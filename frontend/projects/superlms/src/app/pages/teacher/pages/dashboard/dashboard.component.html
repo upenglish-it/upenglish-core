@@ -1,0 +1,88 @@
+<!-- <div class="mt-10">
+  <nz-empty nzNotFoundContent="No data available"></nz-empty>
+</div> -->
+
+<div class="flex gap-2 p-4">
+  <div class="w-3/4">
+    <div class="bg-white border border-gray-200 rounded-md">
+      <div class="border-b border-gray-200 font-medium px-4 py-3">
+        <div class="flex items-center justify-between" [formGroup]="assignedClassFormGroup">
+          <div class="flex items-center space-x-2">
+            <span class="text-base ph-duotone ph-megaphone-simple text-gray-500"></span>
+            <h6 class="text-xs font-medium text-gray-500 uppercase mb-0 p-0">Class Schedule</h6>
+          </div>
+          <nz-select formControlName="shiftId" class="min-w-[200px]" nzSize="small" nzPlaceHolder="Select class" [nzDropdownMatchSelectWidth]="false">
+            <nz-option nzLabel="All" [nzValue]="'all'"></nz-option>
+            @for (scheduleShift of scheduleShifts; track scheduleShift._id) {
+              <nz-option [nzLabel]="scheduleShift.title" [nzValue]="scheduleShift._id"></nz-option>
+            }
+          </nz-select>
+        </div>
+      </div>
+      <div class="p-4 space-y-4">
+        <div class="flex space-x-4 items-center" [formGroup]="assignedClassFormGroup">
+          <div class="flex-1">
+            <ng-container>
+              <nz-select
+                formControlName="calendarView"
+                class="w-56"
+                [nzDropdownMatchSelectWidth]="false"
+                [nzDisabled]="!assignedClassFormGroup.value.calendarView"
+                [nzLoading]="!assignedClassFormGroup.value.calendarView"
+                nzPlaceHolder="Select calendar view">
+                @if (assignedClassFormGroup.value.focusOnSchedule) {
+                  <nz-option nzLabel="My Schedule This Week" nzValue="week"></nz-option>
+                  <nz-option nzLabel="My Schedule This Month" nzValue="month"></nz-option>
+                }
+                @if (!assignedClassFormGroup.value.focusOnSchedule) {
+                  <nz-option nzLabel="Schedule By Week" nzValue="week"></nz-option>
+                  <nz-option nzLabel="Schedule By Month" nzValue="month"></nz-option>
+                }
+              </nz-select>
+            </ng-container>
+          </div>
+          <div>
+            <label nz-checkbox formControlName="focusOnSchedule">Focus only on my schedule</label>
+          </div>
+          <nz-button-group>
+            <button nz-button (click)="tuiCalendar.prev()" [disabled]="assignedClassFormGroup.value.focusOnSchedule">
+              <span nz-icon nzType="left" nzTheme="outline"></span>
+              Back
+            </button>
+            <button nz-button (click)="tuiCalendar.today()" [disabled]="assignedClassFormGroup.value.focusOnSchedule">Today</button>
+            <button nz-button (click)="tuiCalendar.next()" [disabled]="assignedClassFormGroup.value.focusOnSchedule">
+              Next
+              <span nz-icon nzType="right" nzTheme="outline"></span>
+            </button>
+          </nz-button-group>
+          <!-- <div class="text-gray-600 text-sm font-semibold" *ngIf="tuiCalendar?.getDate()?.toDate()">{{ tuiCalendar.getDate().toDate() | date : "MMM, dd, yyyy" }}</div> -->
+        </div>
+        <div #tuiCalendarContainer class="h-[calc(100vh-240px)] border rounded-md w-full"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="w-1/4">
+    <div class="bg-white border border-gray-200 rounded-md">
+      <div class="border-b border-gray-200 font-medium px-4 py-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span class="text-base ph-duotone ph-megaphone-simple text-gray-500"></span>
+            <h6 class="text-xs font-medium text-gray-500 uppercase mb-0 p-0">Announcements</h6>
+          </div>
+        </div>
+      </div>
+      <div class="p-4 space-y-4">
+        @for (announcement of announcements; track announcement._id) {
+          <nz-alert
+            nzType="warning"
+            nzCloseable
+            [nzMessage]="announcement.title"
+            (nzOnClose)="deleteAnnouncementById(announcement._id)"
+            [nzDescription]="announcement.message"
+            nzShowIcon />
+        }
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,166 @@
+<div class="h-[55px] bg-white justify-between flex border-b items-center px-4">
+  <div class="flex items-center flex-1 space-x-4">
+    <div class="max-w-xs w-full">
+      <nz-select class="w-full" nzPlaceHolder="Select leave status" nzMode="multiple" [nzMaxMultipleCount]="3" [nzDropdownMatchSelectWidth]="false">
+        <nz-option nzLabel="All" [nzValue]="null"></nz-option>
+        <nz-option *ngFor="let status of leaveStatus" [nzLabel]="status.name" [nzValue]="status.value"></nz-option>
+      </nz-select>
+    </div>
+
+    <div class="max-w-xs w-full">
+      <nz-select class="w-full" nzPlaceHolder="Select leave type" nzMode="multiple" [nzMaxMultipleCount]="2" [nzDropdownMatchSelectWidth]="false">
+        <nz-option nzLabel="All" [nzValue]="null"></nz-option>
+        <nz-option *ngFor="let type of leaveTypes" [nzLabel]="type.name" [nzValue]="type.value"></nz-option>
+      </nz-select>
+    </div>
+
+    <!-- <div class="max-w-sm w-full" [formGroup]="filterFormGroup">
+      <nz-input-group [nzPrefix]="searchPrefixTemplate" [nzSuffix]="searchSuffixTemplate" class="space-x-1.5">
+        <input nz-input placeholder="Search for: First Name or Last Name" nzShape="round" formControlName="searchQuery" />
+      </nz-input-group>
+      <ng-template #searchPrefixTemplate>
+        <span class="text-base cursor-pointer text-gray-400 ph ph-magnifying-glass"></span>
+      </ng-template>
+      <ng-template #searchSuffixTemplate>
+        <span nz-icon class="ant-input-clear-icon" nzTheme="fill" nzType="close-circle"></span>
+      </ng-template>
+    </div> -->
+    <!-- <isms-manage-student-filter (on-smart-filter-output)="onSmartFilterOutput($event)" [student-ids]="selectedStudents"></isms-manage-student-filter> -->
+  </div>
+  <div class="space-x-6 flex items-center">
+    <div class="space-x-2 flex items-center">
+      <!-- <button nz-button export-json-to-csv [data]="filteredLeaves" *ngIf="filteredLeaves.length > 0">
+        Export To CSV
+        <span nz-icon nzType="export" nzTheme="outline"></span>
+      </button>
+      <button nz-button nzType="primary" (click)="addStaffManuallyModal.toggle()">
+        Add New Staff
+        <span nz-icon nzType="down" nzTheme="outline"></span>
+      </button> -->
+    </div>
+  </div>
+</div>
+
+<div class="overflow-y-auto bg-white mini-scroll-bar flex-1 h-[calc(100vh-210px)] lg:h-[calc(100vh-110px)]" reach-scroll-to-bottom (on-reach)="loadData()">
+  <div class="overflow-x-auto">
+  <table role="table" class="min-w-full divide-y divide-gray-200 isms-table">
+      <thead class="bg-gray-50 sticky top-0 z-10">
+      <tr class="font-bold text-gray-700">
+          <th class="w-10 px-2 md:px-4 py-2 md:py-3">
+          <div class="relative grid place-items-center">
+            <label nz-checkbox (nzCheckedChange)="onAllCandidateChecked($event)" class="absolute top-[-11px]"></label>
+          </div>
+        </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[150px]">
+          <div class="flex items-center justify-between">Full Name</div>
+        </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[120px]">
+          <div class="flex items-center justify-between">Policy</div>
+        </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[150px]">
+          <div class="flex items-center justify-between">Reason</div>
+        </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[180px]">
+          <div class="flex items-center justify-between">From - To</div>
+        </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[100px]">
+          <div class="flex items-center justify-between">Status</div>
+        </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[80px]">
+          <div class="flex items-center justify-between">Hours</div>
+        </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[100px]">
+          <div class="flex items-center justify-between">Payable</div>
+        </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[150px]">
+          <div class="flex items-center justify-between">Approval Notes</div>
+        </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[160px]">
+          <div class="flex items-center justify-between">Requested Date</div>
+        </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[100px]">Action</th>
+      </tr>
+    </thead>
+    <tbody class="text-sm bg-white divide-y divide-gray-200">
+      <tr *ngFor="let leave of filteredLeaves; trackBy: identify; let i = index">
+          <td class="px-2 md:px-4 py-2 md:py-3" [class.selected-td]="leave.selected">
+          <div class="relative grid place-items-center">
+            <label nz-checkbox [(ngModel)]="leave.selected" class="absolute top-[-11px]"></label>
+          </div>
+        </td>
+
+          <td class="px-2 md:px-4 py-2 md:py-3" [class.selected-td]="leave.staff.selected">
+            <div class="flex items-center space-x-2 md:space-x-3">
+              <img profile-photo [photo]="leave.staff.profilePhoto" [letter]="leave.staff.firstName[0]" class="w-6 h-6 md:w-7 md:h-7 bg-gray-100 rounded-full flex-shrink-0" />
+              <div class="flex flex-col min-w-0">
+                <span class="text-xs font-medium text-gray-700 cursor-pointer truncate"> {{ leave.staff.firstName }} {{ leave.staff.lastName }} </span>
+              <!-- <span class="text-[11px] font-normal text-gray-400">
+                <ng-container *ngFor="let emailAddress of leave.staff.emailAddresses"> {{ emailAddress }} </ng-container>
+              </span> -->
+            </div>
+          </div>
+        </td>
+
+          <td class="px-2 md:px-4 py-2 md:py-3 font-semibold text-xs text-gray-500 whitespace-nowrap" [class.selected-td]="leave.selected">
+          <ng-container *ngIf="leave.type === 'pto'">Paid Time Off</ng-container>
+          <ng-container *ngIf="leave.type === 'uto'">Unpaid Time Off</ng-container>
+          <ng-container *ngIf="leave.type === 'sl'">Sick</ng-container>
+          <ng-container *ngIf="leave.type === 'el'">Emergency</ng-container>
+          <ng-container *ngIf="leave.type === 'bl'">Birthday</ng-container>
+          <ng-container *ngIf="leave.type === 'ml'">Maternity</ng-container>
+          <ng-container *ngIf="leave.type === 'pl'">Paternity</ng-container>
+          <ng-container *ngIf="leave.type === 'other'">Other</ng-container>
+        </td>
+
+          <td class="px-2 md:px-4 py-2 md:py-3 font-normal text-xs text-gray-500 break-words max-w-[200px]" [class.selected-td]="leave.selected">
+          {{ leave.notes }}
+        </td>
+
+          <td class="px-2 md:px-4 py-2 md:py-3 font-normal text-xs text-gray-500 whitespace-nowrap" [class.selected-td]="leave.selected">
+          {{ leave.dates.at(0).date | date: "MM, d YYYY" }} → {{ leave.dates.at(leave.dates.length - 1).date | date: "MMM, d YYYY" }}
+        </td>
+
+          <td class="px-2 md:px-4 py-2 md:py-3 font-normal">
+            <div class="inline-grid px-1.5 md:px-2 py-0.5 md:py-1 place-items-center border border-success-400 text-success-500 bg-success-50 rounded-md text-[10px] md:text-xs whitespace-nowrap" *ngIf="leave.status === 'approved'">Approved</div>
+            <div class="inline-grid px-1.5 md:px-2 py-0.5 md:py-1 place-items-center border border-error-400 text-error-500 bg-error-50 rounded-md text-[10px] md:text-xs whitespace-nowrap" *ngIf="leave.status === 'rejected'">Rejected</div>
+            <div class="inline-grid px-1.5 md:px-2 py-0.5 md:py-1 place-items-center border border-yellow-400 text-yellow-500 bg-yellow-50 rounded-md text-[10px] md:text-xs whitespace-nowrap" *ngIf="leave.status === 'pending'">Pending</div>
+        </td>
+
+          <td class="px-2 md:px-4 py-2 md:py-3 font-normal text-xs text-gray-500 whitespace-nowrap">{{ leave.hours }}</td>
+          <td class="px-2 md:px-4 py-2 md:py-3 font-normal text-xs text-gray-500 whitespace-nowrap">{{ leave.payable }}</td>
+
+          <td class="px-2 md:px-4 py-2 md:py-3 font-normal text-xs text-gray-500 break-words max-w-[200px]" [class.selected-td]="leave.selected">{{ leave.approvalNotes }}</td>
+          <td class="px-2 md:px-4 py-2 md:py-3 font-normal text-xs text-gray-500 whitespace-nowrap" [class.selected-td]="leave.selected">{{ leave.createdAt | date: "MMM, d YYYY hh:mm a" }}</td>
+
+          <td class="px-2 md:px-4 py-2 md:py-3 font-normal text-xs text-gray-500" [class.selected-td]="leave.selected">
+            <button nz-button nzType="primary" nzSize="small" nzGhost nz-dropdown [nzDropdownMenu]="leaveActionMenu" class="text-[10px] md:text-xs">
+            Action
+            <span nz-icon nzType="down" nzTheme="outline"></span>
+          </button>
+          <nz-dropdown-menu #leaveActionMenu="nzDropdownMenu">
+            <ul nz-menu>
+              <li nz-menu-item (click)="actionRequest(leave, 'approved')">Approved</li>
+              <li nz-menu-item nzDanger (click)="actionRequest(leave, 'rejected')">
+                <div class="space-x-2 flex items-center">
+                  <span>Rejected</span>
+                  <span nz-icon nzType="info-circle" nzTheme="outline" nz-tooltip nzTooltipTitle="Reject staff leave request"></span>
+                </div>
+              </li>
+            </ul>
+          </nz-dropdown-menu>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<!--
+<isms-import-student-from-csv-drawer #importStudentFromCSVDrawer></isms-import-student-from-csv-drawer>
+
+<isms-student-info-drawer #studentInfoDrawer (on-saved)="loadData()"></isms-student-info-drawer> -->
+
+<!-- <isms-add-staff-manually-modal #addStaffManuallyModal (on-submitted)="onSubmitted($event)"></isms-add-staff-manually-modal>
+<isms-staff-info-drawer #staffInfoDrawer (on-saved)="loadData()"></isms-staff-info-drawer> -->
+
+<isms-manage-leave-approval-modal #manageLeaveApprovalModal (on-submitted)="ngOnInit()"></isms-manage-leave-approval-modal>

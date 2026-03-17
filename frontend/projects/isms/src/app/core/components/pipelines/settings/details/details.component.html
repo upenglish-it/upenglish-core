@@ -1,0 +1,11 @@
+<div class="isms-section-container-content flex flex-col space-y-4" [formGroup]="formGroup">
+  <div class="space-x-2 flex">
+    <div class="space-y-1.5 flex-1">
+      <label class="isms-label isms-required">Title</label>
+      <input nz-input placeholder="Ex. Advance English Prospecting" formControlName="title" />
+      <ng-container *ngIf="formGroup.get('title').touched">
+        <p class="isms-error-message" *ngIf="formGroup.get('title').hasError('required')">Title is required</p>
+      </ng-container>
+    </div>
+  </div>
+</div>

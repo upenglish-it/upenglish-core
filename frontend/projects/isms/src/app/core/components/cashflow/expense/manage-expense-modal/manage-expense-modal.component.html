@@ -1,0 +1,50 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  nzCentered
+  [nzWidth]="'520px'"
+  [nzTitle]="titleTemplate"
+  [nzFooter]="footerTemplate"
+  (nzOnOk)="onCreate()"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <form class="px-4 py-3 flex-col max-h-[500px] space-y-3 flex-1 flex overflow-auto mini-scroll-bar min-h-fit" [formGroup]="cashflowExpenseFormGroup">
+      <div class="flex space-x-2">
+        <div class="space-y-1.5 flex-1 flex flex-col">
+          <label class="font-normal text-gray-600 text-xs required">Amount</label>
+          <nz-input-number
+            formControlName="amount"
+            [nzDisabled]="cashflowExpenseFormGroup.value.from === 'material'"
+            nzPlaceHolder="0"
+            style="width: 100%"
+            [nzMin]="1"
+            [nzStep]="1"></nz-input-number>
+          <ng-container *ngIf="cashflowExpenseFormGroup.get('amount').touched">
+            <p class="isms-error-message" *ngIf="cashflowExpenseFormGroup.get('amount').hasError('required')">Amount is required</p>
+          </ng-container>
+        </div>
+        <div class="flex-1"></div>
+      </div>
+
+      <div class="space-y-1.5">
+        <label class="font-normal text-gray-600 text-xs"> Mode Of Payment </label>
+        <nz-select formControlName="mode" nzShowSearch class="w-full" nzPlaceHolder="Select mode of payment" [nzDropdownMatchSelectWidth]="false">
+          <nz-option *ngFor="let mop of modeOfPayment" [nzLabel]="mop.name" [nzValue]="mop.value"></nz-option>
+        </nz-select>
+      </div>
+
+      <div class="space-y-1.5 flex flex-col">
+        <label class="font-normal text-gray-600 text-xs required">Notes</label>
+        <textarea formControlName="notes" nz-input rows="2" placeholder="Type here"></textarea>
+      </div>
+    </form>
+  </ng-container>
+  <ng-template #titleTemplate> Expense </ng-template>
+  <ng-template #footerTemplate>
+    <div class="space-x-2 flex items-center">
+      <button nz-button nzBlock (click)="toggle()">Close</button>
+      <button nz-button nzType="primary" (click)="onCreate()" [nzLoading]="loading" nzBlock [disabled]="cashflowExpenseFormGroup.invalid">Submit</button>
+    </div>
+  </ng-template>
+</nz-modal>

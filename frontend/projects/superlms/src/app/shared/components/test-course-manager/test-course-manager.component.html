@@ -1,0 +1,226 @@
+@if (testOfClass) {
+  <div class="max-w-7xl w-full mx-auto flex flex-col gap-10">
+    <div class="flex flex-col gap-6 pt-14">
+      <div>
+        <a class="flex gap-2 items-center w-fit" [routerLink]="backRoute">
+          <span class="ph ph-arrow-bend-up-left"></span>
+          <span>
+            {{ backTitle }}
+          </span>
+        </a>
+      </div>
+      <div class="flex flex-col gap-4 p-4 border bg-white rounded-lg shadow-md">
+        <div class="flex flex-col gap-2">
+          <h2 class="font-bold text-2xl mb-0">Class: {{ testOfClass.class.name }}</h2>
+          <span>Course: {{ testOfClass.course.name }}</span>
+          @if (testOfClass.test) {
+            <span
+              >Status:
+              <nz-tag [nzColor]="testOfClass.test.status === 'draft' ? 'blue' : 'green'">
+                {{ testOfClass.test.status === "draft" ? "Draft" : "Published" }}
+              </nz-tag>
+            </span>
+          }
+        </div>
+
+        @if (testOfClass.test) {
+          <div class="flex flex-col gap-2">
+            <span class="font-bold">Course's details</span>
+            @if (accountService.account.role === "admin") {
+              <nz-textarea-count>
+                <textarea [formControl]="descriptionFormControl" nz-input rows="15" placeholder="Write the course details here..."></textarea>
+              </nz-textarea-count>
+            } @else {
+              <div class="" style="line-height: 23px" [innerHTML]="testOfClass.test.description"></div>
+            }
+          </div>
+        }
+
+        <div class="flex justify-between items-center">
+          <div class="flex items-center gap-2">
+            @if (accountService.account.role === "admin" && testOfClass.test) {
+              <button nz-button nzType="default" (click)="updateStatus('draft')">Save as draft</button>
+              <button nz-button nzType="primary" (click)="updateStatus('published')">Publish Course</button>
+            }
+          </div>
+          <div class="flex items-center gap-2">
+            <!-- @if (accountService.account.role === "admin" && !testOfClass.test) {
+              <button nz-button nzType="primary" (click)="addPeriod()">Add Period</button>
+            } -->
+            @if (accountService.account.role === "admin" && testOfClass.test) {
+              <button nz-button nzType="primary" (click)="addPeriod()">Add Period</button>
+            }
+            <div class="w-4"></div>
+            <!-- @if (accountService.account.role === "teacher" && testOfClass) {
+              <button nz-button nzType="primary" (click)="addPeriod()">Add Period</button>
+            } -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    @if (testOfClass.test && testOfClass.test.periods.length !== 0) {
+      <div class="bg-white rounded-lg shadow-md">
+        <nz-collapse nzExpandIconPosition="end">
+          @for (period of testOfClass.test.periods; track period._id) {
+            <nz-collapse-panel [nzHeader]="periodHeader" [nzActive]="true" nzDisabled="true" [nzShowArrow]="false" [nzExtra]="header1extraTpl">
+              <ng-template #periodHeader>
+                <div class="flex items-center gap-2">
+                  @if (accountService.account.role === "admin" || accountService.account._id === period.createdBy) {
+                    <input type="text" class="font-semibold py-1 w-fit bg-[transparent]" [(ngModel)]="period.name" (ngModelChange)="periodNameChange(period._id, $event)" />
+                  } @else {
+                    <span class="font-bold py-1 text-slms-500">{{ period.name }}</span>
+                  }
+                </div>
+              </ng-template>
+              <div>
+                @if (period.sections.length) {
+                  <nz-collapse nzExpandIconPosition="end">
+                    @for (section of period.sections; track section._id) {
+                      <nz-collapse-panel
+                        [nzHeader]="sectionHeader"
+                        [nzActive]="true"
+                        nzDisabled="true"
+                        [nzShowArrow]="false"
+                        [nzExtra]="sectionHeaderTemplate"
+                        style="overflow: auto"
+                        [style.background-color]="section.type === 'assignment' ? '#c6e1fc' : '#fcc6c6'">
+                        <ng-template #sectionHeader>
+                          <div class="flex items-center gap-2">
+                            @if (accountService.account.role === "admin" || accountService.account._id === section.createdBy) {
+                              <input
+                                type="text"
+                                class="font-bold py-1 w-fit bg-[transparent]"
+                                [(ngModel)]="section.name"
+                                (ngModelChange)="sectionNameChange(section._id, $event)" />
+                            } @else {
+                              <span class="font-bold py-1 text-slms-500">{{ section.name }}</span>
+                            }
+                            <span class="text-gray-500 text-xs capitalize">{{ section.type }}</span>
+                          </div>
+                        </ng-template>
+                        <div>
+                          @if (section.tests.length) {
+                            <nz-list nzBordered>
+                              @for (test of section.tests; track test._id) {
+                                <nz-list-item>
+                                  <div class="flex items-center">
+                                    <div class="text-slms-500 w-36 capitalize">
+                                      {{ test.test.type }}
+                                    </div>
+                                    <div class="flex flex-col gap-2 font-medium w-96">
+                                      <span class="">
+                                        {{ test.test.name }}
+                                        @if (accountService.account.role !== "admin" && accountService.account._id === test.createdBy) {
+                                          <sup class="text-slms-500 font-regular text-xs">You created</sup>
+                                        }
+                                      </span>
+                                      <!-- <div class="flex items-center gap-2 text-xs">
+                                    <span class="font-light">10 questions</span>
+                                    •
+                                    <span class="font-light">10 pts</span>
+                                  </div> -->
+                                    </div>
+                                  </div>
+                                  <div class="flex-1">
+                                    <span class="text-gray-500 text-xs">{{ test.test.duration }} secs</span>
+                                  </div>
+                                  <div class="flex items-center gap-2">
+                                    @if (accountService.account.role === "admin" || accountService.account._id === test.createdBy) {
+                                      <a
+                                        nz-button
+                                        nzType="link"
+                                        [routerLink]="['/task', test._id, 'builder']"
+                                        [queryParams]="{
+                                          backRedirectUrl: (accountService.account.role === 'admin' ? '/a/courses/' : '/t/courses/') + testOfClass.class._id,
+                                          type: 'test',
+                                          mode: 'editing',
+                                          action: 'builder-editing',
+                                        }">
+                                        Edit
+                                      </a>
+                                    }
+                                    <a
+                                      nz-button
+                                      nzType="link"
+                                      [routerLink]="['/task', test._id, 'builder']"
+                                      [queryParams]="{
+                                        backRedirectUrl: (accountService.account.role === 'admin' ? '/a/courses/' : '/t/courses/') + testOfClass.class._id,
+                                        type: 'test',
+                                        mode: 'viewing',
+                                      }">
+                                      View
+                                    </a>
+                                    <!-- <a nz-button nzType="link">View</a> -->
+                                    <a nz-button nzType="link" nzDanger (click)="deleteTest(period._id, section._id, test._id)">Remove</a>
+                                  </div>
+                                </nz-list-item>
+                              }
+                            </nz-list>
+                          } @else {
+                            No test available
+                          }
+                        </div>
+                      </nz-collapse-panel>
+                      <ng-template #sectionHeaderTemplate>
+                        <div class="flex items-center gap-4">
+                          @if (accountService.account.role !== "admin" && accountService.account._id === section.createdBy) {
+                            <button nz-button nzType="primary" nzGhost (click)="addTest(period._id, section._id)"
+                              >New {{ section.type === "assignment" ? "Assignment" : "Test" }}</button
+                            >
+                          } @else {
+                            <button nz-button nzType="primary" nzGhost (click)="addTest(period._id, section._id)">
+                              New {{ section.type === "assignment" ? "Assignment" : "Test" }}
+                            </button>
+                            <button nz-button nzType="primary" nzDanger nzGhost (click)="deleteSection(period._id, section._id)">
+                              <span class="ph-bold ph-trash"></span>
+                            </button>
+                          }
+                        </div>
+                      </ng-template>
+                    }
+                  </nz-collapse>
+                } @else {
+                  No sections available
+                }
+              </div>
+            </nz-collapse-panel>
+            <ng-template #header1extraTpl>
+              <div class="flex items-center gap-2">
+                <button nz-button nzType="primary" nzGhost nz-dropdown [nzDropdownMenu]="menu">
+                  <div class="flex gap-2 items-center">
+                    <span>Add Section</span>
+                    <i class="ph ph-caret-down"></i>
+                  </div>
+                </button>
+                <button nz-button nzType="primary" nzDanger (click)="deletePeriod(period._id)">
+                  <span class="ph ph-trash"></span>
+                </button>
+              </div>
+              <nz-dropdown-menu #menu="nzDropdownMenu">
+                <ul nz-menu nzSelectable>
+                  <li nz-menu-item (click)="addSection(period._id, 'assignment')">Assignment</li>
+                  <li nz-menu-item (click)="addSection(period._id, 'mini-test')">Test</li>
+                </ul>
+              </nz-dropdown-menu>
+            </ng-template>
+          }
+        </nz-collapse>
+      </div>
+    } @else {
+      <nz-empty nzNotFoundContent="This course dont have a test. Admin has to create at least one period."></nz-empty>
+      @if (accountService.account.role === "admin") {
+        <div class="mx-auto grid place-items-center">
+          <p class="text-center">Click the add period to setup the class test. </p>
+          <button nz-button nzType="primary" (click)="addPeriod()">Add Period</button>
+        </div>
+      }
+    }
+  </div>
+
+  <slms-choose-test-modal #chooseTestModal (submitted)="loadTestOfClass()"></slms-choose-test-modal>
+} @else {
+  Loading please wait...
+}
+
+<div class="h-44"></div>

@@ -1,0 +1,45 @@
+<div class="flex">
+  <div class="w-[420px] border-r space-y-4 select-none">
+    <ul class="p-4 space-y-3 mb-0">
+      <li
+        class="py-1 rounded-md px-2 cursor-pointer transition-all"
+        *ngFor="let section of tabSectionOptions; let i = index"
+        [ngClass]="{ 'bg-isms-100 ring-1 ring-isms-200': section.active }"
+        (click)="onSelectSection(i)">
+        <div class="flex space-x-3 items-center" [ngClass]="{ 'text-gray-500': !section.active, 'text-isms-500': section.active }">
+          <span class="text-lg {{ section.icon }}" [ngClass]="{ 'ph-duotone': !section.active, 'ph-fill': section.active }"></span>
+          <div class="flex flex-col">
+            <span class="font-normal">{{ section.title }}</span>
+          </div>
+        </div>
+      </li>
+    </ul>
+  </div>
+
+  <div class="flex flex-col px-4 py-4 bg-gray-50 w-full overflow-auto h-[calc(100vh-70px)] mini-scroll-bar">
+    <div class="flex flex-col w-full max-w-5xl space-y-3">
+      <isms-section-container title="Details" [form-group]="detailsFormGroup" id="details-section" [active]="selectedTabSectionIndex === 0">
+        <ng-container content>
+          <isms-pipeline-details [form-group]="detailsFormGroup"></isms-pipeline-details>
+        </ng-container>
+      </isms-section-container>
+
+      <isms-section-container title="Sourcing Team" [form-group]="sourcingTeamFormGroup" id="sourcing-team-section" [active]="selectedTabSectionIndex === 1">
+        <ng-container content>
+          <isms-pipeline-sourcing-team [form-group]="sourcingTeamFormGroup"></isms-pipeline-sourcing-team>
+        </ng-container>
+      </isms-section-container>
+
+      <isms-section-container
+        title="Sourcing Pipeline"
+        tooltip="Manage leads by setting up a sourcing pipeline for your pipeline."
+        [form-group]="sourcingPipelineFormGroup"
+        id="sourcing-pipeline-section"
+        [active]="selectedTabSectionIndex === 2">
+        <ng-container content>
+          <isms-pipeline-sourcing-pipeline [pipeline]="pipeline" [form-group]="sourcingPipelineFormGroup"></isms-pipeline-sourcing-pipeline>
+        </ng-container>
+      </isms-section-container>
+    </div>
+  </div>
+</div>

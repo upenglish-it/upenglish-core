@@ -1,0 +1,31 @@
+<nz-modal
+  nzCentered
+  [nzVisible]="showDrawer"
+  [nzWidth]="'480px'"
+  nzTitle="Create New Branch"
+  [nzMaskClosable]="false"
+  [nzClosable]="false"
+  [nzFooter]="footerTemplate"
+  nzPlacement="right">
+  <ng-container *nzModalContent>
+    <div class="h-[300px]">
+      <form class="flex-col space-y-2 flex" [formGroup]="formGroup">
+        <div class="space-y-1.5 flex-1">
+          <label class="font-normal text-gray-600 text-xs">Name</label>
+          <input nz-input placeholder="Type here" formControlName="name" />
+        </div>
+        <div class="space-y-1.5 flex-1">
+          <label class="font-normal text-gray-600 text-xs">Address</label>
+          <textarea nz-input placeholder="Type here" [nzAutosize]="{ minRows: 3, maxRows: 10 }" formControlName="address"></textarea>
+        </div>
+      </form>
+    </div>
+  </ng-container>
+</nz-modal>
+
+<ng-template #footerTemplate>
+  <div class="space-x-2 flex">
+    <button nz-button nzBlock (click)="toggle()">Cancel</button>
+    <button nz-button nzType="primary" nzBlock [disabled]="formGroup.invalid" (click)="onSubmit()">Save Changes</button>
+  </div>
+</ng-template>

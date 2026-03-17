@@ -1,0 +1,27 @@
+// ng-component {
+//   // @apply flex flex-1;
+//   flex: 1;
+//   display: flex;
+// }
+
+.account-navigation {
+  background: transparent;
+  * {
+    background: transparent;
+  }
+
+  & .ant-menu-sub.ant-menu-inline {
+    background: transparent;
+  }
+  > .ant-menu-sub.ant-menu-inline {
+    background: transparent !important;
+  }
+  li {
+    > .ant-menu-inline {
+      background: transparent;
+    }
+  }
+  .ant-menu-submenu > .ant-menu {
+    background: transparent;
+  }
+}

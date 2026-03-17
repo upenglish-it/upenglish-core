@@ -1,0 +1,78 @@
+<div class="h-screen flex flex-col lg:flex-row overflow-hidden">
+  <div class="flex bg-gray-50 w-full lg:w-96 p-3 md:p-4 border-r border-b lg:border-b-0 flex-col space-y-3 md:space-y-5 overflow-y-auto flex-shrink-0 lg:h-full">
+    <div class="flex">
+      <button nz-button nzType="primary" nzBlock (click)="manageEventModal.toggle()" [disabled]="integrations.length === 0" class="text-xs md:text-sm">
+        <div class="items-center flex space-x-1 justify-center">
+          <span> Create Meeting </span>
+          <span class="ph-bold ph-plus"></span>
+        </div>
+      </button>
+    </div>
+    <div class="grid place-items-center w-full">
+      <!-- <nz-date-picker nzInline class="no-shadow-date-picker"></nz-date-picker> -->
+      <div class="border rounded-md bg-white shadow-md w-full max-w-xs" [formGroup]="calendarFormGroup">
+        <nz-calendar [nzFullscreen]="false" formControlName="calendarCalendarDate"></nz-calendar>
+      </div>
+    </div>
+    <div class="flex flex-col space-y-2 md:space-y-3">
+      <h3 class="text-xs text-gray-500 font-semibold mb-0">Synced Calendars</h3>
+
+      <ng-container *ngFor="let integration of integrations; let integrationIndex = index">
+        <isms-manage-calendar-provider
+          [integration]="integration"
+          [integration-index]="integrationIndex"
+          (on-collapse)="integrations[integrationIndex].expand = $event"
+          (on-checked-calendars)="onCheckedCalendars($event, integrationIndex)"
+          (on-submitted)="onUpdateIntegration(integration._id, integrationIndex)"
+          (on-deleted)="onDeleteIntegration(integrationIndex)"></isms-manage-calendar-provider>
+      </ng-container>
+
+      <a nz-button nzType="primary" nzGhost nzBlock (click)="integrateNewCalendar()" class="text-xs md:text-sm">
+        <div class="items-center flex space-x-1 justify-center">
+          <span> Integrate New Calendar </span>
+          <span class="ph-bold ph-plugs-connected text-sm"></span>
+        </div>
+      </a>
+    </div>
+  </div>
+  <div class="flex flex-col flex-1 min-w-0 overflow-hidden">
+    <div class="p-2 md:p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
+      <div class="flex flex-wrap gap-2 sm:gap-4 items-center w-full sm:w-auto">
+        <!-- <nz-date-picker [(ngModel)]="selectedData" (ngModelChange)="tuiCalendar.setDate($event);"></nz-date-picker> -->
+        <nz-button-group class="flex-shrink-0">
+          <button nz-button (click)="tuiCalendar.prev()" class="text-xs md:text-sm">
+            <span nz-icon nzType="left" nzTheme="outline"></span>
+            <span class="hidden sm:inline">Back</span>
+          </button>
+          <button nz-button (click)="tuiCalendar.today()" class="text-xs md:text-sm">Today</button>
+          <button nz-button (click)="tuiCalendar.next()" class="text-xs md:text-sm">
+            <span class="hidden sm:inline">Next</span>
+            <span nz-icon nzType="right" nzTheme="outline"></span>
+          </button>
+        </nz-button-group>
+        <ng-container [formGroup]="calendarFormGroup">
+          <nz-select formControlName="calendarView" class="w-24 md:w-28 text-xs md:text-sm" [nzDropdownMatchSelectWidth]="false">
+            <nz-option nzLabel="Day" nzValue="day"></nz-option>
+            <nz-option nzLabel="Week" nzValue="week"></nz-option>
+            <nz-option nzLabel="Month" nzValue="month"></nz-option>
+          </nz-select>
+        </ng-container>
+        <div class="text-gray-600 text-xs md:text-sm font-semibold truncate" *ngIf="tuiCalendar?.getDate()?.toDate()">{{ tuiCalendar.getDate().toDate() | date: "MMM, dd, yyyy" }}</div>
+      </div>
+      <div class="flex space-x-4 items-center">
+        <!-- <button nz-button>
+          <span nz-icon nzType="setting" nzTheme="outline"></span>
+          Settings
+        </button> -->
+      </div>
+    </div>
+    <div #tuiCalendarContainer class="h-[calc(100vh-200px)] sm:h-[calc(100vh-150px)] lg:h-[calc(100vh-70px)] flex-1 min-h-0"></div>
+  </div>
+</div>
+
+<isms-manage-event-modal
+  #manageEventModal
+  (on-submitted)="onSubmittedCalendarEvent($event)"
+  (on-deleted)="onDeletedCalendarEvent($event)"
+  (on-updated)="onUpdatedCalendarEvent($event)"></isms-manage-event-modal>
+<!-- <isms-manage-calendar-provider-modal #manageCalendarProviderModal></isms-manage-calendar-provider-modal> -->

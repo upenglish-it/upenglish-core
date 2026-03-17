@@ -1,0 +1,83 @@
+<div class="h-[55px] bg-white justify-between flex border-b items-center px-4">
+  <div class="flex items-center flex-1 space-x-4">
+    <div class="max-w-sm w-full" [formGroup]="filterFormGroup">
+      <nz-input-group [nzPrefix]="searchPrefixTemplate" [nzSuffix]="searchSuffixTemplate" class="space-x-1.5">
+        <input nz-input placeholder="Search for: Title" nzShape="round" formControlName="searchQuery" />
+      </nz-input-group>
+      <ng-template #searchPrefixTemplate>
+        <span class="text-base cursor-pointer text-gray-400 ph ph-magnifying-glass"></span>
+      </ng-template>
+      <ng-template #searchSuffixTemplate>
+        <span nz-icon class="ant-input-clear-icon" nzTheme="fill" nzType="close-circle"></span>
+      </ng-template>
+    </div>
+  </div>
+  <div class="space-x-6 flex items-center">
+    <div class="space-x-2 flex items-center">
+      <button nz-button nzType="primary" class="mb-0" (click)="createStudentManually()">
+        Create Manually
+        <span nz-icon nzType="plus" nzTheme="outline"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="overflow-auto bg-white mini-scroll-bar flex-1">
+  <table role="table" class="min-w-full divide-y divide-gray-200 isms-table">
+    <thead>
+      <tr class="font-bold text-gray-700">
+        <th class="sticky top-0 z-10 w-10 px-4 py-3">
+          <div class="relative grid place-items-center">
+            <label nz-checkbox [nzIndeterminate]="nzIndeterminateStudent" (nzCheckedChange)="onSelectAll('all')" class="absolute top-[-11px]"></label>
+          </div>
+        </th>
+        <th class="sticky top-0 px-4 py-3 pl-0 text-xs tracking-wider text-left group">
+          <div class="flex items-center justify-between">Full Name</div>
+        </th>
+        <th class="sticky top-0 px-4 py-3 pl-0 text-xs tracking-wider text-left group">
+          <div class="flex items-center justify-between">Email Address</div>
+        </th>
+        <th class="sticky top-0 px-4 py-3 pl-0 text-xs tracking-wider text-left group">
+          <div class="flex items-center justify-between">Contact Number</div>
+        </th>
+        <th class="">
+          <div class="flex items-center justify-between">Sources</div>
+        </th>
+        <th class="sticky top-0 px-4 py-3 pl-0 text-xs tracking-wider text-left group">
+          <div class="flex items-center justify-between">Date Created</div>
+        </th>
+      </tr>
+    </thead>
+    <tbody class="text-sm bg-white divide-y divide-gray-200">
+      <tr *ngFor="let student of students; let i = index">
+        <td class="" [class.selected-td]="student.selected">
+          <div class="relative grid place-items-center">
+            <label nz-checkbox [(ngModel)]="student.selected" (nzCheckedChange)="onSelectAll(student._id)" class="absolute top-[-11px]"></label>
+          </div>
+        </td>
+        <td [class.selected-td]="student.selected">
+          <div class="flex items-center space-x-3">
+            <img profile-photo [photo]="student.profilePhoto" [letter]="student.firstName + ' ' + student.lastName" class="w-7 h-7 bg-gray-100 rounded-full" />
+            <span class="text-xs font-normal text-gray-700"> {{ student.firstName }} {{ student.lastName }} </span>
+          </div>
+        </td>
+
+        <td class="font-normal text-xs text-gray-500" [class.selected-td]="student.selected">
+          <ng-container *ngFor="let emailAddress of student.emailAddresses"> {{ emailAddress }} </ng-container>
+        </td>
+
+        <td class="font-normal text-xs text-gray-500" [class.selected-td]="student.selected">
+          <ng-container *ngFor="let number of student.contactNumbers"> {{ number.countryCallingCode }}{{ number.number }} </ng-container>
+        </td>
+
+        <td class="font-normal text-xs text-gray-500" [class.selected-td]="student.selected">
+          <nz-tag [nzColor]="'geekblue'" class="capitalize" *ngFor="let source of student.sources | slice: 0 : 5">{{ source }}</nz-tag>
+        </td>
+
+        <td class="font-normal text-xs text-gray-500" [class.selected-td]="student.selected">{{ student.createdAt | date: "MM/d/YY • hh:mm a" }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<isms-add-student-manually-modal #addStudentManuallyModal (on-submitted)="onSubmittedAddStudentManually($event)"></isms-add-student-manually-modal>

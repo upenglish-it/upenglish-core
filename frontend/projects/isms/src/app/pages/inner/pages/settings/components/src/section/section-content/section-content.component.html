@@ -1,0 +1,38 @@
+<ng-container *ngFor="let form of formArray.controls; let i = index">
+  <section-container [form-group]="createProductFormGroup(i)">
+    <ng-container bodyContent>
+      <ng-container [formGroup]="createProductFormGroup(i)">
+        <ng-container *ngIf="form.value.type === 'basic-info'">
+          <div class="p-4 space-y-2 border-t border-gray-200" [@down] *ngIf="createProductFormGroup(i).value.expand">
+            <div class="flex flex-col space-y-1">
+              <span class="text-gray-500 required">Name</span>
+              <input nz-input formControlName="name" nzStatus="warning" />
+              <p *ngIf="createProductFormGroup(i).get('name').touched && createProductFormGroup(i).get('name').hasError('required')" class="text-error-500"
+                >Product name is required</p
+              >
+            </div>
+            <div class="flex flex-col space-y-1">
+              <span class="text-gray-500 required">Main Description</span>
+              <textarea
+                nz-input
+                placeholder="Selling a pet clothes and food"
+                class="resize-none"
+                [nzAutosize]="{ minRows: 5, maxRows: 20 }"
+                formControlName="description"></textarea>
+              <p *ngIf="createProductFormGroup(i).get('description').touched && createProductFormGroup(i).get('description').hasError('required')" class="text-error-500"
+                >Description is required</p
+              >
+            </div>
+
+            <div class="flex flex-col space-y-1">
+              <span class="text-gray-500 required">Category</span>
+              <div>
+                <nz-cascader [nzOptions]="[]" [nzShowSearch]="true" nzAllowClear="false" class="w-full" nzStatus="error" nzPlaceHolder="Select category"> </nz-cascader>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+      </ng-container>
+    </ng-container>
+  </section-container>
+</ng-container>

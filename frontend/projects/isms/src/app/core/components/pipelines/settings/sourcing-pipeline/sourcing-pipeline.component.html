@@ -1,0 +1,86 @@
+<div class="isms-section-container-content flex space-x-2">
+  <div class="w-[320px] flex flex-col space-y-2">
+    <div class="border border-solid border-gray-200 space-y-2 p-3 bg-gray-50 rounded-md">
+      <!-- *ngFor="let item of ['Hiring stages', 'Final stages']; let stateId = index" -->
+      <!-- <label class="isms-label">{{ item }}</label> -->
+      <ul class="mb-0 space-y-1 state-boundary" cdkDropList (cdkDropListDropped)="sortStage($event)">
+        <!-- Editable -->
+        <ng-container *ngFor="let stageFormGroup of editableStagesFormArray.controls; let stageId = index">
+          <ng-container>
+            <li
+              cdkDrag
+              cdkDragLockAxis="y"
+              [cdkDragData]="{ data: stageFormGroup.value, index: stageId }"
+              cdkDragBoundary=".state-boundary"
+              class="py-2 bg-white border rounded-md cursor-pointer px-2 hover:border-isms-500 flex items-center"
+              [ngClass]="{
+                'bg-isms-100 border-isms-500 text-isms-500': stageId === selectedStageIndex,
+                'text-gray-500 border-gray-200': stageId !== selectedStageIndex,
+                '!hidden': !stageFormGroup.value.editable,
+              }"
+              (click)="selectedStageIndex = stageId">
+              <div class="flex space-x-1 items-center flex-1">
+                <span class="text-lg ph-dots-six-vertical ph-bold cursor-move"></span>
+                <div class="font-normal">{{ stageFormGroup.value.title }}</div>
+              </div>
+
+              <!-- Drag Preview -->
+              <div class="py-2 bg-gray-100 border rounded-md px-2 hover:border-isms-500 flex justify-between items-cente opacity-50" *cdkDragPreview>
+                <div class="flex space-x-1 items-center cursor-pointer" (click)="selectedStageIndex = stageId">
+                  <span class="text-lg ph-dots-six-vertical ph-bold" cdkDragHandle></span>
+                  <span class="font-normal">{{ stageFormGroup.value.title }}</span>
+                </div>
+                <span
+                  class="text-sm ph-trash-simple ph-fill cursor-pointer text-gray-400"
+                  nz-popconfirm
+                  nzPopconfirmPlacement="bottom"
+                  nzPopconfirmTitle="Remove this stage?"
+                  (nzOnConfirm)="(1)"></span>
+              </div>
+            </li>
+          </ng-container>
+        </ng-container>
+        <li>
+          <nz-divider></nz-divider>
+        </li>
+        <!-- Non-Editable -->
+        <ng-container *ngFor="let stageFormGroup of stagesFormArray.controls; let stageId = index">
+          <li
+            *ngIf="!stageFormGroup.value.editable"
+            class="py-2 bg-white border rounded-md cursor-pointer px-2 hover:border-isms-500 flex items-center"
+            [ngClass]="{ 'bg-isms-100 border-isms-500 text-isms-500': stageId === selectedStageIndex, 'text-gray-500 border-gray-200': stageId !== selectedStageIndex }"
+            (click)="selectedStageIndex = stageId">
+            <div class="flex space-x-1 items-center flex-1">
+              <span class="text-lg ph-dots-six-vertical ph-bold cursor-move"></span>
+              <div class="font-normal">{{ stageFormGroup.value.title }}</div>
+            </div>
+          </li>
+        </ng-container>
+      </ul>
+      <a nz-button nzType="link" (click)="onAddStage()">
+        <div class="flex space-x-1 items-center">
+          <span class="ph-plus ph-bold"></span>
+          <span>Add new stage</span>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <ng-container *ngIf="stageFormGroup">
+    <div class="flex-1 rounded-md flex flex-col space-y-4 p-4 border border-solid border-gray-200" [formGroup]="stageFormGroup">
+      <div class="space-x-2 flex">
+        <div class="space-y-1.5 flex-1">
+          <label class="isms-label isms-required">Title</label>
+          <input nz-input placeholder="Type here" formControlName="title" *ngIf="stageFormGroup.value.editable" />
+          <input nz-input placeholder="Type here" [value]="stageFormGroup.value.title" [readonly]="!stageFormGroup.value.editable" *ngIf="!stageFormGroup.value.editable" />
+        </div>
+      </div>
+
+      <div class="flex-wrap flex" *ngIf="stageFormGroup.value.editable">
+        <button nz-button nzType="link" nzDanger nzSize="small" nz-popconfirm nzPopconfirmPlacement="bottom" nzPopconfirmTitle="Delete this stage?" (nzOnConfirm)="onDeleteStage()">
+          Delete this stage
+        </button>
+      </div>
+    </div>
+  </ng-container>
+</div>

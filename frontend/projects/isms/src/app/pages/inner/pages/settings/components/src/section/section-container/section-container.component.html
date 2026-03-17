@@ -1,0 +1,26 @@
+<div class="w-full bg-white border border-gray-200 rounded-md shadow hover:border-alagain-200">
+  <!-- Header -->
+  <div class="flex items-center px-4 py-3" (click)="toggleExpand()">
+    <div class="flex items-center flex-1 space-x-2 cursor-pointer select-none">
+      <div class="grid text-lg bg-gray-400 rounded-full w-7 h-7 bg-opacity-20 place-items-center">
+        <i
+          class="text-base text-gray-500 ph-duotone"
+          [ngClass]="{
+            'ph-identification-card': formGroup.value.type === 'basic-info',
+          }">
+        </i>
+      </div>
+      <span class="text-sm text-gray-600 font-regular">
+        {{ formGroup.value.title }}
+      </span>
+    </div>
+    <div class="flex items-center space-x-3">
+      <i class="text-lg text-gray-400 transition-all cursor-pointer ph" [ngClass]="{ 'ph-caret-up': formGroup.value.expand, 'ph-caret-down': !formGroup.value.expand }"></i>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <ng-container *ngIf="formGroup.value.expand">
+    <ng-content select="[bodyContent]"></ng-content>
+  </ng-container>
+</div>

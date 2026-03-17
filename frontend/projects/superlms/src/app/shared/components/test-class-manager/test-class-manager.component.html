@@ -1,0 +1,140 @@
+@if (testOfClass) {
+  <div class="flex gap-8 max-w-7xl w-full mx-auto pt-8">
+    <div class="w-[400px] flex flex-col gap-6">
+      <div>
+        <a class="flex gap-2 items-center w-fit" [routerLink]="backRoute">
+          <span class="ph ph-arrow-bend-up-left"></span>
+          <span>
+            {{ backTitle }}
+          </span>
+        </a>
+      </div>
+
+      <div class="flex flex-col gap-4 p-4 border bg-white rounded-lg shadow-md">
+        <h3 class="mb-0 font-bold text-lg">Class: {{ testOfClass.class.name }}</h3>
+        <span class="text-sm">Student list</span>
+        @for (student of testOfClass.students; track $index) {
+          <div
+            class="border h-16 p-4 rounded-md flex items-center gap-2 bg-white cursor-pointer transition-all shadow-xs hover:shadow-md hover:border-slms-500"
+            (click)="selectStudent(student.account)">
+            <div class="w-1.5 h-full bg-slms-500"></div>
+            <h3 class="mb-0 font-bold">{{ student.account.firstName + " " + student.account.lastName }} </h3>
+          </div>
+        }
+      </div>
+    </div>
+    <div class="flex-1 bg-white rounded-lg shadow-md p-4 border">
+      <h3 class="font-bold text-lg mb-5">Class information</h3>
+      <div class="grid grid-cols-1 gap-5">
+        <div class="flex items-center gap-2">
+          <span class="font-semibold w-32">Course:</span>
+          <span>{{ testOfClass.course.name }}</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <span class="font-semibold w-32">Students:</span>
+          <span>{{ testOfClass.students.length }}</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <span class="font-semibold w-32">Time:</span>
+          <span>{{ testOfClass.scheduleAndStaff.time.from }} - {{ testOfClass.scheduleAndStaff.time.to }}</span>
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <span class="font-semibold w-32">Teacher:</span>
+          <div class="flex gap-12">
+            @for (teacher of testOfClass.scheduleAndStaff.teachers; track $index) {
+              <div class="flex items-center gap-2">
+                <img profile-photo [photo]="teacher.profilePhoto" [letter]="teacher.firstName[0]" class="bg-gray-300 rounded-full h-8 w-8 object-cover" />
+                <div class="flex flex-col gap-4">
+                  <h2 class="font-medium text-xs mb-0 text-gray-500">{{ teacher.firstName }} {{ teacher.lastName }}</h2>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <span class="font-semibold w-32">Care Taker:</span>
+          <div class="flex gap-12">
+            <div class="flex items-center gap-2">
+              <img
+                profile-photo
+                [photo]="testOfClass.scheduleAndStaff.careTaker.profilePhoto"
+                [letter]="testOfClass.scheduleAndStaff.careTaker.firstName[0]"
+                class="bg-gray-300 rounded-full h-8 w-8 object-cover" />
+              <div class="flex flex-col gap-4">
+                <h2 class="font-medium text-xs mb-0 text-gray-500">{{ testOfClass.scheduleAndStaff.careTaker.firstName }} {{ testOfClass.scheduleAndStaff.careTaker.lastName }}</h2>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <span class="font-semibold w-40">Homework Checker:</span>
+          <div class="flex gap-12">
+            <div class="flex items-center gap-2">
+              <img
+                profile-photo
+                [photo]="testOfClass.scheduleAndStaff.homeworkChecker.profilePhoto"
+                [letter]="testOfClass.scheduleAndStaff.homeworkChecker.firstName[0]"
+                class="bg-gray-300 rounded-full h-8 w-8 object-cover" />
+              <div class="flex flex-col gap-4">
+                <h2 class="font-medium text-xs mb-0 text-gray-500">
+                  {{ testOfClass.scheduleAndStaff.homeworkChecker.firstName }} {{ testOfClass.scheduleAndStaff.homeworkChecker.lastName }}
+                </h2>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <span class="font-bold">Course's details</span>
+          <div class="" style="line-height: 23px" [innerHTML]="testOfClass.test.description"></div>
+        </div>
+
+        <!-- ------------------ -->
+
+        <!-- <div class="flex items-center gap-2">
+        <span class="font-bold w-32">Teacher's note:</span>
+        <span>Study well and effectively. / Good and effective learning.</span>
+      </div>
+      <div class="flex items-center gap-6">
+        <div class="flex items-center gap-2">
+          <span class="font-bold">Session:</span>
+          <span>3</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="font-bold">Online class link:</span>
+          <span>https://teams.microsoft.com/l/meetup...</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="font-bold w-32">Target::</span>
+        <span>IELTS 7.5</span>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <span class="font-bold w-32">Teacher:</span>
+      <span> .</span>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <span class="font-bold w-32">Attendance:</span>
+      <span>Study well and effectively. / Good and effective learning.</span>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <span class="font-bold w-32">Red flags:</span>
+      <span>
+        <span class="ph ph-flag"></span>
+      </span>
+    </div> -->
+      </div>
+    </div>
+  </div>
+}
+
+<div class="h-14"></div>

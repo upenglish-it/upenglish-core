@@ -1,0 +1,22 @@
+.pipeline-stage-container.cdk-drop-list-dragging {
+  .pipeline-stage-empty-placeholder {
+    @apply hidden;
+  }
+}
+.pipeline-stage-container {
+  .cdk-drag-placeholder {
+    .pipeline-stage-lead-item {
+      @apply bg-gray-100 border-dashed border-gray-400;
+
+      img,
+      div {
+        @apply invisible;
+      }
+    }
+  }
+}
+.pipeline-stage-lead.cdk-drag-preview {
+  .pipeline-stage-lead-item {
+    @apply transform shadow-lg border-isms-500;
+  }
+}

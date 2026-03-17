@@ -1,0 +1,52 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  nzCentered
+  [nzWidth]="'400px'"
+  [nzTitle]="titleTemplate"
+  [nzFooter]="footerTemplate"
+  (nzOnOk)="onCreate()"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <form class="px-4 py-3 flex-col max-h-[500px] space-y-3 flex-1 flex overflow-auto mini-scroll-bar min-h-fit" [formGroup]="materialFormGroup">
+      <div class="space-y-1.5">
+        <label class="font-normal text-gray-600 text-xs required">Name</label>
+        <input nz-input placeholder="Type here" formControlName="name" />
+        <ng-container *ngIf="materialFormGroup.get('name').touched">
+          <p class="isms-error-message" *ngIf="materialFormGroup.get('name').hasError('required')">Name is required</p>
+        </ng-container>
+      </div>
+      <div class="flex space-x-2">
+        <div class="space-y-1.5 flex-1 flex flex-col">
+          <label class="font-normal text-gray-600 text-xs required">Price</label>
+          <nz-input-number formControlName="price" nzPlaceHolder="0" style="width: 100%" [nzMin]="1" [nzStep]="1"></nz-input-number>
+          <ng-container *ngIf="materialFormGroup.get('price').touched">
+            <p class="isms-error-message" *ngIf="materialFormGroup.get('price').hasError('required')">Price is required</p>
+          </ng-container>
+        </div>
+        <div class="space-y-1.5 flex-1 flex flex-col">
+          <label class="font-normal text-gray-600 text-xs">Quantity</label>
+          <nz-input-number formControlName="quantity" nzPlaceHolder="0" style="width: 100%" [nzMin]="1" [nzStep]="1"></nz-input-number>
+          <ng-container *ngIf="materialFormGroup.get('quantity').touched">
+            <p class="isms-error-message" *ngIf="materialFormGroup.get('quantity').hasError('required')">Quantity is required</p>
+          </ng-container>
+        </div>
+      </div>
+    </form>
+  </ng-container>
+  <ng-template #titleTemplate>
+    {{ materialFormGroup.value._id ? "Manage Item" : "Add New Item" }}
+  </ng-template>
+  <ng-template #footerTemplate>
+    <div class="space-x-2 flex items-center">
+      <button nz-button nzBlock (click)="toggle()">Close</button>
+      <button nz-button nzType="primary" (click)="onCreate()" [nzLoading]="loading" nzBlock [disabled]="materialFormGroup.invalid" *ngIf="!materialFormGroup.value._id"
+        >Submit</button
+      >
+      <button nz-button nzType="primary" (click)="onUpdate()" [nzLoading]="loading" nzBlock [disabled]="materialFormGroup.invalid" *ngIf="materialFormGroup.value._id"
+        >Save Changes</button
+      >
+    </div>
+  </ng-template>
+</nz-modal>

@@ -1,0 +1,61 @@
+<div class="flex flex-col gap-6">
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+    @for (class of classes; track class._id) {
+      <div
+        class="group rounded-3xl border border-slate-200 bg-slate-50/60 hover:bg-white hover:border-slms-400 transition-all duration-200 shadow-sm hover:shadow-xl cursor-pointer p-6 flex flex-col gap-5"
+        (click)="selectClass(class)">
+        <div class="flex items-start justify-between gap-4">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-slms-500/10 text-slms-600 font-semibold text-lg flex items-center justify-center">
+              {{ class.course?.name?.charAt(0) || class.name?.charAt(0) || "C" }}
+            </div>
+            <div class="flex flex-col gap-1">
+              <h3 class="text-lg font-semibold text-slate-900 mb-0 leading-tight">{{ class.name }}</h3>
+              <p class="text-sm text-slate-500 mb-0">{{ class.course?.name || "Untitled course" }}</p>
+            </div>
+          </div>
+          <span
+            style="text-wrap: nowrap"
+            class="inline-flex items-center gap-2 text-xs font-semibold rounded-full px-3 py-1 uppercase tracking-wider"
+            [ngClass]="{
+              'text-[#4C1D95] bg-[#EDE9FE]': class.status === 'ongoing',
+              'text-[#92400E] bg-[#FEF3C7]': class.status === 'stopped',
+              'text-[#0F62FE] bg-[#E0EBFF]': class.status === 'not-started',
+              'text-[#047857] bg-[#D1FAE5]': class.status === 'finished',
+              'text-[#334155] bg-[#E2E8F0]': !class.status || class.status === 'completed',
+            }">
+            {{ (class.status || "scheduled").replace("-", " ") }}
+          </span>
+        </div>
+
+        <div class="rounded-2xl border border-slate-100 bg-white px-4 py-3 flex items-center justify-between text-sm text-slate-600">
+          <div class="flex flex-col">
+            <span class="text-xs uppercase tracking-wide text-slate-400">Students</span>
+            <span class="text-base font-semibold text-slate-900">{{ class.totalMembers || 0 }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-xs uppercase tracking-wide text-slate-400">IELTS tests</span>
+            <span class="text-base font-semibold text-slate-900">{{ class.ieltsTestsOfCourse ? 1 : 0 }}</span>
+          </div>
+          <div class="flex flex-col text-right">
+            <span class="text-xs uppercase tracking-wide text-slate-400">Last updated</span>
+            <span class="text-base font-semibold text-slate-900">{{ class.updatedAt | date: "MMM d, y" }}</span>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between text-xs text-slate-500">
+          <span class="inline-flex items-center gap-1 text-slms-500 font-medium">
+            Manage class
+            <span class="ph ph-arrow-up-right text-sm"></span>
+          </span>
+        </div>
+      </div>
+    } @empty {
+      <div class="col-span-full text-center border border-dashed border-slate-300 rounded-3xl py-16 bg-white">
+        <span class="ph ph-graduation-cap text-4xl text-slate-300 block mb-4"></span>
+        <h4 class="text-xl font-semibold text-slate-900 mb-1">No classes yet</h4>
+        <p class="text-sm text-slate-500 mb-0">Start by creating your first course to populate this view.</p>
+      </div>
+    }
+  </div>
+</div>

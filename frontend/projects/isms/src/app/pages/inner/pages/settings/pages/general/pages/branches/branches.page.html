@@ -1,0 +1,86 @@
+<div class="w-full flex flex-col space-y-4">
+  <div class="flex mb-2 items-center">
+    <div class="flex-1 flex space-y-2 flex-col">
+      <h1 class="mt-0 mb-0 text-xl text-gray-800 font-semibold">Branches ({{ branches.length }})</h1>
+      <p class="mt-0 mb-0 text-sm text-gray-500 font-regular">Manage branches</p>
+    </div>
+    <div>
+      <button nz-button nzType="primary" (click)="manageBranchModal.toggle()">
+        Create New Branch
+        <span nz-icon nzType="plus" nzTheme="outline"></span>
+      </button>
+    </div>
+  </div>
+
+  <div class="grid md:grid-cols-3 sm:grid-cols-2 lg:grid-cols-5 gap-3 grid-rows-3">
+    <ng-container *ngFor="let branch of branches">
+      <div
+        class="border border-gray-200 rounded-md flex space-x-3 p-2 items-start"
+        [ngClass]="{ 'bg-isms-200 border-isms-500': selectedBranch === branch._id, 'opacity-50  ': branch.deleted }"
+        nz-tooltip
+        [nzTooltipTitle]="branch.deleted ? 'This branch was deleted' : null"
+        nzTooltipPlacement="top">
+        <img profile-photo [letter]="branch.name[0].toUpperCase()" alt="" class="w-8 h-8 bg-gray-200 rounded-full" />
+        <div class="flex flex-col flex-1 space-y-1">
+          <span class="text-sm font-semibold" [ngClass]="{ 'text-isms-600': selectedBranch === branch._id, 'text-gray-600': selectedBranch !== branch._id }">{{
+            branch.name
+          }}</span>
+          <span class="text-xs font-normal" [ngClass]="{ 'text-isms-500': selectedBranch === branch._id, 'text-gray-500': selectedBranch !== branch._id }">{{
+            branch.address
+          }}</span>
+        </div>
+        <div>
+          <span
+            class="ph-fill ph-dots-three-outline cursor-pointer text-base"
+            [ngClass]="{ 'text-isms-500': selectedBranch === branch._id, 'text-gray-500': selectedBranch !== branch._id }"
+            nz-dropdown
+            nzTrigger="click"
+            [nzDropdownMenu]="branchSettingsDropdownMenu"></span>
+        </div>
+        <nz-dropdown-menu #branchSettingsDropdownMenu="nzDropdownMenu">
+          <ul nz-menu>
+            <li nz-menu-item (click)="onSetAsSelected(branch)" *ngIf="!branch.deleted">Set as Selected</li>
+            <li nz-menu-item (click)="onEdit(branch)" *ngIf="!branch.deleted">Edit</li>
+            <li
+              nz-menu-item
+              nzDanger
+              class="flex justify-between w-40"
+              *ngIf="selectedBranch !== branch._id && !branch.deleted"
+              nz-popconfirm
+              nzPopconfirmTitle="Are you sure you want to delete this?"
+              (nzOnConfirm)="onSetToInactive(branch)"
+              (nzOnCancel)="(0)"
+              nzPopconfirmPlacement="top">
+              <span>Mark as Deleted</span>
+              <span
+                nz-icon
+                nzType="info-circle"
+                nzTheme="fill"
+                nz-tooltip
+                nzTooltipTitle="Deleting this branch will remove from the branch selector, however you can still undo it."
+                nzTooltipPlacement="top"></span>
+            </li>
+            <li nz-menu-item (click)="onSetToInactive(branch)" class="flex justify-between w-40" *ngIf="selectedBranch !== branch._id && branch.deleted">
+              <span>Recover </span>
+              <span nz-icon nzType="info-circle" nzTheme="fill" nz-tooltip nzTooltipTitle="It will recover this deleted branch" nzTooltipPlacement="top"></span>
+            </li>
+          </ul>
+        </nz-dropdown-menu>
+      </div>
+    </ng-container>
+
+    <!-- <div
+      class="border border-isms-200 bg-isms-100 text-isms-500 hover:scale-105 transition-transform hover:shadow-lg cursor-pointer rounded-full justify-center flex w-10 h-10 items-center"
+      
+      nz-tooltip
+      nzTooltipTitle="Create new Branch"
+      nzTooltipColor="#ff3823"
+      nzTooltipOverlayClassName="primary-tooltip-arrow"
+      nzTooltipPlacement="right"
+    >
+      <span class="ph-bold ph-plus text-base"></span>
+    </div> -->
+  </div>
+</div>
+
+<isms-manage-branch-modal #manageBranchModal [form-group]="manageBranchFormGroup" (on-saved)="loadData()"></isms-manage-branch-modal>

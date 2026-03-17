@@ -1,0 +1,11 @@
+import { ServiceAccount } from 'firebase-admin';
+
+export const FirebaseAdminConfig: ServiceAccount = {
+  projectId: 'isms-up',
+  privateKey:
+    '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCz7HHYwjjTQYv7\nIRLAV/Ex9zLBcZ25t/OfA1j+EED0KnpYUVN5mC24mOxYma4v6gElzSHxsqm6jiSB\nmWlSVZJ2mqW83xNJWounbf/mXOP0tQDrd8pGLobXpBVzH8cu4/3bIzoWDoyjRIF6\n7L6g+H/J7EPHlVnoMljPJbUuUNVwyScAcAQreVJyF4CJX5YWhKHoXBUpoLQUVxWf\nSTD8hvoOX0kOweQ3Td0p7FCPq99y7IOLcPN/KWUlK/3DFxZ5+F8EIqIw9RCHFZfD\nTC7/8xbf3vbMJEc5ZzqgSJM/CKyj9OvdeRRcU1it+q+OGyD1ZkVnkbzKlwlTJ1C7\n+N/JtBgtAgMBAAECggEAMke4tvzr2WmfX0IqVdMdpbtxlSqVi8Fy1PSgCXvsUu+N\n+iFcBQZ4fHZL0iS8T0qDIJe3TS6DDQ3M+OSw0J/2SqvD9kiWwLCLh3IPicZas9dj\nVupGfh9hcmC5187BIIL5PaSWBnTxa2zpDDuduClJuNmMRXmgwulS9SyR+cwAIcC0\nX7LCRDJUv6LQVZQYOSCal6uuTMIGbxs9u7uDt2LFs9tjvBmnhbWN0QiF5Z5ysZ/S\n/NDoM9MwHO6y1rJagjEwl3ni+j/KZfYMz3g0m3qm2lCxzb5xurKB+6Stq9p9Lp1J\nSPi2MLdaUaUlNlX2kjNRT1qcuPvhDmrUlZoIQfZ2hwKBgQDseH492WyA/at2QGj7\ntHF6TV0cdUBNQtglM70UqvMhhrHWbY/e3HHIbRdGQLAtByq8KPBMzb63Nvt/HdiE\n9Eny685UqgOH6Di6O9WnPxpbSCMB9rVy8TtJIgF/nn+WyOBelwdbMZCZ3eIZpSe/\nxqZKm6wn49hh4vRFJqE74G+NnwKBgQDCyGxOaTB0sn9YHbIF1fnNc1Yqqa3Jwn65\nh2Uepbtxuh2npDAwJoSdA87FqR2Pr0Gl4nHR+snrWuRWu5ewdHGWBtYN4ic1BYnx\nr2XeEJn3ia29NYrK5pS6E01B7cL9HQA+RJeZ9lCPAha+E3SQyEry4e1dxxxyItNm\nmh8GPU6uswKBgGHmvPVkV/zLiTprDkvvd+/Xqc4HaTjTjONSGV0+LWza9DO/ponx\nIJaHO9SVIZty1SmTlXFm2SfHdrY5KBRbg2Y0ZHc+8DlLVnkcHqegg4v5QK0mdBcD\ncrUjhBVPDKnjvqjKxHvn+GMLrvlJHDzUxLIs40icl1BngxRCGwzMLcMnAoGBAJ09\nQDlYLxa1lZljd3fAkYSp69BK45ExIi3RP+8qqROYxCG1qHTmUz2RelUUPVnlh6BL\nGckBpAkLebMOgtieV6dd42SXwUDLNN1W02wdiL1MdmV8mItM8pj3xfFH55V+2Nhr\ndNqD/epELGnKuNm75s0FVyHR/4Of23pDRnI6AY+DAoGAXLbdIlhk9Ekpl6sZsdhv\nf9cok7Uxp42gTIPUslq43qd/FvbAa5C8DNosftZu3REqbNQPIaQdc6qllJjwAj0w\nog1Aivn69BEnemefcQ7szOjPwkOKQRCuI8Myd1TniOYk6wajgj8gx67So5kZwLz8\n5HJ9YIM1mk4yjBShiRtER88=\n-----END PRIVATE KEY-----\n'.replace(
+      /\\n/g,
+      '\n',
+    ),
+  clientEmail: 'firebase-adminsdk-eqjab@isms-up.iam.gserviceaccount.com',
+};

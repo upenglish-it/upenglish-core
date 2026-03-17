@@ -1,0 +1,51 @@
+@if (elementRef.nativeElement) {
+  @if (elementRef.nativeElement.getAttribute("answer-number")) {
+    <span class="font-semibold text-gray-500 text-center">{{ elementRef.nativeElement.getAttribute("answer-number") }}.</span>
+  }
+  <!-- {{ type }} -->
+  <!-- {{ viewMode }} -->
+  <!-- Textbox -->
+  @if (type === "movable-textbox" || type === "static-textbox") {
+    <input (click)="inputElement.focus()" [readonly]="viewMode === 'editing'" (keyup)="participantTypedAnswer(inputElement.value)" placeholder="Enter answer" #inputElement />
+  }
+
+  <!-- Dropzone -->
+  @if (type === "movable-dropzone" || type === "static-dropzone") {
+    <!-- @if (viewMode === "editing") {
+      <div
+        class="dropzone-editing mr-2"
+        cdkDropList
+        (cdkDropListDropped)="onDrop($event)"
+        [id]="'answer-box-' + associatedQuestionId"
+        [cdkDropListConnectedTo]="[associatedQuestionId]">
+        {{ participantAnswerText }}
+      </div>
+    }
+    @if (viewMode === "viewing") {
+      <div
+        class="dropzone-editing mr-2"
+        cdkDropList
+        (cdkDropListDropped)="onDrop($event)"
+        [id]="'answer-box-' + associatedQuestionId"
+        [cdkDropListConnectedTo]="[associatedQuestionId]">
+        {{ participantAnswerText }}
+      </div>
+    } -->
+
+    @if (viewMode === "editing") {
+      <div class="dropzone-editing mr-2 dnd-dropzone" [id]="'answer-box-' + associatedQuestionId">&nbsp;</div>
+    }
+    @if (viewMode === "viewing") {
+      <div class="dropzone-editing mr-2 dnd-dropzone" [id]="'answer-box-' + associatedQuestionId" (drop)="dropHandler($event)" (dragover)="dragoverHandler($event)">{{
+        participantAnswerText ?? "&nbsp;"
+      }}</div>
+    }
+  }
+
+  @if (viewMode === "editing") {
+    <span class="ph-bold ph-pencil" (click)="updateAttribute()"></span>
+    <span class="font-semibold text-gray-500 text-center">{{ elementRef.nativeElement.getAttribute("points") }}pts</span>
+    <span class="ph-bold ph-x" (click)="delete()"></span>
+    <slms-answer-box-config-modal #answerBoxConfigModal></slms-answer-box-config-modal>
+  }
+}

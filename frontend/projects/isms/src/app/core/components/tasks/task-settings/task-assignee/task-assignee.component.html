@@ -1,0 +1,300 @@
+<div class="isms-section-container-content flex flex-col space-y-4" [formGroup]="assigneeFormGroup">
+  <div class="flex flex-col md:flex-row gap-3 md:gap-4">
+    <div class="space-y-1.5 flex-1 flex flex-col">
+      <label class="isms-label-left isms-required">Created By</label>
+      <!-- <nz-select nzDisabled formControlName="reviewers" nzShowSearch nzPlaceHolder="Select creator">
+        <nz-option nzCustomContent *ngFor="let member of []" [nzLabel]="member.firstName + ' ' + member.lastName" [nzValue]="member._id">
+          <div class="flex space-x-2 items-center">
+            <img profile-photo [letter]="member.firstName[0].toUpperCase() + '' + member.lastName[0].toUpperCase()" [photo]="member.profilePhoto" alt="" class="border-gray-200 rounded-full w-6 h-6" />
+            <div class="flex flex-col">
+              <span class="text-xs leading-[1] font-medium text-gray-700">{{ member.firstName + " " + member.lastName }}</span>
+              <span class="text-gray-500 text-xs">{{ member.contacts[0].value }}</span>
+            </div>
+          </div>
+        </nz-option>
+      </nz-select>
+      <ng-container *ngIf="formGroup.get('reviewers').touched">
+        <p class="isms-error-message" *ngIf="formGroup.get('reviewers').hasError('required')">Creator is required</p>
+      </ng-container> -->
+      <div class="flex items-center space-x-3" *ngIf="task">
+        <img
+          profile-photo
+          [letter]="task.createdBy.firstName[0].toUpperCase() + '' + task.createdBy.lastName[0].toUpperCase()"
+          [photo]="task.createdBy.profilePhoto"
+          alt=""
+          class="border-gray-200 rounded-full w-6 h-6" />
+        <div class="flex flex-col">
+          <span class="text-xs leading-[1] font-medium text-gray-700">{{ task.createdBy.firstName + " " + task.createdBy.lastName }}</span>
+          <span class="text-[11px] font-normal text-gray-400">{{ task.createdBy.emailAddresses[0] }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="space-y-1.5 flex-1 flex flex-col">
+      <label class="isms-label-left isms-required">Reviewers</label>
+      <nz-select nzMode="multiple" formControlName="reviewers" nzShowSearch nzPlaceHolder="Select reviewers">
+        <nz-option nzCustomContent *ngFor="let staff of staffs" [nzLabel]="staff.firstName + ' ' + staff.lastName" [nzValue]="staff._id" [nzHide]="isReviewerSelected(staff._id)">
+          <div class="flex space-x-2 items-center">
+            <img
+              profile-photo
+              [letter]="staff.firstName[0].toUpperCase() + '' + staff.lastName[0].toUpperCase()"
+              [photo]="staff.profilePhoto"
+              alt=""
+              class="border-gray-200 rounded-full w-6 h-6" />
+            <div class="flex flex-col">
+              <span class="text-xs leading-[1] font-medium text-gray-700">{{ staff.firstName + " " + staff.lastName }}</span>
+              <span class="text-gray-500 text-xs">{{ staff.emailAddresses[0] }}</span>
+            </div>
+          </div>
+        </nz-option>
+      </nz-select>
+      <ng-container *ngIf="assigneeFormGroup.get('reviewers').touched">
+        <p class="isms-error-message" *ngIf="assigneeFormGroup.get('reviewers').hasError('required')">Reviewers is required</p>
+      </ng-container>
+    </div>
+  </div>
+
+  <!-- <div class="space-x-2 flex">
+    <div class="space-y-1.5 flex-1">
+      <label class="isms-label-left isms-required">Pipeline Title</label>
+      <nz-input-group [nzPrefix]="prefixPosition" class="space-x-1.5">
+        <input nz-input placeholder="Ex. HR Associate" />
+      </nz-input-group>
+      <ng-template #prefixPosition>
+        <span class="text-base text-gray-400 ph-duotone ph-briefcase"></span>
+      </ng-template>
+      <ng-container>
+        <p class="isms-error-message">Pipeline Title is required</p>
+      </ng-container>
+    </div>
+
+    <div class="space-y-1.5 flex-1">
+      <label class="isms-label-left isms-required">Department</label>
+    </div>
+  </div> -->
+  <br />
+  <div class="space-y-1.5 flex-1 flex flex-col">
+    <div class="flex items-center justify-between gap-2 flex-wrap">
+      <label class="isms-label-left isms-required">Participants</label>
+      <button nz-button nzSize="small" nzType="primary" nzGhost (click)="toggleParticipantsModal()">
+        Add Participants
+        <span nz-icon nzType="usergroup-add" nzTheme="outline"></span>
+      </button>
+    </div>
+
+    <ng-container *ngIf="assignedParticipants.length > 0; else emptyFilteredParticipant">
+      <div class="bg-white flex-1 overflow-y-auto mini-scroll-bar">
+        <div class="overflow-x-auto min-h-0">
+          <table role="table" class="min-w-[520px] lg:min-w-full divide-y divide-gray-200 isms-table">
+            <thead class="bg-gray-50">
+              <tr class="font-semibold text-gray-700 text-xs md:text-sm">
+                <th class="w-10 px-2 md:px-3 py-2 md:py-3">
+                  <div class="relative grid place-items-center">#</div>
+                </th>
+                <th class="px-2 md:px-3 py-2 md:py-3 text-left">
+                  <div class="flex items-center justify-between">Name</div>
+                </th>
+                <th class="px-2 md:px-3 py-2 md:py-3 text-right"></th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200 text-xs md:text-sm">
+              <tr *ngFor="let participant of assignedParticipants; let participantIndex = index">
+                <td class="px-2 md:px-3 py-2 md:py-3">
+                  <div class="relative grid place-items-center">
+                    {{ participantIndex + 1 }}
+                  </div>
+                </td>
+                <td class="px-2 md:px-3 py-2 md:py-3">
+                  <div class="flex items-center space-x-3 min-w-0">
+                    <img profile-photo [photo]="null" [letter]="participant.name[0]" class="w-6 h-6 bg-gray-100 rounded-full" />
+                    <div class="flex flex-col min-w-0">
+                      <span class="text-xs md:text-sm font-medium text-gray-700 cursor-pointer truncate max-w-[200px] md:max-w-none" (click)="(1)">{{
+                        participant.name
+                      }}</span>
+                      <span
+                        class="text-[11px] font-normal text-gray-400"
+                        *ngIf="participant.value.type === 'class'"
+                        nz-popover
+                        nzType="primary"
+                        nzPopoverTitle="Assigned Participants"
+                        [nzPopoverContent]="participantsTemplate">
+                        {{ participant.value.totalMembers }} members
+                      </span>
+                      <ng-template #participantsTemplate>
+                        <nz-list nzBordered nzSize="small">
+                          <nz-list-item *ngFor="let member of participant.value.members.studentsTuitionAttendance">
+                            <div class="flex">{{ member.studentInfo.firstName }} {{ member.studentInfo.lastName }}</div>
+                          </nz-list-item>
+                        </nz-list>
+                      </ng-template>
+                      <span class="text-[11px] font-normal text-gray-400 truncate max-w-[200px] md:max-w-none" *ngIf="participant.value.type === 'student'">{{
+                        participant.value.emailAddress
+                      }}</span>
+                    </div>
+                  </div>
+                </td>
+                <td class="px-2 md:px-3 py-2 md:py-3 font-normal text-xs md:text-sm text-gray-500">
+                  <div class="flex justify-end">
+                    <button
+                      nz-button
+                      nzType="primary"
+                      nzDanger
+                      nzGhost
+                      nzSize="small"
+                      nz-popconfirm
+                      nzPopconfirmTitle="Would you like to remove this?"
+                      nzPopconfirmPlacement="bottom"
+                      (nzOnConfirm)="removeParticipant(participantIndex, participant)">
+                      Remove
+                      <span nz-icon nzType="usergroup-delete" nzTheme="outline" *ngIf="participant.value.type === 'class'"></span>
+                      <span nz-icon nzType="user-delete" nzTheme="outline" *ngIf="participant.value.type === 'student'"></span>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </ng-container>
+  </div>
+</div>
+
+<!-- Assign Participants Modal -->
+<nz-modal
+  [(nzVisible)]="showParticipantsModal"
+  nzCentered
+  [nzWidth]="'95%'"
+  [nzStyle]="{ maxWidth: '500px' }"
+  [nzTitle]="titleTemplate"
+  [nzFooter]="null"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggleParticipantsModal()"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <form
+      class="px-4 py-3 flex-col h-[calc(100vh-160px)] md:h-[600px] space-y-3 flex-1 flex overflow-auto mini-scroll-bar min-h-fit"
+      [formGroup]="filterParticipantFormGroup">
+      <div class="space-y-1.5 flex flex-col">
+        <!-- <label class="font-normal text-gray-600 text-xs required">Type of Participant</label> -->
+        <nz-radio-group formControlName="type" nzButtonStyle="solid" nzSize="small">
+          <label nz-radio-button nzValue="student">Students</label>
+          <label nz-radio-button nzValue="class">Class</label>
+        </nz-radio-group>
+      </div>
+
+      <div class="space-y-1.5 flex flex-col">
+        <div>
+          <nz-input-group [nzPrefix]="searchPrefixTemplate" [nzSuffix]="searchSuffixTemplate" class="space-x-1.5">
+            <input nz-input placeholder="Search for: Name" nzShape="round" formControlName="searchQuery" />
+          </nz-input-group>
+          <ng-template #searchPrefixTemplate>
+            <span class="text-base cursor-pointer text-gray-400 ph ph-magnifying-glass"></span>
+          </ng-template>
+          <ng-template #searchSuffixTemplate>
+            <span nz-icon class="ant-input-clear-icon" nzTheme="fill" nzType="close-circle" (click)="filterParticipantFormGroup.get('searchQuery').setValue(null)"></span>
+          </ng-template>
+        </div>
+      </div>
+
+      <ng-container *ngIf="filteredParticipants.length > 0; else emptyFilteredParticipant">
+        <div class="bg-white mini-scroll-bar flex-1 overflow-y-auto">
+          <div class="overflow-x-auto min-h-0">
+            <table role="table" class="min-w-[520px] lg:min-w-full divide-y divide-gray-200 isms-table">
+              <thead class="bg-gray-50">
+                <tr class="font-semibold text-gray-700 text-xs md:text-sm">
+                  <th class="w-10 px-2 md:px-3 py-2 md:py-3">
+                    <div class="relative grid place-items-center">#</div>
+                  </th>
+                  <th class="px-2 md:px-3 py-2 md:py-3 text-left">
+                    <div class="flex items-center justify-between">Name</div>
+                  </th>
+                  <th class="px-2 md:px-3 py-2 md:py-3 text-right"></th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200 text-xs md:text-sm">
+                <tr *ngFor="let participant of filteredParticipants; let i = index">
+                  <td class="px-2 md:px-3 py-2 md:py-3">
+                    <div class="relative grid place-items-center">{{ i + 1 }}</div>
+                  </td>
+
+                  <td class="px-2 md:px-3 py-2 md:py-3">
+                    <div class="flex items-center space-x-3 min-w-0">
+                      <img profile-photo [photo]="null" [letter]="participant.name[0]" class="w-6 h-6 bg-gray-100 rounded-full" />
+                      <div class="flex flex-col min-w-0">
+                        <span class="text-xs md:text-sm font-medium text-gray-700 cursor-pointer truncate max-w-[200px] md:max-w-none" (click)="(1)">{{
+                          participant.name
+                        }}</span>
+                        <span
+                          class="text-[11px] font-normal text-gray-400"
+                          *ngIf="participant.value.type === 'class'"
+                          nz-popover
+                          nzType="primary"
+                          nzPopoverTitle="Participants"
+                          [nzPopoverContent]="participantsTemplate">
+                          {{ participant.value.totalMembers }} members
+                        </span>
+                        <ng-template #participantsTemplate>
+                          <nz-list nzBordered nzSize="small">
+                            <nz-list-item *ngFor="let member of participant.value.studentsTuitionAttendance">
+                              <div class="flex">{{ member.studentInfo.firstName }} {{ member.studentInfo.lastName }}</div>
+                            </nz-list-item>
+                          </nz-list>
+                        </ng-template>
+
+                        <span class="text-[11px] font-normal text-gray-400 truncate max-w-[200px] md:max-w-none" *ngIf="participant.value.type === 'student'">{{
+                          participant.value.emailAddress
+                        }}</span>
+                      </div>
+                    </div>
+                  </td>
+
+                  <td class="px-2 md:px-3 py-2 md:py-3 font-normal text-xs md:text-sm text-gray-500">
+                    <div class="flex justify-center">
+                      <span *ngIf="participantAlreadyAdded(participant.value.id)" class="text-success-500">Already added</span>
+                      <ng-container *ngIf="!participantAlreadyAdded(participant.value.id)">
+                        <ng-container *ngIf="participant.value.type === 'student'">
+                          <button nz-button nzType="primary" nzDanger nzGhost nzSize="small" (click)="onAddParticipant(participant)">
+                            Add
+                            <span nz-icon nzType="user-add" nzTheme="outline"></span>
+                          </button>
+                        </ng-container>
+                        <ng-container *ngIf="participant.value.type === 'class'">
+                          <span *ngIf="participant.value.totalMembers === 0" class="text-gray-500">No members</span>
+                          <ng-container *ngIf="participant.value.totalMembers > 0">
+                            <button nz-button nzType="primary" nzDanger nzGhost nzSize="small" (click)="onAddParticipant(participant)">
+                              Add
+                              <span nz-icon nzType="usergroup-add"></span>
+                            </button>
+                          </ng-container>
+                        </ng-container>
+                      </ng-container>
+
+                      <!--
+                    <ng-container *ngIf="participant.value.type === 'student'"></ng-container>
+                    <ng-container *ngIf="participant.value.type === 'class'">
+                      <span *ngIf="participant.value.totalMembers === 0" class="text-success-500">No members</span>
+                      || (participant.value.type === 'class' && participant.value?.totalMembers === 0)
+                    </ng-container>
+                    <button nz-button nzType="primary" nzDanger nzGhost nzSize="small" (click)="onAddParticipant(participant)" *ngIf="!participantAlreadyAdded(participant.value.id)">
+                      Add
+                      <span nz-icon nzType="usergroup-add" nzTheme="outline" *ngIf="participant.value.type === 'class'"></span>
+                      <span nz-icon nzType="user-add" nzTheme="outline" *ngIf="participant.value.type === 'student'"></span>
+                    </button> -->
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </ng-container>
+    </form>
+  </ng-container>
+  <ng-template #titleTemplate>Add Participants</ng-template>
+</nz-modal>
+
+<ng-template #emptyFilteredParticipant>
+  <div>
+    <nz-empty nzNotFoundContent="No available participants"></nz-empty>
+  </div>
+</ng-template>

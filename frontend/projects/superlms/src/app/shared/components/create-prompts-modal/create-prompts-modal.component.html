@@ -1,0 +1,43 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  [nzWidth]="'600px'"
+  [nzTitle]="promptFormGroup.value._id ? 'Edit Prompt' : 'Create Prompt'"
+  [nzMaskClosable]="false"
+  [nzClosable]="false"
+  nzCancelText="Close"
+  (nzOnCancel)="toggle()"
+  [nzOkText]="promptFormGroup.value._id ? 'Save' : 'Create'"
+  (nzOnOk)="onSubmit()"
+  [nzOkDisabled]="promptFormGroup.invalid"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <form class="px-4 py-3 flex-col max-h-[500px] space-y-3 flex-1 flex overflow-auto mini-scroll-bar min-h-fit" [formGroup]="promptFormGroup">
+      <div class="space-y-1.5 flex-1">
+        <label class="slms-label slms-required">Name</label>
+        <input nz-input formControlName="name" placeholder="Enter name" />
+      </div>
+      <div class="flex items-center justify-between gap-4">
+        <div class="space-y-1.5 flex-1">
+          <label class="slms-label slms-required">Provider</label>
+          <nz-select formControlName="provider" nzShowSearch class="w-full" nzPlaceHolder="Select provider" [nzDropdownMatchSelectWidth]="false">
+            <nz-option nzValue="openai" nzLabel="OpenAI"></nz-option>
+            <nz-option nzValue="gemini" nzLabel="Gemini"></nz-option>
+            <nz-option nzValue="openrouter" nzLabel="OpenRouter"></nz-option>
+          </nz-select>
+        </div>
+        <div class="space-y-1.5 flex-1">
+          <label class="slms-label slms-required">Model</label>
+          <input nz-input formControlName="model" placeholder="Enter model" />
+        </div>
+      </div>
+      <div class="space-y-1.5 flex-1">
+        <label class="slms-label slms-required">API Key</label>
+        <input nz-input formControlName="apiKey" placeholder="Enter API key" />
+      </div>
+      <div class="space-y-1.5 flex-1">
+        <label class="slms-label slms-required">Prompt Message</label>
+        <textarea nz-input formControlName="message" class="resize-none" [nzAutosize]="{ minRows: 10 }" placeholder="Type here..."></textarea>
+      </div>
+    </form>
+  </ng-container>
+</nz-modal>

@@ -1,0 +1,117 @@
+<div class="bg-white border rounded-md select-none shadow-md">
+  <div class="border-b font-medium px-3 py-2.5 flex items-center justify-between">
+    <div class="flex items-center space-x-1.5 cursor-pointer" (click)="onCollapse.emit(!integration.expand)">
+      <span class="ph-bold text-gray-900 text-xs" *ngIf="integration.calendars.length > 0" [ngClass]="{ 'ph-caret-up': integration.expand, 'ph-caret-down': !integration.expand }">
+      </span>
+      <ng-container *ngIf="integration.company === 'microsoft'">
+        <!-- <img src="assets/images/outlook.svg" alt="Logo" draggable="false" width="12" /> -->
+        <!-- <nz-switch nzSize="small" nzLoading nzDisabled [ngModel]="true" nz-tooltip nzTooltipTitle="Calendar is syncing..."></nz-switch> -->
+        <h6 class="font-semibold text-gray-600 mb-0 p-0 lowercase text-ellipsis">{{ integration.data.info.mail || integration.data.info.userPrincipalName }}</h6>
+      </ng-container>
+      <!-- show modal to edit the two way, sync=true,  -->
+      <!-- <span class="ph-bold ph-gear-six text-gray-500 cursor-pointer"></span> -->
+    </div>
+    <!-- <span class="ph ph-caret-down text-gray-500 cursor-pointer text-base" (click)="integrations[integrationIndex].expand = !integration.expand"></span> -->
+    <a class="ph-bold ph-gear-six text-sm cursor-pointer" (click)="toggle()" *ngIf="integration.calendars.length > 0"></a>
+  </div>
+
+  <ng-container *ngIf="integration.expand">
+    <div style="width: 100%" *ngIf="integration.calendars.length > 0" [@down]>
+      <nz-spin nzTip="Calendar is syncing..." [nzSpinning]="integration.data.status === 'synching'">
+        <nz-checkbox-wrapper>
+          <div nz-row class="px-3 py-2 space-y-2">
+            <div nz-col nzSpan="8" *ngFor="let calendar of integration.calendars">
+              <label nz-checkbox (ngModelChange)="onCheckCalendar()" [(ngModel)]="calendar.selected" [nzValue]="calendar._id" [nzDisabled]="!calendar.data.canEdit">
+                <div class="flex space-x-2 items-center">
+                  <span class="font-medium">{{ calendar.data.name }}</span>
+                  <span
+                    *ngIf="calendar.data.canEdit"
+                    class="ph-fill ph-check-circle"
+                    nz-tooltip
+                    [nzTooltipTitle]="calendar.meta.insync ? 'This calendar is insync' : 'Not insync'"
+                    nzTooltipColor="#ff3823"
+                    nzTooltipOverlayClassName="primary-tooltip-arrow"
+                    nzTooltipPlacement="top"
+                    [ngClass]="{ 'text-green-600': calendar.meta.insync, 'text-gray-400': !calendar.meta.insync }"></span>
+                </div>
+              </label>
+            </div>
+            <!-- <div nz-col nzSpan="8" class="pt-2">
+              <a nz-button nzBlock nzSize="small">
+                <div class="items-center flex space-x-1 justify-center">
+                  <span> Add calendar </span>
+                  <span class="ph-bold ph-plus"></span>
+                </div>
+              </a>
+            </div> -->
+          </div>
+        </nz-checkbox-wrapper>
+      </nz-spin>
+    </div>
+  </ng-container>
+</div>
+
+<nz-modal
+  [(nzVisible)]="showModal"
+  [nzWidth]="'500px'"
+  [nzTitle]="titleTemplate"
+  [nzFooter]="footerTemplate"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <div class="px-4 py-3 flex-col max-h-[400px] space-y-6 flex-1 flex overflow-auto mini-scroll-bar min-h-fit">
+      <div
+        class="p-4 rounded-md text-center border font-medium text-lg flex items-center justify-between"
+        [formGroup]="integrationFormGroup"
+        [ngClass]="{ 'bg-isms-50 border-isms-500': integrationFormGroup.value.sync, 'bg-gray-50': !integrationFormGroup.value.sync }">
+        <span class="font-medium text-xs" [ngClass]="{ 'text-isms-500': integrationFormGroup.value.sync, 'text-gray-500': !integrationFormGroup.value.sync }">
+          <ng-container *ngIf="integrationFormGroup.value.sync">
+            <ng-container *ngIf="syncLoading"> Calendar is synching... </ng-container>
+            <ng-container *ngIf="!syncLoading"> Calendar is sync </ng-container>
+          </ng-container>
+          <ng-container *ngIf="!integrationFormGroup.value.sync">Calendar is not sync</ng-container>
+        </span>
+        <nz-switch formControlName="sync" nzSize="small" [nzLoading]="syncLoading"></nz-switch>
+      </div>
+      <div>
+        <h3 class="text-xs text-gray-500 font-semibold mb-0">Calendars</h3>
+        <nz-checkbox-wrapper>
+          <div nz-row class="py-2 space-y-2">
+            <div nz-col nzSpan="8" *ngFor="let calendar of integration.calendars">
+              <label nz-checkbox (ngModelChange)="onCheckCalendar()" [(ngModel)]="calendar.selected" [nzValue]="calendar._id" [nzDisabled]="!calendar.data.canEdit">
+                <div class="flex space-x-2 items-center">
+                  <span class="font-medium">{{ calendar.data.name }}</span>
+                  <span
+                    *ngIf="calendar.data.canEdit"
+                    class="ph-fill ph-check-circle"
+                    nz-tooltip
+                    [nzTooltipTitle]="calendar.meta.insync ? 'This calendar is insync' : 'Not insync'"
+                    nzTooltipColor="#ff3823"
+                    nzTooltipOverlayClassName="primary-tooltip-arrow"
+                    nzTooltipPlacement="top"
+                    [ngClass]="{ 'text-green-600': calendar.meta.insync, 'text-gray-400': !calendar.meta.insync }"></span>
+                </div>
+              </label>
+            </div>
+          </div>
+        </nz-checkbox-wrapper>
+      </div>
+    </div>
+  </ng-container>
+  <ng-template #titleTemplate>
+    <span class="font-semibold text-isms-500 lowercase text-ellipsis">{{ integration.data.info.mail || integration.data.info.userPrincipalName }}</span>
+  </ng-template>
+  <ng-template #footerTemplate>
+    <div class="flex items-center justify-between">
+      <button nz-button nzType="primary" (click)="onDelete()" [nzLoading]="unlinkLoading">
+        Unlink this?
+        <!-- <div class="flex space-x-1.5 items-center text-white">
+          <span> Unlink this? </span>
+          <span class="ph-bold ph-plugs text-sm"></span>
+        </div> -->
+      </button>
+      <button nz-button (click)="toggle()">Close</button>
+    </div>
+  </ng-template>
+</nz-modal>

@@ -1,0 +1,90 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  nzCentered
+  [nzWidth]="'580px'"
+  [nzTitle]="null"
+  [nzFooter]="null"
+  (nzOnOk)="(1)"
+  [nzKeyboard]="false"
+  [nzClosable]="viewState === 'initial'"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <div class="w-full flex flex-col p-4 space-y-4 h-[700px] overflow-auto mini-scroll-bar">
+      <div class="flex flex-col">
+        <span class="text-base font-medium">Student Attendance</span>
+        <span class="text-gray-500">Efficiently monitor and record student presence.</span>
+      </div>
+      <ng-container [formGroup]="formGroup">
+        <form class="flex-col space-y-4 max-h-fit flex-1 flex overflow-auto mini-scroll-bar mini-scroll-bar">
+          <!-- {{ formGroup.value | json }} -->
+          <div class="space-y-1.5 flex flex-col">
+            <label class="font-normal text-gray-600 text-xs required">Date of Attendance</label>
+            <nz-date-picker [nzDisabledDate]="disabledPreviousDate" nzPlaceHolder="Select date" nzMode="date" nzFormat="MMM dd, yyyy" formControlName="date"></nz-date-picker>
+          </div>
+
+          <div class="space-y-1.5 flex flex-col">
+            <label class="font-normal text-gray-600 text-xs required">Mark as</label>
+            <nz-radio-group formControlName="status" [nzDisabled]="record?.status === 'off-day'">
+              <label nz-radio nzValue="unmark" *ngIf="record?.status">Unmark</label>
+              <label nz-radio nzValue="present">Present</label>
+              <label nz-radio nzValue="absent">Absent</label>
+              <label nz-radio nzValue="absent-with-notice">Absent With Notice</label>
+              <label nz-radio nzValue="off-day">Off Day</label>
+            </nz-radio-group>
+          </div>
+
+          <div class="space-y-1.5 flex flex-col" *ngIf="formGroup.value.status === 'absent-with-notice' || formGroup.value.status === 'off-day'">
+            <label class="font-normal text-gray-600 text-xs required">Notes</label>
+            <textarea formControlName="notes" nz-input rows="2" placeholder="Type here"></textarea>
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="font-normal text-gray-600 text-xs"> Class </label>
+            <nz-select formControlName="studentClassId" nzDisabled class="w-full" nzPlaceHolder="Select class" [nzDropdownMatchSelectWidth]="false">
+              <nz-option *ngFor="let class of classes" [nzLabel]="class.name" [nzValue]="class._id"></nz-option>
+            </nz-select>
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="font-normal text-gray-600 text-xs"> Students </label>
+            <nz-select formControlName="studentIds" nzMode="multiple" [nzDisabled]="true" class="w-full" nzPlaceHolder="Select student" [nzDropdownMatchSelectWidth]="false">
+              <nz-option *ngFor="let student of students" [nzLabel]="student.firstName + ' ' + student.lastName" nzCustomContent [nzValue]="student._id">
+                <div class="flex space-x-2 items-center">
+                  <img profile-photo [letter]="student.firstName[0]" class="w-5 h-5 bg-gray-100 rounded-full" />
+                  <span class="text-xs font-normal text-gray-500"> {{ student.firstName }} {{ student.lastName }} </span>
+                </div>
+              </nz-option>
+            </nz-select>
+          </div>
+        </form>
+
+        <ng-container *ngIf="formGroup.value.status === 'off-day'">
+          <nz-alert nzType="warning" nzMessage="This action is irreversible" nzShowIcon></nz-alert>
+          <label nz-checkbox formControlName="offDayRestriction">I understand</label>
+        </ng-container>
+      </ng-container>
+      <button nz-button nzType="primary" (click)="onSubmit()" nzBlock [nzLoading]="viewState === 'updating'" [disabled]="formGroup.invalid || record.status === 'off-day'">
+        <div class="flex space-x-1 items-center justify-center">
+          <span>Mark as </span>
+          <span class="font-semibold">
+            <ng-container *ngIf="formGroup.value.status === 'unmark'">Unmark</ng-container>
+            <ng-container *ngIf="formGroup.value.status === 'present'">Present</ng-container>
+            <ng-container *ngIf="formGroup.value.status === 'absent'">Absent</ng-container>
+            <ng-container *ngIf="formGroup.value.status === 'absent-with-notice'">Absent With Notice</ng-container>
+            <ng-container *ngIf="formGroup.value.status === 'off-day'">Off Day</ng-container>
+          </span>
+        </div>
+      </button>
+    </div>
+  </ng-container>
+</nz-modal>
+
+<!-- <ng-template #statusTemplate
+  >
+  <ng-container *ngIf="formGroup.value.status === 'present'">Present</ng-container>
+  <ng-container *ngIf="formGroup.value.status === 'absent'">Absent</ng-container>
+  <ng-container *ngIf="formGroup.value.status === 'absent-with-notice'">Absent With Notice</ng-container>
+  <ng-container *ngIf="formGroup.value.status === 'off-day'">Off Day</ng-container>
+</ng-template> -->

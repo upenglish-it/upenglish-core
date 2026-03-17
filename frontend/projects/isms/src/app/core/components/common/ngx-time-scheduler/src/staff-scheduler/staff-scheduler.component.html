@@ -1,0 +1,531 @@
+<div class="time-sch-wrapper" [style.height]="maxHeight">
+  <div class="flex items-center px-4 justify-between h-16">
+    <div class="flex space-x-2" *ngIf="showActionButtons">
+      <!-- <button class="btn" *ngIf="showGoto" (click)="showGotoModal = !showGotoModal">{{ text.GotoButton }}</button> -->
+      <!-- <nz-date-picker [nzAllowClear]="false" class="w-44"></nz-date-picker> -->
+      <!-- <div class="goto-modal" *ngIf="showGotoModal">
+        <label>
+          <input type="date" (change)="gotoDate($event.target)" />
+          <nz-date-picker *ngIf="showGoto"></nz-date-picker>
+        </label>
+      </div> -->
+
+      <!-- <button class="btn" *ngIf="showToday" (click)="gotoToday()">{{ text.TodayButton }}</button>
+      <button class="btn" (click)="previousPeriod()">{{ text.PrevButton }}</button>
+      <button class="btn" (click)="nextPeriod()">{{ text.NextButton }}</button> -->
+
+      <!-- <button nz-button *ngIf="showToday" (click)="currentWeek()">{{ text.CurrentWeekButton }}</button> -->
+      <!-- <button class="btn" *ngIf="showToday" (click)="gotoToday()">{{ text.TodayButton }}</button> --->
+      <nz-button-group>
+        <!-- Week -->
+        <button nz-button (click)="previousPeriod()" *ngIf="view === 'week' || view === 'week-by-class'">{{ text.PrevButton }}</button>
+        <button nz-button *ngIf="view === 'week' || view === 'week-by-class'" (click)="currentWeek()">{{ text.CurrentWeekButton }}</button>
+        <button nz-button (click)="nextPeriod()" *ngIf="view === 'week' || view === 'week-by-class'">{{ text.NextButton }}</button>
+
+        <!-- Day -->
+        <button nz-button (click)="previousDayPeriod()" *ngIf="view === 'day'">{{ text.PrevButton }}</button>
+        <button nz-button (click)="currentDay()" *ngIf="view === 'day'">{{ text.TodayButton }}</button>
+        <button nz-button (click)="nextDayPeriod()" *ngIf="view === 'day'">{{ text.NextButton }}</button>
+      </nz-button-group>
+    </div>
+
+    <h3 class="text-center m-0 font-medium flex items-center space-x-3 text-base text-gray-600" *ngIf="showHeaderTitle">
+      <span>
+        {{ text.HeaderTitle ?? start.locale(locale).startOf("week").format(headerFormat) }}
+      </span>
+      <span class="ph-fill text-gray-400 ph-arrow-fat-lines-right"></span>
+      <span>
+        {{ end.locale(locale).endOf("week").format(headerFormat) }}
+      </span>
+    </h3>
+
+    <div class="invisible" *ngIf="showActionButtons">
+      <button class="btn" *ngFor="let period of periods" [ngClass]="period.classes" (click)="changePeriod(period)" [title]="period.tooltip ? period.tooltip : ''">
+        {{ period.name }}
+      </button>
+    </div>
+  </div>
+
+  <div class="time-sch-table-wrapper">
+    <table class="time-sch-table">
+      <tr *ngFor="let timeFrameHeader of header; let i = index; trackBy: trackByFn">
+        <td class="time-sch-section relative text-center" *ngIf="i === 0" [rowSpan]="periods.length">
+          <span class="font-semibold text-gray-600 text-sm">
+            {{ text.SectionTitle }}
+            <!-- Time slots of staff in a week -->
+          </span>
+          <div class="absolute right-1 top-1">
+            <!-- <a (click)="manageStaffScheduleDrawer.toggle()">New time slot</a> -->
+            <!-- <button
+              nz-button
+              nzShape="circle"
+              nzSize="small"
+              nz-tooltip
+              nzTooltipTitle="Add new time slot"
+              nzTooltipColor="#ff3823"
+              nzTooltipOverlayClassName="primary-tooltip-arrow"
+              nzTooltipPlacement="top"
+            >
+              <span nz-icon nzType="plus" nzTheme="outline"></span>
+            </button> -->
+          </div>
+        </td>
+        <td
+          class="py-3 text-center font-semibold text-gray-500"
+          *ngFor="let dateTime of timeFrameHeader.headerDetails; trackBy: trackByFn"
+          [colSpan]="dateTime.colspan"
+          [title]="dateTime.tooltip ? dateTime.tooltip : ''">
+          {{ dateTime.name }}
+        </td>
+        <!-- <td class="py-3 text-center font-semibold text-gray-500">notes</td> -->
+        <!-- <td class="time-sch-section relative text-center" *ngIf="i === 0" [rowSpan]="periods.length">
+          <span class="font-semibold text-gray-600 text-sm">Notes</span>
+        </td> -->
+      </tr>
+    </table>
+
+    <div class="time-sch-content-wrap">
+      <table class="time-sch-table">
+        <tr *ngFor="let sectionItem of sectionItems; trackBy: trackByFn" [style.height]="sectionItem.minRowHeight + 'px'">
+          <td
+            class="time-sch-section text-center relative"
+            #sectionTd
+            (click)="events.SectionClickEvent ? events.SectionClickEvent(sectionItem.section) : false"
+            (contextmenu)="events.SectionContextMenuEvent ? events.SectionContextMenuEvent(sectionItem.section, $event) : false"
+            [style.cursor]="events.SectionClickEvent ? 'pointer' : ''"
+            [title]="sectionItem.section.tooltip ? sectionItem.section.tooltip : ''">
+            <!-- <div class="flex flex-col flex-1 py-2">
+              <span class="font-semibold"> {{ sectionItem.section.title }}</span>
+              <span class="font-normal text-xs text-gray-500" *ngIf="sectionItem.section?.description">{{ sectionItem.section.description }}</span>
+            </div> -->
+
+            <a class="absolute right-1 top-1" (click)="onSelectSchedule(sectionItem)" *ngIf="view === 'week'">Edit</a>
+
+            <!-- nz-tooltip
+              [nzTooltipTitle]="scheduleTooltipTemplate"
+              nzTooltipPlacement="bottomLeft"
+              nzTooltipOverlayClassName="white-tooltip-arrow no-padding-tooltip-arrow "
+              nzTooltipColor="#FFFFFF"
+
+            <ng-template #scheduleTooltipTemplate>
+              <div class="flex">
+                <div class="w-52 flex flex-col border-r">
+                  <h3 class="text-gray-500 mb-0 text-sm font-medium border-b px-3 py-2.5">Members in this schedule</h3>
+                  <ul class="mb-0 h-64 overflow-auto mini-scroll-bar flex flex-col">
+                    <li class="flex items-center space-x-3 hover:bg-gray-100 px-3 cursor-pointer py-1.5" *ngFor="let item of [0, 0, 0, 0, 0, 0, 0, 0, 0]">
+                      <img profile-photo [letter]="'JA'" class="w-7 h-7 bg-gray-100 rounded-full" />
+                      <span class="text-xs font-medium text-gray-700"> John Mark</span>
+                    </li>
+                  </ul>
+                </div>
+                <div class="w-72 flex flex-col">
+                  <h3 class="text-gray-500 mb-0 text-sm font-medium border-b px-3 py-2.5">Notes for Sep 2, 2023</h3>
+                  <div class="mb-0 h-64 overflow-auto mini-scroll-bar text-gray-600 text-sm px-3 py-2">
+                    <p>
+                      Lorem ipsum dolor, sit amet consectetur adipisicing elit. Architecto voluptatibus animi ad et, quisquam obcaecati rerum quaerat numquam officia eius! Nisi, similique illo unde
+                      accusamus aliquam minus inventore molestias tempora! Lorem ipsum dolor, sit amet consectetur adipisicing elit. Architecto voluptatibus animi ad et, quisquam obcaecati rerum
+                      quaerat numquam officia eius! Nisi, similique illo unde accusamus aliquam minus inventore molestias tempora! Lorem ipsum dolor, sit amet consectetur adipisicing elit. Architecto
+                      voluptatibus animi ad et, quisquam obcaecati rerum quaerat numquam officia eius! Nisi, similique illo unde accusamus aliquam minus inventore molestias tempora! Lorem ipsum dolor,
+                      sit amet consectetur adipisicing elit. Architecto voluptatibus animi ad et, quisquam obcaecati rerum quaerat numquam officia eius! Nisi, similique illo unde accusamus aliquam
+                      minus inventore molestias tempora!
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </ng-template> -->
+
+            <div class="flex flex-col flex-1 py-2">
+              <span class="font-semibold"> {{ sectionItem.section.title }}</span>
+              <span class="font-normal text-xs text-gray-500" *ngIf="sectionItem.section?.description">{{ sectionItem.section.description }}</span>
+            </div>
+          </td>
+          <td *ngFor="let td of header[header.length - 1].headerDetails; trackBy: trackByFn"></td>
+        </tr>
+        <!-- <tr>
+          <td>Notes</td>
+        </tr> -->
+      </table>
+
+      <div class="time-sch-section-wrapper" [style.left]="SectionLeftMeasure" cdkDropListGroup>
+        <div
+          class="time-sch-section-container"
+          cdkDropList
+          cdkDropListSortingDisabled
+          [cdkDropListData]="sectionItem.section"
+          (cdkDropListDropped)="drop($event)"
+          *ngFor="let sectionItem of sectionItems; trackBy: trackByFn"
+          [style.height]="sectionItem.minRowHeight + 'px'">
+          <div
+            class="time-sch-item"
+            cdkDrag
+            cdkDragLockAxis="y"
+            cdkDragBoundary=".time-sch-section-wrapper"
+            [cdkDragData]="itemMeta.item"
+            [cdkDragDisabled]="!allowDragging"
+            *ngFor="let itemMeta of sectionItem.itemMetas; let itemMetaIndex = index; let itemMetaLast = last"
+            [ngClass]="itemMeta.item.classes"
+            (click)="events.ItemClicked ? events.ItemClicked(itemMeta.item) : false"
+            (contextmenu)="events.ItemContextMenu ? events.ItemContextMenu(itemMeta.item, $event) : false"
+            [style.height]="minRowHeight + 'px'"
+            [style.top]="itemMeta.cssTop + 'px'"
+            [style.left]="itemMeta.cssLeft + '%'"
+            [style.width]="itemMeta.cssWidth + '%'">
+            <div
+              class="item-drag-placeholder"
+              *cdkDragPlaceholder
+              [style.height]="minRowHeight - 6 + 'px'"
+              [style.left]="itemMeta.cssLeft + '%'"
+              [style.width]="'calc(' + itemMeta.cssWidth + '% - 6px)'"></div>
+            <!-- <div class="time-sch-item-start" *ngIf="itemMeta.isStart"></div> -->
+            <ng-container *ngIf="view === 'week'">
+              <!-- (click)="manageStaffScheduleDrawer.toggle()" -->
+              <div
+                class="time-sch-item-content"
+                nz-tooltip
+                [nzTooltipTitle]="scheduleTooltipTemplate"
+                nzTooltipPlacement="bottomLeft"
+                nzTooltipOverlayClassName="white-tooltip-arrow no-padding-tooltip-arrow "
+                nzTooltipColor="#FFFFFF">
+                <!-- <span class="font-semibold text-[10px]" *ngIf="itemMeta.item.name">{{ sectionItem.item | json }}</span> -->
+                <span class="text-[10px] h-6 grid place-items-center">No available staff</span>
+                <div class="flex -space-x-2.5 items-center relative">
+                  <!-- <ng-container
+                    *ngFor="
+                      let account of sectionItem.section.schedule.schedulesShifts
+                        | slice : (sectionItem.section.schedule.schedulesShifts.length > 2 ? sectionItem.section.schedule.schedulesShifts.length - 2 : 0)
+                    "
+                  >
+                    <img
+                      class="w-6 h-6 rounded-full relative hover:z-10 hover:scale-110 transition-all bg-gray-200"
+                      style="border: 2px solid white"
+                      alt=""
+                      profile-photo
+                      [photo]="account.staff.profilePhoto"
+                      [letter]="account.staff.firstName[0] + '' + account.staff.lastName[0]"
+                      nz-tooltip
+                      [nzTooltipTitle]="account.staff.firstName + ' ' + account.staff.lastName"
+                      nzTooltipColor="#ff3823"
+                      nzTooltipOverlayClassName="primary-tooltip-arrow"
+                      nzTooltipPlacement="top"
+                    />
+                  </ng-container> -->
+                  <!-- <img
+                    class="w-6 h-6 rounded-full relative hover:z-10 hover:scale-110 transition-all bg-gray-200"
+                    style="border: 2px solid white"
+                    src="https://daisyui.com/images/stock/photo-1534528741775-53994a69daeb.jpg"
+                    alt=""
+                    nz-tooltip
+                    nzTooltipTitle="Johnny Bravo"
+                    nzTooltipColor="#ff3823"
+                    nzTooltipOverlayClassName="primary-tooltip-arrow"
+                    nzTooltipPlacement="top"
+                  />
+                  <img
+                    class="w-6 h-6 rounded-full relative hover:z-10 hover:scale-110 transition-all bg-gray-200"
+                    style="border: 2px solid white"
+                    src="https://flowbite.com/docs/images/people/profile-picture-2.jpg"
+                    alt=""
+                    nz-tooltip
+                    nzTooltipTitle="Johnny Bravo"
+                    nzTooltipColor="#ff3823"
+                    nzTooltipOverlayClassName="primary-tooltip-arrow"
+                    nzTooltipPlacement="top"
+                  />
+                  <img
+                    class="w-6 h-6 rounded-full relative hover:z-10 hover:scale-110 transition-all bg-gray-200"
+                    style="border: 2px solid white"
+                    src="https://flowbite.com/docs/images/people/profile-picture-5.jpg"
+                    alt=""
+                    nz-tooltip
+                    nzTooltipTitle="Johnny Bravo"
+                    nzTooltipColor="#ff3823"
+                    nzTooltipOverlayClassName="primary-tooltip-arrow"
+                    nzTooltipPlacement="top"
+                  />
+                  <img
+                    class="w-6 h-6 rounded-full relative hover:z-10 hover:scale-110 transition-all bg-gray-200"
+                    style="border: 2px solid white"
+                    src="https://flowbite.com/docs/images/people/profile-picture-2.jpg"
+                    alt=""
+                    nz-tooltip
+                    nzTooltipTitle="Johnny Bravo"
+                    nzTooltipColor="#ff3823"
+                    nzTooltipOverlayClassName="primary-tooltip-arrow"
+                    nzTooltipPlacement="top"
+                  />-->
+                  <span
+                    class="px-1 h-6 grid place-items-center text-[10px] font-medium text-isms-500 bg-isms-200 rounded-full relative"
+                    style="border: 2px solid white"
+                    nz-tooltip
+                    nzTooltipTitle="and 13 more"
+                    nzTooltipColor="#ff3823"
+                    nzTooltipOverlayClassName="primary-tooltip-arrow"
+                    nzTooltipPlacement="top"
+                    >+
+                  </span>
+                </div>
+                <ng-template #scheduleTooltipTemplate>
+                  <div class="flex">
+                    <ng-container *ngIf="view === 'week'">
+                      <div class="w-72 flex flex-col">
+                        <h3 class="text-gray-500 mb-0 text-sm font-medium border-b px-3 py-2.5">Teachers in this shift (---)</h3>
+                        <!-- <ul class="mb-0 h-64 overflow-auto mini-scroll-bar flex flex-col">
+                          <li class="flex items-center space-x-3 hover:bg-gray-100 px-3 cursor-pointer py-1.5" *ngFor="let account of sectionItem.section.schedule.schedulesShifts">
+                            <img profile-photo [photo]="account.staff.profilePhoto" [letter]="account.staff.firstName[0] + '' + account.staff.lastName[0]" class="w-7 h-7 bg-gray-100 rounded-full" />
+                            <div class="flex flex-col">
+                              <span class="text-xs font-medium text-gray-700">{{ account.staff.firstName + " " + account.staff.lastName }}</span>
+                              <span class="text-xs text-gray-500">{{ account.staff.emailAddresses }}</span>
+                            </div>
+                          </li>
+                        </ul> -->
+                        <div class="space-x-2 items-center justify-center border-t flex p-3">
+                          <a>Add members</a>
+                        </div>
+                      </div>
+                    </ng-container>
+                  </div>
+                </ng-template>
+              </div>
+            </ng-container>
+
+            <ng-container *ngIf="view === 'week-by-class'">
+              <!-- (click)="manageStaffScheduleDrawer.toggle()" -->
+              <div
+                class="time-sch-item-content"
+                nz-tooltip
+                [nzTooltipTitle]="scheduleTooltipTemplate"
+                nzTooltipPlacement="bottomLeft"
+                nzTooltipOverlayClassName="white-tooltip-arrow no-padding-tooltip-arrow "
+                nzTooltipColor="#FFFFFF"
+                (nzTooltipVisibleChange)="staffTooltipVisibleChange($event, itemMeta.item.start.toDate(), itemMeta)">
+                <div class="h-1.5 w-1.5 absolute top-0.5 right-0.5 bg-isms-500 rounded-full" *ngIf="hasNewChanges(itemMeta)"></div>
+
+                <!-- { value: "staff-work", name: "Staff Work", color: "#fa8c16" },
+  { value: "class-work", name: "Class Work", color: "#1890ff" },
+  { value: "tutoring-work", name: "Tutoring Work", color: "#87d068" }
+]; -->
+                <div class="h-1.5 w-4 absolute bottom-0.5 right-0.5 bg-[#fa8c16] rounded-full" *ngIf="itemMeta.item.shift.type == 'staff-work'"></div>
+                <div class="h-1.5 w-4 absolute bottom-0.5 right-0.5 bg-[#1890ff] rounded-full" *ngIf="itemMeta.item.shift.type == 'class-work'"></div>
+                <div class="h-1.5 w-4 absolute bottom-0.5 right-0.5 bg-[#87d068] rounded-full" *ngIf="itemMeta.item.shift.type == 'tutoring-work'"></div>
+                <div class="h-1.5 w-4 absolute bottom-0.5 right-0.5 bg-[#00684a] rounded-full" *ngIf="itemMeta.item.shift.type == 'tapa-work'"></div>
+                <!-- <span class="font-semibold text-[10px] lowercase">2hrs</span> -->
+                <div class="flex -space-x-2.5 items-center relative">
+                  <!-- <img
+                    class="w-6 h-6 rounded-full relative hover:z-10 hover:scale-110 transition-all bg-gray-200"
+                    style="border: 2px solid white"
+                    alt=""
+                    profile-photo
+                    [photo]="itemMeta.item.shift.staff.profilePhoto"
+                    [letter]="itemMeta.item.shift.staff.firstName[0] + '' + itemMeta.item.shift.staff.lastName[0]"
+                    nz-tooltip
+                    [nzTooltipTitle]="itemMeta.item.shift.staff.firstName + ' ' + itemMeta.item.shift.staff.lastName + ' - Teacher'"
+                    nzTooltipColor="#ff3823"
+                    nzTooltipOverlayClassName="primary-tooltip-arrow"
+                    nzTooltipPlacement="top"
+                  /> -->
+                  <img
+                    class="w-6 h-6 rounded-full relative hover:z-10 hover:scale-110 transition-all bg-gray-200"
+                    style="border: 2px solid white"
+                    alt=""
+                    profile-photo
+                    [photo]="itemMeta.item.shift.careTaker.profilePhoto"
+                    [letter]="itemMeta.item.shift.careTaker.firstName[0] + '' + itemMeta.item.shift.careTaker.lastName[0]"
+                    nz-tooltip
+                    [nzTooltipTitle]="itemMeta.item.shift.careTaker.firstName + ' ' + itemMeta.item.shift.careTaker.lastName + ' - Care Taker'"
+                    nzTooltipColor="#ff3823"
+                    nzTooltipOverlayClassName="primary-tooltip-arrow"
+                    nzTooltipPlacement="top" />
+                </div>
+
+                <span class="font-semibold text-[10px] break-words text-ellipsis">
+                  <!-- {{ itemMeta.item.shift.class }}  -->
+                  {{ itemMeta.item.name }}
+                  <!-- - -->
+                  <!-- {{ itemMeta.item.shift.room }} -->
+                </span>
+                <ng-template #scheduleTooltipTemplate>
+                  <div class="flex">
+                    <div class="w-80 h-96 flex flex-col border-r">
+                      <div class="flex justify-between border-b items-center pr-2">
+                        <h3 class="text-gray-500 mb-0 text-sm font-medium px-3 py-2.5">{{ itemMeta.item.name }}</h3>
+                        <a
+                          (click)="
+                            showWeekByClassTooltip = false;
+                            manageStaffScheduleShiftDrawer.shiftFormGroup.get('_id').setValue(itemMeta.item.shift._id);
+                            manageStaffScheduleShiftDrawer.toggle()
+                          ">
+                          Manage
+                        </a>
+                      </div>
+                      <div class="mb-0 h-64 overflow-auto mini-scroll-bar text-gray-600 text-sm px-3 py-2">
+                        <ul>
+                          <li class="flex flex-col mb-2" *ngIf="itemMeta.item.shift.classes">
+                            <span class="text-gray-500 text-xs">Class</span>
+                            <span class="text-gray-700 text-sm">{{ itemMeta.item.shift.classes.name }}</span>
+                          </li>
+                          <li class="flex flex-col mb-2">
+                            <span class="text-gray-500 text-xs">Room</span>
+                            <span class="text-gray-700 text-sm">{{ itemMeta.item.shift.room }}</span>
+                          </li>
+                          <li class="flex flex-col mb-2">
+                            <span class="text-gray-500 text-xs">Schedule</span>
+                            <span class="text-gray-700 text-sm">{{ itemMeta.item.shift.title }}</span>
+                          </li>
+                          <!-- <li class="flex flex-col mb-2">
+                            <div class="flex flex-col flex-1">
+                              <span class="text-gray-500 text-xs">Teacher</span>
+                              <span class="text-gray-700 text-sm">{{ itemMeta.item.shift.staff.firstName + "" + itemMeta.item.shift.staff.lastName }}</span>
+                            </div>
+                          </li> -->
+                          <li class="flex flex-col">
+                            <div class="flex flex-col">
+                              <span class="text-gray-500 text-xs">Care Taker</span>
+                              <span class="text-gray-700 text-sm">{{ itemMeta.item.shift.careTaker.firstName + " " + itemMeta.item.shift.careTaker.lastName }}</span>
+                            </div>
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+
+                    <div class="w-96 flex flex-col">
+                      <!-- <h3 class="text-gray-500 mb-0 text-sm font-medium border-b px-3 py-2.5">Notes for this week</h3> -->
+                      <div class="flex justify-between border-b items-center pr-2">
+                        <h3 class="text-gray-500 mb-0 text-sm font-medium px-3 py-2.5">Notes for this day</h3>
+                        <!-- <a (click)="(1)">Save changes</a> -->
+                      </div>
+                      <div class="mb-0 h-[400px] text-gray-500 overflow-auto mini-scroll-bar px-2 py-2">
+                        <div class="space-y-1 flex flex-col px-2 py-1" *ngIf="itemMeta.item.shift.type === 'class-work'">
+                          <textarea
+                            nz-input
+                            placeholder="Type lesson details"
+                            [(ngModel)]="lessonDetails"
+                            (ngModelChange)="onChangeLessonDetails(itemMeta.item.start.toDate(), itemMeta)"></textarea>
+                          <br />
+                          <textarea nz-input placeholder="Type here" [(ngModel)]="notes"></textarea>
+                          <button nz-button nzSize="small" nzType="primary" [disabled]="!notes" (click)="addNote(itemMeta.item.start.toDate(), itemMeta)">Add Note</button>
+                        </div>
+                        <nz-divider nzText="Teachers R"></nz-divider>
+                        <ul class="mb-0 flex flex-col space-y-1.5 !list-disc" *ngIf="getNotes(itemMeta.item.shift, itemMeta.item.start.toDate()).length > 0">
+                          <li *ngFor="let note of getNotes(itemMeta.item.shift, itemMeta.item.start.toDate())" class="text-sm text-gray-500 font-normal">
+                            <!-- <div class="space-y-1 flex flex-col px-2 py-1">
+                              <label class="isms-label-left ismns-required">{{ note.date }}</label>
+                              <textarea [(ngModel)]="note.notes" nz-input placeholder="Type here"></textarea>
+                            </div> -->
+                            • {{ note.notes }} -
+                            <small>{{ note.fullName }} - {{ note.date }} </small>
+                          </li>
+                        </ul>
+                        <nz-empty nzNotFoundContent="No available notes" *ngIf="getNotes(itemMeta.item.shift, itemMeta.item.start.toDate()).length === 0"></nz-empty>
+                      </div>
+                    </div>
+                  </div>
+                </ng-template>
+              </div>
+            </ng-container>
+
+            <ng-container *ngIf="view === 'day'">
+              <div
+                class="time-sch-item-content"
+                (click)="manageStaffScheduleDrawer.toggle()"
+                nz-tooltip
+                [nzTooltipTitle]="scheduleTooltipTemplate"
+                nzTooltipPlacement="bottomLeft"
+                nzTooltipOverlayClassName="white-tooltip-arrow no-padding-tooltip-arrow "
+                nzTooltipColor="#FFFFFF">
+                <span class="font-semibold text-[10px]" *ngIf="itemMeta.item.name">{{ itemMeta.item.name }}</span>
+                <!-- <span class="font-semibold text-[10px] lowercase">2hrs</span> -->
+                <div class="flex -space-x-2.5 items-center relative">
+                  <img
+                    class="w-6 h-6 rounded-full relative hover:z-10 hover:scale-110 transition-all bg-gray-200"
+                    style="border: 2px solid white"
+                    src="https://daisyui.com/images/stock/photo-1534528741775-53994a69daeb.jpg"
+                    alt=""
+                    nz-tooltip
+                    nzTooltipTitle="Johnny Bravo"
+                    nzTooltipColor="#ff3823"
+                    nzTooltipOverlayClassName="primary-tooltip-arrow"
+                    nzTooltipPlacement="top" />
+                  <img
+                    class="w-6 h-6 rounded-full relative hover:z-10 hover:scale-110 transition-all bg-gray-200"
+                    style="border: 2px solid white"
+                    src="https://flowbite.com/docs/images/people/profile-picture-2.jpg"
+                    alt=""
+                    nz-tooltip
+                    nzTooltipTitle="Johnny Bravo"
+                    nzTooltipColor="#ff3823"
+                    nzTooltipOverlayClassName="primary-tooltip-arrow"
+                    nzTooltipPlacement="top" />
+                  <img
+                    class="w-6 h-6 rounded-full relative hover:z-10 hover:scale-110 transition-all bg-gray-200"
+                    style="border: 2px solid white"
+                    src="https://flowbite.com/docs/images/people/profile-picture-5.jpg"
+                    alt=""
+                    nz-tooltip
+                    nzTooltipTitle="Johnny Bravo"
+                    nzTooltipColor="#ff3823"
+                    nzTooltipOverlayClassName="primary-tooltip-arrow"
+                    nzTooltipPlacement="top" />
+                  <img
+                    class="w-6 h-6 rounded-full relative hover:z-10 hover:scale-110 transition-all bg-gray-200"
+                    style="border: 2px solid white"
+                    src="https://flowbite.com/docs/images/people/profile-picture-2.jpg"
+                    alt=""
+                    nz-tooltip
+                    nzTooltipTitle="Johnny Bravo"
+                    nzTooltipColor="#ff3823"
+                    nzTooltipOverlayClassName="primary-tooltip-arrow"
+                    nzTooltipPlacement="top" />
+                  <span
+                    class="px-1 h-6 grid place-items-center text-[10px] font-medium text-isms-500 bg-isms-200 rounded-full relative"
+                    style="border: 2px solid white"
+                    nz-tooltip
+                    nzTooltipTitle="and 13 more"
+                    nzTooltipColor="#ff3823"
+                    nzTooltipOverlayClassName="primary-tooltip-arrow"
+                    nzTooltipPlacement="top"
+                    >+2</span
+                  >
+                </div>
+                <ng-template #scheduleTooltipTemplate>
+                  <div class="flex">
+                    <div class="w-52 flex flex-col border-r">
+                      <h3 class="text-gray-500 mb-0 text-sm font-medium border-b px-3 py-2.5">Members in this schedule</h3>
+                      <ul class="mb-0 h-64 overflow-auto mini-scroll-bar flex flex-col">
+                        <li class="flex items-center space-x-3 hover:bg-gray-100 px-3 cursor-pointer py-1.5" *ngFor="let item of [0, 0, 0, 0, 0, 0, 0, 0, 0]">
+                          <img profile-photo [letter]="'JA'" class="w-7 h-7 bg-gray-100 rounded-full" />
+                          <span class="text-xs font-medium text-gray-700"> John Mark</span>
+                        </li>
+                      </ul>
+                    </div>
+
+                    <div class="w-72 flex flex-col">
+                      <h3 class="text-gray-500 mb-0 text-sm font-medium border-b px-3 py-2.5">Notes for Sep 2, 2023</h3>
+                      <div class="mb-0 h-64 overflow-auto mini-scroll-bar text-gray-600 text-sm px-3 py-2">
+                        <p>
+                          Lorem ipsum dolor, sit amet consectetur adipisicing elit. Architecto voluptatibus animi ad et, quisquam obcaecati rerum quaerat numquam officia eius!
+                          Nisi, similique illo unde accusamus aliquam minus inventore molestias tempora! Lorem ipsum dolor, sit amet consectetur adipisicing elit. Architecto
+                          voluptatibus animi ad et, quisquam obcaecati rerum quaerat numquam officia eius! Nisi, similique illo unde accusamus aliquam minus inventore molestias
+                          tempora! Lorem ipsum dolor, sit amet consectetur adipisicing elit. Architecto voluptatibus animi ad et, quisquam obcaecati rerum quaerat numquam officia
+                          eius! Nisi, similique illo unde accusamus aliquam minus inventore molestias tempora! Lorem ipsum dolor, sit amet consectetur adipisicing elit. Architecto
+                          voluptatibus animi ad et, quisquam obcaecati rerum quaerat numquam officia eius! Nisi, similique illo unde accusamus aliquam minus inventore molestias
+                          tempora!
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </ng-template>
+              </div>
+            </ng-container>
+
+            <div class="time-sch-item-end" *ngIf="itemMeta.isEnd"></div>
+          </div>
+        </div>
+
+        <!-- <div class="time-sch-current-time" *ngIf="showCurrentTime" [title]="currentTimeTitle" [style.visibility]="currentTimeVisibility" [style.left]="currentTimeIndicatorPosition"></div> -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<isms-manage-staff-schedule-drawer #manageStaffScheduleDrawer (on-submitted)="events.ScheduleUpdated()"></isms-manage-staff-schedule-drawer>
+<isms-manage-staff-schedule-shift-drawer #manageStaffScheduleShiftDrawer (on-submitted)="ngOnInit()"></isms-manage-staff-schedule-shift-drawer>

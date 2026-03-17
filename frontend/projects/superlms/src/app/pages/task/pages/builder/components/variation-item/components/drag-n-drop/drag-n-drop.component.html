@@ -1,0 +1,141 @@
+@let mode = formGroup.value.stateSettings.mode;
+@let action = formGroup.value.stateSettings.action;
+<div class="flex w-full flex-col gap-3" [formGroup]="itemFormGroup">
+  @if (mode === "editing") {
+    <div class="flex items-center gap-2">
+      <span class="font-bold bg-gray-200 text-gray-600 rounded-md p-2">Drag N Drop</span>
+      <!-- <input nz-input placeholder="Item No." formControlName="itemNumber" style="width: 80px" /> -->
+    </div>
+  }
+  <div class="relative flex-1 bg-gray-50 border border-dashed border-gray-300 p-4 rounded-md flex-nowrap flex flex-col gap-4">
+    <!-- {{ variationFormGroup.value.id }} -->
+    <!-- {{ itemFormGroup.value | json }} -->
+
+    @if (mode === "viewing") {
+      <!-- <div participant-answer-id="1234567890" draggable="true" (dragstart)="dragStart($event)" 
+       class="cursor-move bg-gray-300 border border-dashed rounded-md p-2"
+       >
+        {{ itemFormGroup.value.dragDrop }}
+      </div> -->
+      <!-- <div class="flex gap-2">
+        <div cdkDropList [id]="itemFormGroup.value.id" [cdkDropListConnectedTo]="['answer-box-' + itemFormGroup.value.id]">
+          <button cdkDrag nz-button nzType="primary" nzShape="circle" [cdkDragData]="itemFormGroup.value">
+            <span class="ph-fill ph-arrows-out-cardinal"></span>
+            <button nz-button *cdkDragPlaceholder>
+              <span class="ph-fill ph-arrows-out-cardinal"></span>
+            </button>
+            <div class="drag-n-drop-preview bg-slms-500 w-16 h-4" *cdkDragPreview>preview</div>
+          </button>
+        </div>
+
+        <div class="cursor-move bg-gray-300 border border-dashed rounded-md p-2">
+          {{ itemFormGroup.value.dragDrop }}
+        </div>
+      </div> -->
+
+      <div class="flex flex-col gap-3">
+        @for (dragNDropFG of dragNDropFormArray.controls; track dragNDropFG.value.id; let index = $index) {
+          <div class="flex gap-2 items-center">
+            <!-- <div>
+              <span class="font-bold bg-slms-100 text-slms-500 rounded-md py-1 px-2">{{ dragNDropFG.value.itemNumber }}</span>
+            </div> -->
+            <!-- 
+            <div cdkDropList [id]="itemFormGroup.value.id" [cdkDropListConnectedTo]="['answer-box-' + itemFormGroup.value.id]">
+              <button cdkDrag nz-button nzType="primary" nzShape="circle" [cdkDragData]="dragNDropFG.value">
+                <span class="ph-fill ph-arrows-out-cardinal"></span>
+                <button nz-button *cdkDragPlaceholder>
+                  <span class="ph-fill ph-arrows-out-cardinal"></span>
+                </button>
+                <div class="drag-n-drop-preview bg-slms-500 w-16 h-4" *cdkDragPreview>preview</div>
+              </button>
+            </div>
+             -->
+
+            @if (action === "student-answering") {
+              <div>
+                <button
+                  nz-button
+                  nzType="primary"
+                  nzShape="circle"
+                  [attr.data-answer-id]="dragNDropFG.value.id"
+                  class="dnd-draggable"
+                  (dragstart)="dragstartHandler($event, dragNDropFG.value.value)"
+                  draggable="true">
+                  <span class="ph-fill ph-arrows-out-cardinal"></span>
+                </button>
+              </div>
+            }
+
+            <div class="bg-gray-300 border border-dashed rounded-md p-2">
+              {{ dragNDropFG.value.value }}
+            </div>
+
+            @if (action === "student-viewing-results") {
+              <div
+                nz-tooltip
+                nzTooltipPlacement="left"
+                [nzTooltipTitle]="dragNDropFG.value.id === dragNDropFG.value.participantAnswer ? 'Yey, Answer is correct' : 'Answer is incorrect'"
+                class="border border-dashed rounded-md p-2"
+                [ngClass]="{
+                  'bg-success-50 border-success-400 text-success-500': dragNDropFG.value.id === dragNDropFG.value.participantAnswer,
+                  'bg-error-50 border-error-400 text-error-500': dragNDropFG.value.id !== dragNDropFG.value.participantAnswer,
+                }">
+                {{ dragNDropFG.value.value }}
+                <span
+                  class="ph-fill"
+                  [ngClass]="{
+                    'ph-check-circle': dragNDropFG.value.id === dragNDropFG.value.participantAnswer,
+                    'ph-x-circle': dragNDropFG.value.id !== dragNDropFG.value.participantAnswer,
+                  }"></span>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    } @else if (mode === "editing") {
+      <div class="flex flex-col gap-3">
+        @for (dragNDropFG of dragNDropFormArray.controls; track dragNDropFG.value.id; let index = $index) {
+          <div class="flex items-center gap-2" [formGroup]="dragNDropFormGroup(index)">
+            <!-- <input nz-input placeholder="Type here" formControlName="id" /> -->
+            <!-- <input nz-input placeholder="Type here" formControlName="itemNumber" style="width: 100px" /> -->
+            <input nz-input placeholder="Type here" formControlName="value" />
+            <button nz-button nzType="primary" nzShape="circle" nzDanger (click)="dragNDropFormArray.removeAt(index)">
+              <span class="ph-fill ph-trash"></span>
+            </button>
+            <button
+              nz-button
+              nzType="primary"
+              nzShape="circle"
+              nzGhost
+              (click)="insertDropzone('movable-dropzone', dragNDropFG.value.id)"
+              nz-tooltip
+              nzTooltipPlacement="left"
+              nzTooltipTitle="Click this to add a movable drop position in your text. This is a draggable answer.">
+              <span class="ph-fill ph-arrows-out-cardinal"></span>
+            </button>
+            <button
+              nz-button
+              nzType="primary"
+              nzShape="circle"
+              nzGhost
+              (click)="insertDropzone('static-dropzone', dragNDropFG.value.id)"
+              nz-tooltip
+              nzTooltipPlacement="left"
+              nzTooltipTitle="Drag this to answer description box. This is a non-draggable answer.">
+              <span class="ph-fill ph-textbox"></span>
+            </button>
+          </div>
+        }
+        <div>
+          <button nz-button nzType="primary" nzGhost (click)="addItem()">Add Item</button>
+        </div>
+      </div>
+    } @else {
+      not listed
+    }
+  </div>
+  <!-- <div class="flex flex-col text-center gap-1">
+    <span class="font-semibold">Points:</span>
+    <nz-input-number style="text-align: center" formControlName="points" [nzDisabled]="mode === 'viewing'" [nzReadOnly]="mode === 'viewing'" nzMin="1" />
+  </div> -->
+</div>

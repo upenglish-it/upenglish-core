@@ -1,0 +1,147 @@
+<div class="h-[55px] bg-white justify-between flex border-b items-center px-4">
+  <div class="flex items-center flex-1 space-x-4">
+    <div class="max-w-sm w-full" [formGroup]="filterFormGroup">
+      <nz-input-group [nzPrefix]="searchPrefixTemplate" [nzSuffix]="searchSuffixTemplate" class="space-x-1.5">
+        <input nz-input placeholder="Search for: Name" nzShape="round" formControlName="searchQuery" />
+      </nz-input-group>
+      <ng-template #searchPrefixTemplate>
+        <span class="text-base cursor-pointer text-gray-400 ph ph-magnifying-glass"></span>
+      </ng-template>
+      <ng-template #searchSuffixTemplate>
+        <span nz-icon class="ant-input-clear-icon" nzTheme="fill" nzType="close-circle"></span>
+      </ng-template>
+    </div>
+  </div>
+  <div class="space-x-6 flex items-center">
+    <div class="space-x-2 flex items-center">
+      <button nz-button nzType="primary" (click)="addCourseModal.courseId = null; addCourseModal.toggle()">
+        Add New Course
+        <span nz-icon nzType="down" nzTheme="outline"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="overflow-y-auto bg-white mini-scroll-bar flex-1 h-[calc(100vh-210px)] lg:h-[calc(100vh-110px)]" reach-scroll-to-bottom (on-reach)="loadData()">
+  <div class="overflow-x-auto">
+    <nz-table #filterTable [nzData]="filteredCourses" nzTableLayout="fixed" nzShowSizeChanger [nzPageSize]="30" [nzScroll]="{ y: 'calc(100vh - 220px)', x: 'max-content' }">
+      <thead>
+        <tr>
+          @for (column of listOfColumns; track column) {
+            <th [nzSortOrder]="column.sortOrder" [nzSortFn]="column.sortFn" [nzSortDirections]="column.sortDirections" class="px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm">
+              {{ column.name }}
+            </th>
+          }
+          <th class="px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm"></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (course of filterTable.data; track course._id) {
+          <tr>
+            <td class="px-2 md:px-4 py-2 md:py-3">
+              <div class="relative grid place-items-center">
+                {{ course.count }}
+              </div>
+            </td>
+            <td class="px-2 md:px-4 py-2 md:py-3">
+              <div class="flex items-center space-x-2 md:space-x-3">
+                <span class="text-xs font-normal text-isms-700 cursor-pointer truncate" (click)="onEdit(course._id)"> {{ course.name }} </span>
+              </div>
+            </td>
+            <td class="px-2 md:px-4 py-2 md:py-3 font-normal text-xs text-gray-500">
+              <div class="flex flex-col gap-1 md:gap-1.5">
+                @if (course.price) {
+                  <span class="text-[10px] md:text-xs">Monthly: {{ course.price | formattedCurrency }}</span>
+                }
+                @if (course.hourlyMonthlyPrice) {
+                  <span class="text-[10px] md:text-xs">Hourly Monthly: {{ course.hourlyMonthlyPrice | formattedCurrency }}</span>
+                }
+                @if (course.hourlyPackagePrice) {
+                  <span class="text-[10px] md:text-xs">Hourly Package: {{ course.hourlyPackagePrice | formattedCurrency }}</span>
+                }
+              </div>
+            </td>
+            <td class="px-2 md:px-4 py-2 md:py-3 font-normal text-xs text-gray-500 break-words max-w-[150px]">
+              {{ course?.material?.name || "---" }}
+            </td>
+            <td class="px-2 md:px-4 py-2 md:py-3 font-normal text-xs text-gray-500 whitespace-nowrap">{{ course.createdAt | date: "MM/d/YY • hh:mm a" }}</td>
+            <td class="px-2 md:px-4 py-2 md:py-3 font-normal text-xs text-gray-500">
+              <button
+                nz-button
+                nzType="link"
+                nzSize="small"
+                nz-popconfirm
+                nzPopconfirmTitle="Delete this?"
+                nzPopconfirmPlacement="bottom"
+                (nzOnConfirm)="onDelete(course._id)"
+                (nzOnCancel)="(1)"
+                class="text-[10px] md:text-xs">
+                Delete
+              </button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </nz-table>
+  </div>
+
+  <!-- <table role="table" class="min-w-full divide-y divide-gray-200 isms-table">
+    <thead>
+      <tr class="font-bold text-gray-700">
+        <th class="w-10">
+          <div class="relative grid place-items-center">
+            #
+          </div>
+        </th>
+        <th class="">
+          <div class="flex items-center justify-between">Name</div>
+        </th>
+        <th class="">
+          <div class="flex items-center justify-between">Price</div>
+        </th>
+        <th class="">
+          <div class="flex items-center justify-between">Item</div>
+        </th>
+        <th class="">
+          <div class="flex items-center justify-between">Created Date</div>
+        </th>
+        <th class=""></th>
+      </tr>
+    </thead>
+    <tbody class="text-sm bg-white divide-y divide-gray-200">
+      <tr *ngFor="let course of filteredCourses; trackBy: identify; let i = index">
+        <td>
+          <div class="relative grid place-items-center">
+            {{ i + 1 }}
+          </div>
+        </td>
+
+        <td>
+          <div class="flex items-center space-x-3">
+            <span class="text-xs font-normal text-gray-700 cursor-pointer" (click)="onEdit(course._id)"> {{ course.name }} </span>
+          </div>
+        </td>
+
+        <td class="font-normal text-xs text-gray-500">
+          <ng-container>
+            {{ course.price | formattedCurrency }}
+          </ng-container>
+        </td>
+
+        <td class="font-normal text-xs text-gray-500">
+          {{ course?.material?.name || "---" }}
+        </td>
+
+        <td class="font-normal text-xs text-gray-500">{{ course.createdAt | date: "MM/d/YY • hh:mm a" }}</td>
+
+        <td class="font-normal text-xs text-gray-500">
+          <button nz-button nzType="link" nzSize="small" nz-popconfirm nzPopconfirmTitle="Delete this?" nzPopconfirmPlacement="bottom" (nzOnConfirm)="onDelete(course._id)" (nzOnCancel)="(1)">
+            Delete
+          </button>
+        </td>
+      </tr>
+    </tbody>
+  </table> -->
+</div>
+
+<isms-add-course-modal #addCourseModal (on-submitted)="loadData()"></isms-add-course-modal>

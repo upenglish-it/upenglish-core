@@ -1,0 +1,47 @@
+/* To learn more about this file see: https://angular.io/config/tsconfig. */
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "baseUrl": "./",
+    "outDir": "./dist/out-tsc",
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "sourceMap": true,
+    "declaration": false,
+    "downlevelIteration": true,
+    "experimentalDecorators": true,
+    "moduleResolution": "bundler",
+    "importHelpers": true,
+    "noUncheckedIndexedAccess": true,
+    "target": "ES2022",
+    "module": "ES2022",
+    "useDefineForClassFields": false,
+    "lib": ["ES2022", "dom"],
+    "types": ["cypress", "node", "cypress-real-events"],
+    "paths": {
+      "@isms-core/*": ["projects/isms/src/app/core/*"],
+      "@isms-shell/*": ["projects/isms/src/app/shell/*"],
+      "@isms-pages/*": ["projects/isms/src/app/pages/*"],
+      "@isms-env/*": ["projects/isms/src/environments/*"],
+
+      "@superlms/shared/*": ["projects/superlms/src/app/shared/*"],
+      "@superlms/models/*": ["projects/superlms/src/app/models/*"],
+      "@superlms/interfaces/*": ["projects/superlms/src/app/interfaces/*"],
+      "@superlms/services/*": ["projects/superlms/src/app/services/*"],
+      "@superlms-environment/*": ["projects/superlms/src/environments/*"]
+    },
+    "strictPropertyInitialization": false,
+    "strictNullChecks": false,
+    "allowSyntheticDefaultImports": true
+  },
+  "angularCompilerOptions": {
+    "enableI18nLegacyMessageIdFormat": false,
+    "strictInjectionParameters": true,
+    "strictInputAccessModifiers": true,
+    "strictTemplates": true
+  }
+}

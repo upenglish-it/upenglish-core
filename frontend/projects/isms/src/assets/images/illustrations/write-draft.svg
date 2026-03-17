@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="120px" height="120px" viewBox="0 0 120 120" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>illustration_draft</title>
+    <defs>
+        <radialGradient cx="11.0045255%" cy="23.9499061%" fx="11.0045255%" fy="23.9499061%" r="57.9705805%" gradientTransform="translate(0.110045,0.239499),scale(1.000000,0.905643),translate(-0.110045,-0.239499)" id="radialGradient-1">
+            <stop stop-color="#C8C6C4" offset="0%"></stop>
+            <stop stop-color="#C8C6C4" offset="21%"></stop>
+            <stop stop-color="#E1DFDD" offset="44%"></stop>
+            <stop stop-color="#E1DFDD" offset="70%"></stop>
+            <stop stop-color="#E1DFDD" offset="100%"></stop>
+        </radialGradient>
+    </defs>
+    <g id="illustration_draft" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="Draft-/-General-/-Color-">
+            <g id="Draft-Color" transform="translate(12.000000, 12.000000)">
+                <path d="M86.07,75.4125 C86.5121335,75.9263326 86.6123386,76.6514865 86.3261205,77.265966 C86.0399024,77.8804456 85.4203234,78.2703316 84.7425,78.2625 C79.3725,78.2625 69.5175,79.4925 58.2525,86.37 C48.435,92.37 35.85,94.5375 29.43,95.2875 C26.8295144,95.5919578 24.2668147,94.471135 22.725,92.355 C16.9575,84.4125 3.1275,63 0.75,36.96 C1.245,36.96 19.995,9.72 20.0175,9.66 C33.5175,6.33 49.9125,2.3325 56.46,0.735 C57.1652521,0.564012355 57.910016,0.717171969 58.4905632,1.15258239 C59.0711104,1.58799281 59.4266775,2.26008144 59.46,2.985 C60,13.335 63.4575,48.9975 86.07,75.4125 Z" id="Path" fill="url(#radialGradient-1)" fill-rule="nonzero"></path>
+                <path d="M0.6975,37.0275 C0.6975,37.0275 28.83,37.7775 26.415,32.145 C22.4025,24.9225 19.995,9.645 19.9275,9.8325 C19.995,9.66 0.6975,37.0275 0.6975,37.0275 Z" id="Path" fill="#E1DFDD" fill-rule="nonzero"></path>
+                <path d="M43.4325,44.0925 L50.0475,51.4125 L37.095,57.645 C36.7293546,57.8167817 36.294326,57.7284409 36.0246465,57.4276445 C35.754967,57.1268481 35.7144672,56.6847919 35.925,56.34 L43.4325,44.0925 Z" id="Path" fill="#C7C5C3" fill-rule="nonzero"></path>
+                <path d="M94.0725,8.7975 L90.795,5.16 C89.8720877,4.14583055 88.302908,4.06871275 87.285,4.9875 L43.5,44.01 L50.115,51.33 L93.87,12.33 C94.3699619,11.8912625 94.6729404,11.2702374 94.7110087,10.6061566 C94.749077,9.94207574 94.5190504,9.29049621 94.0725,8.7975 Z" id="Path" fill="#B2AEAA" fill-rule="nonzero"></path>
+            </g>
+        </g>
+    </g>
+</svg>

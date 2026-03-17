@@ -1,0 +1,51 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  [nzWidth]="'500px'"
+  [nzTitle]="taskFormGroup.value._id ? 'Manage Test' : 'Create new template'"
+  [nzMaskClosable]="false"
+  [nzClosable]="false"
+  nzCancelText="Close"
+  (nzOnCancel)="toggle()"
+  nzOkText="Create"
+  (nzOnOk)="onCreate()"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <form class="px-4 py-3 flex-col max-h-[500px] space-y-3 flex-1 flex overflow-auto mini-scroll-bar min-h-fit" [formGroup]="taskFormGroup">
+      <div class="space-y-1.5">
+        <label class="slms-label slms-required">Name</label>
+        <input nz-input placeholder="Type here" formControlName="name" />
+        @if (taskFormGroup.get("name").touched) {
+          @if (taskFormGroup.get("name").hasError("required")) {
+            <p class="slms-error-message">Name is required</p>
+          }
+        }
+      </div>
+      <div class="space-y-1.5 flex-1">
+        <label class="slms-label slms-required">Type</label>
+        <nz-select formControlName="type" nzShowSearch class="w-full" nzPlaceHolder="Select type" [nzDropdownMatchSelectWidth]="false">
+          @for (type of taskTypes; track type.id) {
+            <nz-option [nzLabel]="type.label" [nzValue]="type.value"></nz-option>
+          }
+        </nz-select>
+        @if (taskFormGroup.get("type").touched) {
+          @if (taskFormGroup.get("type").hasError("required")) {
+            <p class="slms-error-message">Type is required</p>
+          }
+        }
+      </div>
+      <!-- <div class="space-y-1.5 flex-1">
+        <label class="slms-label slms-required">Course</label>
+        <nz-select formControlName="course" nzShowSearch class="w-full" nzPlaceHolder="Select course" [nzDropdownMatchSelectWidth]="false">
+          @for (course of courses; track course._id) {
+            <nz-option [nzLabel]="course.name" [nzValue]="course._id"></nz-option>
+          }
+        </nz-select>
+        @if (taskFormGroup.get("course").touched) {
+          @if (taskFormGroup.get("course").hasError("required")) {
+            <p class="slms-error-message">Course is required</p>
+          }
+        }
+      </div> -->
+    </form>
+  </ng-container>
+</nz-modal>

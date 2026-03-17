@@ -1,0 +1,32 @@
+<ng-container *ngIf="type === 'modal'">
+  <nz-modal
+    [(nzVisible)]="showModal"
+    nzCentered
+    nzTitle="Add Note"
+    nzWidth="600px"
+    (nzAfterClose)="formGroup.reset()"
+    nzOkText="Save Note"
+    [nzCancelText]="'Cancel'"
+    (nzOnOk)="onSubmit()"
+    [nzMaskClosable]="false"
+    (nzOnCancel)="toggle()">
+    <ng-container *nzModalContent>
+      <form class="flex flex-col space-y-4 overflow-auto" [formGroup]="formGroup">
+        <div class="space-y-1.5">
+          <label class="isms-label">Message</label>
+          <textarea formControlName="message" nz-input rows="10" [nzAutosize]="{ minRows: 2, maxRows: 6 }" placeholder="Type here"></textarea>
+          <ng-container *ngIf="formGroup.get('message').touched">
+            <p class="isms-error-message" *ngIf="formGroup.get('message').hasError('required')">Message is required</p>
+          </ng-container>
+        </div>
+      </form>
+    </ng-container>
+  </nz-modal>
+</ng-container>
+
+<ng-container *ngIf="type === 'inline'" [formGroup]="formGroup">
+  <textarea formControlName="message" nz-input rows="2" [nzAutosize]="{ minRows: 2, maxRows: 6 }" placeholder="Type here" class="flex-1 resize-none"></textarea>
+  <button nz-button nzType="primary" [disabled]="!formGroup.value.message" nzShape="circle" (click)="onSubmit()">
+    <span nz-icon nzType="send" nzTheme="outline"></span>
+  </button>
+</ng-container>

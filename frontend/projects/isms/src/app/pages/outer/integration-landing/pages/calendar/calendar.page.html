@@ -1,0 +1,30 @@
+<div>
+  <div class="h-screen w-full bg-white flex flex-col items-center justify-center">
+    <div class="relative flex space-x-3 items-center">
+      <div class="w-28 h-28 rounded-full border border-isms-300 shadow-md bg-isms-50 p-4">
+        <img src="assets/images/logo.png" class="z-10 w-full" />
+      </div>
+      <!-- <img
+        *ngIf="authStateInfo && authStateInfo.provider === 'google'"
+        src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Google_Calendar_icon_%282020%29.svg/1024px-Google_Calendar_icon_%282020%29.svg.png"
+        class="w-20 h-20"
+      /> -->
+      <span class="ph ph-plugs-connected text-4xl text-isms-400/80 animate-pulse"></span>
+      <!-- {{authStateInfo.provider|json}}--- -->
+      <!-- *ngIf="authStateInfo && authStateInfo.provider === 'microsoft'" -->
+      <div class="w-28 h-28 rounded-full border border-blue-300 shadow-md bg-blue-100 p-5">
+        <img src="assets/images/outlook.svg" class="w-full" />
+      </div>
+    </div>
+
+    <p class="mt-8 mb-0 text-lg text-gray-600">Successful authentication</p>
+    <p class="text-sm text-gray-400">Please wait while processing...</p>
+
+    <!-- <div [class.hidden]="!showCheckedMarkIcon">
+      <svg class="isms-checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+        <circle class="animated-__circle" cx="26" cy="26" r="25" fill="none" />
+        <path class="animated-__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" />
+      </svg>
+    </div> -->
+  </div>
+</div>

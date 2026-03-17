@@ -1,0 +1,19 @@
+<div class="h-screen flex flex-col">
+  <!-- <div class="h-[55px] bg-white justify-between flex border-b border-b-gray-200 items-center px-4 space-x-4 relative">
+    <h6 class="text-base mb-0 font-medium text-gray-700 cursor-pointer">All Students ({{filteredStudents.length}})</h6>
+  </div> -->
+
+  <div class="h-[55px] bg-white justify-between flex border-b border-b-gray-200 items-center px-4 space-x-4 relative">
+    <div>
+      <h6 class="text-base mb-0 font-medium text-gray-700 cursor-pointer">{{ segmentOptions[segmentIndex].label }}</h6>
+      <span>{{ segmentOptions[segmentIndex].description }}</span>
+    </div>
+    <!-- <div class="flex items-center flex-1 box-content justify-center self-center z-0 absolute top-0 right-0 bottom-0 left-0 m-auto">
+      <isms-segmented-selector [options]="segmentOptions" [current-index]="segmentIndex" (on-changed)="onChangeSegmentSelector($event)"> </isms-segmented-selector>
+    </div> -->
+  </div>
+
+  <ng-container *ngIf="segmentIndex === 0">
+    <isms-material-listing></isms-material-listing>
+  </ng-container>
+</div>

@@ -1,0 +1,122 @@
+<div class="flex gap-4 flex-wrap">
+  <div class="bg-white flex-1 border border-gray-200 rounded-md">
+    <div class="border-b border-gray-200 font-medium px-4 py-3">
+      <div class="flex items-center space-x-2">
+        <span class="text-base ph-duotone ph-chalkboard-teacher text-gray-500"></span>
+        <h6 class="text-xs font-medium text-gray-500 uppercase mb-0 p-0">My Classes</h6>
+      </div>
+    </div>
+    <ul class="mb-0 h-[280px] overflow-auto mini-scroll-bar">
+      <ng-container *ngFor="let class of myClasses">
+        <li class="flex px-4 space-x-3 py-2 last:border-b-0 border-b hover:bg-gray-50 text-gray-500 cursor-pointer">
+          <div class="flex flex-col flex-1">
+            <span class="text-sm flex-1 text-gray-600">{{ class.classes.name }}</span>
+            <!-- <span class="text-xs text-gray-500 flex-1">{{ announcement.createdAt | date : "MMM dd, yyyy hh:mm a" }}</span>
+            <span class="text-xs text-gray-500 flex-1">{{ announcement.message }}</span> -->
+          </div>
+        </li>
+      </ng-container>
+    </ul>
+  </div>
+
+  <div class="bg-white flex-1 border border-gray-200 rounded-md">
+    <div class="border-b border-gray-200 font-medium px-4 py-3">
+      <div class="flex items-center space-x-2">
+        <span class="text-base ph-duotone ph-megaphone-simple text-gray-500"></span>
+        <h6 class="text-xs font-medium text-gray-500 uppercase mb-0 p-0">Announcements</h6>
+      </div>
+    </div>
+    <ul class="mb-0 h-[280px] overflow-auto mini-scroll-bar">
+      <ng-container *ngFor="let announcement of announcements">
+        <li class="flex px-4 space-x-3 py-2 last:border-b-0 border-b hover:bg-gray-50 text-gray-500 cursor-pointer" (click)="(1)">
+          <div class="flex flex-col flex-1">
+            <span class="text-sm flex-1 text-gray-600">{{ announcement.title }}</span>
+            <span class="text-xs text-gray-500 flex-1">{{ announcement.createdAt | date: "MMM dd, yyyy hh:mm a" }}</span>
+            <span class="text-xs text-gray-500 flex-1">{{ announcement.message }}</span>
+          </div>
+        </li>
+      </ng-container>
+    </ul>
+  </div>
+
+  <div class="bg-white flex-1 border border-gray-200 rounded-md">
+    <div class="border-b border-gray-200 font-medium px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <span class="text-base ph-duotone ph-exam text-gray-500"></span>
+        <h6 class="text-xs font-medium text-gray-500 uppercase mb-0 p-0">Tasks</h6>
+      </div>
+      <div>
+        <nz-segmented [nzOptions]="taskOptions" [(ngModel)]="taskOptionSelectedIndex" (nzValueChange)="handleIndexChange($event)"></nz-segmented>
+      </div>
+      <div class="flex gap-2">
+        <a href="/tasks">View All</a>
+        <a (click)="goToSuperLMS()">Go SuperLMS</a>
+      </div>
+    </div>
+    <ul class="mb-0 h-[280px] overflow-auto mini-scroll-bar">
+      <ng-container *ngIf="taskOptionSelectedIndex === 0">
+        <ng-container *ngFor="let task of tasks">
+          <li class="flex px-4 space-x-3 py-2 last:border-b-0 border-b hover:bg-gray-50 text-gray-500 cursor-pointer flex-col flex-1" (click)="viewTask(task)">
+            <span class="text-sm flex-1 text-gray-600">{{ task.generalInfo.title }}</span>
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-gray-500 flex-1">{{ task.createdAt | date: "MMM dd, yyyy hh:mm a" }}</span>
+              <ng-container *ngIf="task">
+                <nz-tag [nzColor]="'blue'" *ngIf="task.generalInfo?.type === 'challenge'" style="margin-right: 0">Challenge</nz-tag>
+                <nz-tag [nzColor]="'orange'" *ngIf="task.generalInfo?.type === 'homework'" style="margin-right: 0">Homework</nz-tag>
+              </ng-container>
+            </div>
+          </li>
+        </ng-container>
+      </ng-container>
+      <ng-container *ngIf="taskOptionSelectedIndex === 1">
+        <ng-container *ngFor="let submission of submissions">
+          <li class="flex px-4 space-x-3 py-2 last:border-b-0 border-b hover:bg-gray-50 text-gray-500 cursor-pointer" (click)="(1)">
+            <div class="flex flex-col flex-1">
+              <span class="text-sm flex-1 text-gray-600">{{ submission.task.generalInfo.title }}</span>
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-gray-500 flex-1">{{ submission.createdAt | date: "MMM dd, yyyy hh:mm a" }}</span>
+                <nz-tag [nzColor]="'blue'" *ngIf="submission.task.generalInfo?.type === 'challenge'" style="margin-right: 0">Challenge</nz-tag>
+                <nz-tag [nzColor]="'orange'" *ngIf="submission.task.generalInfo?.type === 'homework'" style="margin-right: 0">Homework</nz-tag>
+              </div>
+            </div>
+          </li>
+        </ng-container>
+      </ng-container>
+
+      <div class="p-12" *ngIf="tasks.length === 0">
+        <nz-empty nzNotFoundContent="No available questions"></nz-empty>
+      </div>
+    </ul>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 gap-4 sm:hidden">
+  <div class="bg-white border border-gray-200 rounded-md">
+    <div class="border-b border-gray-200 font-medium px-4 py-3 flex items-center justify-between gap-2 flex-wrap">
+      <div class="flex items-center space-x-2">
+        <span class="text-base ph-duotone ph-chart-line text-gray-500"></span>
+        <h6 class="text-xs font-medium text-gray-500 uppercase mb-0 p-0">Challenges</h6>
+      </div>
+      <div class="flex items-center gap-3 flex-wrap" [formGroup]="challengesFilterFormGroup">
+        <nz-select nzShowSearch class="min-w-[224px] lg:w-full" formControlName="class" nzPlaceHolder="Select class" [nzDropdownMatchSelectWidth]="false">
+          <nz-option *ngFor="let class of classes" [nzLabel]="class.name" [nzValue]="class._id"></nz-option>
+        </nz-select>
+        <nz-date-picker class="min-w-[224px] lg:w-full" formControlName="date"></nz-date-picker>
+      </div>
+    </div>
+    <div class="mb-0">
+      <apx-chart
+        [series]="challengesChart.series"
+        [chart]="challengesChart.chart"
+        [xaxis]="challengesChart.xaxis"
+        [stroke]="challengesChart.stroke"
+        [tooltip]="challengesChart.tooltip"
+        [dataLabels]="challengesChart.dataLabels"
+        [legend]="challengesChart.legend"
+        [markers]="challengesChart.markers"
+        [grid]="challengesChart.grid"
+        [yaxis]="challengesChart.yaxis"
+        [title]="challengesChart.title"></apx-chart>
+    </div>
+  </div>
+</div>

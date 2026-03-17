@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx eslint --no-eslintrc --parser-options=ecmaVersion:2022,sourceType:module,ecmaFeatures:{jsx:true} src/pages/LearnGrammarPage.jsx)",
+      "Bash(node -e \"require\\(''esbuild''\\).buildSync\\({entryPoints: [''src/pages/LearnGrammarPage.jsx''], bundle: false, write: false, logLevel: ''error''}\\)\")",
+      "Bash(node -e \"require\\(''esbuild''\\).buildSync\\({entryPoints: [''src/pages/LearnPage.jsx''], bundle: false, write: false, logLevel: ''error''}\\)\")",
+      "Bash(for f in StepMeaning.jsx StepSpelling.jsx StepListening.jsx StepCollocation.jsx StepSequence.jsx StepPronunciation.jsx)",
+      "Bash(do sed -i '' 's/zIndex: 100/zIndex: 1001/g' \"$f\")",
+      "Bash(done)",
+      "Bash(ls -la Step*.jsx)",
+      "Bash(npm install)",
+      "Bash(lsof -ti:5176)",
+      "Bash(xargs kill -9)",
+      "Bash(lsof -i :5137)",
+      "Bash(cd \"/Users/quantheclam/Downloads/Siêu app học từ vựng\" && npm run build 2>&1 | head -50)",
+      "Bash(cd \"/Users/quantheclam/Downloads/Siêu app học từ vựng\" && npm run build 2>&1 | head -30)"
+    ]
+  }
+}

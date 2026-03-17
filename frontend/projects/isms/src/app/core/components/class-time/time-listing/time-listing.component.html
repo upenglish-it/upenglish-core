@@ -1,0 +1,86 @@
+<div class="h-[55px] bg-white justify-between flex border-b items-center px-4">
+  <div class="flex items-center flex-1 space-x-4">
+    <div class="max-w-sm w-full" [formGroup]="filterFormGroup">
+      <nz-input-group [nzPrefix]="searchPrefixTemplate" [nzSuffix]="searchSuffixTemplate" class="space-x-1.5">
+        <input nz-input placeholder="Search for: Name" nzShape="round" formControlName="searchQuery" />
+      </nz-input-group>
+      <ng-template #searchPrefixTemplate>
+        <span class="text-base cursor-pointer text-gray-400 ph ph-magnifying-glass"></span>
+      </ng-template>
+      <ng-template #searchSuffixTemplate>
+        <span nz-icon class="ant-input-clear-icon" nzTheme="fill" nzType="close-circle"></span>
+      </ng-template>
+    </div>
+  </div>
+  <div class="space-x-6 flex items-center">
+    <div class="space-x-2 flex items-center">
+      <button nz-button nzType="primary" (click)="manageTimeModal.toggle()">
+        Add Time
+        <span nz-icon nzType="down" nzTheme="outline"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="overflow-auto bg-white mini-scroll-bar flex-1 h-[calc(100vh-110px)]" reach-scroll-to-bottom (on-reach)="loadData()">
+  <table role="table" class="min-w-full divide-y divide-gray-200 isms-table">
+    <thead>
+      <tr class="font-bold text-gray-700">
+        <th class="w-10">
+          <div class="relative grid place-items-center">
+            <!-- <label nz-checkbox (nzCheckedChange)="onAllCandidateChecked($event)" class="absolute top-[-11px]"></label> -->
+            #
+          </div>
+        </th>
+        <th class="">
+          <div class="flex items-center justify-between">Name</div>
+        </th>
+        <th class="">
+          <div class="flex items-center justify-between">Course</div>
+        </th>
+        <th class="">
+          <div class="flex items-center justify-between">Created Date</div>
+        </th>
+        <th class=""></th>
+      </tr>
+    </thead>
+    <tbody class="text-sm bg-white divide-y divide-gray-200">
+      <tr *ngFor="let time of filteredTimes; trackBy: identify; let i = index">
+        <td>
+          <div class="relative grid place-items-center">
+            <!-- <label nz-checkbox [(ngModel)]="course.selected" class="absolute top-[-11px]"></label> -->
+            {{ i + 1 }}
+          </div>
+        </td>
+
+        <td>
+          <div class="flex items-center space-x-3">
+            <span class="text-xs font-normal text-gray-700 cursor-pointer" (click)="onEdit(time._id)"> {{ time.name }} </span>
+          </div>
+        </td>
+
+        <td class="font-normal text-xs text-gray-500">
+          <nz-tag [nzColor]="'green'" (click)="onEdit(time._id)">{{ time.from }} to {{ time.to }}</nz-tag>
+        </td>
+
+        <td class="font-normal text-xs text-gray-500">{{ time.createdAt | date: "MM/d/YY • hh:mm a" }}</td>
+
+        <td class="font-normal text-xs text-gray-500">
+          <button
+            nz-button
+            nzType="link"
+            nzSize="small"
+            nz-popconfirm
+            nzPopconfirmTitle="Delete this?"
+            nzPopconfirmPlacement="bottom"
+            (nzOnConfirm)="onDelete(time._id)"
+            (nzOnCancel)="(1)">
+            Delete
+          </button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<isms-manage-time-modal #manageTimeModal (on-submitted)="loadData()"></isms-manage-time-modal>

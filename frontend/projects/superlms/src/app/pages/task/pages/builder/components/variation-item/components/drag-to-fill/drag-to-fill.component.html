@@ -1,0 +1,132 @@
+@let mode = formGroup.value.stateSettings.mode;
+@let action = formGroup.value.stateSettings.action;
+<div class="flex flex-col w-full gap-3" [formGroup]="itemFormGroup">
+  @if (mode === "editing") {
+    <div class="flex items-center gap-2 justify-between">
+      <span class="font-bold bg-gray-200 text-gray-600 rounded-md p-2">Drag to Fill</span>
+    </div>
+  }
+
+  <div class="relative flex-1 bg-gray-50 border border-dashed border-gray-300 p-4 rounded-md flex-nowrap flex flex-col gap-4">
+    @if (mode === "viewing") {
+      <div>
+        @if (action === "student-answering") {
+          <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <div
+              #dragToFillContainer
+              [slmsEditorComponentRenderer]="itemFormGroup.value.dragToFillContent"
+              contenteditable="false"
+              class="!relative rounded-md leading-relaxed"
+              style="font-family: Helvetica, Arial, sans-serif">
+            </div>
+          </div>
+          <div class="mt-5 rounded-lg border border-slate-200 bg-slate-50/80 p-4 shadow-sm">
+            <p class="mb-3 text-xs font-medium uppercase tracking-wide text-slate-500">Drag the words below into the blanks</p>
+            <div class="flex flex-wrap gap-2">
+              @for (option of getDragToFillOptions(); track option) {
+                <span
+                  class="inline-flex cursor-grab items-center rounded-lg border border-indigo-200 bg-white px-4 py-2 text-sm font-medium text-indigo-700 shadow-sm transition-shadow active:cursor-grabbing hover:shadow-md"
+                  draggable="true"
+                  (dragstart)="onDragToFillOptionDragStart($event, option)">
+                  {{ option }}
+                </span>
+              }
+            </div>
+          </div>
+        } @else if (action === "student-viewing-results" || action === "teacher-reviewing") {
+          <div [slmsEditorComponentRenderer]="getViewFillInHTML()" contenteditable="false" class="!relative rounded-md" style="font-family: Helvetica, Arial, sans-serif"> </div>
+        } @else {
+          <div [slmsEditorComponentRenderer]="getViewFillInHTML()" contenteditable="false" class="!relative rounded-md" style="font-family: Helvetica, Arial, sans-serif"> </div>
+        }
+      </div>
+    } @else if (mode === "editing") {
+      <div class="flex flex-col gap-3">
+        <div class="flex items-start gap-2 px-3 py-2 rounded-md border border-yellow-200 bg-yellow-50 text-sm text-yellow-700">
+          <span class="ph-bold ph-warning-circle text-base"></span>
+          <span>
+            Place the cursor in the text box where you want a blank, then click
+            <span class="font-semibold">"Add Blank"</span>
+            to insert an answer field.
+          </span>
+        </div>
+        <p class="text-xs text-gray-500">Click a blank below to set its correct answer, points, and case sensitive.</p>
+        <div class="cursor-default" (click)="onEditorAreaClick($event)">
+          <slms-editor
+            [mode]="formGroup.value.mode"
+            [content-form-control]="dragToFillContentFormControl"
+            [editor-id]="itemFormGroup.value.id"
+            [min-height]="200"
+            [enable-fill-in-blank]="true"></slms-editor>
+        </div>
+      </div>
+    }
+  </div>
+
+  @if (mode === "viewing") {
+    @if (action === "teacher-reviewing") {
+      <div class="py-4">
+        <h4 class="font-medium">Student answer:</h4>
+        <div class="text-gray-500" [innerHTML]="itemFormGroup.value.participantAnswer"></div>
+      </div>
+      <div class="py-4">
+        <h4 class="font-medium">Reviewer answer:</h4>
+        <textarea formControlName="reviewerAnswer" nz-input placeholder="Type your answer here"></textarea>
+      </div>
+      <div class="py-4">
+        <h4 class="font-medium">Score: {{ itemFormGroup.value.score || 0 }}/{{ getTotalPoints() }}</h4>
+        <nz-input-number style="text-align: center; width: 100%" formControlName="score" nzMin="0" [nzMax]="getTotalPoints()" />
+      </div>
+    }
+
+    @if (action === "student-viewing-results") {
+      <div class="py-4">
+        <h4 class="font-medium">Your answers:</h4>
+        @if (itemFormGroup.value.participantAnswer && itemFormGroup.value.participantAnswer.length > 0) {
+          <ul class="list-disc list-inside text-sm text-gray-700">
+            @for (answer of itemFormGroup.value.participantAnswer; track $index; let i = $index) {
+              <li class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span>Blank {{ i + 1 }}:</span>
+                <span class="font-semibold" [class.line-through]="isBlankAnswerWrong(i)" [class.text-red-600]="isBlankAnswerWrong(i)">
+                  {{ answer || "-" }}
+                </span>
+                @if (getCorrectAnswerForBlank(i) && isBlankAnswerWrong(i)) {
+                  <span class="text-gray-500 text-xs sm:text-sm">
+                    → <span class="font-medium text-green-700">Correct: {{ getCorrectAnswerForBlank(i) }}</span>
+                  </span>
+                }
+              </li>
+            }
+          </ul>
+        } @else {
+          <div class="text-sm text-gray-500 italic">No answers submitted.</div>
+        }
+      </div>
+      <div class="py-4">
+        <h4 class="font-medium">Score:</h4>
+        <div>
+          <span class="font-bold"> {{ itemFormGroup.value.score || 0 }} out of {{ getTotalPoints() }} </span>
+        </div>
+      </div>
+    }
+  }
+
+  <nz-modal [(nzVisible)]="blankConfigModalVisible" nzTitle="Configure blank" (nzOnCancel)="closeBlankConfigModal()" (nzOnOk)="saveBlankConfig()" nzOkText="Save">
+    <ng-container *nzModalContent>
+      <p class="text-xs text-gray-500 mb-4"> Set the correct answer for this blank. Students will see this as one of the draggable options. </p>
+      <form [formGroup]="blankConfigFormGroup" class="flex flex-col gap-4">
+        <div class="flex flex-col gap-1">
+          <span class="text-sm font-medium">Correct answer</span>
+          <input nz-input formControlName="correctAnswer" placeholder="e.g. Answer" class="w-full" />
+        </div>
+        <label class="flex items-center gap-2">
+          <input type="checkbox" formControlName="caseSensitive" />
+          <span>Case sensitive matching</span>
+        </label>
+        <div class="flex flex-col gap-1">
+          <span class="text-sm font-medium">Points</span>
+          <nz-input-number formControlName="points" nzMin="0" nzStep="0.5" class="w-full"></nz-input-number>
+        </div>
+      </form>
+    </ng-container>
+  </nz-modal>
+</div>

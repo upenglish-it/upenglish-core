@@ -1,0 +1,32 @@
+<form class="w-[380px] flex flex-col space-y-4" [formGroup]="profileFormGroup" autocomplete="on" (ngSubmit)="onSubmit()">
+  <div class="flex space-y-2 flex-col mb-2">
+    <h1 class="mt-0 mb-0 text-xl text-gray-800 font-semibold">Personal Information</h1>
+    <p class="mt-0 mb-0 text-sm text-gray-500 font-regular">View your personal information</p>
+  </div>
+
+  <div class="space-y-1.5">
+    <!-- <img src="//localhost:4200/assets/images/logo-colored.svg" alt="" width="50" class="border-2 shadow-lg rounded-full" /> -->
+    <isms-profile-photo-upload-selector
+      [element-id]="'ui-12346'"
+      accepted-file-type=".jpeg"
+      label="test"
+      sub-label="test"
+      [profile-photo]="profileFormGroup.value.profilePhoto"
+      (on-upload-file)="onUploadFile($event)">
+    </isms-profile-photo-upload-selector>
+  </div>
+
+  <div class="space-y-1.5">
+    <label class="font-normal text-gray-700 text-sm">First Name</label>
+    <input nz-input placeholder="Type here" formControlName="firstName" readonly />
+  </div>
+
+  <div class="space-y-1.5">
+    <label class="font-normal text-gray-700 text-sm">Last Name</label>
+    <input nz-input placeholder="Type here" formControlName="lastName" readonly />
+  </div>
+
+  <!-- <div class="pt-2">
+    <button type="submit" nz-button nzType="primary">Save Changes</button>
+  </div> -->
+</form>

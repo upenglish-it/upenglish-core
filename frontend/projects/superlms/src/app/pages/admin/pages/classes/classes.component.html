@@ -1,0 +1,39 @@
+<div class="max-w-7xl w-full mx-auto flex flex-col gap-10 px-4 md:px-0 pt-14">
+  @if (!isLoading) {
+    <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <article class="rounded-2xl border border-slate-200 bg-white/80 backdrop-blur shadow-sm px-6 py-5 flex flex-col gap-2">
+        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Total classes</span>
+        <span class="text-3xl font-semibold text-slate-900">{{ totalClasses }}</span>
+      </article>
+
+      <article class="rounded-2xl border border-slate-200 bg-white/80 backdrop-blur shadow-sm px-6 py-5 flex flex-col gap-2">
+        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Ongoing</span>
+        <span class="text-3xl font-semibold text-slate-900">{{ totalOngoingClasses }}</span>
+      </article>
+
+      <article class="rounded-2xl border border-slate-200 bg-white/80 backdrop-blur shadow-sm px-6 py-5 flex flex-col gap-2">
+        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Not started</span>
+        <span class="text-3xl font-semibold text-slate-900">{{ totalNotStartedClasses }}</span>
+      </article>
+
+      <article class="rounded-2xl border border-slate-200 bg-white/80 backdrop-blur shadow-sm px-6 py-5 flex flex-col gap-2">
+        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Finished</span>
+        <span class="text-3xl font-semibold text-slate-900">{{ totalFinishedClasses }}</span>
+      </article>
+    </section>
+  }
+
+  <div class="flex flex-col gap-1">
+    <h2 class="font-bold text-3xl mb-0">Classes</h2>
+    <p class="text-sm text-slate-500 mb-0">All assigned classes across your campuses.</p>
+  </div>
+
+  @if (isLoading) {
+    <div class="py-20 flex flex-col items-center justify-center gap-4 text-slate-500">
+      <nz-spin nzSimple nzTip="Loading classes..."></nz-spin>
+      <span class="text-sm">Fetching the latest classes...</span>
+    </div>
+  } @else {
+    <slms-class-list redirection-path="/a/classes-detail" [classes]="assignedClasses"></slms-class-list>
+  }
+</div>

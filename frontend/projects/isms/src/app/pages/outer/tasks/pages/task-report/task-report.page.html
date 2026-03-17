@@ -1,0 +1,15 @@
+<div class="flex place-items-center justify-center gap-3 m-4 print:hidden">
+  <button nz-button nzGhost nzType="primary" (click)="goBack()" id="back-button">
+    <div class="flex gap-3 items-center">
+      <i class="ph ph-arrow-left"></i>
+      <span>Go Back</span>
+    </div>
+  </button>
+  <button nz-button nzType="primary" (click)="printWindow()" id="printbutton">
+    <div class="flex gap-3 items-center">
+      <span> Print Result</span>
+      <i class="ph-fill ph-printer"></i>
+    </div>
+  </button>
+</div>
+<isms-task-result class="flex-1" from-page="submissions-page" view-type="plain" [submission-id]="submissionId"></isms-task-result>

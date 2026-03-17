@@ -1,0 +1,122 @@
+<div class="space-y-5 flex flex-col" [formGroup]="formGroup">
+  <div class="space-y-1.5 flex flex-1 flex-col">
+    <label class="isms-label">Package Name</label>
+    <input nz-input placeholder="Type here" formControlName="name" class="w-full" />
+    <ng-container *ngIf="formGroup.get('name').touched">
+      <p class="isms-error-message" *ngIf="formGroup.get('name').hasError('required')">Package name is required</p>
+    </ng-container>
+  </div>
+
+  <div class="flex space-x-2">
+    <div class="space-y-1.5 flex flex-1 flex-col">
+      <label class="isms-label">Job Title</label>
+      <input nz-input placeholder="Type here" formControlName="jobTitle" class="w-full" />
+      <ng-container *ngIf="formGroup.get('jobTitle').touched">
+        <p class="isms-error-message" *ngIf="formGroup.get('jobTitle').hasError('required')">Job title is required</p>
+      </ng-container>
+    </div>
+
+    <div class="space-y-1.5 flex-1">
+      <label class="isms-label"> Type Of Labor </label>
+      <nz-select formControlName="typeOfLabor" nzShowSearch class="w-full" nzPlaceHolder="Select type of labor" [nzDropdownMatchSelectWidth]="false">
+        <nz-option *ngFor="let labor of typeOfLabors" [nzLabel]="labor.name" [nzValue]="labor.value"></nz-option>
+      </nz-select>
+      <ng-container *ngIf="formGroup.get('typeOfLabor').touched">
+        <p class="isms-error-message" *ngIf="formGroup.get('typeOfLabor').hasError('required')">Type of labor is required</p>
+      </ng-container>
+    </div>
+  </div>
+
+  <div class="flex space-x-2">
+    <div class="space-y-1.5 flex-1 flex flex-col">
+      <label class="isms-label required">Basic Salary</label>
+      <nz-input-number formControlName="basicSalary" nzPlaceHolder="0" [nzMin]="1" [nzStep]="1"></nz-input-number>
+      <ng-container *ngIf="formGroup.get('basicSalary').touched">
+        <p class="isms-error-message" *ngIf="formGroup.get('basicSalary').hasError('required')">Basic salary is required</p>
+      </ng-container>
+    </div>
+    <div class="space-y-1.5 flex-1 flex flex-col">
+      <!-- <label class="isms-label">Daily Rate</label>
+      <nz-input-number-group nzPrefix="$" style="width: 100%">
+        <nz-input-number formControlName="dailySalary" nzPlaceHolder="0" [nzMin]="1" [nzStep]="1"></nz-input-number>
+      </nz-input-number-group>
+      <ng-container *ngIf="formGroup.get('dailySalary').touched">
+        <p class="isms-error-message" *ngIf="formGroup.get('dailySalary').hasError('required')">Daily rate is required</p>
+      </ng-container> -->
+    </div>
+  </div>
+
+  <div class="flex space-x-2">
+    <div class="space-y-1.5 flex-1 flex flex-col">
+      <label class="isms-label required">Consulting Commission</label>
+      <nz-input-number formControlName="consultingCommission" nzPlaceHolder="0" [nzMin]="1" [nzStep]="1"></nz-input-number>
+      <ng-container *ngIf="formGroup.get('consultingCommission').touched">
+        <p class="isms-error-message" *ngIf="formGroup.get('consultingCommission').hasError('required')">Consulting commission is required</p>
+      </ng-container>
+    </div>
+    <div class="space-y-1.5 flex-1 flex flex-col">
+      <label class="isms-label">Hourly Teaching Rate</label>
+      <nz-input-number formControlName="hourlyTeachingRate" nzPlaceHolder="0" [nzMin]="1" [nzStep]="1"></nz-input-number>
+      <ng-container *ngIf="formGroup.get('hourlyTeachingRate').touched">
+        <p class="isms-error-message" *ngIf="formGroup.get('hourlyTeachingRate').hasError('required')">Hourly teaching rate is required</p>
+      </ng-container>
+    </div>
+  </div>
+
+  <div class="flex space-x-2">
+    <div class="space-y-1.5 flex-1 flex flex-col">
+      <label class="isms-label">Hourly Tutoring Rate</label>
+      <nz-input-number formControlName="hourlyTutoringRate" nzPlaceHolder="0" [nzMin]="1" [nzStep]="1"></nz-input-number>
+      <ng-container *ngIf="formGroup.get('hourlyTutoringRate').touched">
+        <p class="isms-error-message" *ngIf="formGroup.get('hourlyTutoringRate').hasError('required')">Hourly tutoring rate is required</p>
+      </ng-container>
+    </div>
+    <div class="space-y-1.5 flex-1 flex flex-col">
+      <label class="isms-label">Hourly TA/PA Rate</label>
+      <nz-input-number formControlName="hourlyTAPARate" nzPlaceHolder="0" [nzMin]="1" [nzStep]="1"></nz-input-number>
+      <ng-container *ngIf="formGroup.get('hourlyTAPARate').touched">
+        <p class="isms-error-message" *ngIf="formGroup.get('hourlyTAPARate').hasError('required')">Hourly TA/PA rate is required</p>
+      </ng-container>
+    </div>
+  </div>
+
+  <div class="flex space-x-2">
+    <div class="space-y-1.5 flex-1 flex flex-col">
+      <label class="isms-label">Insurance Amount</label>
+      <nz-input-number formControlName="insuranceAmount" nzPlaceHolder="0" [nzMin]="1" [nzStep]="1"></nz-input-number>
+      <ng-container *ngIf="formGroup.get('insuranceAmount').touched">
+        <p class="isms-error-message" *ngIf="formGroup.get('insuranceAmount').hasError('required')">Insurance amount is required</p>
+      </ng-container>
+    </div>
+    <div class="flex-1"></div>
+  </div>
+
+  <div class="flex space-x-2">
+    <div class="space-y-1.5 flex-1 flex flex-col">
+      <label class="isms-label">Company Rate %</label>
+      <nz-input-number formControlName="companyPay" nzPlaceHolder="0" [nzMin]="1" [nzStep]="1"></nz-input-number>
+      <ng-container *ngIf="formGroup.get('companyPay').touched">
+        <p class="isms-error-message" *ngIf="formGroup.get('companyPay').hasError('required')">Company rate % is required</p>
+      </ng-container>
+    </div>
+
+    <div class="space-y-1.5 flex-1 flex flex-col">
+      <label class="isms-label">Employee Rate %</label>
+      <nz-input-number formControlName="employeePay" nzPlaceHolder="0" [nzMin]="1" [nzStep]="1"></nz-input-number>
+      <ng-container *ngIf="formGroup.get('employeePay').touched">
+        <p class="isms-error-message" *ngIf="formGroup.get('employeePay').hasError('required')">Employee rate %is required</p>
+      </ng-container>
+    </div>
+  </div>
+
+  <div class="flex space-x-2">
+    <div class="space-y-2 flex-1 flex flex-col">
+      <span>Insurance Amount In Percent </span>
+      <span class="font-medium text-gray-600 text-base">{{ computedInsuranceAmount }}</span>
+    </div>
+    <div class="space-y-2 flex-1 flex flex-col">
+      <span>Insurance Rate <sup class="text-isms-500">(company + employee)</sup> </span>
+      <span class="font-medium text-gray-600 text-base">{{ formGroup.getRawValue().companyPay + formGroup.getRawValue().employeePay }}%</span>
+    </div>
+  </div>
+</div>

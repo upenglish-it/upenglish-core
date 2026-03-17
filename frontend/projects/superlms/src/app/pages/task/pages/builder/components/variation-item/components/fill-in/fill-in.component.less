@@ -1,0 +1,64 @@
+// Visual indicators for filled-in blanks when viewing results / review
+
+.slms-fill-input-blank-result {
+  display: inline-block;
+  min-width: 2rem;
+  padding: 0.15rem 0.5rem;
+  margin: 0 0.1rem;
+  border-radius: 0.25rem;
+  position: relative;
+}
+
+.slms-fill-input-blank-correct {
+  border: 1px solid #16a34a; // green-600
+  background-color: #dcfce7; // green-100
+  color: #166534; // green-700
+  font-weight: 600;
+}
+
+.slms-fill-input-blank-incorrect {
+  border: 1px solid #dc2626; // red-600
+  background-color: #fee2e2; // red-100
+  color: #991b1b; // red-800
+  font-weight: 600;
+}
+
+.slms-fill-input-blank-correct::after,
+.slms-fill-input-blank-incorrect::after {
+  position: absolute;
+  top: -0.4rem;
+  right: -0.4rem;
+  font-size: 0.7rem;
+  border-radius: 9999px;
+  padding: 0.05rem 0.25rem;
+  background-color: #ffffff;
+}
+
+.slms-fill-input-blank-correct::after {
+  content: "✓";
+  color: #16a34a;
+  border: 1px solid #16a34a;
+}
+
+.slms-fill-input-blank-incorrect::after {
+  content: "✗";
+  color: #dc2626;
+  border: 1px solid #dc2626;
+}
+
+// .quill-description {
+//   p {
+//     @apply mb-0;
+//     overflow-wrap: break-word;
+//     line-height: normal;
+//   }
+// }
+// .quill-viewing-instruction {
+//   .p-editor-toolbar.ql-snow {
+//     @apply !hidden;
+//   }
+//   .p-editor-content .ql-editor {
+//     background-color: transparent;
+//     @apply p-0;
+//   }
+// }

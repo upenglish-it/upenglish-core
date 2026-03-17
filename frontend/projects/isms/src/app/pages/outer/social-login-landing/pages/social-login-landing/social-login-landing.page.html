@@ -1,0 +1,21 @@
+<div>
+  <div class="h-screen w-full bg-white flex flex-col items-center justify-center">
+    <div class="relative">
+      <img src="assets/images/logo.png" class="w-28 h-28 z-10 relative -right-4" />
+      <!-- <img *ngIf="authStateInfo && authStateInfo.provider === 'google'"
+        src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Google_Calendar_icon_%282020%29.svg/1024px-Google_Calendar_icon_%282020%29.svg.png"
+        class="w-20 h-20" /> -->
+      <!-- {{authStateInfo.provider|json}}--- -->
+      <!-- <img *ngIf="authStateInfo && authStateInfo.provider === 'microsoft'" src="assets/images/microsoft.svg" class="w-20 h-20" /> -->
+    </div>
+
+    <p class="my-8 text-lg text-gray-600">Successful authentication</p>
+
+    <div [class.hidden]="!showCheckedMarkIcon">
+      <svg class="isms-checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+        <circle class="animated-__circle" cx="26" cy="26" r="25" fill="none" />
+        <path class="animated-__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" />
+      </svg>
+    </div>
+  </div>
+</div>

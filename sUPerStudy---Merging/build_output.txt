@@ -1,0 +1,30 @@
+
+> sie-u-app-ho-c-tu--vu-ng@0.0.0 build
+> vite build
+
+[dotenv@17.3.1] injecting env (30) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+vite v7.3.1 building client environment for production...
+transforming...
+✓ 3185 modules transformed.
+✗ Build failed in 1.71s
+error during build:
+src/pages/teacher/TeacherTopicsPage.jsx (3:157): "getResourceSharedEntities" is not exported by "src/services/teacherService.js", imported by "src/pages/teacher/TeacherTopicsPage.jsx".
+file: /Users/quantheclam/Downloads/Siêu app học từ vựng/src/pages/teacher/TeacherTopicsPage.jsx:3:157
+
+1: import { useState, useEffect } from 'react';
+2: import { Link } from 'react-router-dom';
+3: import { getTeacherTopics, saveTeacherTopic, deleteTeacherTopic, getTeacherFolders, saveTeacherFolder, deleteTeacherFolder, getGroups, toggleResourcePublic, getResourc...
+                                                                                                                                                                ^
+4: import { getAdminTopics } from '../../services/adminService';
+5: import { useAuth } from '../../contexts/AuthContext';
+
+    at getRollupError (file:///Users/quantheclam/Downloads/Sie%CC%82u%20app%20ho%CC%A3c%20tu%CC%9B%CC%80%20vu%CC%9B%CC%A3ng/node_modules/rollup/dist/es/shared/parseAst.js:402:41)
+    at error (file:///Users/quantheclam/Downloads/Sie%CC%82u%20app%20ho%CC%A3c%20tu%CC%9B%CC%80%20vu%CC%9B%CC%A3ng/node_modules/rollup/dist/es/shared/parseAst.js:398:42)
+    at Module.error (file:///Users/quantheclam/Downloads/Sie%CC%82u%20app%20ho%CC%A3c%20tu%CC%9B%CC%80%20vu%CC%9B%CC%A3ng/node_modules/rollup/dist/es/shared/node-entry.js:17040:16)
+    at Module.traceVariable (file:///Users/quantheclam/Downloads/Sie%CC%82u%20app%20ho%CC%A3c%20tu%CC%9B%CC%80%20vu%CC%9B%CC%A3ng/node_modules/rollup/dist/es/shared/node-entry.js:17452:29)
+    at ModuleScope.findVariable (file:///Users/quantheclam/Downloads/Sie%CC%82u%20app%20ho%CC%A3c%20tu%CC%9B%CC%80%20vu%CC%9B%CC%A3ng/node_modules/rollup/dist/es/shared/node-entry.js:15070:39)
+    at FunctionScope.findVariable (file:///Users/quantheclam/Downloads/Sie%CC%82u%20app%20ho%CC%A3c%20tu%CC%9B%CC%80%20vu%CC%9B%CC%A3ng/node_modules/rollup/dist/es/shared/node-entry.js:5673:38)
+    at FunctionBodyScope.findVariable (file:///Users/quantheclam/Downloads/Sie%CC%82u%20app%20ho%CC%A3c%20tu%CC%9B%CC%80%20vu%CC%9B%CC%A3ng/node_modules/rollup/dist/es/shared/node-entry.js:5673:38)
+    at FunctionScope.findVariable (file:///Users/quantheclam/Downloads/Sie%CC%82u%20app%20ho%CC%A3c%20tu%CC%9B%CC%80%20vu%CC%9B%CC%A3ng/node_modules/rollup/dist/es/shared/node-entry.js:5673:38)
+    at FunctionBodyScope.findVariable (file:///Users/quantheclam/Downloads/Sie%CC%82u%20app%20ho%CC%A3c%20tu%CC%9B%CC%80%20vu%CC%9B%CC%A3ng/node_modules/rollup/dist/es/shared/node-entry.js:5673:38)
+    at BlockScope.findVariable (file:///Users/quantheclam/Downloads/Sie%CC%82u%20app%20ho%CC%A3c%20tu%CC%9B%CC%80%20vu%CC%9B%CC%A3ng/node_modules/rollup/dist/es/shared/node-entry.js:5673:38)

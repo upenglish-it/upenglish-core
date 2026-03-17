@@ -1,0 +1,99 @@
+<form class="w-[480px] flex flex-col space-y-4" [formGroup]="notificationFormGroup" autocomplete="on" (ngSubmit)="onSubmit()">
+  <div class="flex space-y-2 flex-col mb-2">
+    <h1 class="mt-0 mb-0 text-xl text-gray-800 font-semibold">Notification</h1>
+    <p class="mt-0 mb-0 text-sm text-gray-500 font-regular">Set you notification preference</p>
+  </div>
+
+  <div class="flex">
+    <!-- <h1 class="mt-0 mb-0 text-base text-gray-800 font-medium w-36">Marketing</h1> -->
+    <div class="flex flex-col space-y-4">
+      <!-- <div class="flex space-x-4">
+        <nz-switch formControlName="gcm" nzSize="small"></nz-switch>
+        <div class="space-y-1.5 flex flex-col">
+          <label class="font-medium text-gray-700 text-sm">Browser Notification</label>
+          <label class="font-normal text-gray-500 text-xs"> Browser notifications allow websites to send you real-time updates and important information directly to your desktop. </label>
+        </div>
+      </div> -->
+
+      <div class="flex space-x-4">
+        <nz-switch formControlName="payslip" nzSize="small"></nz-switch>
+        <div class="space-y-1.5 flex flex-col">
+          <label class="font-medium text-gray-700 text-sm">Payslip</label>
+          <label class="font-normal text-gray-500 text-xs">Stay informed about your salary details, deductions, bonuses, and other important financial information</label>
+        </div>
+      </div>
+
+      <div class="flex space-x-4">
+        <nz-switch formControlName="leadConversation" nzSize="small"></nz-switch>
+        <div class="space-y-1.5 flex flex-col">
+          <label class="font-medium text-gray-700 text-sm">Lead Conversation</label>
+          <label class="font-normal text-gray-500 text-xs"> Stay on top of your marketing efforts by promptly engaging with leads and capturing valuable opportunities. </label>
+        </div>
+      </div>
+
+      <div class="flex space-x-4">
+        <nz-switch formControlName="salaryModification" nzSize="small"></nz-switch>
+        <div class="space-y-1.5 flex flex-col">
+          <label class="font-medium text-gray-700 text-sm">Salary Modification</label>
+          <label class="font-normal text-gray-500 text-xs">
+            Salary modification notifications ensure that you are promptly notified about any financial updates related to your employment, allowing you to stay aware and informed
+            about your remuneration
+          </label>
+        </div>
+      </div>
+
+      <div class="flex space-x-4">
+        <nz-switch formControlName="wonLose" nzSize="small"></nz-switch>
+        <div class="space-y-1.5 flex flex-col">
+          <label class="font-medium text-gray-700 text-sm">Lead Won/Lose</label>
+          <label class="font-normal text-gray-500 text-xs">
+            Stay updated on the progress of your sales efforts and receive timely notifications about the outcome of your lead interactions.
+          </label>
+        </div>
+      </div>
+
+      <div class="flex space-x-4">
+        <nz-switch formControlName="leadCreation" nzSize="small"></nz-switch>
+        <div class="space-y-1.5 flex flex-col">
+          <label class="font-medium text-gray-700 text-sm">Lead Creation</label>
+          <label class="font-normal text-gray-500 text-xs"> Allow you to receive a notifications after the CSV bulk upload process </label>
+        </div>
+      </div>
+
+      <div class="flex space-x-4">
+        <nz-switch formControlName="leaveApproval" nzSize="small"></nz-switch>
+        <div class="space-y-1.5 flex flex-col">
+          <label class="font-medium text-gray-700 text-sm">Leave Approval</label>
+          <label class="font-normal text-gray-500 text-xs">Receive instant alerts when your leave requests are approved or denied by your manager</label>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- 
+  <hr />
+
+  <div class="flex">
+    <h1 class="mt-0 mb-0 text-base text-gray-800 font-medium w-36">Student</h1>
+    <div class="flex flex-col space-y-4">
+      <div class="flex space-x-4">
+        <nz-switch formControlName="enable" nzSize="small"></nz-switch>
+        <div class="space-y-1.5 flex flex-col">
+          <label class="font-normal text-gray-700 text-sm">Student submitted challenge</label>
+          <label class="font-normal text-gray-500 text-xs">Some description will go here</label>
+        </div>
+      </div>
+
+      <div class="flex space-x-4">
+        <nz-switch formControlName="enable" nzSize="small"></nz-switch>
+        <div class="space-y-1.5 flex flex-col">
+          <label class="font-normal text-gray-700 text-sm">Newly created student</label>
+          <label class="font-normal text-gray-500 text-xs">Some description will go here</label>
+        </div>
+      </div>
+    </div>
+  </div> -->
+
+  <!-- <div class="pt-2">
+    <button type="submit" nz-button nzType="primary">Save Changes</button>
+  </div> -->
+</form>

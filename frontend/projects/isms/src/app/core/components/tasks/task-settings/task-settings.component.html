@@ -1,0 +1,48 @@
+<div class="flex-1 h-[calc(100vh-55px)] flex flex-col bg-isms-sub-navigation">
+  <div class="flex-1 overflow-auto mini-scroll-bar p-3 md:p-4">
+    <div class="bg-white rounded-md w-full flex flex-col lg:flex-row border border-gray-200 shadow-md">
+      <div class="w-full lg:w-56 flex flex-col border-b border-gray-200 lg:border-b-0 lg:border-r">
+        <div class="overflow-auto flex-1 mini-scroll-bar">
+          <!-- <ul class="last:border-b-0 px-4 mt-4 space-y-2">
+            <li *ngFor="let navigation of navigations" class="p-2 items-center flex cursor-pointer hover:bg-gray-50 justify-between rounded-md">
+              <span class="text-gray-500 font-medium">{{ navigation.label }}</span>
+            </li>
+          </ul> -->
+          <ul class="p-4  mb-0 flex md:flex-col gap-2 items-center ">
+            <li
+              class="py-1 rounded-md px-2 cursor-pointer transition-all"
+              *ngFor="let section of tabSectionOptions; let i = index"
+              [ngClass]="{ 'bg-isms-100 ring-1 ring-isms-200': section.active }"
+              (click)="onSelectSection(i)">
+              <div class="flex space-x-3 items-center" [ngClass]="{ 'text-gray-500': !section.active, 'text-isms-500': section.active }">
+                <span class="text-lg {{ section.icon }}" [ngClass]="{ 'ph-duotone': !section.active, 'ph-fill': section.active }"></span>
+                <div class="flex flex-col">
+                  <span class="font-normal">{{ section.title }}</span>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div class="flex-1 flex flex-col space-y-4 p-3 md:p-4 overflow-auto mini-scroll-bar">
+        <ng-container *ngIf="taskFormGroup && task">
+          <isms-section-container title="General Information" [form-group]="generalInfoFormGroup" id="general-info-section" [active]="selectedTabSectionIndex === 0">
+            <ng-container content>
+              <isms-task-general-info [form-group]="taskFormGroup" [task]="task"></isms-task-general-info>
+            </ng-container>
+          </isms-section-container>
+          <isms-section-container
+            title="Assignee"
+            [form-group]="assigneeFormGroup"
+            tooltip="Manage participants and reviewers"
+            id="assignee-section"
+            [active]="selectedTabSectionIndex === 1">
+            <ng-container content>
+              <isms-task-assignee [form-group]="taskFormGroup" [task]="task"></isms-task-assignee>
+            </ng-container>
+          </isms-section-container>
+        </ng-container>
+      </div>
+    </div>
+  </div>
+</div>

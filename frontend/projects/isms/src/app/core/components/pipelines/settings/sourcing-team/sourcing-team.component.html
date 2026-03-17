@@ -1,0 +1,55 @@
+<div class="isms-section-container-content flex flex-col space-y-4" [formGroup]="formGroup">
+  <div class="space-y-1.5 flex-1 flex flex-col">
+    <label class="isms-label isms-required">Owner</label>
+    <nz-select class="w-1/2" nzDisabled formControlName="ownerId" nzShowSearch nzPlaceHolder="Select owner">
+      <nz-option nzCustomContent *ngFor="let member of teamMembers" [nzLabel]="member.firstName + ' ' + member.lastName" [nzValue]="member._id">
+        <div class="flex space-x-2 items-center">
+          <img
+            profile-photo
+            [letter]="member.firstName[0].toUpperCase() + '' + member.lastName[0].toUpperCase()"
+            [photo]="member.profilePhoto"
+            alt=""
+            class="border-gray-200 rounded-full w-6 h-6" />
+          <div class="flex flex-col">
+            <span class="text-xs leading-[1] font-medium text-gray-700">{{ member.firstName + " " + member.lastName }}</span>
+            <span class="text-gray-500 text-xs">{{ member.emailAddresses[0] }}</span>
+          </div>
+        </div>
+      </nz-option>
+    </nz-select>
+    <ng-container *ngIf="formGroup.get('ownerId').touched">
+      <p class="isms-error-message" *ngIf="formGroup.get('ownerId').hasError('required')">Owner is required</p>
+    </ng-container>
+  </div>
+
+  <div class="space-y-1.5 flex-1">
+    <div class="flex space-x-1 items-center">
+      <label class="isms-label isms-required">Participants </label>
+      <span
+        class="ph-duotone ph-info cursor-pointer text-sm text-blueLight-500"
+        nz-tooltip
+        nzTooltipColor="#329f72"
+        nzTooltipOverlayClassName="primary-tooltip-arrow"
+        nzTooltipTitle="Select participants."></span>
+    </div>
+    <nz-select class="w-full" nzShowSearch nzMode="multiple" nzAllowClear nzPlaceHolder="Select participants" formControlName="participantIds">
+      <nz-option nzCustomContent *ngFor="let member of teamMembers" [nzLabel]="member.firstName + ' ' + member.lastName" [nzValue]="member._id">
+        <div class="flex space-x-2 items-center">
+          <img
+            profile-photo
+            [letter]="member.firstName[0].toUpperCase() + '' + member.lastName[0].toUpperCase()"
+            [photo]="member.profilePhoto"
+            alt=""
+            class="border-gray-200 rounded-full w-6 h-6" />
+          <div class="flex flex-col">
+            <span class="text-xs leading-[1] font-medium text-gray-700">{{ member.firstName + " " + member.lastName }}</span>
+            <span class="text-gray-500 text-xs">{{ member.emailAddresses[0] }}</span>
+          </div>
+        </div>
+      </nz-option>
+    </nz-select>
+    <ng-container *ngIf="formGroup.get('participantIds').touched">
+      <p class="isms-error-message" *ngIf="formGroup.get('participantIds').hasError('required')">Participants is required</p>
+    </ng-container>
+  </div>
+</div>

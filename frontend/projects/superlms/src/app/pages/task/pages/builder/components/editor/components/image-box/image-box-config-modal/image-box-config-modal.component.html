@@ -1,0 +1,104 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  nzWidth="660px"
+  nzTitle="Upload Image"
+  [nzMaskClosable]="false"
+  [nzClosable]="false"
+  nzCancelText="Close"
+  (nzOnCancel)="toggle()"
+  [nzOkDisabled]="imageBoxFormGroup.invalid"
+  nzOkText="Save"
+  (nzOnOk)="submit()"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <form class="gap-6 flex flex-col p-4" [formGroup]="imageBoxFormGroup">
+      <div class="space-y-1.5">
+        <div class="flex gap-4 flex-wrap">
+          @if (imageBoxFormGroup.value.src) {
+            <div class="w-full h-96 bg-gray-100 relative rounded-md border grid place-items-center">
+              <div class="absolute z-10 top-2 right-2">
+                <button type="button" nz-button nzType="default" nzDanger nzShape="circle" (click)="imageBoxFormGroup.get('src').setValue('')">
+                  <div class="grid place-items-center">
+                    <span class="ph-bold ph-trash"></span>
+                  </div>
+                </button>
+              </div>
+              <img [src]="imageBoxFormGroup.value.src" draggable="false" alt="Image" class="absolute object-contain w-full h-full rounded-md" />
+            </div>
+          } @else {
+            <div class="w-full h-96 bg-gray-100 relative rounded-md border grid place-items-center">
+              <div class="flex flex-col gap-1.5 flex-1 text-center">
+                <span class="text-slate-700">Image</span>
+                <span class="text-xs text-slate-500">Up to 5 MB in size</span>
+                <div class="flex gap-4 items-center">
+                  <label for="profile-photo-upload-selector-input">
+                    @if (imageUploadState === "uploading") {
+                      <span>Uploading...</span>
+                    } @else {
+                      <div class="flex items-center gap-1.5 text-vtap-500 cursor-pointer">
+                        <span>Choose photo</span>
+                        <span class="ph-bold ph-upload-simple"></span>
+                      </div>
+                      <input type="file" id="profile-photo-upload-selector-input" accept=".jpg,.jpeg,.png" class="hidden" (change)="onImageChange($event)" />
+                    }
+                  </label>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- <div class="space-y-1.5">
+        <label class="slms-label slms-required">Answer Number</label>
+        <input nz-input placeHolder="Type here" style="width: 100%" formControlName="answerNumber" nzMin="1" />
+        @if (textboxFormGroup.get("answerNumber").touched) {
+          @if (textboxFormGroup.get("answerNumber").hasError("required")) {
+            <p class="slms-error-message">Answer Number is required</p>
+          }
+        }
+      </div>
+      <div class="space-y-1.5">
+        <label class="slms-label slms-required">Points</label>
+        <nz-input-number nzPlaceHolder="Type here" style="width: 100%" formControlName="points" nzMin="1" />
+        @if (textboxFormGroup.get("points").touched) {
+          @if (textboxFormGroup.get("points").hasError("required")) {
+            <p class="slms-error-message">Points is required</p>
+          }
+        }
+      </div>
+
+      <div class="space-y-1.5">
+        <label class="slms-label slms-required">Description</label>
+        <nz-input-number nzPlaceHolder="Type here" style="width: 100%" formControlName="description" nzMin="1" />
+        @if (textboxFormGroup.get("description").touched) {
+          @if (textboxFormGroup.get("description").hasError("required")) {
+            <p class="slms-error-message">Description is required</p>
+          }
+        }
+      </div> -->
+
+      <!-- <p-fileupload
+        name="file"
+        [url]="uploadFileUrl"
+        [showCancelButton]="false"
+        [showUploadButton]=""
+        (onUpload)="onUpload($event)"
+        [multiple]="false"
+        accept="image/*"
+        maxFileSize="1000000"
+        mode="advanced">
+        <ng-template #empty>
+          <div>Drag and drop files to here to upload.</div>
+        </ng-template>
+        <ng-template #content>
+          <ul>
+            @for (file of uploadedFiles; track file.name) {
+              <li>{{ file.name }} - {{ file.size }} bytes</li>
+            }
+          </ul>
+        </ng-template>
+      </p-fileupload> -->
+    </form>
+  </ng-container>
+</nz-modal>

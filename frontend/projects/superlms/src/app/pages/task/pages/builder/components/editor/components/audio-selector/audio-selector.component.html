@@ -1,0 +1,42 @@
+<div class="border border-slms-200 rounded-md p-2 bg-slms-50 flex items-center gap-2">
+  <!-- @if (waveSurfer) {
+          <button class="w-20 rounded-md border p-2 border-slms-500 bg-slms-100 text-slms-500" (click)="play()">
+            {{ waveSurfer && waveSurfer.isPlaying() ? "Pause" : "Play" }}
+          </button>
+        } @else {
+          <button class="w-20 rounded-md border p-2 border-slms-500 bg-slms-100 text-slms-500" (click)="play()"> Record </button>
+        }
+        <div class="flex-1 w-full">
+          <div #waveform class="w-full"></div>
+        </div> -->
+  <!-- <button nz-button nzType="primary" nzShape="circle" nzDanger nzGhost (click)="waveSurfer.empty()">
+          <span class="ph-bold ph-x"></span>
+        </button> -->
+  <!-- @if (itemFormGroup.value.ieltsSpeaking) { -->
+  <!-- <button nz-button nzType="primary" nzShape="circle" (click)="startRecording()">
+      <span class="ph-bold ph-microphone"></span>
+    </button> -->
+
+  @if (!audioUrl() && !isRecording()) {
+    <button class="w-fit rounded-md border py-2 px-4 border-slms-500 bg-slms-100 text-slms-500" (click)="startRecording()"> Record </button>
+  }
+
+  @if (isRecording()) {
+    <button class="w-fit rounded-md border py-2 px-4 border-error-500 bg-red-100 text-error-500" (click)="stopRecording()">Stop Recording</button>
+  }
+
+  @if (audioUrl()) {
+    <button class="w-fit rounded-md border py-2 px-4 border-slms-500 bg-slms-100 text-slms-500" (click)="play()"> {{ waveSurfer.isPlaying() ? "Pause" : "Play" }} </button>
+  }
+
+  <div class="flex-1 w-full" #waveform></div>
+
+  @if (audioUrl() && canRecord) {
+    <div class="flex items-center gap-1">
+      <button nz-button nzType="link" nzGhost nzDanger (click)="recordAgain()">Record again?</button>
+      @if (showSaveButton()) {
+        <button nz-button nzType="link" (click)="saveAudio()">Use this Audio</button>
+      }
+    </div>
+  }
+</div>

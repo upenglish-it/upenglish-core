@@ -1,0 +1,54 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  nzCentered
+  [nzWidth]="'580px'"
+  nzTitle="Save Draft Tuition"
+  nzOkText="Save Draft Tuition"
+  (nzOnOk)="onSubmit()"
+  [nzKeyboard]="false"
+  [nzClosable]="viewState === 'initial'"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <div class="w-full flex flex-col p-4 space-y-4" [formGroup]="formGroup">
+      <!-- <div class="flex flex-col">
+        <span class="text-base font-medium">Save Draft Tuition</span>
+      </div> -->
+      <form class="flex-col space-y-4 flex-1 flex">
+        <div class="space-y-1.5 flex-1">
+          <label class="isms-label-left isms-required">Name</label>
+          <input nz-input placeholder="Type here" formControlName="name" />
+        </div>
+      </form>
+    </div>
+  </ng-container>
+</nz-modal>
+
+<div [formGroup]="formGroup" class="flex flex-col space-y-4">
+  <div class="flex items-center gap-4">
+    <nz-select formControlName="draftId" nzAllowClear class="w-full" nzPlaceHolder="Select a draft template" [nzDropdownMatchSelectWidth]="false">
+      @for (draft of drafts; track draft._id) {
+        <nz-option [nzValue]="draft._id" [nzLabel]="draft.name"></nz-option>
+      }
+    </nz-select>
+    @if (formGroup.value.draftId) {
+      <button nz-button nzType="default" (click)="loadTemplate()" nzBlock>
+        <ng-container>
+          <span>Load Template</span>
+        </ng-container>
+      </button>
+
+      <button nz-button nzType="primary" (click)="delete()" nzDanger nzBlock>
+        <ng-container>
+          <span>Delete</span>
+        </ng-container>
+      </button>
+    }
+  </div>
+  <button nz-button nzType="primary" (click)="toggle()" nzBlock>
+    <ng-container>
+      <span>Save Template</span>
+    </ng-container>
+  </button>
+</div>

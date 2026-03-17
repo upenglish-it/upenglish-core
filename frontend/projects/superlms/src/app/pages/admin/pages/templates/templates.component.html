@@ -1,0 +1,87 @@
+<div class="max-w-7xl w-full mx-auto flex flex-col gap-8 px-4 md:px-0">
+  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pt-14">
+    <div class="flex flex-col gap-1">
+      <h2 class="font-bold text-3xl mb-0">Templates</h2>
+      <p class="text-sm text-gray-500 mb-0">Launch new experiences faster with reusable blueprints.</p>
+    </div>
+    <button type="button" nz-button nzSize="large" nzType="primary" class="flex items-center gap-2" (click)="createTaskModal.toggle()"> Create template </button>
+  </div>
+
+  <div class="flex flex-col gap-6">
+    @if (isLoading) {
+      <div class="py-20 flex flex-col items-center justify-center gap-4 text-gray-500">
+        <nz-spin nzSimple nzTip="Loading templates..."></nz-spin>
+        <span class="text-sm">Gathering your latest blueprints.</span>
+      </div>
+    } @else {
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 pb-5">
+        @for (test of tests; track test._id) {
+          <div class="rounded-2xl border border-slate-200 bg-white shadow-sm hover:shadow-xl hover:border-slms-400 transition-all duration-200">
+            <div class="flex items-start gap-4 p-5">
+              <a
+                class="flex-1 flex flex-col gap-3 no-underline text-current"
+                [routerLink]="['/task', test._id, 'builder']"
+                [queryParams]="{ backRedirectUrl: '/a/templates', mode: 'editing', type: 'template', action: 'builder-editing' }">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-3">
+                    <div class="w-1.5 h-10 rounded-full bg-slms-500"></div>
+                    <div class="flex flex-col gap-1">
+                      <h3 class="mb-0 font-semibold text-lg">{{ test.name }}</h3>
+                      <span class="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide px-2 py-0.5 rounded-full bg-slms-50 text-slms-600 w-fit">
+                        <span class="w-1.5 h-1.5 rounded-full bg-slms-600"></span>
+                        {{ test.type || "Template" }}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class="mt-1"
+                    nz-button
+                    nzType="default"
+                    nzGhost
+                    nzDanger
+                    nzShape="circle"
+                    nz-tooltip
+                    nzTooltipTitle="Delete template"
+                    (click)="$event.preventDefault(); $event.stopPropagation(); deleteTest(test._id)">
+                    <span class="ph ph-trash"></span>
+                  </button>
+                </div>
+
+                <div class="text-xs text-gray-400"> Created {{ test.createdAt | date: "MMM d, y" }} </div>
+                <div class="flex items-center justify-between text-xs text-gray-500 w-full">
+                  <span class="flex items-center gap-2">
+                    <span class="ph ph-chalkboard-teacher text-base text-slate-400"></span>
+                    Template
+                  </span>
+                  <span class="flex items-center gap-1 text-slms-500 font-medium">
+                    Open builder
+                    <span class="ph ph-arrow-up-right text-sm"></span>
+                  </span>
+                </div>
+              </a>
+            </div>
+          </div>
+        } @empty {
+          <div class="col-span-full border border-dashed border-slate-300 rounded-2xl p-10 text-center bg-white">
+            <span class="ph ph-folders text-3xl text-slate-300 block mb-3"></span>
+            <h4 class="text-lg font-semibold mb-1">No templates yet</h4>
+            <p class="text-sm text-gray-500 mb-4">Spin up your first template to jump-start future launches.</p>
+            <button type="button" nz-button nzType="primary" (click)="createTaskModal.toggle()">Create your first template</button>
+          </div>
+        }
+      </div>
+
+      @if (hasMore) {
+        <div class="flex justify-center pb-12">
+          <button type="button" nz-button nzType="default" nzSize="large" [nzLoading]="isLoadingMore" (click)="loadMore()">
+            <span class="ph ph-arrow-down mr-1"></span>
+            Load more
+          </button>
+        </div>
+      }
+    }
+  </div>
+</div>
+
+<slms-create-task-modal #createTaskModal></slms-create-task-modal>

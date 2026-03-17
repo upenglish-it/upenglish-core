@@ -1,0 +1,26 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  nzCentered
+  [nzWidth]="'450px'"
+  nzTitle="Add Tags to Students"
+  [nzFooter]="footerTemplate"
+  [nzMaskClosable]="false"
+  [nzClosable]="false"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <form class="px-4 py-3 flex-col max-h-[500px] space-y-3 flex-1 flex overflow-auto mini-scroll-bar mini-scroll-bar min-h-fit" [formGroup]="addTagsFormGroup">
+      <div class="p-4 bg-isms-50 rounded-md text-isms-500 text-center font-medium text-lg">{{ studentIds.length }} student(s)</div>
+      <div class="space-y-1.5 flex-1">
+        <label class="font-normal text-gray-600 text-xs">Tags</label>
+        <nz-select formControlName="tags" nzMode="tags" nzShowSearch class="w-full" nzPlaceHolder="Select or add tags" [nzDropdownMatchSelectWidth]="false"> </nz-select>
+      </div>
+    </form>
+  </ng-container>
+
+  <ng-template #footerTemplate>
+    <div class="space-x-2 flex items-center">
+      <button nz-button nzBlock (click)="toggle()">Close</button>
+      <button nz-button nzType="primary" (click)="onSubmit()" [nzLoading]="loadingSubmitButton" nzBlock [disabled]="addTagsFormGroup.invalid">Submit</button>
+    </div>
+  </ng-template>
+</nz-modal>

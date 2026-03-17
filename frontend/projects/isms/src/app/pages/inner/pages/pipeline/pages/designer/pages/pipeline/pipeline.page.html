@@ -1,0 +1,576 @@
+<ng-container *ngIf="pipeline">
+  <div class="h-[55px] bg-white justify-between flex border-b border-b-gray-200 items-center px-4">
+    <div class="flex items-center flex-1 space-x-4" [formGroup]="filterFormGroup">
+      <!-- <nz-select style="min-width: 130px" formControlName="query" [nzDropdownMatchSelectWidth]="false" *ngIf="selectedLeadIds.length===0">
+        <nz-option nzLabel="All" nzValue="all"></nz-option>
+        <nz-option nzLabel="In Progress" nzValue="inprogress"></nz-option>
+        <nz-option nzLabel="Disqualified" nzValue="disqualified"></nz-option>
+      </nz-select> -->
+      <isms-student-action-selector
+        [candidate-ids]="selectedLeadIds"
+        (on-action)="onActionSelector($event)"
+        [remove-from-this-pipeline-id]="pipeline._id"></isms-student-action-selector>
+    </div>
+    <div class="space-x-6 flex items-center">
+      <!-- <button nz-button nzType="primary" (click)="chooseLeadModal.toggle()">
+      Add Leads
+      <span nz-icon nzType="plus"></span>
+    </button> -->
+      <!-- <div class="space-x-2 flex items-center">
+      <button nz-button nzType="primary" (click)="1">
+        Settings
+        <span nz-icon nzType="setting"></span>
+      </button>
+    </div> -->
+    </div>
+  </div>
+
+  <!-- w-[calc(100vw-66px)]  -->
+  <div class="inline-flex space-x-2 overflow-x-scroll p-2 w-full stages-boundary bg-white">
+    <!-- Stages Container -->
+    <div class="flex space-x-4 h-[calc(100vh-125px)]">
+      <!-- Stages - Editable -->
+      <div class="flex space-x-2 p-2 border border-gray-100 rounded-md">
+        <ng-container *ngFor="let stage of pipeline.sourcingPipeline.stages; let stageIndex = index">
+          <div class="rounded-md flex-1 flex flex-col w-[280px]" [@down] *ngIf="stage.editable">
+            <div class="space-x-1 py-2 flex items-center justify-between">
+              <div class="flex items-center">
+                <div class="px-1.5" *ngIf="stage.leads.length > 0">
+                  <label
+                    nz-checkbox
+                    nzValue="all"
+                    [nzIndeterminate]="stage.indeterminate"
+                    [(ngModel)]="stage.selected"
+                    (ngModelChange)="onChangeStage(stage.id, stage.selected)"></label>
+                </div>
+                <div class="flex items-center space-x-1">
+                  <nz-color-picker nzSize="small" [(ngModel)]="stage.color" nzDefaultValue="#f6f8f9" (ngModelChange)="onChangeUpdateStage(stage)"></nz-color-picker>
+                  <ng-template #flipFlop>
+                    <button
+                      nz-button
+                      nzType="primary"
+                      nzSize="small"
+                      [ngStyle]="{ 'background-color': stage.color, width: '10px', height: '10px' }"
+                      [style.background-color]="stage.color"></button>
+                  </ng-template>
+                  <input
+                    type="text"
+                    class="font-medium text-xs outline-none bg-transparent"
+                    #stageNameField
+                    [(ngModel)]="stage.title"
+                    (ngModelChange)="onChangeUpdateStage(stage)" />
+                </div>
+              </div>
+              <div class="flex items-center space-x-3">
+                <span class="font-bold text-xs">({{ pipelineType === "task" ? (stage.tasks?.length ?? 0) : stage.leads.length }})</span>
+                <span class="ph-fill text-gray-500 text-lg ph-dots-three-outline cursor-pointer" nz-dropdown nzTrigger="click" [nzDropdownMenu]="stageDropdownMenu"></span>
+              </div>
+              <nz-dropdown-menu #stageDropdownMenu="nzDropdownMenu">
+                <ul nz-menu>
+                  <li nz-menu-item (click)="onRenameStage(stageNameField)">
+                    <div class="flex items-center space-x-2 text-xs">
+                      <i class="text-base ph-textbox ph"></i>
+                      <span>Rename</span>
+                    </div>
+                  </li>
+                  <li nz-menu-item (click)="onAddNewStage(stage.id)">
+                    <div class="flex items-center space-x-2 text-xs">
+                      <i class="text-base ph-plus ph"></i>
+                      <span>Add New Stage</span>
+                    </div>
+                  </li>
+                  <li nzDanger nz-menu-item (click)="onRemoveStage(stage.id, stageIndex)">
+                    <div class="flex items-center space-x-2 text-xs">
+                      <i class="text-base ph-trash ph-duotone"></i>
+                      <span>Remove Stage</span>
+                    </div>
+                  </li>
+                </ul>
+              </nz-dropdown-menu>
+            </div>
+            <div
+              class="flex flex-col px-1 rounded-md flex-1 overflow-auto h-full mini-scroll-bar pipeline-stage-container"
+              [ngStyle]="{ background: 'linear-gradient(' + stage.color + ',#ffffff)' }"
+              [id]="stage.id"
+              [cdkDropListConnectedTo]="pipelineStageIds"
+              cdkDropList
+              [cdkDropListData]="stage"
+              (cdkDropListDropped)="onDroppedInStage($event, stage.id)">
+              <!-- Tasks mode -->
+              <ng-container *ngIf="pipelineType === 'task'">
+                <ng-container *ngIf="stage.tasks?.length > 0; else emptyLeadTemplate">
+                  <div class="pipeline-stage-lead first:mt-1 mt-1 last:mb-2" *ngFor="let task of stage.tasks" cdkDrag [cdkDragData]="task" cdkDragBoundary=".stages-boundary">
+                    <div class="border bg-white rounded-md border-gray-200 hover:shadow-lg group shadow-xs cursor-grab pipeline-stage-lead-item relative">
+                      <div class="flex px-3 py-2 items-start space-x-2">
+                        <div class="flex flex-col flex-1">
+                          <span class="font-base font-medium text-gray-700">
+                            {{ task.name }}
+                          </span>
+                          <span class="text-xs text-gray-500 pt-1">
+                            {{ task.notes }}
+                          </span>
+                        </div>
+                        <a class="flex items-center text-gray-500" nz-dropdown nzTrigger="click" [nzDropdownMenu]="taskItemDropdownMenu">
+                          <i class="text-2xl ph-dots-three ph-bold"></i>
+                        </a>
+                        <nz-dropdown-menu #taskItemDropdownMenu="nzDropdownMenu">
+                          <ul nz-menu>
+                            <li nz-menu-item (click)="onEditTaskInStage(task, stage)" *ngIf="task.taskId">
+                              <div class="flex items-center space-x-2 text-xs">
+                                <i class="text-base ph-pencil ph-duotone"></i>
+                                <span>Edit task</span>
+                              </div>
+                            </li>
+                            <li nz-submenu [nzTitle]="selectStagesSubMenuTask">
+                              <ul>
+                                <ng-container *ngFor="let navStage of pipeline.sourcingPipeline.stages; let navStageIndex = index">
+                                  <li
+                                    nz-menu-item
+                                    *ngIf="navStage.id !== stage.id"
+                                    (click)="onMoveTaskInStage({ stageIndex: navStageIndex, stageTask: task, stageId: navStage.id })">
+                                    <div class="flex items-center space-x-2 text-xs">
+                                      <nz-color-picker nzSize="small" nzDisabled [(ngModel)]="navStage.color" (ngModelChange)="onChangeUpdateStage(navStage)"></nz-color-picker>
+                                      <ng-template #flipFlop>
+                                        <button
+                                          nz-button
+                                          nzType="primary"
+                                          nzSize="small"
+                                          [ngStyle]="{ 'background-color': navStage.color, width: '10px', height: '10px' }"
+                                          [style.background-color]="navStage.color"></button>
+                                      </ng-template>
+                                      <span>{{ navStage.title }}</span>
+                                    </div>
+                                  </li>
+                                </ng-container>
+                              </ul>
+                              <ng-template #selectStagesSubMenuTask>
+                                <span class="inline-flex items-center space-x-2 text-xs">
+                                  <i class="text-base ph-kanban ph-duotone"></i>
+                                  <span class="text-xs">Move to stage</span>
+                                </span>
+                              </ng-template>
+                            </li>
+                            <li nz-menu-item nzDanger *ngIf="task.taskId" (click)="onRemoveTaskFromStage(task, stage)">
+                              <div class="flex items-center space-x-2 text-xs">
+                                <i class="text-base ph-x-circle ph-duotone"></i>
+                                <span>Remove this task from this stage</span>
+                              </div>
+                            </li>
+                          </ul>
+                        </nz-dropdown-menu>
+                      </div>
+                    </div>
+                  </div>
+                </ng-container>
+              </ng-container>
+
+              <!-- Leads mode (only render when pipeline is leads type; avoids showing empty template twice for task pipelines) -->
+              <ng-container *ngIf="pipelineType !== 'task'">
+                <ng-container *ngIf="stage.leads.length > 0; else emptyLeadTemplate">
+                  <div class="pipeline-stage-lead first:mt-1 mt-1 last:mb-2" *ngFor="let lead of stage.leads" cdkDrag [cdkDragData]="lead" cdkDragBoundary=".stages-boundary">
+                    <!-- style="box-shadow: rgba(0, 0, 0, 0.04) 0px 1px 2px, rgba(0, 0, 0, 0.16) 0px 2px 6px" -->
+                    <div
+                      class="border bg-white rounded-md border-gray-200 hover:shadow-lg group shadow-xs cursor-grab pipeline-stage-lead-item relative"
+                      [ngClass]="{ 'border-isms-500': lead.info.selected }">
+                      <div class="absolute top-[-1px] left-[1px]">
+                        <label
+                          nz-checkbox
+                          [(ngModel)]="lead.info.selected"
+                          [nzValue]="lead.info._id"
+                          (ngModelChange)="onChangeStageLead(stage.id, lead.info._id, lead.info.selected)"></label>
+                      </div>
+
+                      <div class="flex px-3 py-2 items-start space-x-2">
+                        <img
+                          profile-photo
+                          [letter]="lead.info.firstName[0].toUpperCase() + '' + lead.info.lastName[0].toUpperCase()"
+                          [photo]="lead.info.profilePhoto"
+                          alt=""
+                          class="mt-1 border-gray-200 rounded-full w-7 h-7" />
+                        <div class="flex flex-col flex-1">
+                          <span class="font-base font-medium text-gray-700 cursor-pointer" (click)="onClickViewLeadInfoModal(lead, stage)">
+                            {{ lead.info.firstName }} {{ lead.info.lastName }}
+                          </span>
+                          <span class="text-xs text-gray-500 flex items-center space-x-1 pt-1">
+                            <!-- <span class="text-sm ph ph-clock"></span> -->
+                            <!-- <span class="text-sm ph ph-user-gear"></span> -->
+                            <!-- <span>Added by: John Mark Alicante</span> -->
+                            <span [title]="lead.addedAt | date: 'MMMM dd, yyyy • hh:mma'">Added {{ lead.addedAt | timeago }}</span>
+                            <!-- <span class="text-ellipsis">{{lead.info.emailAddresses[0]}}</span> -->
+                          </span>
+                        </div>
+                        <!-- <div class="h-2 w-2 bg-isms-500 rounded-full"></div> -->
+                        <a class="flex items-center text-gray-500" nz-dropdown nzTrigger="click" [nzDropdownMenu]="leadItemDropdownMenu">
+                          <i class="text-2xl ph-dots-three ph-bold"></i>
+                        </a>
+                        <nz-dropdown-menu #leadItemDropdownMenu="nzDropdownMenu">
+                          <ul nz-menu>
+                            <li nz-menu-item (click)="onClickViewLeadInfoModal(lead, stage)">
+                              <div class="flex items-center space-x-2 text-xs">
+                                <i class="text-base ph-address-book ph-duotone"></i>
+                                <span>View Lead Info</span>
+                              </div>
+                            </li>
+                            <li nz-menu-item (click)="onEditStudent(lead.id)">
+                              <div class="flex items-center space-x-2 text-xs">
+                                <i class="text-base ph-chats-teardrop ph-duotone"></i>
+                                <span>Edit Information</span>
+                              </div>
+                            </li>
+                            <li nz-submenu [nzTitle]="selectStagesSubMenu">
+                              <ul>
+                                <ng-container *ngFor="let navStage of pipeline.sourcingPipeline.stages; let navStageIndex = index">
+                                  <li
+                                    nz-menu-item
+                                    *ngIf="navStage.id !== stage.id"
+                                    (click)="onMoveLeadInStage({ stageIndex: navStageIndex, stageLead: lead, stageId: navStage.id })">
+                                    <div class="flex items-center space-x-2 text-xs">
+                                      <nz-color-picker nzSize="small" nzDisabled [(ngModel)]="navStage.color" (ngModelChange)="onChangeUpdateStage(navStage)"></nz-color-picker>
+                                      <ng-template #flipFlop>
+                                        <button
+                                          nz-button
+                                          nzType="primary"
+                                          nzSize="small"
+                                          [ngStyle]="{ 'background-color': navStage.color, width: '10px', height: '10px' }"
+                                          [style.background-color]="navStage.color"></button>
+                                      </ng-template>
+                                      <span>{{ navStage.title }}</span>
+                                    </div>
+                                  </li>
+                                </ng-container>
+                              </ul>
+                              <ng-template #selectStagesSubMenu>
+                                <span class="inline-flex items-center space-x-2 text-xs">
+                                  <i class="text-base ph-kanban ph-duotone"></i>
+                                  <span class="text-xs">Move to stage</span>
+                                </span>
+                              </ng-template>
+                            </li>
+                            <li nz-menu-divider></li>
+                            <li cla nzDanger nz-menu-item (click)="onRemoveFromThisPipeline(lead, stage)">
+                              <div class="flex items-center space-x-2 text-xs">
+                                <i class="text-base ph-x-circle ph-duotone"></i>
+                                <span>Remove from this Pipeline</span>
+                              </div>
+                            </li>
+                          </ul>
+                        </nz-dropdown-menu>
+                      </div>
+                      <div class="flex px-3 justify-between border-t border-gray-200 space-x-1 py-2">
+                        <div class="flex space-x-1">
+                          <nz-tag [nzColor]="'geekblue'" class="capitalize" *ngFor="let source of lead.info.sources | slice: 0 : 1">{{ source }}</nz-tag>
+                        </div>
+
+                        <div class="flex space-x-3 flex-1">
+                          <div class="flex-1 flex items-center gap-1">
+                            <div
+                              *ngFor="let tag of lead.info.tags"
+                              nz-tooltip
+                              [nzTooltipTitle]="tag.name"
+                              class="w-2 h-2 rounded-full cursor-pointer"
+                              [ngStyle]="{ 'background-color': tag.color }"></div>
+                          </div>
+
+                          <div
+                            class="rounded-full text-gray-500 font-medium flex justify-center items-center space-x-0.5 cursor-pointer"
+                            [title]="lead.info.activityLogs + ' activity logs'">
+                            <span class="text-base ph-duotone ph-list-bullets"></span>
+                            <span>{{ lead.info.activityLogs }}</span>
+                          </div>
+
+                          <div
+                            class="rounded-full text-gray-500 font-medium flex justify-center items-center space-x-0.5 cursor-pointer"
+                            [title]="lead.info.conversations + ' conversations'">
+                            <span class="text-base ph-duotone ph-chats-circle"></span>
+                            <span>{{ lead.info.conversations }}</span>
+                          </div>
+
+                          <div class="rounded-full text-gray-500 font-medium flex justify-center items-center space-x-0.5 cursor-pointer" [title]="lead.info.notes + ' notes'">
+                            <span class="text-base ph-duotone ph-file-text"></span>
+                            <span>{{ lead.info.notes }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </ng-container>
+              </ng-container>
+              <ng-template #emptyLeadTemplate>
+                <div class="pipeline-stage-empty-placeholder flex flex-1 justify-center flex-col items-center space-y-3 py-10">
+                  <div>
+                    <nz-empty [nzNotFoundContent]="emptyContentTemplate" [nzNotFoundFooter]="emptyFooterTemplate">
+                      <ng-template #emptyContentTemplate>
+                        <span class="text-gray-400">
+                          <ng-container *ngIf="pipelineType === 'task'; else leadEmptyText"> No task on this stage </ng-container>
+                          <ng-template #leadEmptyText> No lead on this stage </ng-template>
+                        </span>
+                      </ng-template>
+                      <ng-template #emptyFooterTemplate>
+                        <div
+                          class="px-2 py-1.5 bg-gray-50 hover:bg-gray-100 transition-all border-t border border-gray-300 rounded-md border-dashed text-gray-500 cursor-pointer items-center flex justify-center space-x-2"
+                          (click)="onClickAddToStage(stage.id)">
+                          <span>{{ pipelineType === "task" ? "Add Task" : "Add Lead" }}</span>
+                          <span class="ph-bold ph-plus"></span>
+                        </div>
+                      </ng-template>
+                    </nz-empty>
+                  </div>
+                </div>
+              </ng-template>
+            </div>
+            <div
+              class="px-2 py-1.5 bg-gray-50 border-t border border-gray-300 rounded-md border-dashed text-gray-500 cursor-pointer items-center flex justify-center space-x-2"
+              (click)="onClickAddToStage(stage.id)"
+              *ngIf="(pipelineType === 'task' ? (stage.tasks?.length ?? 0) : stage.leads.length) > 0">
+              <span>{{ pipelineType === "task" ? "Add Task" : "Add Lead" }}</span>
+              <span class="ph-bold ph-plus"></span>
+            </div>
+          </div>
+        </ng-container>
+      </div>
+
+      <!-- Stages - Non Editable (leads only; task pipelines show all stages in editable section) -->
+      <div class="flex flex-col space-y-2 p-2 border border-gray-100 rounded-md" *ngIf="pipelineType !== 'task'">
+        <ng-container *ngFor="let stage of pipeline.sourcingPipeline.stages; let stageIndex = index">
+          <div class="rounded-md flex-1 flex flex-col w-[280px]" [@down] *ngIf="!stage.editable">
+            <div class="space-x-1 py-2 flex items-center justify-between">
+              <div class="flex items-center">
+                <div class="flex items-center space-x-1 px-1.5 py-[4px]">
+                  <input type="text" class="font-medium text-xs outline-none bg-transparent" [value]="stage.title" readonly />
+                </div>
+              </div>
+            </div>
+            <div
+              class="flex flex-col px-1 rounded-md flex-1 overflow-auto h-full mini-scroll-bar pipeline-stage-container"
+              [ngStyle]="{ background: 'linear-gradient(' + stage.color + ',#ffffff)' }"
+              [id]="stage.id"
+              [cdkDropListConnectedTo]="pipelineStageIds"
+              cdkDropList
+              [cdkDropListData]="stage"
+              (cdkDropListDropped)="onDroppedInStage($event, stage.id)">
+              <!-- Leads -->
+              <ng-container *ngIf="stage.leads.length > 0; else emptyLeadTemplate">
+                <div class="pipeline-stage-lead first:mt-1 mt-1 last:mb-2" *ngFor="let lead of stage.leads" cdkDrag [cdkDragData]="lead" cdkDragBoundary=".stages-boundary">
+                  <!-- style="box-shadow: rgba(0, 0, 0, 0.04) 0px 1px 2px, rgba(0, 0, 0, 0.16) 0px 2px 6px" -->
+                  <div
+                    class="border bg-white rounded-md border-gray-200 hover:shadow-lg group shadow-xs cursor-grab pipeline-stage-lead-item relative"
+                    [ngClass]="{ 'border-isms-500': lead.info.selected }">
+                    <div class="absolute top-[-1px] left-[1px]">
+                      <label
+                        nz-checkbox
+                        [(ngModel)]="lead.info.selected"
+                        [nzValue]="lead.info._id"
+                        (ngModelChange)="onChangeStageLead(stage.id, lead.info._id, lead.info.selected)"></label>
+                    </div>
+
+                    <div class="flex px-3 py-2 items-start space-x-2">
+                      <img
+                        profile-photo
+                        [letter]="lead.info.firstName[0].toUpperCase() + '' + lead.info.lastName[0].toUpperCase()"
+                        [photo]="lead.info.profilePhoto"
+                        alt=""
+                        class="mt-1 border-gray-200 rounded-full w-7 h-7" />
+                      <div class="flex flex-col flex-1">
+                        <span class="font-base font-medium text-gray-700 cursor-pointer" (click)="onClickViewLeadInfoModal(lead, stage)"
+                          >{{ lead.info.firstName }} {{ lead.info.lastName }}</span
+                        >
+                        <span class="text-xs text-gray-500 flex items-center space-x-1">
+                          <!-- <span class="text-sm ph ph-clock"></span> -->
+                          <!-- <span class="text-sm ph ph-user-gear"></span> -->
+                          <!-- <span>Added by: John Mark Alicante</span> -->
+                          <span [title]="lead.addedAt | date: 'MMMM dd, yyyy • hh:mma'">Added {{ lead.addedAt | timeago }}</span>
+                          <!-- <span class="text-ellipsis">{{lead.info.emailAddresses[0]}}</span> -->
+                        </span>
+                      </div>
+                      <!-- <div class="h-2 w-2 bg-isms-500 rounded-full"></div> -->
+                      <a class="flex items-center text-gray-500" nz-dropdown nzTrigger="click" [nzDropdownMenu]="leadItemDropdownMenu">
+                        <i class="text-2xl ph-dots-three ph-bold"></i>
+                      </a>
+                      <nz-dropdown-menu #leadItemDropdownMenu="nzDropdownMenu">
+                        <ul nz-menu>
+                          <li nz-menu-item (click)="onClickViewLeadInfoModal(lead, stage)">
+                            <div class="flex items-center space-x-2 text-xs">
+                              <i class="text-base ph-address-book ph-duotone"></i>
+                              <span>View Lead Info</span>
+                            </div>
+                          </li>
+                          <li nz-menu-item (click)="onEditStudent(lead.id)">
+                            <div class="flex items-center space-x-2 text-xs">
+                              <i class="text-base ph-chats-teardrop ph-duotone"></i>
+                              <span>Edit Information</span>
+                            </div>
+                          </li>
+                          <!-- <li nz-menu-divider></li> -->
+                          <!-- <li nz-menu-item (click)="addConversationModal.toggle()">
+                        <div class="flex items-center space-x-2 text-xs">
+                          <i class="text-base ph-chats-circle ph-duotone"></i>
+                          <span>Leave A Message</span>
+                        </div>
+                      </li>
+                      <li nz-menu-item>
+                        <div class="flex items-center space-x-2 text-xs">
+                          <i class="text-base ph-file-text ph-duotone"></i>
+                          <span>Add Notes</span>
+                        </div>
+                      </li>
+                      <li nz-menu-divider></li> -->
+                          <!-- <li nz-menu-item>
+                        <div class="flex items-center space-x-2 text-xs">
+                          <i class="text-base ph-envelope-simple ph-duotone"></i>
+                          <span>Send Email</span>
+                        </div>
+                      </li>
+                      <li nz-menu-item>
+                        <div class="flex items-center space-x-2 text-xs">
+                          <i class="text-base ph-chat-circle-text ph-duotone"></i>
+                          <span>Send SMS</span>
+                        </div>
+                      </li>
+                      <li nz-menu-item>
+                        <div class="flex items-center space-x-2 text-xs">
+                          <i class="text-base ph-calendar-plus ph-duotone"></i>
+                          <span>Book Appointment</span>
+                        </div>
+                      </li>
+                      <li nz-menu-divider></li> -->
+                          <!-- <li class="flex items-center space-x-2 text-xs" nz-menu-item (click)="1">
+                  <i class="text-base ph-pencil ph-duotone"></i>
+                  <span>Edit</span>
+                </li> -->
+                          <li nz-submenu [nzTitle]="selectStagesSubMenu">
+                            <ul>
+                              <ng-container *ngFor="let navStage of pipeline.sourcingPipeline.stages; let navStageIndex = index">
+                                <li nz-menu-item *ngIf="navStage.id !== stage.id" (click)="onMoveLeadInStage({ stageIndex: navStageIndex, stageLead: lead, stageId: navStage.id })">
+                                  <div class="flex items-center space-x-2 text-xs">
+                                    <nz-color-picker nzSize="small" nzDisabled [(ngModel)]="navStage.color" (ngModelChange)="onChangeUpdateStage(navStage)"></nz-color-picker>
+                                    <ng-template #flipFlop>
+                                      <button
+                                        nz-button
+                                        nzType="primary"
+                                        nzSize="small"
+                                        [ngStyle]="{ 'background-color': navStage.color, width: '10px', height: '10px' }"
+                                        [style.background-color]="navStage.color"></button>
+                                    </ng-template>
+                                    <span>{{ navStage.title }}</span>
+                                  </div>
+                                </li>
+                              </ng-container>
+                            </ul>
+                            <ng-template #selectStagesSubMenu>
+                              <span class="inline-flex items-center space-x-2 text-xs">
+                                <i class="text-base ph-kanban ph-duotone"></i>
+                                <span class="text-xs">Move to stage</span>
+                              </span>
+                            </ng-template>
+                          </li>
+                          <li nz-menu-divider></li>
+                          <li cla nzDanger nz-menu-item (click)="onRemoveFromThisPipeline(lead, stage)">
+                            <div class="flex items-center space-x-2 text-xs">
+                              <i class="text-base ph-x-circle ph-duotone"></i>
+                              <span>Remove from this Pipeline</span>
+                            </div>
+                          </li>
+                        </ul>
+                      </nz-dropdown-menu>
+                    </div>
+                    <div class="flex px-3 justify-between border-t border-gray-200 space-x-1 py-2">
+                      <div class="flex space-x-1">
+                        <nz-tag [nzColor]="'geekblue'" class="capitalize" *ngFor="let source of lead.info.sources | slice: 0 : 1">{{ source }}</nz-tag>
+                      </div>
+
+                      <div class="flex space-x-3">
+                        <!-- <div class="rounded-full border-blue-300 bg-blue-50 text-blue-500 border font-medium px-1.5 flex justify-center items-center space-x-1 cursor-pointer" title="Created date">
+                      <span class="text-sm ph-duotone ph-clock"></span>
+                      <span class="">6d</span>
+                    </div> -->
+
+                        <div
+                          class="rounded-full text-gray-500 font-medium flex justify-center items-center space-x-0.5 cursor-pointer"
+                          [title]="lead.info.activityLogs + ' activity logs'">
+                          <span class="text-base ph-duotone ph-list-bullets"></span>
+                          <span>{{ lead.info.activityLogs }}</span>
+                        </div>
+
+                        <div
+                          class="rounded-full text-gray-500 font-medium flex justify-center items-center space-x-0.5 cursor-pointer"
+                          [title]="lead.info.conversations + ' conversations'">
+                          <span class="text-base ph-duotone ph-chats-circle"></span>
+                          <span>{{ lead.info.conversations }}</span>
+                        </div>
+
+                        <div class="rounded-full text-gray-500 font-medium flex justify-center items-center space-x-0.5 cursor-pointer" [title]="lead.info.notes + ' notes'">
+                          <span class="text-base ph-duotone ph-file-text"></span>
+                          <span>{{ lead.info.notes }}</span>
+                        </div>
+
+                        <!-- <div class="rounded-full border-isms-300 bg-isms-50 text-isms-500 border font-medium px-1.5 flex justify-center items-center space-x-1 cursor-pointer" title="Positive feedback">
+                      <span class="text-sm ph-fill ph-hands-clapping"></span>
+                      <span class="">78%</span>
+                    </div>
+                    <div class="rounded-full border-yellow-300 bg-yellow-50 text-yellow-500 border font-medium px-1.5 flex justify-center items-center space-x-1 cursor-pointer" title="Best match">
+                      <span class="text-sm ph-fill ph-hand-fist"></span>
+                      <span class="">58%</span>
+                    </div> -->
+                      </div>
+                      <!-- <div class="flex items-center space-x-2 text-gray-500">
+                    <span class="ph-duotone text-lg ph-envelope-simple"></span>
+                    <span class="text-xs cursor-pointer">{{item.email}}</span>
+                  </div>
+                -->
+                      <!-- <nz-tag>Facebook</nz-tag> -->
+                      <!-- <div class="flex items-center text-gray-500 space-x-2">
+                    <span class="ph-duotone text-lg ph-chat-text"></span>
+                    <span class="cursor-pointer">Facebook</span>
+                  </div> -->
+                    </div>
+                  </div>
+                </div>
+              </ng-container>
+              <ng-template #emptyLeadTemplate>
+                <div class="pipeline-stage-empty-placeholder flex flex-1 justify-center flex-col items-center space-y-3 py-10">
+                  <div>
+                    <nz-empty [nzNotFoundContent]="emptyContentTemplate" [nzNotFoundFooter]="emptyFooterTemplate">
+                      <ng-template #emptyContentTemplate>
+                        <span class="text-gray-400"> No lead on this stage </span>
+                      </ng-template>
+                      <ng-template #emptyFooterTemplate>
+                        <div
+                          class="px-2 py-1.5 bg-gray-50 hover:bg-gray-100 transition-all border-t border border-gray-300 rounded-md border-dashed text-gray-500 cursor-pointer items-center flex justify-center space-x-2"
+                          (click)="onClickAddToStage(stage.id)">
+                          <span>Add Lead</span>
+                          <span class="ph-bold ph-plus"></span>
+                        </div>
+                      </ng-template>
+                    </nz-empty>
+                  </div>
+                </div>
+              </ng-template>
+            </div>
+            <div
+              class="px-2 py-1.5 bg-gray-50 border-t border border-gray-300 rounded-md border-dashed text-gray-500 cursor-pointer items-center flex justify-center space-x-2"
+              (click)="selectedPipelineStageId = stage.id; chooseStudentModal.toggle()"
+              *ngIf="stage.leads.length > 0">
+              <span>Add Lead</span>
+              <span class="ph-bold ph-plus"></span>
+            </div>
+          </div>
+        </ng-container>
+      </div>
+    </div>
+  </div>
+
+  <isms-choose-students-modal #chooseStudentModal (on-select)="onSelectedLeadsToAdd($event)" [student-ids]="[]"></isms-choose-students-modal>
+  <isms-delete-pipeline-stage-modal #deletePipelineStageModal [pipeline]="pipeline" (on-submitted)="onRemoveStageResponse($event)"></isms-delete-pipeline-stage-modal>
+  <isms-lead-info-modal #leadInfoModal></isms-lead-info-modal>
+
+  <isms-add-task-in-task-pipeline-modal #addTaskModal (on-submitted)="loadData()"></isms-add-task-in-task-pipeline-modal>
+
+  <isms-add-note-modal [hide-cancel]="true" #addNoteModal (on-submitted)="wonLostManage()"></isms-add-note-modal>
+
+  <isms-student-info-drawer #studentInfoDrawer [tags-type]="'pipeline'" (on-saved)="loadData()"></isms-student-info-drawer>
+
+  <isms-add-conversation-modal #addConversationModal type="modal"></isms-add-conversation-modal>
+
+  <!-- <hc-delete-pipeline-stage-modal #deletePipelineStageModal [pipeline]="pipeline" (on-submitted)="onRemoveStageResponse($event)"></hc-delete-pipeline-stage-modal>
+  <hc-disqualify-lead-modal #disqualifyLeadModal></hc-disqualify-lead-modal> -->
+</ng-container>

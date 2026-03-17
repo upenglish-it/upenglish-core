@@ -1,0 +1,332 @@
+<div class="bg-white justify-between flex flex-col lg:flex-row border-b px-4 mb-3 lg:mb-0">
+  <div class="flex gap-2 py-2" [formGroup]="filterFormGroup">
+    <div class="w-full lg:max-w-xs">
+      <nz-select
+        formControlName="classId"
+        nzShowSearch
+        [nzDisabled]="viewState === 'loading-tuition-listing'"
+        class="w-full"
+        nzPlaceHolder="Select class"
+        [nzDropdownMatchSelectWidth]="false">
+        <nz-option *ngFor="let class of classes" [nzLabel]="class.name" [nzValue]="class._id"></nz-option>
+      </nz-select>
+    </div>
+
+    <div class="w-full lg:w-fit">
+      <nz-date-picker
+        [nzAllowClear]="false"
+        [nzDisabled]="viewState === 'loading-tuition-listing'"
+        nzPlaceHolder="Select month"
+        nzMode="month"
+        nzFormat="MMM yyyy"
+        formControlName="date"></nz-date-picker>
+    </div>
+
+    <!-- <div class="max-w-xs w-full">
+      <nz-input-number-group [nzPrefix]="tuitionPrefixTemplate" style="width: 100%" class="space-x-1.5 w-full">
+        <nz-input-number nzPlaceHolder="Tuition amount" formControlName="amount" />
+      </nz-input-number-group>
+      <ng-template #tuitionPrefixTemplate>
+        <span class="text-base cursor-pointer text-gray-400 ph-fill ph-currency-circle-dollar"></span>
+      </ng-template>
+    </div> -->
+  </div>
+  <div class="flex items-center w-full lg:w-fit">
+    <div class="space-x-2 flex items-center w-full">
+      <!-- <button nz-button export-json-to-csv [data]="filteredStudents" *ngIf="filteredStudents.length > 0">
+        Export To CSV
+        <span nz-icon nzType="export" nzTheme="outline"></span>
+      </button> -->
+      <button class="w-full lg:w-auto" nz-button nzType="primary" (click)="enrollNewStudent()">
+        Enroll New Student
+        <span nz-icon nzType="plus" nzTheme="outline"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<nz-spin nzTip="Loading..." [nzSpinning]="viewState === 'loading-tuition-listing'">
+  <!-- h-[calc(100vh-110px)] -->
+  <div class="bg-white flex-1" reach-scroll-to-bottom (on-reach)="loadMore()">
+    <div class="-mx-4 px-4 md:mx-0 md:px-0">
+      <table role="table" class="min-w-full divide-y divide-gray-200 isms-table">
+        <thead class="bg-gray-50 sticky top-0 z-10">
+          <tr class="font-bold text-gray-700">
+            <th class="w-10 px-2 md:px-4">
+              <div class="relative grid place-items-center text-xs md:text-sm">
+                <!-- <label nz-checkbox (nzCheckedChange)="onAllCandidateChecked($event)" class="absolute top-[-11px]"></label> -->
+                #
+              </div>
+            </th>
+            <th class="w-32 min-w-[120px] px-2 md:px-4">
+              <div class="flex items-center justify-between text-xs md:text-sm">Full Name</div>
+            </th>
+            <th class="min-w-[200px] px-2 md:px-4">
+              <div class="flex items-center justify-between text-xs md:text-sm">Days of {{ filterFormGroup.value.date | date: "MMMM" }}</div>
+            </th>
+            <!-- <th class="">
+          <div class="flex items-center justify-between">Tuition this Month</div>
+        </th>
+        <th class="">
+          <div class="flex items-center justify-between">Package Covered</div>
+        </th> -->
+
+            <th class="min-w-[140px] px-2 md:px-4">
+              <div class="flex items-center justify-between text-xs md:text-sm whitespace-nowrap">Amount Paid this Month</div>
+            </th>
+
+            <th class="min-w-[120px] px-2 md:px-4">
+              <div class="flex items-center justify-between text-xs md:text-sm">Debt</div>
+            </th>
+            <th class="min-w-[100px] px-2 md:px-4">
+              <div class="flex items-center justify-between text-xs md:text-sm whitespace-nowrap">Total Debt</div>
+            </th>
+            <th class="min-w-[140px] px-2 md:px-4">
+              <div class="flex items-center justify-between text-xs md:text-sm whitespace-nowrap">Debt for this Month</div>
+            </th>
+            <th class="min-w-[100px] px-2 md:px-4">
+              <div class="flex items-center justify-between text-xs md:text-sm">Off Day(s)</div>
+            </th>
+            <th class="min-w-[80px] px-2 md:px-4">
+              <div class="flex items-center justify-between text-xs md:text-sm">Status</div>
+            </th>
+          </tr>
+        </thead>
+        <tbody class="text-sm bg-white divide-y divide-gray-200">
+          <ng-container *ngFor="let student of students; trackBy: identify; let i = index">
+            @if (student.records.length > 0) {
+              <tr [ngClass]="{ 'opacity-60 bg-gray-50': student.status === 'stopped' || student.status === 'completed' }">
+                <td class="px-2 md:px-4">
+                  <div class="relative grid place-items-center text-xs md:text-sm">
+                    {{ i + 1 }}
+                    <!-- <label nz-checkbox [(ngModel)]="student.selected" class="absolute top-[-11px]"></label> -->
+                  </div>
+                </td>
+
+                <td class="px-2 md:px-4">
+                  <div class="flex items-center space-x-2 md:space-x-3 flex-wrap gap-1">
+                    <!-- <img profile-photo [letter]="student.firstName[0]" class="w-7 h-7 bg-gray-100 rounded-full" /> -->
+                    <span class="text-xs font-normal text-gray-700 cursor-pointer break-words" (click)="viewStudent(student.account._id)"
+                      >{{ student.account.firstName }} {{ student.account.lastName }}
+                    </span>
+                    <a nz-dropdown [nzDropdownMenu]="manageMenu" class="text-xs whitespace-nowrap">
+                      Manage
+                      <span nz-icon nzType="down"></span>
+                    </a>
+                    <nz-dropdown-menu #manageMenu="nzDropdownMenu">
+                      <ul nz-menu class="w-36">
+                        <li nz-menu-item (click)="onPayTuition(false, student)" *ngIf="student.status === 'ongoing'">Pay Tuition</li>
+                        <li nz-menu-item (click)="onPayDebt(false, student)" *ngIf="student.status === 'stopped'">Pay Debt</li>
+
+                        <ng-container *ngIf="student.monthHasUnPaid">
+                          <li nz-menu-item (click)="onPayTuition(true, student)" *ngIf="student.status !== 'stopped'">Move to Debt</li>
+                        </ng-container>
+
+                        <!-- show modal similar to paytuition modal but make sure to make paid=false and only one month is allowed to extend -->
+
+                        <li nz-menu-item (click)="stopLearning('cant-pay', student)" *ngIf="student.status === 'ongoing'">Stop Learning</li>
+
+                        <li nz-menu-divider *ngIf="student.status !== 'completed'"></li>
+                        <!-- <li nz-menu-item (click)="onViewReceipts(student)">View Receipts</li> -->
+
+                        <li nz-submenu nzTitle="Receipts">
+                          <ul>
+                            <li nz-menu-item *ngFor="let paymentHistory of student.paymentHistory" (click)="onViewReceipts(paymentHistory)">
+                              {{ paymentHistory.data.fromDate | date: "MMM, dd, yyyy" }} to {{ paymentHistory.data.toDate | date: "MMM, dd, yyyy" }} •
+                              {{ paymentHistory.data.deductedTotalAmount | formattedCurrency }}
+                            </li>
+                          </ul>
+                        </li>
+
+                        <li nz-submenu nzTitle="Payment History">
+                          <ul>
+                            <li nz-menu-item *ngFor="let paymentHistory of student.paymentHistory" (click)="onViewPaymentHistory(paymentHistory, student)">
+                              {{ paymentHistory.data.fromDate | date: "MMM, dd, yyyy" }} to {{ paymentHistory.data.toDate | date: "MMM, dd, yyyy" }}
+                            </li>
+                          </ul>
+                        </li>
+
+                        <li nz-submenu nzTitle="Revert Version" *ngIf="student.status === 'ongoing'">
+                          <ul>
+                            <li nz-menu-item *ngFor="let changeLog of student.changeLogs" (click)="onViewVersions(student._id, changeLog)">
+                              {{ changeLog.dateCreated | date: "MMM, dd, yyyy hh:mm:s a" }}
+                            </li>
+                            <li nz-menu-item (click)="onViewVersions(student._id, null)">Hard Revert</li>
+                          </ul>
+                        </li>
+                      </ul>
+                    </nz-dropdown-menu>
+                  </div>
+                </td>
+
+                <td class="px-2 md:px-4">
+                  <div class="flex justify-items-start items-start flex-wrap max-w-xl">
+                    <ng-container *ngIf="student.records.length > 0; else noRecords">
+                      <ng-container *ngFor="let record of student.records">
+                        <!-- Included in enrolled day -->
+                        @if ((record.enable && record.included) || (!record.enable && record.paidOffDay) || (record.included && !record.paidOffDay)) {
+                          <div
+                            class="w-5 h-5 md:w-6 md:h-6 cursor-pointer grid place-items-center text-[8px] md:text-[9px] rounded-full m-[2px] md:m-[3px]"
+                            [ngClass]="{
+                              'bg-isms-500': record.paid && record.status !== 'off-day',
+                              'border border-isms-500 bg-gray-200': record.status === 'off-day',
+                              'bg-gray-400': !record.paid,
+                            }"
+                            nz-tooltip
+                            [nzTooltipTitle]="nzTooltipTitleTemplate">
+                            <ng-template #nzTooltipTitleTemplate>
+                              <ng-container *ngIf="record.paid">Paid</ng-container>
+                              <ng-container *ngIf="!record.paid">Unpaid</ng-container>
+                              <ng-container *ngIf="record.status === 'off-day'"> - Off Day</ng-container>
+                              <ng-container *ngIf="record.paymentType"> • {{ record.paymentType | titlecase }}</ng-container>
+                            </ng-template>
+                            <span
+                              [ngClass]="{
+                                'text-white': (record.paid && record.status !== 'off-day') || !record.paid,
+                                'text-isms-500': record.status === 'off-day',
+                              }">
+                              {{ record.day }}
+                            </span>
+                          </div>
+                        } @else {
+                          <!-- Not included in enrolled day -->
+                          <div class="w-5 h-5 md:w-6 md:h-6 cursor-not-allowed grid place-items-center text-[8px] md:text-[9px] rounded-full m-[2px] md:m-[3px] bg-gray-200">
+                            <span class="text-gray-400"> {{ record.day }} </span>
+                          </div>
+                        }
+                      </ng-container>
+                    </ng-container>
+                    <ng-template #noRecords>
+                      <div class="grid place-items-center text-xs text-gray-400">No record(s) for this month</div>
+                    </ng-template>
+                  </div>
+                </td>
+
+                <!-- <td class="font-normal text-xs text-gray-500">
+            <ng-container>
+              <div class="flex space-x-2 items-center">
+                <span>
+                  {{ student.totalAmountCovered | formattedCurrency }}
+                </span>
+              </div>
+            </ng-container>
+          </td>
+
+          <td class="font-normal text-xs text-gray-500">
+            <ng-container *ngIf="student.records.length > 0">
+              {{ paymentHistory(student).data.deductedTotalAmount | formattedCurrency }}
+            </ng-container>
+          </td> -->
+
+                <td class="font-normal text-xs text-gray-500 px-2 md:px-4">
+                  <ng-container *ngIf="student.records.length > 0">
+                    <!-- <ng-container *ngIf="student.totalOfUnpaidDays === 0"> -->
+                    @if (student.totalAmountPaid > 0) {
+                      <span class="whitespace-nowrap">{{ student.totalAmountPaid | formattedCurrency }}</span>
+                    } @else {
+                      @if (student.discount > 0) {
+                        <span class="whitespace-nowrap">{{ student.totalAmountPaid | formattedCurrency }}</span>
+                      } @else {
+                        Not Paid
+                      }
+                    }
+                    <!-- </ng-container>
+                <ng-container *ngIf="student.totalOfUnpaidDays > 0"> Not Paid </ng-container> -->
+                  </ng-container>
+                </td>
+
+                <td class="px-2 md:px-4">
+                  <div class="flex justify-items-start items-start flex-wrap">
+                    <ng-container *ngIf="student.debtRecords.length > 0; else noDebtRecords">
+                      <div
+                        *ngFor="let debt of student.debtRecords"
+                        class="cursor-pointer grid place-items-center bg-yellow-100 border border-yellow-500 text-[8px] md:text-[9px] h-5 md:h-6 rounded-md px-1.5 md:px-2 m-[2px] md:m-[3px]"
+                        nz-tooltip
+                        [nzTooltipTitle]="debt.totalAmount | formattedCurrency">
+                        <span class="text-yellow-500 text-[10px] md:text-xs">{{ debt.date | date: "MMM YYYY" }}</span>
+                      </div>
+                    </ng-container>
+                    <ng-template #noDebtRecords>
+                      <div class="grid place-items-center text-xs text-gray-400">No record(s) of debt</div>
+                    </ng-template>
+                  </div>
+                </td>
+
+                <td class="font-normal text-xs text-gray-500 px-2 md:px-4">
+                  <ng-container>
+                    <span class="whitespace-nowrap">{{ student.totalDebtAmount | formattedCurrency }}</span>
+                  </ng-container>
+                </td>
+
+                <td class="font-normal text-xs text-gray-500 px-2 md:px-4">
+                  <ng-container>
+                    <span class="whitespace-nowrap">{{ student.totalAmountNotPaid | formattedCurrency }}</span>
+                  </ng-container>
+                </td>
+
+                <td class="font-normal text-xs text-gray-500 px-2 md:px-4">
+                  <ng-container>
+                    {{ student.totalOfOffDays }}
+                  </ng-container>
+                </td>
+
+                <td class="font-normal text-xs capitalize px-2 md:px-4">
+                  <div class="inline-flex">
+                    <div
+                      class="px-1 md:px-1.5 text-[10px] md:text-xs grid place-items-center border border-success-400 text-success-500 bg-success-50 rounded-md"
+                      *ngIf="student.status === 'ongoing'">
+                      {{ student.status }}
+                    </div>
+                    <div
+                      class="px-1 md:px-1.5 text-[10px] md:text-xs capitalize self-center grid place-items-center border border-yellow-400 text-yellow-500 bg-yellow-50 rounded-md"
+                      *ngIf="student.status === 'stopped'">
+                      {{ student.status }}
+                    </div>
+                    <div
+                      class="px-1 md:px-1.5 text-[10px] md:text-xs capitalize self-center grid place-items-center border border-blue-400 text-blue-500 bg-blue-50 rounded-md"
+                      *ngIf="student.status === 'completed'">
+                      {{ student.status }}
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            }
+          </ng-container>
+          @if (!isLoadingMore && students.length === 0) {
+            <tr>
+              <td colspan="9">
+                <div class="flex flex-col items-center justify-center py-12 text-gray-400">
+                  <span nz-icon nzType="inbox" nzTheme="outline" class="text-4xl mb-2"></span>
+                  <span class="text-sm">No students found</span>
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    @if (isLoadingMore) {
+      <div class="flex justify-center items-center py-3">
+        <nz-spin nzSimple [nzSize]="'small'"></nz-spin>
+        <span class="ml-2 text-xs text-gray-400">Loading more...</span>
+      </div>
+    }
+    @if (!isLoadingMore && !hasMore && students.length > 0) {
+      <div class="flex justify-center items-center py-3">
+        <span class="text-xs text-gray-400">All records loaded</span>
+      </div>
+    }
+  </div>
+</nz-spin>
+
+<isms-enroll-new-student-modal #enrollNewStudentModal (on-submitted)="onTuitionPayment($event)"></isms-enroll-new-student-modal>
+<isms-pay-tuition-modal #payTuitionModal (on-submitted)="onTuitionPayment($event)"></isms-pay-tuition-modal>
+<isms-payment-history-modal #paymentHistoryModal></isms-payment-history-modal>
+<isms-stop-learning-modal #stopLearningModal (on-submitted)="setTuitionListing()"></isms-stop-learning-modal>
+
+<isms-student-info-drawer #studentInfoDrawer (on-saved)="loadData()"></isms-student-info-drawer>
+
+<ng-template let-paymentHistory="data" #tuitionPaymentReceiptTemplate>
+  Payment successfully made
+  <a nz-button nzSize="small" nzType="link" [href]="'/pop/student-receipt?urlCode=' + paymentHistory.urlCode">View Receipt</a>
+</ng-template>

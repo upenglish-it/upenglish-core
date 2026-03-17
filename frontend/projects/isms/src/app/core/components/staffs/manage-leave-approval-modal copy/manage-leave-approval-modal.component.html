@@ -1,0 +1,41 @@
+<nz-modal
+  nzCentered
+  [nzVisible]="showDrawer"
+  [nzWidth]="'380px'"
+  [nzTitle]="titleTemplate"
+  [nzMaskClosable]="false"
+  [nzClosable]="false"
+  [nzFooter]="footerTemplate"
+  nzPlacement="right">
+  <ng-container *nzModalContent>
+    <form class="flex-col space-y-2 flex h-[200px] overflow-auto mini-scroll-bar min-h-fit" [formGroup]="leaveApprovalFormGroup">
+      <div class="space-y-1.5">
+        <label class="font-normal text-gray-600 text-xs">Notes</label>
+        <textarea nz-input placeholder="Type here" [nzAutosize]="{ minRows: 4, maxRows: 10 }" formControlName="notes" class="resize-none"></textarea>
+        <ng-container *ngIf="leaveApprovalFormGroup.get('notes').touched">
+          <p class="isms-error-message" *ngIf="leaveApprovalFormGroup.get('notes').hasError('required')">Notes is required</p>
+        </ng-container>
+      </div>
+    </form>
+  </ng-container>
+</nz-modal>
+
+<ng-template #titleTemplate>
+  <div class="flex space-x-2 items-center">
+    <span> Request Leave: </span>
+    <div
+      class="px-1.5 text-xs grid place-items-center border border-success-400 text-success-500 bg-success-50 rounded-md"
+      *ngIf="leaveApprovalFormGroup.value.status === 'approved'"
+      >Approve</div
+    >
+    <div class="px-1.5 text-xs grid place-items-center border border-error-400 text-error-500 bg-error-50 rounded-md" *ngIf="leaveApprovalFormGroup.value.status === 'rejected'"
+      >Reject</div
+    >
+  </div>
+</ng-template>
+<ng-template #footerTemplate>
+  <div class="space-x-2 flex">
+    <button nz-button nzBlock (click)="toggle()">Cancel</button>
+    <button nz-button nzType="primary" nzBlock [disabled]="leaveApprovalFormGroup.invalid" [nzLoading]="loading" (click)="onSubmit()">Submit</button>
+  </div>
+</ng-template>

@@ -1,0 +1,10 @@
+<isms-section-container [title]="formGroup.value.createdBy" [form-group]="formGroup" [active]="false" [collapsible]="false">
+  <ng-container content>
+    <div class="p-3">
+      {{ formGroup.value.message }}
+      <br />
+      <br />
+      <i>Sent: {{ formGroup.value.createdAt | timeago }} </i>
+    </div>
+  </ng-container>
+</isms-section-container>

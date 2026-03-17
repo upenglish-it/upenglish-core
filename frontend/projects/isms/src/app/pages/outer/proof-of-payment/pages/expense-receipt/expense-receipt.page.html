@@ -1,0 +1,74 @@
+<div class="student-receipt-container" *ngIf="cashflow; else noResult">
+  <div class="text-left">
+    <h4 style="padding-top: 2pt; padding-left: 5pt; text-indent: 0pt; text-align: left; line-height: 163%">CÔNG TY TNHH MTV GIÁO DỤC VÀ ĐÀO TẠO QUÂN NGUYỄN</h4>
+    <p class="s1" style="padding-left: 5pt; text-indent: 0pt; text-align: left; line-height: 163%">82, Ngô Chí Quốc, tổ 85, khu phố 13, phường Phú Cường, TP.TDM, Bình Dương.</p>
+    <h3 style="padding-top: 3pt; padding-left: 5pt; text-indent: 0pt; text-align: left; line-height: 163%">Số: {{ cashflow.transactionId }}</h3>
+  </div>
+
+  <div class="text-center">
+    <h1>BIÊN LAI HOÀN TIỀN</h1>
+    <p class="s2">Ngày {{ cashflow.createdAt | date: "d" }} tháng {{ cashflow.createdAt | date: "M" }} năm {{ cashflow.createdAt | date: "yyyy" }}</p>
+  </div>
+  <p style="text-indent: 0pt; text-align: left"><br /></p>
+  <p style="text-indent: 0pt; text-align: left"><br /></p>
+  @if (cashflow.type === "income") {
+    <p style="padding-left: 5pt; text-indent: 0pt; line-height: 163%; text-align: left"
+      >Họ và tên người nộp tiền: {{ cashflow.payedBy.firstName }} {{ cashflow.payedBy.lastName }}</p
+    >
+  } @else {
+    <p style="padding-left: 5pt; text-indent: 0pt; line-height: 163%; text-align: left"
+      >Họ và tên người nộp tiền: {{ cashflow.receivedBy.firstName }} {{ cashflow.receivedBy.lastName }}</p
+    >
+  }
+  <p style="padding-left: 5pt; text-indent: 0pt; line-height: 163%; text-align: left">Ngày sinh: {{ cashflow.receivedBy.birthDate }}</p>
+  <p style="padding-left: 5pt; text-indent: 0pt; text-align: left; line-height: 163%">CMND/CCCD: {{ cashflow.receivedBy.cmnd }}</p>
+  <p style="padding-left: 5pt; text-indent: 0pt; text-align: left; line-height: 163%" *ngIf="cashflow.from === 'tuition-refund'">
+    Địa chỉ: {{ cashflow.receivedBy.address.street }}, {{ cashflow.receivedBy.address.state }}, {{ cashflow.receivedBy.address.city }} {{ cashflow.receivedBy.address.country }},
+    {{ cashflow.receivedBy.address.postalCode }}
+  </p>
+
+  <!-- For tuition payment -->
+  <p *ngIf="cashflow.tuition" style="padding-left: 5pt; text-indent: 0pt; line-height: 163%; text-align: left">
+    Nội dung thu: Nộp học phí lớp {{ cashflow.tuition.className }} tháng {{ cashflow.tuition.dates.join(" to ") }}
+  </p>
+
+  <!-- For tutoring -->
+  <p *ngIf="cashflow.from === 'tutoring'" style="padding-left: 5pt; text-indent: 0pt; line-height: 163%; text-align: left"
+    >Nội dung thu: Nộp học phí học kèm {{ cashflow.quantity }} buổi</p
+  >
+
+  <!-- For Items -->
+  <p *ngIf="cashflow.from === 'material'" style="padding-left: 5pt; text-indent: 0pt; text-align: left; line-height: 163%">
+    Nội dung thu: Nộp tiền mua {{ cashflow.material.quantity }} {{ cashflow.material.materialName }}(s)
+  </p>
+
+  <!-- For Deposit -->
+  <p *ngIf="cashflow.from === 'deposit'" style="padding-left: 5pt; text-indent: 0pt; text-align: left; line-height: 163%"
+    >Nội dung thu: Đặt cọc giữ chỗ lớp {{ cashflow.tuition.className }}</p
+  >
+
+  <ng-container *ngIf="cashflow.from === 'tuition-refund'; else tuitionPaymentTemplate">
+    <p style="padding-left: 5pt; text-indent: 0pt; text-align: left; line-height: 163%">Số tiền hoàn lại: {{ cashflow.amount | formattedCurrency }}</p>
+    <p style="padding-left: 5pt; text-indent: 0pt; text-align: left; line-height: 163%">Nội dung thu: Hoàn lại phần học phí lớp … còn lại</p>
+  </ng-container>
+  <ng-template #tuitionPaymentTemplate>
+    @if (cashflow.from === "tuition-refund") {
+      <p style="padding-left: 5pt; text-indent: 0pt; text-align: left; line-height: 163%">Số tiền: {{ cashflow.amount | formattedCurrency }}</p>
+    } @else {
+      <p style="padding-left: 5pt; text-indent: 0pt; text-align: left; line-height: 163%">Số lượng: {{ cashflow.amount | formattedCurrency }}</p>
+    }
+  </ng-template>
+
+  <p style="text-indent: 0pt; text-align: left"><br /></p>
+  <h2 style="padding-left: 215pt; text-indent: 0pt; line-height: 13pt; text-align: right; line-height: 163%" class="mb-0">Người hoàn tiền</h2>
+  <p style="padding-left: 217pt; text-indent: 0pt; line-height: 13pt; text-align: right; line-height: 163%">(Ký và ghi rõ họ tên)</p>
+  <p style="text-indent: 0pt; text-align: left">
+    <br />
+    <br />
+  </p>
+  <p class="s2" class="text-center">* Người nộp tiền vui lòng kiểm tra kỹ thông tin trước khi duỵệt mẫu, giữ lại biên lai cẩn thận và xuất trình khi công ty yêu cầu</p>
+</div>
+
+<ng-template #noResult>
+  <h1 class="text-lg text-center p-8">Not available</h1>
+</ng-template>

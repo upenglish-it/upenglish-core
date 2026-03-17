@@ -1,0 +1,38 @@
+<div class="bg-gray-50 h-full p-4 space-y-6 overflow-y-auto mini-scroll-bar">
+  <div class="flex flex-col gap-1">
+    <span class="text-gray-500 text-base">{{ currentDate | date: "EEEE, MMM dd, yyyy" }}</span>
+    <h3 class="text-gray-800 font-medium text-3xl mb-0">{{ greetingMessage }}, {{ accountStore.account.firstName }} {{ accountStore.account.lastName }} 👋</h3>
+  </div>
+
+  <div class=" place-items-center py-4 hidden">
+    <div class="bg-white border border-gray-300/50 transition-all hover:border-isms-500 cursor-pointer flex justify-between items-center px-4 py-3 rounded-full w-1/2">
+      <div class="flex space-x-2 items-center">
+        <i class="text-gray-400 text-base ph ph-magnifying-glass"></i>
+        <span class="text-gray-400 text-xs">Click to search for: </span>
+        <div class="flex flex-wrap items-center space-x-2">
+          <ng-container *ngFor="let command of ['Students', 'Staffs', 'Classes', 'Courses']">
+            <div class="px-1.5 text-xs py-0.5 space-x-2 flex items-center border border-gray-200 text-gray-600 bg-gray-50 rounded-md">
+              <span>{{ command }}</span>
+            </div>
+          </ng-container>
+        </div>
+      </div>
+      <div class="flex space-x-2 items-center">
+        <!-- <span class="text-gray-600 text-xs">Quick search key: </span> -->
+        <div class="flex flex-wrap items-center space-x-2">
+          <ng-container *ngFor="let command of searchShortcutKey">
+            <div class="px-1.5 text-xs py-0.5 space-x-2 flex items-center border border-gray-200 text-gray-600 bg-gray-50 rounded-md">
+              <span>{{ command }}</span>
+            </div>
+          </ng-container>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <isms-admin-dashboard remove-component-tag *ngIf="accountStore.account.role === 'admin'"></isms-admin-dashboard>
+  <isms-teacher-dashboard remove-component-tag *ngIf="accountStore.account.role === 'teacher'"></isms-teacher-dashboard>
+  <isms-student-dashboard remove-component-tag *ngIf="accountStore.account.role === 'student'"></isms-student-dashboard>
+  <isms-receptionist-dashboard remove-component-tag *ngIf="accountStore.account.role === 'receptionist'"></isms-receptionist-dashboard>
+  <isms-marketing-dashboard remove-component-tag *ngIf="accountStore.account.role === 'marketing'"></isms-marketing-dashboard>
+</div>

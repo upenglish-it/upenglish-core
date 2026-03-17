@@ -1,0 +1,334 @@
+<div class="grid grid-cols-1 md:grid-cols-4  gap-4">
+  <div class="flex items-center border border-gray-200 justify-between p-4 bg-white rounded-md shadow-xs">
+    <div>
+      <h6 class="text-xs font-medium text-gray-500 uppercase">Students</h6>
+      <div class="flex items-center">
+        <span class="text-xl font-semibold">{{ statistics.students }}</span>
+        <!-- <span class="inline-block px-2 py-px ml-2 text-xs text-green-500 bg-green-100 rounded-md"> +3.1% </span> -->
+      </div>
+    </div>
+    <div class="grid w-10 h-10 text-lg rounded-full place-items-center text-isms-500 bg-isms-50">
+      <i class="ph-duotone ph-users-four"></i>
+    </div>
+  </div>
+
+  <div class="flex items-center border border-gray-200 justify-between p-4 bg-white rounded-md">
+    <div class="">
+      <h6 class="text-xs font-medium text-gray-500 uppercase">Staffs</h6>
+      <div class="flex items-center">
+        <span class="text-xl font-semibold">{{ statistics.staffs }}</span>
+      </div>
+    </div>
+    <div class="grid w-10 h-10 text-lg rounded-full border-gray-200 bg- place-items-center text-isms-500 bg-isms-50">
+      <i class="ph-duotone ph-users-three"></i>
+    </div>
+  </div>
+
+  <div class="flex items-center border border-gray-200 justify-between p-4 bg-white rounded-md">
+    <div>
+      <h6 class="text-xs font-medium text-gray-500 uppercase">Leads</h6>
+      <span class="text-xl font-semibold">{{ statistics.leads }}</span>
+      <!-- <span class="inline-block px-2 py-px ml-2 text-xs text-green-500 bg-green-100 rounded-md"> +4.6% </span> -->
+    </div>
+    <div class="grid w-10 h-10 text-lg rounded-full bg-isms-50 place-items-center text-isms-500">
+      <i class="ph-duotone ph-users"></i>
+    </div>
+  </div>
+
+  <div class="flex items-center border border-gray-200 justify-between p-4 bg-white rounded-md">
+    <div>
+      <h6 class="text-xs font-medium text-gray-500 uppercase">Won Leads</h6>
+      <div class="flex items-center">
+        <span class="text-xl font-semibold">{{ statistics.wonLeads }}</span>
+        <!-- <span class="inline-block px-2 py-px ml-2 text-xs text-green-500 bg-green-100 rounded-md"> +3.1% </span> -->
+        <!-- <span class="inline-block px-2 py-px ml-2 text-xs text-green-500 bg-green-100 rounded-md"> +52.2% </span> -->
+      </div>
+    </div>
+    <div class="grid w-10 h-10 text-lg rounded-full place-items-center text-isms-500 bg-isms-50">
+      <i class="ph-duotone ph-hand-coins"></i>
+    </div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 gap-4">
+  <div class="bg-white border border-gray-200 rounded-md">
+    <div class="border-b border-gray-200 font-medium px-4 py-3">
+      <div class="flex items-center space-x-2">
+        <span class="text-base ph-duotone ph-hand-coins text-gray-500"></span>
+        <h6 class="text-xs font-medium text-gray-500 uppercase mb-0 p-0">Income and Expenses</h6>
+      </div>
+    </div>
+    <div class="mb-0">
+      <apx-chart
+        dir="ltr"
+        class="apex-charts"
+        [series]="incomeAndExpense.series"
+        [chart]="incomeAndExpense.chart"
+        [legend]="incomeAndExpense.legend"
+        [stroke]="incomeAndExpense.stroke"
+        [plotOptions]="incomeAndExpense.plotOptions"
+        [fill]="incomeAndExpense.fill"
+        [labels]="incomeAndExpense.labels"
+        [dataLabels]="incomeAndExpense.dataLabels"
+        [colors]="incomeAndExpense.colors"
+        [markers]="incomeAndExpense.markers"
+        [tooltip]="incomeAndExpense.tooltip">
+      </apx-chart>
+    </div>
+  </div>
+</div>
+
+<div class="grid lg:grid-cols-3 grid-cols-1 gap-4">
+  <div class="bg-white border border-gray-200 rounded-md">
+    <div class="border-b border-gray-200 font-medium px-4 py-3">
+      <div class="flex items-center space-x-2">
+        <span class="text-base ph-duotone ph-megaphone-simple text-gray-500"></span>
+        <h6 class="text-xs font-medium text-gray-500 uppercase mb-0 p-0">Marketing Activity</h6>
+      </div>
+    </div>
+    <ul class="mb-0 h-[280px] overflow-auto mini-scroll-bar">
+      <ng-container *ngFor="let activity of marketingActivityLogs">
+        <li class="flex px-4 space-x-3 py-2 items-center border-b hover:bg-gray-50 text-gray-500 cursor-pointer">
+          <img
+            profile-photo
+            [photo]="activity.createdBy.profilePhoto"
+            [letter]="activity.createdBy.firstName[0] + '' + activity.createdBy.lastName[0]"
+            class="w-8 h-8 bg-gray-200 rounded-full" />
+          <div class="flex-1">
+            <ng-container *ngIf="activity.action === 'create-a-lead'">
+              <b class="font-bold">{{ activity.createdBy.firstName }} {{ activity.createdBy.lastName }}</b> got a new lead named
+              <b class="text-success-500 font-bold" *ngIf="activity.student">{{ activity.student.firstName }} {{ activity.student.lastName }} </b>
+            </ng-container>
+            <ng-container *ngIf="activity.action === 'assign-to-stage'">
+              <b class="font-bold">{{ activity.student.firstName }} {{ activity.student.lastName }}</b> was added to
+              <b class="text-success-500 font-bold" [routerLink]="['/i/pipelines/designer/pipeline/' + activity.data.pipelineId]">{{ activity.message }}</b> stage
+              <ng-container *ngIf="activity.message === 'Won'">🎉🥳🎊👏</ng-container>
+            </ng-container>
+            •
+            <b class="text-gray-500">{{ activity.createdAt | date: "MMM dd, yyyy hh:mm a" }}</b>
+          </div>
+        </li>
+      </ng-container>
+      <div class="p-12" *ngIf="marketingActivityLogs.length === 0">
+        <nz-empty nzNotFoundContent="No data available"></nz-empty>
+      </div>
+    </ul>
+  </div>
+  <div class="bg-white border border-gray-200 rounded-md">
+    <div class="border-b border-gray-200 font-medium px-4 py-3">
+      <div class="flex items-center space-x-2">
+        <span class="text-base ph-duotone ph-megaphone-simple text-gray-500"></span>
+        <h6 class="text-xs font-medium text-gray-500 uppercase mb-0 p-0">Reception Activity</h6>
+      </div>
+    </div>
+    <ul class="mb-0 h-[280px] overflow-auto mini-scroll-bar">
+      <ng-container *ngFor="let activity of receptionActivityLogs">
+        <li class="flex px-4 space-x-3 py-2 last:border-b-0 border-b hover:bg-gray-50 text-gray-500 cursor-pointer">
+          <img
+            profile-photo
+            [photo]="activity.createdBy.profilePhoto"
+            [letter]="activity.createdBy.firstName[0] + '' + activity.createdBy.lastName[0]"
+            class="w-8 h-8 bg-gray-200 rounded-full" />
+          <div class="flex-1">
+            <ng-container *ngIf="activity.action === 'receive-payment-from-material'">
+              <b class="font-bold">{{ activity.createdBy.firstName }} {{ activity.createdBy.lastName }}</b> received a payment from <b class="text-info"> {{ "Item" }} </b>. 💰
+            </ng-container>
+            <ng-container *ngIf="activity.action === 'expense'">
+              <b class="font-bold">{{ activity.createdBy.firstName }} {{ activity.createdBy.lastName }}</b>
+              released a budget for expense 💸
+            </ng-container>
+            <b class="text-gray-500">{{ activity.createdAt | date: "MMM dd, yyyy hh:mm a" }}</b>
+          </div>
+        </li>
+      </ng-container>
+      <div class="p-12" *ngIf="receptionActivityLogs.length === 0">
+        <nz-empty nzNotFoundContent="No data available"></nz-empty>
+      </div>
+    </ul>
+  </div>
+  <div class="bg-white border border-gray-200 rounded-md">
+    <div class="border-b border-gray-200 font-medium px-4 py-3">
+      <div class="flex items-center space-x-2">
+        <span class="text-base ph-duotone ph-megaphone-simple text-gray-500"></span>
+        <h6 class="text-xs font-medium text-gray-500 uppercase mb-0 p-0">Reception Activity with Students</h6>
+      </div>
+    </div>
+    <ul class="mb-0 h-[280px] overflow-auto mini-scroll-bar">
+      <ng-container *ngFor="let activity of studentActivityLogs">
+        <li class="flex px-4 space-x-3 py-2 last:border-b-0 border-b hover:bg-gray-50 text-gray-500 cursor-pointer" (click)="(1)">
+          <img
+            profile-photo
+            [photo]="activity.createdBy.profilePhoto"
+            [letter]="activity.createdBy.firstName[0] + '' + activity.createdBy.lastName[0]"
+            class="w-8 h-8 bg-gray-200 rounded-full" />
+          <div class="flex-1">
+            <ng-container *ngIf="activity.action === 'receive-payment-from-tuition'">
+              <b class="font-bold">{{ activity.createdBy.firstName }} {{ activity.createdBy.lastName }}</b> received a tuition payment from student
+              <b>{{ activity.student.firstName }} {{ activity.student.lastName }}</b
+              >. 💰
+            </ng-container>
+            <ng-container *ngIf="activity.action === 'student-stop-learning'">
+              Student <b class="font-bold">{{ activity.student.firstName }} {{ activity.student.lastName }}</b> stopped learning. Assisted by
+              <b class="font-bold">{{ activity.createdBy.firstName }} {{ activity.createdBy.lastName }}</b
+              >. 😔
+            </ng-container>
+            <span class="text-xs text-gray-500 flex-1">{{ activity.createdAt | date: "MMM dd, yyyy hh:mm a" }}</span>
+          </div>
+        </li>
+      </ng-container>
+      <div class="p-12" *ngIf="studentActivityLogs.length === 0">
+        <nz-empty nzNotFoundContent="No data available"></nz-empty>
+      </div>
+    </ul>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 sm:grid-cols-1 gap-4">
+  <div class="bg-white border border-gray-200 rounded-md">
+    <div class="border-b border-gray-200 font-medium px-4 py-3">
+      <div class="flex items-center space-x-2">
+        <span class="text-base ph-duotone ph-megaphone-simple text-gray-500"></span>
+        <h6 class="text-xs font-medium text-gray-500 uppercase mb-0 p-0">Announcements</h6>
+      </div>
+    </div>
+    <ul class="mb-0 h-[280px] overflow-auto mini-scroll-bar">
+      <ng-container *ngFor="let announcement of announcements">
+        <li class="flex px-4 space-x-3 py-2 last:border-b-0 border-b hover:bg-gray-50 text-gray-500 cursor-pointer" (click)="(1)">
+          <!-- <img src="https://www.cebupacificair.com/favicon.ico" alt="" class="w-8 h-8 bg-gray-200 rounded-full" /> -->
+          <!-- <div>
+              <div class="rounded-full h-8 w-8 grid place-items-center bg-isms-100 text-isms-500">
+                <span class="text-base ph-duotone ph-megaphone-simple"></span>
+              </div>
+            </div> -->
+          <div class="flex flex-col flex-1">
+            <span class="text-sm flex-1 text-gray-600">{{ announcement.title }}</span>
+            <span class="text-xs text-gray-500 flex-1">{{ announcement.createdAt | date: "MMM dd, yyyy hh:mm a" }}</span>
+            <span class="text-xs text-gray-500 flex-1">{{ announcement.message }}</span>
+          </div>
+        </li>
+      </ng-container>
+      <div class="p-12" *ngIf="announcements.length === 0">
+        <nz-empty nzNotFoundContent="No data available"></nz-empty>
+      </div>
+    </ul>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-md">
+    <div class="border-b border-gray-200 font-medium px-4 py-3">
+      <div class="flex items-center space-x-2">
+        <span class="text-base ph-duotone ph-cake text-gray-500"></span>
+        <h6 class="text-xs font-medium text-gray-500 uppercase mb-0 p-0">Birthdays for this Month</h6>
+      </div>
+    </div>
+    <ul class="mb-0 h-[280px] overflow-auto mini-scroll-bar">
+      <ng-container *ngFor="let birthDay of birthDays">
+        <li class="flex px-4 space-x-3 py-2 items-center border-b hover:bg-gray-50 text-gray-500 cursor-pointer" (click)="(1)">
+          <img profile-photo [photo]="birthDay.profilePhoto" [letter]="birthDay.firstName[0] + '' + birthDay.lastName[0]" class="w-8 h-8 bg-gray-200 rounded-full" />
+          <!-- <div>
+              <div class="rounded-full h-8 w-8 grid place-items-center bg-isms-100 text-isms-500">
+                <span class="text-base ph-duotone ph-megaphone-simple"></span>
+              </div>
+            </div> -->
+          <div class="flex flex-col flex-1">
+            <span class="text-sm flex-1 text-gray-600">{{ birthDay.firstName }} {{ birthDay.lastName }}</span>
+            <span class="text-xs text-gray-500 flex-1">{{ birthDay.birthDate | date: "MMMM dd, yyyy" }}</span>
+            <!-- <span class="text-xs text-gray-500 flex-1">2years</span> -->
+          </div>
+        </li>
+      </ng-container>
+      <div class="p-12" *ngIf="birthDays.length === 0">
+        <nz-empty nzNotFoundContent="No data available"></nz-empty>
+      </div>
+    </ul>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-md">
+    <div class="border-b border-gray-200 font-medium px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <!-- <div class="rounded-full h-5 w-5 grid place-items-center bg-isms-100 text-isms-500"> -->
+        <span class="text-base ph-duotone ph-users-three text-gray-500"></span>
+        <!-- </div> -->
+        <h6 class="text-xs font-medium text-gray-500 uppercase mb-0 p-0">Upcoming Employee Anniversaries</h6>
+      </div>
+    </div>
+    <ul class="mb-0 h-[280px] overflow-auto mini-scroll-bar">
+      <ng-container *ngFor="let staff of staffAnniversary">
+        <li class="flex px-4 space-x-3 py-2 items-center border-b hover:bg-gray-50 text-gray-500 cursor-pointer" (click)="(1)">
+          <img profile-photo [photo]="staff.staff.profilePhoto" [letter]="staff.staff.firstName[0] + '' + staff.staff.lastName[0]" class="w-8 h-8 bg-gray-200 rounded-full" />
+          <!-- <div>
+              <div class="rounded-full h-8 w-8 grid place-items-center bg-isms-100 text-isms-500">
+                <span class="text-base ph-duotone ph-megaphone-simple"></span>
+              </div>
+            </div> -->
+          <div class="flex flex-col flex-1">
+            <span class="text-sm flex-1 text-gray-600">{{ staff.staff.firstName }} {{ staff.staff.lastName }}</span>
+            <span class="text-xs text-gray-500 flex-1">{{ staff.dateHired | date: "MMM dd, yyyy" }}</span>
+            <!-- <span class="text-xs text-gray-500 flex-1">2years</span> -->
+          </div>
+          <div class="text-right">
+            <span class="text-xs text-gray-500 flex-1">{{ staff.yearsSinceHired }} year(s)</span>
+          </div>
+        </li>
+      </ng-container>
+      <div class="p-12" *ngIf="staffAnniversary.length === 0">
+        <nz-empty nzNotFoundContent="No data available"></nz-empty>
+      </div>
+    </ul>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-md">
+    <div class="border-b border-gray-200 font-medium px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <!-- <div class="rounded-full h-5 w-5 grid place-items-center bg-isms-100 text-isms-500"> -->
+        <span class="text-base ph-duotone ph-users-three text-gray-500"></span>
+        <!-- </div> -->
+        <h6 class="text-xs font-medium text-gray-500 uppercase mb-0 p-0">Salary Increase ({{ staffSalaryIncrease.length }})</h6>
+      </div>
+    </div>
+    <ul class="mb-0 h-[280px] overflow-auto mini-scroll-bar">
+      <ng-container *ngFor="let staff of staffSalaryIncrease">
+        <li class="flex px-4 space-x-3 py-2 items-center border-b hover:bg-gray-50 text-gray-500 cursor-pointer" (click)="(1)">
+          <img profile-photo [photo]="staff.staff.profilePhoto" [letter]="staff.staff.firstName[0] + '' + staff.staff.lastName[0]" class="w-8 h-8 bg-gray-200 rounded-full" />
+          <!-- <div>
+              <div class="rounded-full h-8 w-8 grid place-items-center bg-isms-100 text-isms-500">
+                <span class="text-base ph-duotone ph-megaphone-simple"></span>
+              </div>
+            </div> -->
+          <div class="flex flex-col flex-1">
+            <span class="text-sm flex-1 text-gray-600">{{ staff.staff.firstName }} {{ staff.staff.lastName }}</span>
+            <span class="text-xs text-gray-500 flex-1">Salary Increase every {{ staff.salaryIncrease.count + " " + staff.salaryIncrease.type }}(s)</span>
+            <!-- <span class="text-xs text-gray-500 flex-1">2years</span> -->
+          </div>
+          <!-- <div class="text-right">
+            <span class="text-xs text-gray-500 flex-1">{{ staff.yearsSinceHired }} year(s)</span>
+          </div> -->
+        </li>
+      </ng-container>
+      <div class="p-12" *ngIf="staffSalaryIncrease.length === 0">
+        <nz-empty nzNotFoundContent="No data available"></nz-empty>
+      </div>
+    </ul>
+  </div>
+
+  <!-- <div class="bg-white border border-gray-200"></div> -->
+
+  <!-- <div class="bg-white border border-gray-200 rounded-md">
+      <div class="border-b border-gray-200 font-medium px-4 py-3">
+        <h6 class="text-xs font-medium text-gray-500 uppercase mb-0 p-0">Total hired from the past month</h6>
+      </div>
+
+      <ul class="px-4 py-2">
+        <ng-container *ngFor="let navigation of ['Alan Nacedo', 'Jon Doe', 'Willian Ward']">
+          <li class="flex items-center space-x-2 py-1 text-gray-500 rounded cursor-pointer" (click)="(1)">
+            <img src="https://www.cebupacificair.com/favicon.ico" alt="" class="w-8 h-8 bg-gray-200 rounded-full" />
+            <div class="flex flex-col">
+              <span class="text-sm flex-1">{{ navigation }}</span>
+              <span class="text-xs flex-1">Pasig City</span>
+            </div>
+          </li>
+        </ng-container>
+      </ul>
+    </div> -->
+
+  <!-- <div class="bg-white border border-gray-200"></div> -->
+</div>

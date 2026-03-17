@@ -1,0 +1,86 @@
+<nz-modal
+  nzCentered
+  [nzVisible]="showDrawer"
+  [nzWidth]="'580px'"
+  nzTitle="Request Leave"
+  [nzMaskClosable]="false"
+  [nzClosable]="false"
+  [nzFooter]="footerTemplate"
+  nzPlacement="right">
+  <ng-container *nzModalContent>
+    <form class="flex-col space-y-2 flex h-[500px] overflow-auto mini-scroll-bar min-h-fit" [formGroup]="leaveFormGroup">
+      <div class="space-y-1.5">
+        <label class="font-normal text-gray-600 text-xs required">Leave Type</label>
+        <nz-select formControlName="type" nzPlaceHolder="Select type" nzShowSearch class="w-full" [nzDropdownMatchSelectWidth]="false">
+          <nz-option *ngFor="let type of leaveTypes" [nzLabel]="type.name" [nzValue]="type.value"></nz-option>
+        </nz-select>
+        <ng-container *ngIf="leaveFormGroup.get('type').touched">
+          <p class="isms-error-message" *ngIf="leaveFormGroup.get('type').hasError('required')">Type is required</p>
+        </ng-container>
+      </div>
+
+      <fieldset class="border border-solid border-gray-200 p-3 rounded-md" formGroupName="dates">
+        <legend class="font-normal text-gray-600 text-xs w-fit px-0.5">Dates</legend>
+        <div class="space-y-2">
+          <ng-container *ngFor="let formGroup of datesFormArray.controls; let dateIndex = index">
+            <div class="flex space-x-2 items-center" [formGroup]="toFormGroup(formGroup)">
+              <div class="space-y-1.5 flex flex-1 flex-col">
+                <nz-date-picker nzPlaceHolder="Select date" class="w-full" formControlName="date" [nzDisabledDate]="disabledDate"></nz-date-picker>
+                <ng-container *ngIf="formGroup.get('date').touched">
+                  <p class="isms-error-message" *ngIf="formGroup.get('date').hasError('required')">Date is required</p>
+                </ng-container>
+              </div>
+              <div>
+                <div
+                  class="h-6 w-6 rounded-full hover:bg-error-400 text-gray-500 hover:border-error-500 transition-all hover:text-white grid place-items-center bg-white border cursor-pointer"
+                  (click)="datesFormArray.removeAt(dateIndex)"
+                  *ngIf="datesFormArray.length >= 2">
+                  <span class="ph-bold ph-trash"></span>
+                </div>
+              </div>
+            </div>
+          </ng-container>
+          <div [class.pt-2]="datesFormArray.length > 1">
+            <a class="flex items-center space-x-1" (click)="addDate()">
+              <span nz-icon nzType="plus" nzTheme="outline"></span>
+              <span>Add date</span>
+            </a>
+          </div>
+        </div>
+      </fieldset>
+
+      <div class="space-y-1.5">
+        <label class="font-normal text-gray-600 text-xs">Payable</label>
+        <nz-select formControlName="payable" nzPlaceHolder="Select type" nzShowSearch class="w-full" [nzDropdownMatchSelectWidth]="false">
+          <nz-option *ngFor="let type of ['paid', 'unpaid']" [nzLabel]="type" [nzValue]="type"></nz-option>
+        </nz-select>
+        <ng-container *ngIf="leaveFormGroup.get('payable').touched">
+          <p class="isms-error-message" *ngIf="leaveFormGroup.get('payable').hasError('required')">Hours is required</p>
+        </ng-container>
+      </div>
+
+      <div class="space-y-1.5">
+        <label class="font-normal text-gray-600 text-xs">Hours</label>
+        <input nz-input formControlName="hours" />
+        <ng-container *ngIf="leaveFormGroup.get('hours').touched">
+          <p class="isms-error-message" *ngIf="leaveFormGroup.get('hours').hasError('required')">Hours is required</p>
+        </ng-container>
+      </div>
+
+      <div class="space-y-1.5">
+        <label class="font-normal text-gray-600 text-xs">Notes</label>
+        <textarea nz-input placeholder="Type here" [nzAutosize]="{ minRows: 3, maxRows: 10 }" formControlName="notes" class="resize-none"></textarea>
+        <ng-container *ngIf="leaveFormGroup.get('notes').touched">
+          <p class="isms-error-message" *ngIf="leaveFormGroup.get('notes').hasError('required')">Notes is required</p>
+        </ng-container>
+      </div>
+    </form>
+  </ng-container>
+</nz-modal>
+
+<ng-template #footerTemplate>
+  <div class="space-x-2 flex">
+    <button nz-button nzBlock (click)="toggle()">Cancel</button>
+    <button nz-button nzType="primary" nzBlock [disabled]="leaveFormGroup.invalid" [nzLoading]="loading" (click)="onSubmit()">Submit</button>
+  </div>
+</ng-template>

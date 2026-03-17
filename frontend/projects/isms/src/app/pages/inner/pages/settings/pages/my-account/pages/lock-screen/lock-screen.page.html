@@ -1,0 +1,27 @@
+<form class="w-[380px] flex flex-col space-y-4" [formGroup]="lockScreenFormGroup" autocomplete="on" (ngSubmit)="onSubmit()">
+  <div class="flex space-y-2 flex-col mb-2">
+    <h1 class="mt-0 mb-0 text-xl text-gray-800 font-semibold">Lock Screen</h1>
+    <p class="mt-0 mb-0 text-sm text-gray-500 font-regular">Set you lock screen preference</p>
+  </div>
+
+  <div class="space-y-1.5 flex flex-col">
+    <label class="font-normal text-gray-700 text-sm">Enable</label>
+    <nz-switch formControlName="enable" nzSize="small"></nz-switch>
+  </div>
+
+  <div class="space-y-1.5 flex flex-col" [ngClass]="{ 'opacity-60 pointer-events-none': !lockScreenFormGroup.value.enable }">
+    <label class="font-normal text-gray-700 text-sm">Passcode</label>
+    <label class="font-normal text-gray-500 text-xs">This code will use to unlock the screen</label>
+    <input nz-input type="text" placeholder="Type here" formControlName="code" />
+  </div>
+
+  <div class="space-y-1.5 flex flex-col" [ngClass]="{ 'opacity-60 pointer-events-none': !lockScreenFormGroup.value.enable }">
+    <label class="font-normal text-gray-700 text-sm">Idle Duration</label>
+    <label class="font-normal text-gray-500 text-xs">In seconds duration the screen will lock automatically and it will require code to unlock</label>
+    <input nz-input type="number" placeholder="Type here" formControlName="idleDuration" />
+  </div>
+
+  <div class="pt-2">
+    <button type="submit" nz-button nzType="primary">Save Changes</button>
+  </div>
+</form>

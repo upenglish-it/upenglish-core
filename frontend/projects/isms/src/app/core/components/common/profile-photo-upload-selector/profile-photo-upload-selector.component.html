@@ -1,0 +1,102 @@
+<!-- <div class="image-upload-selector">
+  <div class="multiple-file">
+    <div class="file-wrapper">
+      <div class="file-item" *ngFor="let file of files; let i = index">
+        <div
+          class="image-holder"
+          [ngStyle]="{
+            'background-image': 'url(' + file.value + ')'
+          }"
+        ></div>
+
+        <div class="options-holder">
+          <div class="option-buttons">
+            <button class="view-uploaded" nz-button nzType="primary" nzShape="circle" nzSize="small" (click)="previewModal = true; selectedPreviewFile = file.value">
+              <i nz-icon nzType="eye" nzTheme="outline"></i>
+            </button>
+            <button
+              class="delete-uploaded"
+              nz-button
+              nzType="primary"
+              nzDanger
+              nzShape="circle"
+              nzSize="small"
+              nz-popconfirm
+              nzPopconfirmTitle="Are you sure you want to remove this?"
+              (nzOnConfirm)="onClickRemoveFile(i)"
+              (nzOnCancel)="(0)"
+              nzPopconfirmPlacement="bottomRight"
+            >
+              <i nz-icon nzType="delete" nzTheme="outline"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="file-opener">
+        <label for="fileElement">
+          <i nz-icon nzType="cloud-upload" nzTheme="outline" nzIconfont="20px"></i>
+          <div style="margin-top: 8px">Click here to upload</div>
+        </label>
+        <input type="file" id="fileElement" accept=".jpg,.jpeg,.png" class="input-file-selector" (change)="onFileChange($event)" />
+      </div>
+    </div>
+  </div>
+</div> -->
+
+<div class="group relative h-20 w-20 rounded-full bg-gray-200">
+  <label
+    class="absolute z-10 grid place-items-center h-full w-full cursor-pointer rounded-full bg-gray-100/80 transition-all group-hover:visible"
+    for="profile-photo-upload-selector-input"
+    [ngClass]="{ invisible: profilePhoto }">
+    <span class="ph-fill ph-plus-circle text-gray-400 text-lg"></span>
+    <input type="file" id="profile-photo-upload-selector-input" accept=".jpg,.jpeg,.png" class="hidden" (change)="onFileChange($event)" />
+  </label>
+  <img [src]="profilePhoto" alt="" class="rounded-full w-full h-full" *ngIf="profilePhoto" />
+</div>
+
+<!-- Preview Modal -->
+<nz-modal
+  [nzBodyStyle]="{ overflow: 'auto' }"
+  [(nzVisible)]="selectedPreviewFile"
+  nzTitle="Preview"
+  nzClosable="false"
+  nzCentered
+  (nzOnOk)="selectedPreviewFile = null"
+  [nzFooter]="previewFooterModal"
+  [nzWidth]="700">
+  <ng-container *nzModalContent>
+    <img [src]="selectedPreviewFile" alt="Selected Image" width="100%" />
+  </ng-container>
+  <ng-template #previewFooterModal>
+    <button nz-button nzType="primary" (click)="selectedPreviewFile = null">Close</button>
+  </ng-template>
+</nz-modal>
+
+<!-- After Uploading Modal -->
+<nz-modal
+  [nzBodyStyle]="{ overflow: 'auto' }"
+  [(nzVisible)]="cropperImageChangedEvent"
+  nzTitle="Resize"
+  nzClosable="false"
+  nzCentered
+  (nzOnOk)="cropperImageChangedEvent = null"
+  [nzFooter]="cropperFooterModal">
+  <ng-container *nzModalContent>
+    <div class="w-full m-auto">
+      <image-cropper
+        [imageChangedEvent]="cropperImageChangedEvent"
+        [containWithinAspectRatio]="true"
+        [maintainAspectRatio]="true"
+        [aspectRatio]="4 / 4"
+        [resizeToWidth]="500"
+        [resizeToHeight]="500"
+        format="jpeg"
+        [roundCropper]="true"
+        (imageCropped)="imageCropped($event)"></image-cropper>
+    </div>
+  </ng-container>
+  <ng-template #cropperFooterModal>
+    <button nz-button nzType="primary" (click)="cropperImageChangedEvent = null">Close</button>
+  </ng-template>
+</nz-modal>

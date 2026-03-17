@@ -1,0 +1,14 @@
+@if (element) {
+  @if (viewMode === "editing") {
+    <span class="ph-bold ph-pencil" (click)="updateAttribute()"></span>
+  }
+  @if (element.getAttribute("item-number")) {
+    <span class="font-semibold text-gray-500 text-center">{{ element.getAttribute("item-number") }}.</span>
+  }
+  <input (click)="inputElement.focus()" [readonly]="viewMode === 'editing'" (keyup)="participantTypedAnswer(inputElement.value)" placeholder="Enter answer" #inputElement />
+  @if (viewMode === "editing") {
+    <span class="font-semibold text-gray-500 text-center">{{ element.getAttribute("points") }}pts</span>
+    <span class="ph-bold ph-x" (click)="delete()"></span>
+    <slms-textbox-points-config-modal #textboxPointsConfigModal></slms-textbox-points-config-modal>
+  }
+}

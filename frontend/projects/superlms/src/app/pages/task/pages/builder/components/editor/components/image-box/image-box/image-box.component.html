@@ -1,0 +1,21 @@
+@if (element) {
+  @if (viewMode === "editing") {
+    <div class="shadow-md ring-1 ring-slms-500 bg-slms-300 relative rounded-md" contenteditable="false">
+      <div class="!absolute z-10 -top-2 -right-2 flex items-center gap-2">
+        <button nz-button nzType="primary" nzShape="circle" (click)="updateAttribute()">
+          <span class="ph-bold ph-pencil"></span>
+        </button>
+        <button nz-button nzType="primary" nzShape="circle" nzDanger (click)="delete()">
+          <span class="ph-bold ph-x"></span>
+        </button>
+      </div>
+      <img [src]="element.getAttribute('src')" alt="Image" draggable="false" class="rounded-md w-full" />
+    </div>
+
+    <slms-image-box-config-modal #imageBoxConfigModal></slms-image-box-config-modal>
+  }
+
+  @if (viewMode === "viewing") {
+    <img [src]="element.getAttribute('src')" alt="Image" draggable="false" class="w-full" />
+  }
+}

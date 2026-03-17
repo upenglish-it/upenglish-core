@@ -1,0 +1,165 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  nzCentered
+  [nzWidth]="'520px'"
+  [nzTitle]="titleTemplate"
+  [nzFooter]="footerTemplate"
+  (nzOnOk)="onCreate()"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <form class="px-4 py-3 flex-col max-h-[500px] space-y-3 flex-1 flex overflow-auto mini-scroll-bar min-h-fit" [formGroup]="cashflowIncomeFormGroup">
+      <div class="space-y-1.5">
+        <label class="font-normal text-gray-600 text-xs"> Income From </label>
+        <nz-select formControlName="from" nzShowSearch class="w-full" nzPlaceHolder="Select income" [nzDropdownMatchSelectWidth]="false">
+          <nz-option *ngFor="let income of incomeFrom" [nzLabel]="income.name" [nzValue]="income.value"></nz-option>
+        </nz-select>
+      </div>
+
+      <div class="space-y-1.5">
+        <label class="font-normal text-gray-600 text-xs">Student</label>
+        <nz-select formControlName="studentId" nzShowSearch class="w-full" nzPlaceHolder="Select student" [nzDropdownMatchSelectWidth]="false">
+          <nz-option *ngFor="let student of students" [nzLabel]="student.firstName + ' ' + student.lastName" [nzValue]="student._id"></nz-option>
+        </nz-select>
+      </div>
+
+      <fieldset class="border border-solid border-gray-200 p-3 rounded-md" *ngIf="selectedStudent">
+        <legend class="font-normal text-gray-600 text-xs w-fit px-0.5">Student Information</legend>
+        <div class="flex-col flex space-y-3">
+          <div class="flex-col flex space-y-1.5">
+            <label class="font-normal text-gray-600 text-xs">Latest Class</label>
+            <ul type="">
+              <li *ngFor="let breakdown of selectedStudentBreakdown">
+                <span class="font-semibold">{{ breakdown.name }}</span>
+              </li>
+            </ul>
+          </div>
+
+          <div class="flex-col flex space-y-1.5">
+            <label class="font-normal text-gray-600 text-xs">Email Address</label>
+            <label class="font-normal text-gray-600 text-xs">{{ selectedStudent.emailAddresses[0] }}</label>
+          </div>
+
+          <!-- <div class="space-y-1.5 flex-1">
+            <label class="font-normal text-gray-600 text-xs required">Street</label>
+            <input nz-input placeholder="Type here" formControlName="street" />
+            <ng-container *ngIf="personalInfoFormGroup.get('address').get('street').touched">
+              <p class="isms-error-message" *ngIf="personalInfoFormGroup.get('address').get('street').hasError('required')">Street is required</p>
+            </ng-container>
+          </div> -->
+          <!-- <div class="space-y-1.5 flex-1">
+            <label class="font-normal text-gray-600 text-xs required">City</label>
+            <input nz-input placeholder="Type here" formControlName="city" />
+            <ng-container *ngIf="personalInfoFormGroup.get('address').get('city').touched">
+              <p class="isms-error-message" *ngIf="personalInfoFormGroup.get('address').get('city').hasError('required')">City is required</p>
+            </ng-container>
+          </div>
+          <div class="space-y-1.5 flex-1">
+            <label class="font-normal text-gray-600 text-xs required">State / Province / Region</label>
+            <input nz-input placeholder="Type here" formControlName="state" />
+            <ng-container *ngIf="personalInfoFormGroup.get('address').get('state').touched">
+              <p class="isms-error-message" *ngIf="personalInfoFormGroup.get('address').get('state').hasError('required')">State is required</p>
+            </ng-container>
+          </div>
+          <div class="space-y-1.5 flex-1">
+            <label class="font-normal text-gray-600 text-xs required">Country</label>
+            <nz-select formControlName="country" nzPlaceHolder="Select country" nzShowSearch class="w-full" [nzDropdownMatchSelectWidth]="false">
+              <nz-option *ngFor="let country of countries" [nzLabel]="country.name" [nzValue]="country.code"> </nz-option>
+            </nz-select>
+            <ng-container *ngIf="personalInfoFormGroup.get('address').get('country').touched">
+              <p class="isms-error-message" *ngIf="personalInfoFormGroup.get('address').get('country').hasError('required')">Country is required</p>
+            </ng-container>
+          </div>
+          <div class="space-y-1.5 flex-1">
+            <label class="font-normal text-gray-600 text-xs required">Postal code</label>
+            <input nz-input numberOnly placeholder="Type here" formControlName="postalCode" />
+            <ng-container *ngIf="personalInfoFormGroup.get('address').get('postalCode').touched">
+              <p class="isms-error-message" *ngIf="personalInfoFormGroup.get('address').get('postalCode').hasError('required')">Postal code is required</p>
+            </ng-container>
+          </div>
+          <div class="space-y-1.5 flex-1">
+            <label class="font-normal text-gray-600 text-xs">Timezone</label>
+            <nz-select formControlName="timezone" nzShowSearch nzPlaceHolder="Select timezone" class="w-full" [nzDropdownMatchSelectWidth]="false">
+              <nz-option *ngFor="let timezone of timezones" [nzLabel]="timezone.label + ' (' + timezone.offset + ')'" [nzValue]="timezone.timezone"> </nz-option>
+            </nz-select>
+            <ng-container *ngIf="personalInfoFormGroup.get('address').get('timezone').touched">
+              <p class="isms-error-message" *ngIf="personalInfoFormGroup.get('address').get('timezone').hasError('required')">Timezone is required</p>
+            </ng-container>
+          </div> -->
+        </div>
+      </fieldset>
+
+      <div class="space-y-1.5" *ngIf="cashflowIncomeFormGroup.value.from === 'material'">
+        <label class="font-normal text-gray-600 text-xs">Items</label>
+        <nz-select formControlName="materialId" nzShowSearch class="w-full" nzPlaceHolder="Select item" [nzDropdownMatchSelectWidth]="false">
+          <nz-option *ngFor="let material of materials" [nzLabel]="material.name" [nzValue]="material._id"></nz-option>
+        </nz-select>
+      </div>
+
+      <div class="flex space-x-2">
+        <div class="space-y-1.5 flex-1 flex flex-col">
+          <label class="font-normal text-gray-600 text-xs required">Price</label>
+          <nz-input-number
+            formControlName="amount"
+            [nzDisabled]="cashflowIncomeFormGroup.value.from === 'material'"
+            nzPlaceHolder="0"
+            style="width: 100%"
+            [nzMin]="1"
+            [nzStep]="1"></nz-input-number>
+          <ng-container *ngIf="cashflowIncomeFormGroup.get('amount').touched">
+            <p class="isms-error-message" *ngIf="cashflowIncomeFormGroup.get('amount').hasError('required')">Amount is required</p>
+          </ng-container>
+        </div>
+        <div class="space-y-1.5 flex-1 flex flex-col">
+          <label class="font-normal text-gray-600 text-xs">Quantity</label>
+          <nz-input-number formControlName="quantity" nzPlaceHolder="0" style="width: 100%" [nzMin]="1" [nzStep]="1"></nz-input-number>
+          <ng-container *ngIf="cashflowIncomeFormGroup.get('quantity').touched">
+            <p class="isms-error-message" *ngIf="cashflowIncomeFormGroup.get('quantity').hasError('required')">Quantity is required</p>
+          </ng-container>
+        </div>
+      </div>
+
+      <div class="space-y-1.5">
+        <label class="font-normal text-gray-600 text-xs"> Mode Of Payment </label>
+        <nz-select formControlName="mode" nzShowSearch class="w-full" nzPlaceHolder="Select mode of payment" [nzDropdownMatchSelectWidth]="false">
+          <nz-option *ngFor="let mop of modeOfPayment" [nzLabel]="mop.name" [nzValue]="mop.value"></nz-option>
+        </nz-select>
+      </div>
+
+      <div class="space-y-1.5 flex flex-col">
+        <label class="font-normal text-gray-600 text-xs required">Notes</label>
+        <textarea formControlName="notes" nz-input rows="2" placeholder="Type here"></textarea>
+      </div>
+
+      <div class="space-y-1.5 flex flex-col">
+        <label class="font-normal text-gray-600 text-xs required">Total Amount To Pay</label>
+        <h2>{{ totalPrice | formattedCurrency }}</h2>
+      </div>
+
+      <!-- <div class="flex space-x-2">
+        <div class="space-y-1.5 flex-1 flex flex-col">
+          <label class="font-normal text-gray-600 text-xs required">Price</label>
+          <nz-input-number formControlName="price" nzPlaceHolder="0" style="width: 100%" [nzMin]="1" [nzStep]="1"></nz-input-number>
+          <ng-container *ngIf="cashflowIncomeFormGroup.get('price').touched">
+            <p class="isms-error-message" *ngIf="cashflowIncomeFormGroup.get('price').hasError('required')">Price is required</p>
+          </ng-container>
+        </div>
+        <div class="space-y-1.5 flex-1 flex flex-col">
+          <label class="font-normal text-gray-600 text-xs">Quantity</label>
+          <nz-input-number formControlName="quantity" nzPlaceHolder="0" style="width: 100%" [nzMin]="1" [nzStep]="1"></nz-input-number>
+          <ng-container *ngIf="cashflowIncomeFormGroup.get('quantity').touched">
+            <p class="isms-error-message" *ngIf="cashflowIncomeFormGroup.get('quantity').hasError('required')">Quantity is required</p>
+          </ng-container>
+        </div>
+      </div> -->
+    </form>
+  </ng-container>
+  <ng-template #titleTemplate> Income </ng-template>
+  <ng-template #footerTemplate>
+    <div class="space-x-2 flex items-center">
+      <button nz-button nzBlock (click)="toggle()">Close</button>
+      <button nz-button nzType="primary" (click)="onCreate()" [nzLoading]="loading" nzBlock [disabled]="cashflowIncomeFormGroup.invalid">Submit</button>
+    </div>
+  </ng-template>
+</nz-modal>

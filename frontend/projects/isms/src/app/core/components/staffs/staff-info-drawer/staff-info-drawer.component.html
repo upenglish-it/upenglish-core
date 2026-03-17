@@ -1,0 +1,436 @@
+<nz-drawer
+  [nzVisible]="showDrawer"
+  nzCentered
+  nzWidth="600px"
+  [nzTitle]="titleTemplate"
+  (nzOnOk)="(1)"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzFooter]="footerTemplate"
+  nzPlacement="right"
+  [nzClosable]="false"
+  [nzBodyStyle]="{ 'padding-top': '4px' }">
+  <ng-container *nzDrawerContent>
+    <nz-spin nzTip="Processing data please wait..." [nzSpinning]="loading">
+      <ng-container *ngIf="segmentIndex === 0">
+        <form class="py-4 flex-col space-y-5 flex-1 flex overflow-auto mini-scroll-bar min-h-fit" [formGroup]="personalInfoFormGroup">
+          <div class="space-y-1.5 flex-1">
+            <label class="isms-label"> Role </label>
+            <nz-select formControlName="role" nzDisabled nzShowSearch class="w-full" nzPlaceHolder="Select role" [nzDropdownMatchSelectWidth]="false">
+              <nz-option *ngFor="let role of roles" [nzLabel]="role.name" [nzValue]="role.value"></nz-option>
+            </nz-select>
+          </div>
+
+          <div class="space-x-2 items-center flex flex-1">
+            <nz-switch formControlName="active" nzSize="small"></nz-switch>
+            <label class="text-gray-700 text-xs font-normal">
+              {{ personalInfoFormGroup.value.active ? "Active" : "Inactive" }}
+              <span
+                class="cursor-pointer ml-1"
+                nz-icon
+                nzType="info-circle"
+                nzTheme="twotone"
+                nz-tooltip
+                nzTooltipTitle="The inactive staff will not show in the staff list"></span>
+            </label>
+            <!-- <nz-select formControlName="branches" nzShowSearch nzMode="multiple" class="w-full" nzPlaceHolder="Select branch" [nzDropdownMatchSelectWidth]="false">
+              <nz-option *ngFor="let branch of branches" [nzLabel]="branch.name" [nzValue]="branch._id" [nzHide]="hideSelectedBranch(branch._id)"></nz-option>
+            </nz-select> -->
+          </div>
+
+          <div class="space-y-1.5 flex-1">
+            <label class="text-gray-700 text-xs font-medium">This staff was added to this branches:</label>
+            <nz-select formControlName="branches" nzShowSearch nzMode="multiple" class="w-full" nzPlaceHolder="Select branch" [nzDropdownMatchSelectWidth]="false">
+              <nz-option *ngFor="let branch of branches" [nzLabel]="branch.name" [nzValue]="branch._id" [nzHide]="hideSelectedBranch(branch._id)"></nz-option>
+            </nz-select>
+          </div>
+
+          <div class="space-y-1.5 flex-1" formArrayName="emailAddresses">
+            <ng-container *ngIf="emailAddressesFormArray.controls.length > 0">
+              <label class="isms-label">
+                Email Address
+                <span class="cursor-pointer ml-1" nz-icon nzType="info-circle" nzTheme="twotone" nz-tooltip nzTooltipTitle="Use to login in with microsoft."></span>
+              </label>
+              <ng-container *ngFor="let formGroup of emailAddressesFormArray.controls; let emailAddressIndex = index">
+                <div class="flex space-x-1 items-center">
+                  <!-- <div>
+              <div class="h-6 w-6 rounded-full grid place-items-center bg-white border cursor-grab hover:group">
+                <span class="ph ph-list group-hover:scale-125"></span>
+              </div>
+            </div> -->
+                  <!-- nzStatus="warning" -->
+                  <input nz-input placeholder="Type here" readonly disabled [value]="formGroup.value" *ngIf="!noEmailAddress" />
+                  <input nz-input placeholder="Type here" [formControlName]="emailAddressIndex" *ngIf="noEmailAddress" />
+
+                  <!-- Since we use microsoft login no need to show add email -->
+                  <!-- <div>
+                <div
+                  class="h-6 w-6 rounded-full hover:bg-error-400 text-gray-500 hover:border-error-500 transition-all hover:text-white grid place-items-center bg-white border cursor-pointer"
+                  (click)="removeEmailAddress(emailAddressIndex)"
+                >
+                  <span class="ph-bold ph-trash"></span>
+                </div>
+              </div> -->
+                </div>
+                <ng-container *ngIf="emailAddressesFormArray.controls[emailAddressIndex].touched">
+                  <p class="isms-error-message" *ngIf="emailAddressesFormArray.controls[emailAddressIndex].hasError('required')">Email address is required</p>
+                  <p class="isms-error-message" *ngIf="emailAddressesFormArray.controls[emailAddressIndex].hasError('maxlength')">
+                    Email address should not be more than {{ emailAddressesFormArray.controls[emailAddressIndex].errors["maxlength"].requiredLength }} characters
+                  </p>
+                  <p
+                    class="isms-error-message"
+                    *ngIf="emailAddressesFormArray.controls[emailAddressIndex].hasError('email') || emailAddressesFormArray.controls[emailAddressIndex].hasError('pattern')">
+                    Email address is invalid format
+                  </p>
+                </ng-container>
+              </ng-container>
+            </ng-container>
+
+            <!-- Since we use microsoft login no need to show add email -->
+            <!-- <div [class.pt-2]="emailAddressesFormArray.controls.length > 0">
+          <a class="flex items-center space-x-1" (click)="addEmailAddress()">
+            <span nz-icon nzType="plus" nzTheme="outline"></span>
+            <span>Add Email Address</span>
+          </a>
+        </div> -->
+          </div>
+
+          <div class="flex space-x-2">
+            <div class="space-y-1.5 flex-1">
+              <label class="isms-label required">First Name</label>
+              <input nz-input placeholder="Type here" formControlName="firstName" />
+              <ng-container *ngIf="personalInfoFormGroup.get('firstName').touched">
+                <p class="isms-error-message" *ngIf="personalInfoFormGroup.get('firstName').hasError('required')">First name is required</p>
+                <p class="isms-error-message" *ngIf="personalInfoFormGroup.get('firstName').hasError('maxlength')">
+                  First name should not be more than {{ personalInfoFormGroup.get("firstName").errors["maxlength"].requiredLength }} characters
+                </p>
+                <p class="isms-error-message" *ngIf="personalInfoFormGroup.get('firstName').hasError('pattern')">First name is invalid format</p>
+              </ng-container>
+            </div>
+
+            <div class="space-y-1.5 flex-1">
+              <label class="isms-label">Last Name</label>
+              <input nz-input placeholder="Type here" formControlName="lastName" />
+              <ng-container *ngIf="personalInfoFormGroup.get('lastName').touched">
+                <p class="isms-error-message" *ngIf="personalInfoFormGroup.get('lastName').hasError('required')">Last name is required</p>
+                <p class="isms-error-message" *ngIf="personalInfoFormGroup.get('lastName').hasError('maxlength')">
+                  Last name should not be more than {{ personalInfoFormGroup.get("lastName").errors["maxlength"].requiredLength }} characters
+                </p>
+                <p class="isms-error-message" *ngIf="personalInfoFormGroup.get('lastName').hasError('pattern')">Last name is invalid format</p>
+              </ng-container>
+            </div>
+          </div>
+
+          <div class="space-y-1.5 flex-1">
+            <label class="isms-label">Gender</label>
+            <nz-select formControlName="gender" nzShowSearch class="w-full" nzPlaceHolder="Select gender" [nzDropdownMatchSelectWidth]="false">
+              <nz-option nzLabel="Male" nzValue="male"></nz-option>
+              <nz-option nzLabel="Female" nzValue="female"></nz-option>
+            </nz-select>
+            <ng-container *ngIf="personalInfoFormGroup.get('gender').touched">
+              <p class="isms-error-message" *ngIf="personalInfoFormGroup.get('gender').hasError('required')">Gender is required</p>
+            </ng-container>
+          </div>
+
+          <div class="space-y-1.5 flex-1">
+            <label class="isms-label">Birth Date</label>
+            <nz-date-picker formControlName="birthDate" class="w-full"></nz-date-picker>
+            <ng-container *ngIf="personalInfoFormGroup.get('birthDate').touched">
+              <p class="isms-error-message" *ngIf="personalInfoFormGroup.get('birthDate').hasError('required')">Birth date is required</p>
+            </ng-container>
+          </div>
+
+          <fieldset class="border border-solid border-gray-200 p-3 rounded-md" formGroupName="contactNumbers">
+            <legend class="isms-label w-fit px-0.5">Contact Numbers</legend>
+            <div class="space-y-1.5 flex-1">
+              <ng-container *ngIf="contactNumbersFormArray.controls.length > 0">
+                <ng-container *ngFor="let formGroup of contactNumbersFormArray.controls; let contactNumberIndex = index">
+                  <div class="flex space-x-1 items-center" [formGroup]="toFormGroup(formGroup)">
+                    <div class="space-x-1.5 flex flex-1">
+                      <nz-select formControlName="type" nzShowSearch class="min-w-[80px]" [nzDropdownMatchSelectWidth]="false">
+                        <nz-option *ngFor="let type of contactNumberTypes" [nzLabel]="type.name" [nzValue]="type.value"> </nz-option>
+                      </nz-select>
+                      <nz-select formControlName="countryCallingCode" nzShowSearch class="min-w-[80px]" [nzCustomTemplate]="contactNumber" [nzDropdownMatchSelectWidth]="false">
+                        <nz-option
+                          *ngFor="let numberCountry of numberCountries"
+                          [nzLabel]="numberCountry.flag + ' (' + numberCountry.countryCallingCode + ') ' + numberCountry.name"
+                          [nzValue]="numberCountry.countryCallingCode">
+                        </nz-option>
+                      </nz-select>
+                      <ng-template #contactNumber let-selected>{{ selected.nzValue }}</ng-template>
+                      <input nz-input type="text" numberOnly placeholder="Type here" class="w-full" formControlName="number" />
+                    </div>
+                    <div>
+                      <div
+                        class="h-6 w-6 rounded-full hover:bg-error-400 text-gray-500 hover:border-error-500 transition-all hover:text-white grid place-items-center bg-white border cursor-pointer"
+                        (click)="removeContactNumber(contactNumberIndex)">
+                        <span class="ph-bold ph-trash"></span>
+                      </div>
+                    </div>
+                  </div>
+                </ng-container>
+              </ng-container>
+              <div [class.pt-2]="contactNumbersFormArray.controls.length > 0">
+                <a class="flex items-center space-x-1" (click)="addContactNumber()">
+                  <span nz-icon nzType="plus" nzTheme="outline"></span>
+                  <span>Add Contact Number</span>
+                  <span class="cursor-pointer" nz-icon nzType="info-circle" nzTheme="twotone" nz-tooltip nzTooltipTitle="Staff contact number"></span>
+                </a>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="border border-solid border-gray-200 p-3 rounded-md" formGroupName="address">
+            <legend class="isms-label w-fit px-0.5">Address Information</legend>
+            <div class="flex-col flex space-y-3">
+              <div class="space-y-1.5 flex-1">
+                <label class="isms-label required">Street</label>
+                <input nz-input placeholder="Type here" formControlName="street" />
+                <ng-container *ngIf="personalInfoFormGroup.get('address').get('street').touched">
+                  <p class="isms-error-message" *ngIf="personalInfoFormGroup.get('address').get('street').hasError('required')">Street is required</p>
+                </ng-container>
+              </div>
+              <div class="space-y-1.5 flex-1">
+                <label class="isms-label required">City</label>
+                <input nz-input placeholder="Type here" formControlName="city" />
+                <ng-container *ngIf="personalInfoFormGroup.get('address').get('city').touched">
+                  <p class="isms-error-message" *ngIf="personalInfoFormGroup.get('address').get('city').hasError('required')">City is required</p>
+                </ng-container>
+              </div>
+              <div class="space-y-1.5 flex-1">
+                <label class="isms-label required">State / Province / Region</label>
+                <input nz-input placeholder="Type here" formControlName="state" />
+                <ng-container *ngIf="personalInfoFormGroup.get('address').get('state').touched">
+                  <p class="isms-error-message" *ngIf="personalInfoFormGroup.get('address').get('state').hasError('required')">State is required</p>
+                </ng-container>
+              </div>
+              <div class="space-y-1.5 flex-1">
+                <label class="isms-label required">Country</label>
+                <nz-select formControlName="country" nzPlaceHolder="Select country" nzShowSearch class="w-full" [nzDropdownMatchSelectWidth]="false">
+                  <nz-option *ngFor="let country of countries" [nzLabel]="country.name" [nzValue]="country.code"> </nz-option>
+                </nz-select>
+                <ng-container *ngIf="personalInfoFormGroup.get('address').get('country').touched">
+                  <p class="isms-error-message" *ngIf="personalInfoFormGroup.get('address').get('country').hasError('required')">Country is required</p>
+                </ng-container>
+              </div>
+              <div class="space-y-1.5 flex-1">
+                <label class="isms-label required">Postal code</label>
+                <input nz-input numberOnly placeholder="Type here" formControlName="postalCode" />
+                <ng-container *ngIf="personalInfoFormGroup.get('address').get('postalCode').touched">
+                  <p class="isms-error-message" *ngIf="personalInfoFormGroup.get('address').get('postalCode').hasError('required')">Postal code is required</p>
+                </ng-container>
+              </div>
+              <div class="space-y-1.5 flex-1">
+                <label class="isms-label">Timezone</label>
+                <nz-select formControlName="timezone" nzShowSearch nzPlaceHolder="Select timezone" class="w-full" [nzDropdownMatchSelectWidth]="false">
+                  <nz-option *ngFor="let timezone of timezones" [nzLabel]="timezone.label + ' (' + timezone.offset + ')'" [nzValue]="timezone.timezone"> </nz-option>
+                </nz-select>
+                <ng-container *ngIf="personalInfoFormGroup.get('address').get('timezone').touched">
+                  <p class="isms-error-message" *ngIf="personalInfoFormGroup.get('address').get('timezone').hasError('required')">Timezone is required</p>
+                </ng-container>
+              </div>
+            </div>
+          </fieldset>
+
+          <div class="space-y-1.5 flex-1" formArrayName="sources">
+            <ng-container *ngIf="sourcesFormArray.controls.length > 0">
+              <label class="isms-label">Sources</label>
+              <ng-container *ngFor="let formGroup of sourcesFormArray.controls; let sourceIndex = index">
+                <div class="flex space-x-1 items-center">
+                  <input nz-input placeholder="Type here" [formControlName]="sourceIndex" />
+                  <div>
+                    <div
+                      class="h-6 w-6 rounded-full hover:bg-error-400 text-gray-500 hover:border-error-500 transition-all hover:text-white grid place-items-center bg-white border cursor-pointer"
+                      (click)="removeSource(sourceIndex)">
+                      <span class="ph-bold ph-trash"></span>
+                    </div>
+                  </div>
+                </div>
+                <ng-container *ngIf="sourcesFormArray.controls[sourceIndex].touched">
+                  <p class="isms-error-message" *ngIf="sourcesFormArray.controls[sourceIndex].hasError('required')">Source is required</p>
+                  <p class="isms-error-message" *ngIf="sourcesFormArray.controls[sourceIndex].hasError('maxlength')">
+                    Source should not be more than {{ sourcesFormArray.controls[sourceIndex].errors["maxlength"].requiredLength }} characters
+                  </p>
+                </ng-container>
+              </ng-container>
+            </ng-container>
+            <div [class.pt-2]="sourcesFormArray.controls.length > 0">
+              <a class="flex items-center space-x-1" (click)="addSource()">
+                <span nz-icon nzType="plus" nzTheme="outline"></span>
+                <span>Add Source</span>
+                <span
+                  class="cursor-pointer"
+                  nz-icon
+                  nzType="info-circle"
+                  nzTheme="twotone"
+                  nz-tooltip
+                  nzTooltipTitle="Identify the staff where it came from. Ex: facebook.com, instagram.com"></span>
+              </a>
+            </div>
+          </div>
+
+          <div class="space-y-1.5 flex-1" formArrayName="tags">
+            <ng-container *ngIf="tagsFormArray.controls.length > 0">
+              <label class="font-normal text-gray-600 text-xs">Tags</label>
+              <ng-container *ngFor="let formGroup of tagsFormArray.controls; let sourceIndex = index">
+                <div class="flex space-x-1 items-center">
+                  <!-- <input nz-input placeholder="Type here" [formControlName]="sourceIndex" /> -->
+                  <nz-select [formControlName]="sourceIndex" nzShowSearch class="w-full" nzPlaceHolder="Select tags" [nzDropdownMatchSelectWidth]="false">
+                    <nz-option *ngFor="let tag of tags" [nzLabel]="tag.value" [nzValue]="tag.value"></nz-option>
+                  </nz-select>
+                  <div>
+                    <div
+                      class="h-6 w-6 rounded-full hover:bg-error-400 text-gray-500 hover:border-error-500 transition-all hover:text-white grid place-items-center bg-white border cursor-pointer"
+                      (click)="removeTag(sourceIndex)">
+                      <span class="ph-bold ph-trash"></span>
+                    </div>
+                  </div>
+                </div>
+                <ng-container *ngIf="tagsFormArray.controls[sourceIndex].touched">
+                  <p class="isms-error-message" *ngIf="tagsFormArray.controls[sourceIndex].hasError('required')">Tag is required</p>
+                  <p class="isms-error-message" *ngIf="tagsFormArray.controls[sourceIndex].hasError('maxlength')">
+                    Tag should not be more than {{ tagsFormArray.controls[sourceIndex].errors["maxlength"].requiredLength }} characters
+                  </p>
+                </ng-container>
+              </ng-container>
+            </ng-container>
+            <div [class.pt-2]="tagsFormArray.controls.length > 0">
+              <a class="flex items-center space-x-1" (click)="addTag()">
+                <span nz-icon nzType="plus" nzTheme="outline"></span>
+                <span>Add Tag</span>
+                <span class="cursor-pointer" nz-icon nzType="info-circle" nzTheme="twotone" nz-tooltip nzTooltipTitle="Tag the student. Ex: beginner, dropped"></span>
+              </a>
+            </div>
+          </div>
+        </form>
+      </ng-container>
+
+      <ng-container *ngIf="segmentIndex === 1">
+        <div class="py-4 flex-col space-y-5 flex-1 flex overflow-auto mini-scroll-bar min-h-fit">
+          <!-- <pre>
+            {{ employmentSettingsFormGroup.value | json }}
+          </pre> -->
+
+          <isms-staff-salary-package-selector [staff-id]="personalInfoFormGroup.value._id" (on-submitted)="(1)"></isms-staff-salary-package-selector>
+
+          <isms-manage-salary-advancement
+            [form-group]="staffSalaryAdvancementFormGroup"
+            [staff-id]="personalInfoFormGroup.value._id"
+            view="form"
+            (on-submitted)="(1)"></isms-manage-salary-advancement>
+
+          <!-- <fieldset class="border border-solid border-gray-200 p-3 rounded-md" [formGroup]="employmentSettingsFormGroup">
+            <legend class="isms-label w-fit px-0.5">Manage Leaves Credits</legend>
+            <div class="space-y-5 flex-1">
+              <div class="flex space-x-2">
+                <div class="space-y-1.5 flex flex-col w-1/2">
+                  <label class="isms-label">Current credits</label>
+                  <input nz-input placeholder="Type here" />
+                </div>
+              </div>
+
+              <div class="flex space-x-2">
+                <div class="space-y-1.5 flex-1 flex flex-col">
+                  <label class="isms-label">
+                    Increment leave credits
+                    <span class="cursor-pointer ml-1" nz-icon nzType="info-circle" nzTheme="twotone" nz-tooltip nzTooltipTitle="Leave credits will increment based on the configuration."></span>
+                  </label>
+
+                  <div class="flex space-x-2">
+                    <div class="space-y-1.5 flex-1 flex flex-col">
+                      <label class="isms-label">Credits</label>
+                      <nz-input-number style="width: 100%" nzPlaceHolder="Type here" [nzMin]="1" [nzStep]="1"></nz-input-number>
+                    </div>
+                    <div class="space-y-1.5 flex-1 flex flex-col">
+                      <label class="isms-label">Duration</label>
+                      <nz-input-number style="width: 100%" nzPlaceHolder="Type here" [nzMin]="1" [nzStep]="1"></nz-input-number>
+                    </div>
+                    <div class="space-y-1.5 flex-1 flex flex-col">
+                      <label class="isms-label">Type</label>
+                      <nz-select nzShowSearch class="w-full" nzPlaceHolder="Select duration type" [nzDropdownMatchSelectWidth]="false">
+                        <nz-option nzLabel="Days" nzValue="days"></nz-option>
+                        <nz-option nzLabel="Months" nzValue="months"></nz-option>
+                        <nz-option nzLabel="Years" nzValue="years"></nz-option>
+                      </nz-select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="flex justify-end">
+                <button nz-button nzType="primary" nzGhost nzSize="small" [nzLoading]="loading" (click)="onUpdateLeaveCredits()" [disabled]="employmentSettingsFormGroup.invalid">Save Changes</button>
+              </div>
+            </div>
+          </fieldset> -->
+        </div>
+      </ng-container>
+
+      <ng-container *ngIf="segmentIndex === 2">
+        <div class="py-4">
+          <nz-timeline *ngIf="salaryPayments.length > 0" [nzReverse]="true">
+            <nz-timeline-item *ngFor="let salaryPayment of salaryPayments">
+              <span class="font-medium text-gray-700"> Payment Received </span>
+              at {{ salaryPayment.dateIssued | date: "MMMM dd, yyyy hh:mm a" }}.
+              <br />
+              Working date between
+              <span class="font-medium text-gray-500"> {{ salaryPayment.workStartDate | date: "MMMM dd" }} </span> to
+              <span class="font-medium text-gray-500"> {{ salaryPayment.workEndDate | date: "MMMM dd, yyyy" }} </span>
+              <br />
+              <a [href]="'/pop/staff-payslip?urlCode=' + salaryPayment.urlCode">Download Payslip</a>
+            </nz-timeline-item>
+          </nz-timeline>
+          <nz-alert *ngIf="salaryPayments.length === 0" nzType="warning" nzMessage="No logs available" nzShowIcon></nz-alert>
+        </div>
+      </ng-container>
+    </nz-spin>
+  </ng-container>
+
+  <ng-template #titleTemplate>
+    <div class="">
+      <!-- <span>staff Information</span> -->
+      <!-- <div class=""> -->
+      <isms-segmented-selector [options]="segmentOptions" [current-index]="segmentIndex" (on-changed)="onChangeSegmentSelector($event)"> </isms-segmented-selector>
+      <!-- </div> -->
+    </div>
+  </ng-template>
+
+  <ng-template #footerTemplate>
+    <div class="flex space-x-2">
+      <button nz-button nzDanger (click)="toggle()" nzBlock>Close</button>
+      <button
+        nz-button
+        nzType="primary"
+        [nzLoading]="loading"
+        (click)="onUpdatePersonalInformation()"
+        nzBlock
+        [disabled]="personalInfoFormGroup.invalid"
+        *ngIf="segmentIndex === 0">
+        Save Changes
+      </button>
+      <!-- <button nz-button nzType="primary" [nzLoading]="loading" (click)="onUpdateEmploymentSettings()" nzBlock [disabled]="employmentSettingsFormGroup.invalid" *ngIf="segmentIndex === 1">
+        Save Changes
+      </button> -->
+    </div>
+  </ng-template>
+</nz-drawer>
+<!-- 
+<nz-modal [(nzVisible)]="showSalaryChangelogModal" nzCentered [nzWidth]="'450px'" nzTitle="Salary Changelog" [nzFooter]="null" [nzMaskClosable]="false" (nzOnCancel)="toggleSalaryChangelogModal()">
+  <ng-container *nzModalContent>
+    <div class="py-4">
+      <nz-timeline *ngIf="salaryPayments.length > 0" [nzReverse]="true">
+        <nz-timeline-item *ngFor="let salary of salaryPayments">
+          <span
+            class="font-medium"
+            [ngClass]="{
+              'text-green-500': salary.action === 'insert',
+              'text-yellow-500': salary.action === 'update'
+            }"
+          >
+            {{ salary.action === "insert" ? "Created" : "Updated" }}</span
+          >
+          at {{ salary.createdAt | date : "MMMM dd, yyyy hh:mm a" }}
+        </nz-timeline-item>
+      </nz-timeline>
+      <nz-alert *ngIf="salaryPayments.length === 0" nzType="warning" nzMessage="No logs available" nzShowIcon></nz-alert>
+    </div>
+  </ng-container>
+</nz-modal> -->

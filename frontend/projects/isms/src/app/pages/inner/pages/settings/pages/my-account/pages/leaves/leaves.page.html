@@ -1,0 +1,120 @@
+<div class="flex flex-col space-y-4">
+  <div class="flex mb-2 items-center">
+    <div class="flex-1 flex space-y-2 flex-col">
+      <h1 class="mt-0 mb-0 text-xl text-gray-800 font-semibold">Leaves</h1>
+      <p class="mt-0 mb-0 text-sm text-gray-500 font-regular">File and track your leaves</p>
+    </div>
+    <div>
+      <button nz-button nzType="primary" (click)="manageLeaveModal.toggle()">
+        Request a leave
+        <span nz-icon nzType="plus" nzTheme="outline"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- <div class="grid grid-cols-4 gap-4">
+    <div class="flex items-center border border-gray-200 justify-between p-4 bg-white rounded-md shadow-xs">
+      <div>
+        <h6 class="text-xs font-medium text-gray-500 capitalize">Available Leaves</h6>
+        <div class="flex items-center">
+          <span class="text-xl font-semibold">9</span>
+        </div>
+      </div>
+      <div class="grid w-10 h-10 text-lg rounded-full place-items-center text-green-500 bg-green-50">
+        <i class="ph-duotone ph-notepad"></i>
+      </div>
+    </div>
+
+    <div class="flex items-center border border-gray-200 justify-between p-4 bg-white rounded-md">
+      <div class="">
+        <h6 class="text-xs font-medium text-gray-500 capitalize">Used Leaves</h6>
+        <div class="flex items-center">
+          <span class="text-xl font-semibold">6</span>
+        </div>
+      </div>
+      <div class="grid w-10 h-10 text-lg rounded-full border-gray-200 bg- place-items-center text-isms-500 bg-isms-50">
+        <i class="ph-duotone ph-notebook"></i>
+      </div>
+    </div>
+  </div> -->
+
+  <div class="space-y-2">
+    <h1 class="mt-0 mb-0 text-base text-gray-800 font-semibold">Leave Record</h1>
+    <div class="overflow-auto shadow-md bg-white mini-scroll-bar rounded-md flex-1 h-[calc(100vh-230px)]" reach-scroll-to-bottom (on-reach)="(1)">
+      <table role="table" class="min-w-full divide-y divide-gray-200 isms-table">
+        <thead>
+          <tr class="font-bold text-gray-700">
+            <th class="w-10">
+              <div class="relative grid place-items-center">
+                <!-- <label nz-checkbox (nzCheckedChange)="onAllCandidateChecked($event)" class="absolute top-[-11px]"></label> -->
+                #
+              </div>
+            </th>
+            <th class="">
+              <div class="flex items-center justify-between">Policy</div>
+            </th>
+            <th class="">
+              <div class="flex items-center justify-between">Reason</div>
+            </th>
+            <th class="">
+              <div class="flex items-center justify-between">From - To</div>
+            </th>
+            <th class="">
+              <div class="flex items-center justify-between">Total Leave(Days)</div>
+            </th>
+            <th class="">
+              <div class="flex items-center justify-between">Hours</div>
+            </th>
+            <th class="">
+              <div class="flex items-center justify-between">Paid/UnPaid</div>
+            </th>
+            <th class="">
+              <div class="flex items-center justify-between">Status</div>
+            </th>
+            <th class="">
+              <div class="flex items-center justify-between">Approval Notes</div>
+            </th>
+            <th class="">
+              <div class="flex items-center justify-between">Requested Date</div>
+            </th>
+          </tr>
+        </thead>
+        <tbody class="text-sm bg-white divide-y divide-gray-200">
+          <tr *ngFor="let leave of leaves; let leaveIndex = index">
+            <td>
+              <div class="relative grid place-items-center">{{ leaveIndex + 1 }}</div>
+            </td>
+            <td class="font-semibold text-xs text-gray-500">
+              <ng-container *ngIf="leave.type === 'pto'">Paid Time Off</ng-container>
+              <ng-container *ngIf="leave.type === 'uto'">Unpaid Time Off</ng-container>
+              <ng-container *ngIf="leave.type === 'sl'">Sick</ng-container>
+              <ng-container *ngIf="leave.type === 'el'">Emergency</ng-container>
+              <ng-container *ngIf="leave.type === 'bl'">Birthday</ng-container>
+              <ng-container *ngIf="leave.type === 'ml'">Maternity</ng-container>
+              <ng-container *ngIf="leave.type === 'pl'">Paternity</ng-container>
+              <ng-container *ngIf="leave.type === 'other'">Other</ng-container>
+            </td>
+            <td class="font-normal text-xs text-gray-500">{{ leave.notes }}</td>
+            <td class="font-normal text-xs text-gray-500"
+              >{{ leave.dates.at(0).date | date: "MMM d, YYYY" }} → {{ leave.dates.at(leave.dates.length - 1).date | date: "MMM, d YYYY" }}</td
+            >
+            <td class="font-normal text-xs text-gray-500">{{ leave.totalDaysOfLeave }}</td>
+            <td class="font-normal text-xs text-gray-500">{{ leave.hours }}</td>
+            <td class="font-normal text-xs text-gray-500">{{ leave.payable }}</td>
+            <td class="flex">
+              <div class="px-1.5 text-xs grid place-items-center border border-success-400 text-success-500 bg-success-50 rounded-md" *ngIf="leave.status === 'approved'"
+                >Approved</div
+              >
+              <div class="px-1.5 text-xs grid place-items-center border border-error-400 text-error-500 bg-error-50 rounded-md" *ngIf="leave.status === 'rejected'">Rejected</div>
+              <div class="px-1.5 text-xs grid place-items-center border border-yellow-400 text-yellow-500 bg-yellow-50 rounded-md" *ngIf="leave.status === 'pending'">Pending</div>
+            </td>
+            <td class="font-normal text-xs text-gray-500">{{ leave.approvalNotes }}</td>
+            <td class="font-normal text-xs text-gray-500">{{ leave.createdAt | date: "MMM, d YYYY hh:mm a" }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<isms-manage-leave-modal #manageLeaveModal (on-saved)="loadData()"></isms-manage-leave-modal>

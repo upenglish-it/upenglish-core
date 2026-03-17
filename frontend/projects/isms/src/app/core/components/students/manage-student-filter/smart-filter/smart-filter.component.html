@@ -1,0 +1,73 @@
+<nz-drawer
+  [nzVisible]="showDrawer"
+  [nzWidth]="drawerWidth"
+  [nzTitle]="filterFormArray.length > 0 ? titleTemplate : null"
+  [nzFooter]="filterFormArray.length > 0 ? footerTemplate : null"
+  nzPlacement="right"
+  [nzClosable]="filterFormArray.length > 0 ? false : true"
+  [nzMaskClosable]="false"
+  (nzOnClose)="toggle()"
+  [nzMaskStyle]="{
+    'background-color': 'rgba(0, 0, 0, 0.10)',
+  }">
+  <ng-container *nzDrawerContent>
+    <div class="flex flex-col">
+      <!-- <pre>
+      {{ smartFilterFormGroup.value | json }}
+      </pre> -->
+
+      <isms-filter-item [filter-form-group]="smartFilterFormGroup"></isms-filter-item>
+
+      <!-- <ng-container *ngFor="let item of [0, 0, 0, 0, 0, 0, 0, 0]">
+        <div class="space-y-1.5 flex-1 border rounded-md p-4 relative">
+          <span class="text-error-500 absolute top-1 right-1 cursor-pointer hover:bg-error-200 w-5 h-5 grid place-items-center rounded-full bg-error-100">
+            <span class="ph ph-x text-xs"></span>
+          </span>
+          <label class="font-normal text-gray-600 text-xs">Gender</label>
+          <nz-select nzShowSearch class="w-full" [nzDropdownMatchSelectWidth]="false">
+            <nz-option nzLabel="Male" nzValue="male"></nz-option>
+            <nz-option nzLabel="Female" nzValue="female"></nz-option>
+          </nz-select>
+        </div>
+        <div class="flex justify-center items-center flex-col">
+          <div class="w-[1px] h-2.5 bg-gray-200"></div>
+          <div>
+            <span class="text-gray-400 text-xs py-0.5 px-1.5 rounded-full bg-gray-100">And</span>
+          </div>
+          <div class="w-[1px] h-2.5 bg-gray-200"></div>
+        </div>
+      </ng-container> -->
+
+      <!-- <div class="py-3">
+        <button nz-button nzBlock (click)="(1)">Add New Condition</button>
+        <nz-dropdown-menu #conditionsDropdownMenu="nzDropdownMenu">
+          <ul nz-menu nzSelectable>
+            <li nz-menu-item>Gender</li>
+            <li nz-menu-item>City</li>
+            <li nz-submenu nzTitle="Address">
+              <ul>
+                <li nz-menu-item>3rd menu item</li>
+                <li nz-menu-item>4th menu item</li>
+              </ul>
+            </li>
+            <li nz-menu-item>3rd menu item</li>
+            <li nz-menu-item nzDanger>4th danger item</li>
+          </ul>
+        </nz-dropdown-menu>
+      </div> -->
+    </div>
+  </ng-container>
+
+  <ng-template #titleTemplate>
+    <ng-container [formGroup]="smartFilterFormGroup">
+      <input type="text" placeholder="Title" class="w-full text-xs sm:text-sm py-1.5 sm:py-1 px-2 sm:px-1.5 text-gray-700 bg-white rounded-md outline-none ring-gray-200 focus:ring-1" formControlName="title" />
+    </ng-container>
+  </ng-template>
+  <ng-template #footerTemplate>
+    <div class="flex flex-col sm:flex-row gap-2 sm:space-x-2 sm:gap-0">
+      <button nz-button (click)="toggle()" nzBlock class="w-full sm:w-auto text-xs sm:text-sm">Close</button>
+      <button nz-button nzType="primary" (click)="onSubmit()" nzBlock *ngIf="smartFilterFormGroup.value._id" [disabled]="smartFilterFormGroup.invalid" class="w-full sm:w-auto text-xs sm:text-sm">Save Changes</button>
+      <button nz-button nzType="primary" (click)="onSubmit()" nzBlock *ngIf="!smartFilterFormGroup.value._id" [disabled]="smartFilterFormGroup.invalid" class="w-full sm:w-auto text-xs sm:text-sm">Submit</button>
+    </div>
+  </ng-template>
+</nz-drawer>

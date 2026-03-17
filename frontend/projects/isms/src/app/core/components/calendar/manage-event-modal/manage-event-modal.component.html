@@ -1,0 +1,101 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  [nzWidth]="'600px'"
+  [nzTitle]="titleTemplate"
+  [nzFooter]="footerTemplate"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <form class="px-4 py-3 flex-col max-h-[700px] space-y-4 flex-1 flex overflow-auto mini-scroll-bar min-h-fit" [formGroup]="eventFormGroup">
+      <div class="space-y-1.5 flex-1">
+        <label class="font-medium text-gray-600 text-xs">Calendar</label>
+        <div class="flex space-x-3 items-center">
+          <nz-select formControlName="integrationId" class="w-full" nzPlaceHolder="Select here" [nzDropdownMatchSelectWidth]="false" [nzDisabled]="eventFormGroup.value._id">
+            <nz-option
+              *ngFor="let integration of integrations"
+              [nzLabel]="integration.data.info.mail || integration.data.info.userPrincipalName"
+              [nzValue]="integration._id"></nz-option>
+          </nz-select>
+          <span class="ph-duotone ph-arrow-fat-line-right text-base text-gray-500"></span>
+          <nz-select formControlName="calendarId" class="w-full" nzPlaceHolder="Select here" [nzDropdownMatchSelectWidth]="false" [nzDisabled]="eventFormGroup.value._id">
+            <nz-option *ngFor="let calendar of calendars" [nzLabel]="calendar.data.name" [nzValue]="calendar._id"></nz-option>
+          </nz-select>
+        </div>
+        <ng-container *ngIf="eventFormGroup.get('integrationId').touched || eventFormGroup.get('integrationId').touched">
+          <p class="isms-error-message" *ngIf="eventFormGroup.get('integrationId').hasError('required') || eventFormGroup.get('integrationId').hasError('required')"
+            >Calendar is required</p
+          >
+        </ng-container>
+      </div>
+
+      <div class="space-y-1.5 flex-1">
+        <label class="font-medium text-gray-600 text-xs required">Title</label>
+        <input nz-input placeholder="Ex. Teacher's meeting" formControlName="title" />
+        <ng-container *ngIf="eventFormGroup.get('title').touched">
+          <p class="isms-error-message" *ngIf="eventFormGroup.get('title').hasError('required')">Title is required</p>
+        </ng-container>
+      </div>
+
+      <!-- <div class="space-y-1.5 flex flex-col">
+        <label class="font-medium text-gray-600 text-xs required">Organizer</label>
+        {{ eventFormGroup.value.organizer | json }}
+        <div class="py-2 bg-isms-50 rounded-md text-isms-500 text-center font-medium text-sm">{{ eventFormGroup.value.organizer.name }} - {{ eventFormGroup.value.organizer.emailAddress }}</div>
+      </div> -->
+
+      <div class="space-y-1.5 flex flex-col">
+        <label class="font-medium text-gray-600 text-xs required">Attendees</label>
+        <isms-members-selector [attendees-form-array]="attendeesFormArray"></isms-members-selector>
+      </div>
+
+      <div class="space-y-1.5 flex flex-col">
+        <label class="font-medium text-gray-600 text-xs required">Schedule</label>
+        <isms-schedule-selector [form-group]="scheduleFormGroup"></isms-schedule-selector>
+      </div>
+
+      <div class="space-y-1.5 flex-1">
+        <label class="font-medium text-gray-600 text-xs required">Location</label>
+        <div class="w-full">
+          <nz-input-group [nzPrefix]="searchPrefixTemplate" class="space-x-1.5">
+            <input nz-input placeholder="Add location" nzShape="round" formControlName="location" />
+          </nz-input-group>
+          <ng-template #searchPrefixTemplate>
+            <span class="text-base cursor-pointer text-gray-400 ph-duotone ph-map-pin"></span>
+          </ng-template>
+        </div>
+        <ng-container *ngIf="eventFormGroup.get('location').touched">
+          <p class="isms-error-message" *ngIf="eventFormGroup.get('location').hasError('required')">Location is required</p>
+        </ng-container>
+      </div>
+
+      <div class="space-y-1.5 flex flex-col">
+        <label class="font-medium text-gray-600 text-xs required">Description</label>
+        <tinymce [config]="{ height: 120 }" formControlName="description"></tinymce>
+        <ng-container *ngIf="eventFormGroup.get('description').touched">
+          <p class="isms-error-message" *ngIf="eventFormGroup.get('description').hasError('required')">Description is required</p>
+        </ng-container>
+      </div>
+    </form>
+  </ng-container>
+  <ng-template #titleTemplate>Create New Event</ng-template>
+  <ng-template #footerTemplate>
+    <div class="flex items-center justify-between">
+      <button
+        nz-button
+        nzDanger
+        [nzLoading]="deleteLoading"
+        nz-popconfirm
+        nzPopconfirmTitle="Do you want to delete this event?"
+        nzPopconfirmPlacement="bottom"
+        (nzOnConfirm)="onDelete()">
+        Delete event
+      </button>
+      <div class="space-x-2 flex items-center justify-end">
+        <button nz-button (click)="toggle()">Close</button>
+        <button nz-button nzType="primary" (click)="onSubmit()" [disabled]="eventFormGroup.invalid" [nzLoading]="submitLoading">
+          {{ eventFormGroup.value._id ? "Save Changes" : "Create Event" }}
+        </button>
+      </div>
+    </div>
+  </ng-template>
+</nz-modal>

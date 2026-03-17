@@ -1,0 +1,232 @@
+<div class="flex-1 h-[calc(100vh-55px)] flex flex-col bg-isms-sub-navigation">
+  <div class="flex-1 overflow-auto mini-scroll-bar p-3 md:p-4">
+    <div class="bg-white rounded-md flex-1 flex flex-col lg:flex-row border border-gray-200 shadow-md">
+      <div class="w-full lg:w-80 flex flex-col border-b border-gray-200 lg:border-b-0 lg:border-r">
+        <!-- <div class="border-b px-2 py-3 flex flex-col border-b-gray-200">
+          <button nz-button nzType="primary" nzShape="circle">
+            <span nz-icon nzType="plus"></span>
+          </button>
+        </div> -->
+
+        <ng-container *ngIf="!categoryFormGroup">
+          <div class="px-2 py-2">
+            <a nz-button nzType="link" nzBlock (click)="onAddCategory()">Add new question</a>
+          </div>
+        </ng-container>
+
+        <ng-container *ngIf="categoryFormGroup" [formGroup]="categoryFormGroup">
+          <div class="overflow-auto flex-1 mini-scroll-bar">
+            <ul class="last:border-b-0">
+              <ng-container *ngFor="let category of categoriesFormArray.value; let categoryIndex = index">
+                <li
+                  class="p-2 border-b items-center flex w-full border-b-gray-100 cursor-pointer hover:bg-gray-100 justify-between"
+                  (click)="onSelectCategory(categoryIndex)"
+                  [ngClass]="{ 'bg-gray-100': taskFormGroup.value.editing.categoryIndex === categoryIndex }">
+                  <div class="flex items-center space-x-2 w-full truncate">
+                    <span class="text-gray-500 font-semibold text-sm">{{ categoryIndex + 1 }}.</span>
+                    <span class="text-gray-500 font-medium text-xs truncate" *ngIf="category.title">{{ category.title }}</span>
+                    <span class="text-gray-500 italic font-normal text-xs truncate px-1" *ngIf="!category.title">Untitled Question</span>
+                  </div>
+                  <div class="flex items-center space-x-1">
+                    <nz-tag>{{ category.questions.length }}</nz-tag>
+                    <nz-tag [nzColor]="'#87d068'" *ngIf="category.points">{{ category.points }}</nz-tag>
+                    <button nz-button nzSize="small" nzShape="circle" nz-dropdown [nzDropdownMenu]="optionsMenu">
+                      <span nz-icon nzType="ellipsis"></span>
+                    </button>
+                    <nz-dropdown-menu #optionsMenu="nzDropdownMenu">
+                      <ul nz-menu nzSelectable>
+                        <li nz-menu-item *ngIf="categoryIndex > 0" (click)="onMoveCategory(-1, categoryIndex)">Move Up</li>
+                        <li nz-menu-item *ngIf="categoryIndex < categoriesFormArray.value.length - 1" (click)="onMoveCategory(1, categoryIndex)">Move Down</li>
+                        <li
+                          nz-menu-item
+                          nzDanger
+                          nz-popconfirm
+                          nzPopconfirmTitle="Delete this category?"
+                          (nzOnConfirm)="onRemoveCategory(categoryIndex)"
+                          nzPopconfirmPlacement="top"
+                          >Delete</li
+                        >
+                      </ul>
+                    </nz-dropdown-menu>
+                  </div>
+                </li>
+              </ng-container>
+            </ul>
+          </div>
+          <div class="border-t px-2 py-2">
+            <a nz-button nzType="link" nzBlock (click)="onAddCategory()">
+              Add new question
+              <span nz-icon nzType="plus"></span>
+            </a>
+          </div>
+        </ng-container>
+      </div>
+
+      <div class="flex-1 flex flex-col min-w-0">
+        <ng-container *ngIf="!categoryFormGroup">
+          <div class="p-12">
+            <nz-empty nzNotFoundContent="No available questions"></nz-empty>
+          </div>
+        </ng-container>
+        <ng-container *ngIf="categoryFormGroup" [formGroup]="categoryFormGroup">
+          <div class="border-b py-2 md:py-3 flex flex-row md:items-center gap-2 md:gap-0 pr-3">
+            <input type="text" class="font-medium text-xs px-4 outline-none w-full" placeholder="Type Question Title" formControlName="title" />
+            <nz-input-number formControlName="points" style="width: 200px" [nzMin]="1" nzPlaceHolder="Enter question points" [nzStep]="1"></nz-input-number>
+          </div>
+          <div class="p-3 md:p-4 overflow-auto flex-1 mini-scroll-bar">
+            <div class="flex-col flex space-y-4">
+              <ng-container *ngFor="let questionFormGroup of questionsFormArray.controls; let questionIndex = index">
+                <div [formGroup]="toFormGroup(questionFormGroup)" class="rounded-md shadow-xs border">
+                  <div class="pl-3 pr-2 py-2 flex items-center space-x-2">
+                    <input type="text" class="font-medium text-xs outline-none w-full" placeholder="Type the command here" formControlName="title" />
+                    <!-- <span class="font-medium text-xs outline-none w-full">Question {{ questionIndex + 1 }}</span> -->
+                    <nz-select [nzDropdownMatchSelectWidth]="false" class="w-32" formControlName="type">
+                      <nz-option nzLabel="Fill In" nzValue="fill-in"></nz-option>
+                      <nz-option nzLabel="Choices" nzValue="choices"></nz-option>
+                    </nz-select>
+                    <button nz-button nzShape="circle" nzSize="small" nzType="text" (click)="questionFormGroup.get('expand').setValue(!questionFormGroup.get('expand').value)">
+                      <span nz-icon [nzType]="questionFormGroup.get('expand').value ? 'up' : 'down'"></span>
+                    </button>
+                  </div>
+                  <div class="flex-col flex p-4 border-t space-y-4 transition-all" [class.hidden]="!questionFormGroup.get('expand').value">
+                    <div class="space-y-1.5">
+                      <!-- <label class="isms-label-left isms-required">Description</label> -->
+                      <div>
+                        <tinymce [config]="{ height: '300px' }" [loading]="tinyMCELoading" placeholder="Type the description here" formControlName="description"></tinymce>
+                        <ng-template #tinyMCELoading>
+                          <div class="p-4 space-x-2 justify-center flex items-center rounded-md">
+                            <span class="ph text-lg text-gray-500 ph-spinner-gap animate-spin"></span>
+                            <h3 class="text-center mb-0 text-gray-400">Loading please wait</h3>
+                          </div>
+                        </ng-template>
+                      </div>
+                      <ng-container *ngIf="toFormGroup(questionFormGroup).get('description').touched">
+                        <p class="hc-error-message" *ngIf="toFormGroup(questionFormGroup).get('description').hasError('required')">Description is required</p>
+                      </ng-container>
+                    </div>
+
+                    <ng-container *ngIf="questionFormGroup.value.type === 'fill-in'">
+                      <div class="space-y-1.5 flex flex-col">
+                        <div class="flex flex-col md:flex-row md:items-center gap-3">
+                          <label class="font-normal text-gray-600 text-xs isms-required">Keypoints of the Answer</label>
+                          <div>
+                            <nz-select nzPlaceHolder="Select here" nzSize="small" formControlName="check" [nzDropdownMatchSelectWidth]="false">
+                              <nz-option nzLabel="Manually check by teacher" nzValue="none"></nz-option>
+                              <nz-option nzLabel="AI - Short Answers (Lis-Red-Gra-Vocab)" nzValue="short-answer"></nz-option>
+                              <nz-option nzLabel="AI - Long answers (Paragraph-Email-Essay...)" nzValue="long-answer"></nz-option>
+                              <nz-option nzLabel="AI - Gra&Vocab check" nzValue="grammar-vocab-check"></nz-option>
+                            </nz-select>
+                          </div>
+                        </div>
+
+                        <textarea formControlName="originalAnswer" nz-input [nzAutosize]="{ minRows: 5, maxRows: 20 }" placeholder="Type here"></textarea>
+                        <ng-container *ngIf="questionFormGroup.get('originalAnswer').touched">
+                          <p class="isms-error-message" *ngIf="questionFormGroup.get('originalAnswer').hasError('required')">Message is required</p>
+                        </ng-container>
+                      </div>
+                    </ng-container>
+
+                    <!-- <pre>
+                      {{ questionFormGroup.value | json }}
+                        </pre
+                    > -->
+
+                    <ng-container *ngIf="questionFormGroup.value.type === 'choices'">
+                      <div class="space-y-2 flex flex-col">
+                        <div class="flex flex-col space-y-1.5">
+                          <ng-container *ngFor="let choiceFormGroup of choiceFormArray(questionIndex).controls; let choiceIndex = index">
+                            <div class="flex items-center px-2 py-2 space-x-3 border rounded-md">
+                              <ng-container [formGroup]="toFormGroup(choiceFormGroup)">
+                                <!-- <span class="text-gray-400 cursor-pointer ph ph-dots-six-vertical"></span> -->
+                                <div class="flex items-center space-x-1">
+                                  <button nz-button nzSize="small" nzShape="circle" nz-dropdown [nzDropdownMenu]="optionsMenu">
+                                    <span nz-icon nzType="ellipsis"></span>
+                                  </button>
+                                  <nz-dropdown-menu #optionsMenu="nzDropdownMenu">
+                                    <ul nz-menu nzSelectable>
+                                      <li nz-menu-item>Move Up</li>
+                                      <li nz-menu-item>Move Down</li>
+                                      <li
+                                        nz-menu-item
+                                        nzDanger
+                                        nz-popconfirm
+                                        nzPopconfirmTitle="Delete this choice?"
+                                        (nzOnConfirm)="choiceFormArray(questionIndex).removeAt(choiceIndex)"
+                                        nzPopconfirmPlacement="top">
+                                        Delete
+                                      </li>
+                                    </ul>
+                                  </nz-dropdown-menu>
+                                </div>
+                                <span class="font-medium text-isms-500">({{ alphabet[choiceIndex] }})</span>
+                                <!-- <input type="text" placeholder="Type here" class="flex-1 outline-none py-1 rounded-md" formControlName="value" /> -->
+                                <div class="flex-1 outline-none py-1 rounded-md no-styles" contenteditable formControlName="value"></div>
+                                <ng-container>
+                                  <ng-container *ngIf="originalAnswer(choiceFormGroup.value.id, questionFormGroup.value.originalAnswer)">
+                                    <button class="bg-success-500 text-white p-1 px-1.5 rounded-md flex items-center space-x-2">
+                                      <span> Correct Answer </span>
+                                      <span nz-icon nzType="check-circle" nzTheme="fill"></span>
+                                    </button>
+                                  </ng-container>
+                                  <ng-container *ngIf="!originalAnswer(choiceFormGroup.value.id, questionFormGroup.value.originalAnswer)">
+                                    <button nz-button nzType="primary" nzGhost nzSize="small" (click)="questionFormGroup.get('originalAnswer').setValue(choiceFormGroup.value.id)">
+                                      Mark As Correct Answer
+                                      <span nz-icon nzType="check-circle"></span>
+                                    </button>
+                                  </ng-container>
+                                </ng-container>
+                                <!-- <span class="text-gray-400 cursor-pointer ph ph-trash hover:text-red-500" (click)="(1)"></span> -->
+                              </ng-container>
+                            </div>
+                          </ng-container>
+                          <div class="w-full">
+                            <button nz-button nzType="primary" nzGhost nzDanger nzSize="small" (click)="onAddChoice(questionIndex)">
+                              Add Choice
+                              <span nz-icon nzType="plus"></span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </ng-container>
+
+                    <div class="w-full pt-4">
+                      <button
+                        nz-button
+                        nzType="primary"
+                        nzGhost
+                        nzDanger
+                        nzShape="circle"
+                        nz-popconfirm
+                        nzPopconfirmTitle="Remove this question?"
+                        (nzOnConfirm)="questionsFormArray.removeAt(questionIndex)"
+                        nzPopconfirmPlacement="top">
+                        <span nz-icon nzType="delete" nzTheme="fill"></span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </ng-container>
+
+              <div class="w-full pt-4">
+                <button
+                  nz-button
+                  nzType="primary"
+                  nzSize="small"
+                  nzGhost
+                  (click)="onAddQuestion()"
+                  *ngIf="taskFormGroup.value.generalInfo.type === 'homework' && questionsFormArray.length <= 0">
+                  Add variation
+                  <span nz-icon nzType="plus"></span>
+                </button>
+                <button nz-button nzType="primary" nzSize="small" nzGhost (click)="onAddQuestion()" *ngIf="taskFormGroup.value.generalInfo.type === 'challenge'">
+                  Add variation
+                  <span nz-icon nzType="plus"></span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+      </div>
+    </div>
+  </div>
+</div>

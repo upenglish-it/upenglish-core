@@ -1,0 +1,211 @@
+<div class="flex flex-col sm:flex-row gap-2 sm:space-x-2 w-full">
+  <button
+    nz-button
+    (click)="popoverVisible = true"
+    class="flex space-x-2 items-center w-full sm:w-auto"
+    nz-popover
+    nzType="primary"
+    nzPopoverTrigger="click"
+    [nzPopoverPlacement]="'bottomLeft'"
+    [nzPopoverContent]="groupingAndSmartFilterContentTemplate"
+    [nzPopoverVisible]="popoverVisible">
+    <span nz-icon nzType="pic-left" nzTheme="outline"></span>
+    <span class="text-xs sm:text-sm"> Categorization & Filter </span>
+  </button>
+
+  <nz-button-group *ngIf="studentIds.length" class="w-full sm:w-auto">
+    <button nz-button (click)="addTags.toggle()" class="flex-1 sm:flex-none">
+      <div class="flex items-center space-x-1 sm:space-x-2">
+        <span class="text-xs sm:text-sm">Add Tags</span>
+        <i class="text-xs sm:text-sm ph-tag ph-duotone"></i>
+      </div>
+    </button>
+    <button nz-button (click)="addSources.toggle()" class="flex-1 sm:flex-none">
+      <div class="flex items-center space-x-1 sm:space-x-2">
+        <span class="text-xs sm:text-sm">Add Sources</span>
+        <i class="text-xs sm:text-sm ph-webhooks-logo ph-duotone"></i>
+      </div>
+    </button>
+    <!-- <button nz-button (click)="(1)">
+      <div class="flex items-center space-x-2">
+        <span>Set To Active</span>
+        <i class="text-sm ph-minus ph"></i>
+      </div>
+    </button>
+    <button nz-button (click)="(1)">
+      <div class="flex items-center space-x-2">
+        <span>Set To InActive</span>
+        <i class="text-sm ph-minus ph"></i>
+      </div>
+    </button> -->
+  </nz-button-group>
+</div>
+
+<!-- [nzPopoverTitle]="groupingAndSmartFilterTitleTemplate" -->
+
+<ng-template #groupingAndSmartFilterTitleTemplate>
+  <div class="py-2">
+    <isms-segmented-selector [options]="groupingAndSmartFilterSegment" [current-index]="segmentIndex" (on-changed)="onChangeSegmentSelector($event)"> </isms-segmented-selector>
+  </div>
+</ng-template>
+<ng-template #groupingAndSmartFilterContentTemplate>
+  <div class="flex flex-col space-y-2 md:space-y-3 w-[calc(100vw-2rem)] sm:w-[420px] max-w-[420px]">
+    <!-- <div class="w-full">
+      <nz-input-group [nzPrefix]="searchPrefixTemplate" [nzSuffix]="searchSuffixTemplate" class="space-x-1.5">
+        <input nz-input placeholder="Search for: Name " nzShape="round" />
+      </nz-input-group>
+      <ng-template #searchPrefixTemplate>
+        <span class="text-base cursor-pointer text-gray-400 ph ph-magnifying-glass"></span>
+      </ng-template>
+      <ng-template #searchSuffixTemplate>
+        <span nz-icon class="ant-input-clear-icon" nzTheme="fill" nzType="close-circle"></span>
+      </ng-template>
+    </div> -->
+
+    <!-- Classes -->
+    <ng-container *ngIf="segmentIndex === 0001">
+      <div class="w-full overflow-auto mini-scroll-bar space-y-1 select-none" style="max-height: 400px">
+        <div class="space-y-2 border p-2 md:p-3 rounded-md" *ngFor="let filterName of ['ENG001', 'ENG002', 'ENG003']">
+          <div class="flex items-center justify-between gap-2">
+            <label nz-checkbox nzValue="A" class="flex-1 min-w-0">
+              <div class="flex items-center space-x-1 md:space-x-2 min-w-0">
+                <span class="text-xs md:text-sm text-gray-500 font-medium truncate">{{ filterName }}</span>
+                <span class="text-xs md:text-sm font-medium text-gray-500 flex-shrink-0">(3)</span>
+              </div>
+            </label>
+            <div class="flex items-center space-x-2 md:space-x-3 flex-shrink-0">
+              <span class="text-xs md:text-sm text-isms-500 cursor-pointer whitespace-nowrap" (click)="$event.stopPropagation()">Configure</span>
+              <span class="text-gray-600 ph cursor-pointer text-sm md:text-base" (click)="showGrouping = !showGrouping" [class.ph-caret-down]="!showGrouping" [class.ph-caret-up]="showGrouping"></span>
+            </div>
+          </div>
+          <nz-checkbox-wrapper class="w-full" (nzOnChange)="groupingChange($event)" *ngIf="showGrouping" [@default]>
+            <div class="flex flex-col space-y-2 pl-4 md:pl-6">
+              <div *ngFor="let item of ['Rejected In Javascript', 'Newly Applied', 'No Response', 'Not Fit in Javascript']">
+                <label nz-checkbox nzValue="A">
+                  <span class="w-full text-xs md:text-sm text-gray-500 truncate"> {{ item }} </span>
+                </label>
+              </div>
+            </div>
+          </nz-checkbox-wrapper>
+        </div>
+      </div>
+    </ng-container>
+
+    <!-- Courses -->
+    <ng-container *ngIf="segmentIndex === 111">
+      <div class="w-full overflow-auto mini-scroll-bar space-y-1 select-none" style="max-height: 400px">
+        <div class="space-y-2 border p-2 md:p-3 rounded-md" *ngFor="let filterName of ['ENG001', 'ENG002', 'ENG003']">
+          <div class="flex items-center justify-between gap-2">
+            <label nz-checkbox nzValue="A" class="flex-1 min-w-0">
+              <div class="flex items-center space-x-1 md:space-x-2 min-w-0">
+                <span class="text-xs md:text-sm text-gray-500 font-medium truncate">{{ filterName }}</span>
+                <span class="text-xs md:text-sm font-medium text-gray-500 flex-shrink-0">(3)</span>
+              </div>
+            </label>
+            <div class="flex items-center space-x-2 md:space-x-3 flex-shrink-0">
+              <span class="text-xs md:text-sm text-isms-500 cursor-pointer whitespace-nowrap" (click)="$event.stopPropagation()">Configure</span>
+              <span class="text-gray-600 ph cursor-pointer text-sm md:text-base" (click)="showGrouping = !showGrouping" [class.ph-caret-down]="!showGrouping" [class.ph-caret-up]="showGrouping"></span>
+            </div>
+          </div>
+          <nz-checkbox-wrapper class="w-full" (nzOnChange)="groupingChange($event)" *ngIf="showGrouping" [@default]>
+            <div class="flex flex-col space-y-2 pl-4 md:pl-6">
+              <div *ngFor="let item of ['Rejected In Javascript', 'Newly Applied', 'No Response', 'Not Fit in Javascript']">
+                <label nz-checkbox nzValue="A">
+                  <span class="w-full text-xs md:text-sm text-gray-500 truncate"> {{ item }} </span>
+                </label>
+              </div>
+            </div>
+          </nz-checkbox-wrapper>
+        </div>
+      </div>
+    </ng-container>
+
+    <!-- Group -->
+    <ng-container *ngIf="segmentIndex === 222">
+      <div class="w-full overflow-auto mini-scroll-bar space-y-1 select-none" style="max-height: 400px">
+        <div class="space-y-2 border p-2 md:p-3 rounded-md" *ngFor="let group of groups">
+          <div class="flex items-center justify-between gap-2">
+            <!-- <div class="flex items-center space-x-2">
+            <span class="text-gray-500 font-medium">Students From Linkedin</span>
+            <span class="font-medium text-gray-500">(3)</span>
+          </div> -->
+
+            <label nz-checkbox nzValue="A" class="flex-1 min-w-0">
+              <div class="flex items-center space-x-1 md:space-x-2 min-w-0">
+                <span class="text-xs md:text-sm text-gray-500 font-medium truncate">{{ group.name }}</span>
+                <span class="text-xs md:text-sm font-medium text-gray-500 flex-shrink-0">({{ group.subGroup.length }})</span>
+              </div>
+            </label>
+
+            <div class="flex items-center space-x-2 md:space-x-3 flex-shrink-0">
+              <span class="text-xs md:text-sm text-isms-500 cursor-pointer whitespace-nowrap" (click)="$event.stopPropagation(); popoverVisible = false; onConfigure(group)"> Configure </span>
+              <span class="text-gray-600 ph cursor-pointer text-sm md:text-base" (click)="group.expand = !group.expand" [class.ph-caret-down]="!group.expand" [class.ph-caret-up]="group.expand"></span>
+            </div>
+          </div>
+          <nz-checkbox-wrapper class="w-full" (nzOnChange)="groupingChange($event)" *ngIf="group.expand && group.subGroup.length > 0" [@default]>
+            <div class="flex flex-col space-y-2 pl-4 md:pl-6">
+              <div *ngFor="let sg of group.subGroup">
+                <label nz-checkbox nzValue="A" class="w-full">
+                  <span class="w-full text-xs md:text-sm text-gray-500 truncate"> {{ sg.name }} </span>
+                  <span class="text-xs md:text-sm font-medium text-gray-500 flex-shrink-0">({{ sg.leads.length }})</span>
+                </label>
+              </div>
+            </div>
+          </nz-checkbox-wrapper>
+        </div>
+
+        <!-- <div class="space-y-2">
+          <div class="flex items-center justify-between cursor-pointer" (click)="showSmartFilter = !showSmartFilter">
+            <span class="text-gray-600 font-medium">Students From Facebook</span>
+            <span class="text-gray-600 ph ph-caret-down pr-4"></span>
+          </div>
+          <nz-checkbox-wrapper class="w-full" (nzOnChange)="groupingChange($event)" *ngIf="showSmartFilter" [@default]>
+            <div class="flex flex-col space-y-2">
+              <div
+                *ngFor="let item of ['Engineering', 'HR Specialist', 'IT Support', 'Assistant Manager']"
+                class="text-gray-600"
+              >
+                <label nz-checkbox nzValue="A">
+                  <span class="w-full text-gray-500"> {{ item }} </span>
+                  <span class="font-medium text-gray-500">(3)</span>
+                </label>
+              </div>
+            </div>
+          </nz-checkbox-wrapper>
+        </div> -->
+      </div>
+
+      <div class="p-1 md:p-2 grid place-items-center">
+        <a class="text-xs md:text-sm text-isms-500" nz-button nzType="link" (click)="popoverVisible = false; group.toggle()"> Create New Group </a>
+      </div>
+    </ng-container>
+
+    <!-- Smart Filter -->
+    <ng-container *ngIf="segmentIndex === 0">
+      <div class="w-full overflow-auto mini-scroll-bar space-y-1 select-none" style="max-height: 400px">
+        <div class="space-y-2 border p-2 md:p-3 rounded-md" *ngFor="let filter of smartFilterStudents">
+          <div class="flex items-center justify-between gap-2">
+            <label nz-checkbox [nzValue]="filter._id" [(ngModel)]="filter.selected" (nzCheckedChange)="onSmartCheckChange($event, filter._id)" class="flex-1 min-w-0">
+              <div class="flex items-center space-x-1 md:space-x-2 min-w-0">
+                <span class="text-xs md:text-sm text-gray-500 font-medium truncate">{{ filter.title }}</span>
+              </div>
+            </label>
+            <div class="flex items-center space-x-2 md:space-x-3 flex-shrink-0">
+              <a class="text-xs md:text-sm text-isms-500 whitespace-nowrap" (click)="$event.stopPropagation(); popoverVisible = false; onConfigureSmartFilter(filter)">Configure</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-1 md:p-2 grid place-items-center">
+        <a class="text-xs md:text-sm text-isms-500" nz-button nzType="link" (click)="popoverVisible = false; smartFilter.smartFilterId = null; smartFilter.toggle()">Create New Filter</a>
+      </div>
+    </ng-container>
+  </div>
+</ng-template>
+
+<isms-group [form-group]="groupFormGroup" #group></isms-group>
+<isms-smart-filter #smartFilter (on-saved)="loadSmartFilterData()"></isms-smart-filter>
+
+<isms-add-tags #addTags [student-ids]="studentIds"></isms-add-tags>
+<isms-add-sources #addSources [student-ids]="studentIds"></isms-add-sources>

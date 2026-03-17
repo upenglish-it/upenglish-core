@@ -1,0 +1,38 @@
+<div class="w-full">
+  <ng-container [formGroup]="filterFormGroup">
+    <!-- Status -->
+    <ng-container *ngIf="filterFormGroup.value.parameter.value === 'student/status'">
+      <nz-select nzPlaceHolder="Select status" class="value" formControlName="value" nzShowSearch [compareWith]="compareValue">
+        <nz-option *ngFor="let value of statusValues" [nzValue]="value" [nzLabel]="value.name"></nz-option>
+      </nz-select>
+    </ng-container>
+
+    <ng-container *ngIf="filterFormGroup.value.parameter.value === 'student/country'">
+      <nz-select nzPlaceHolder="Select country" class="value" formControlName="value" nzShowSearch [compareWith]="compareValue">
+        <nz-option *ngFor="let value of countryValues" [nzValue]="value" [nzLabel]="value.name"></nz-option>
+      </nz-select>
+    </ng-container>
+
+    <ng-container *ngIf="filterFormGroup.value.parameter.value === 'student/gender'">
+      <nz-select nzPlaceHolder="Select gender" class="value" formControlName="value" nzShowSearch [compareWith]="compareValue">
+        <nz-option *ngFor="let value of genderValues" [nzValue]="value" [nzLabel]="value.name"></nz-option>
+      </nz-select>
+    </ng-container>
+
+    <ng-container *ngIf="filterFormGroup.value.parameter.value === 'student/age'">
+      <input nz-input numberOnly placeholder="Type here" formControlName="value" />
+    </ng-container>
+
+    <ng-container *ngIf="filterFormGroup.value.parameter.value === 'student/branch'">
+      <nz-select nzPlaceHolder="Select branches" class="value" nzMode="multiple" formControlName="value" nzShowSearch>
+        <nz-option *ngFor="let value of branchValues" [nzValue]="value.value" [nzLabel]="value.name" [nzHide]="hideSelectedBranch(value.value)"></nz-option>
+      </nz-select>
+    </ng-container>
+
+    <ng-container *ngIf="filterFormGroup.value.parameter.value === 'student/lead'">
+      <nz-select nzPlaceHolder="Select leads" class="value" formControlName="value" nzShowSearch>
+        <nz-option *ngFor="let value of leadsValues" [nzValue]="value.value" [nzLabel]="value.name"></nz-option>
+      </nz-select>
+    </ng-container>
+  </ng-container>
+</div>

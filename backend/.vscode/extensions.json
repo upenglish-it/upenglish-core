@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "streetsidesoftware.code-spell-checker",
+    "oderwat.indent-rainbow",
+    "pranaygp.vscode-css-peek",
+    "vincaslt.highlight-matching-tag"
+  ],
+  "unwantedRecommendations": []
+}

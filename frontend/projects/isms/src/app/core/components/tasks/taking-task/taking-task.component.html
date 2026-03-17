@@ -1,0 +1,230 @@
+<nz-spin nzTip="Submitting your answer. Please wait..." [nzSpinning]="submittingParticipantAnswer">
+  <div class="h-screen flex flex-col">
+    <div class="flex items-center justify-between h-20 lg:h-auto py-4 sm:gap-3 px-5 relative sm:flex-col">
+      <div class="flex flex-1 space-x-2 items-center relative z-10">
+        <button nz-button nzType="default" nzShape="circle" routerLink="/i/tasks">
+          <span nz-icon nzType="arrow-left"></span>
+        </button>
+        <div class="flex flex-col justify-between space-y-1">
+          <div class="flex items-center space-x-2" *ngIf="taskFormGroup">
+            <h6 class="text-base mb-0 font-medium text-gray-700 cursor-pointer">{{ taskFormGroup.value.generalInfo.title || "" }}</h6>
+            <ng-container *ngIf="seeMoreTimer">
+              <nz-tag [nzColor]="'blue'" *ngIf="taskFormGroup.value.generalInfo.type === 'challenge'">Challenge</nz-tag>
+              <nz-tag [nzColor]="'orange'" *ngIf="taskFormGroup.value.generalInfo.type === 'homework'">Homework</nz-tag>
+            </ng-container>
+          </div>
+        </div>
+      </div>
+
+      <ng-container *ngIf="seeMoreTimer">
+        <div class="flex self-center sm:w-full items-center justify-center gap-4 top-0 right-0 bottom-0 left-0 z-40" id="timer-container">
+          <div class="flex items-center justify-center">
+            <nz-progress
+              [nzPercent]="(taskFormGroup.value.editing.categoryIndex + 1 / categoriesFormArray.value.length) * 100"
+              [nzFormat]="formatOne"
+              [nzStrokeColor]="{ '0%': '#58963d', '100%': '#87d068' }"
+              nzType="circle"
+              [nzWidth]="50"></nz-progress>
+          </div>
+
+          <div class="gap-2 items-center flex flex-col flex-1">
+            <a nz-button nzSize="small" nzType="primary" class="sm:block hidden" (click)="seeMoreTimer = !seeMoreTimer">{{ seeMoreTimer ? "Hide details" : "Show details" }}</a>
+            <a
+              nz-button
+              nzSize="small"
+              nzType="primary"
+              class="text-gray-700 items-center font-medium flex gap-2 relative z-50 cursor-pointer"
+              (click)="showDescriptionMode()"
+              *ngIf="seeMoreTimer">
+              <span>Refresh Content</span>
+              <i class="ph" [ngClass]="{ 'animate-spin ph-spinner-gap': !showDescription, 'ph-arrow-clockwise': showDescription }"></i>
+            </a>
+          </div>
+
+          <div class="flex items-center space-x-2 rounded-md py-2" *ngIf="taskFormGroup.value.generalInfo.type === 'challenge'">
+            <!-- <span class="ph-duotone ph-timer text-3xl text-gray-400"></span> -->
+            <div class="flex flex-col items-center">
+              <!-- <span class="text-gray-600">Remaining Countdown</span> -->
+              <div class="font-bold text-base text-isms-500 flex space-x-2">
+                <span translate="no">{{ timerText }}</span>
+                <!-- <span>seconds</span> -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </ng-container>
+
+      <ng-container *ngIf="!seeMoreTimer">
+        <div class="gap-3 items-center flex">
+          <a nz-button nzSize="small" nzType="primary" class="sm:block hidden" (click)="seeMoreTimer = !seeMoreTimer">{{ seeMoreTimer ? "Hide details" : "Show details" }}</a>
+          <a
+            nz-button
+            nzSize="small"
+            nzType="primary"
+            class="text-gray-700 items-center font-medium flex gap-2 relative z-50 cursor-pointer"
+            (click)="showDescriptionMode()"
+            *ngIf="seeMoreTimer">
+            <span>Refresh Content</span>
+            <i class="ph" [ngClass]="{ 'animate-spin ph-spinner-gap': !showDescription, 'ph-arrow-clockwise': showDescription }"></i>
+          </a>
+        </div>
+      </ng-container>
+    </div>
+    <div class="flex flex-1 flex-col border-t bg-white px-5">
+      <div class="space-y-4 flex flex-col" *ngIf="questionFormGroup" [formGroup]="questionFormGroup">
+        <div class="mt-4 w-fit">
+          <!-- <div class="font-bold text-base bg-isms-50 text-isms-400 p-4 border border-isms-200 rounded-md">{{ questionFormGroup.value.title }}</div> -->
+          <!-- pointer-events-none select-none-->
+          <div class="font-bold text-lg text-isms-400 rounded-md select-none" translate="no">{{ questionFormGroup.value.title }}</div>
+        </div>
+
+        <!-- class="select-none pointer-events-none" -->
+
+        <div class="empty:hidden" *ngIf="questionFormGroup.value.description && showDescription">
+          <tinymce
+            class="select-none"
+            tinymce-iframe-full-height
+            id="tinymce-custom-preview"
+            [disabled]="true"
+            readonly="true"
+            style="border: 0"
+            [config]="{
+              content_style:
+                'body { margin:0; font-size:12px; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; -moz-user-select: -moz-none; -webkit-user-select: none; -ms-user-select: none; user-select: none; }',
+              plugins: 'media',
+              menubar: false,
+              toolbar: false,
+              readonly: true,
+              media_live_embeds: true,
+              language: 'en',
+            }"
+            translate="no"
+            [ngModelOptions]="{ standalone: true }"
+            [(ngModel)]="questionFormGroup.value.description"
+            [loading]="tinyMCELoading"></tinymce>
+          <ng-template #tinyMCELoading>
+            <div class="p-4 space-x-2 justify-center flex items-center rounded-md">
+              <span class="ph text-lg text-gray-500 ph-spinner-gap animate-spin"></span>
+              <h3 class="text-center mb-0 text-gray-400">Loading content</h3>
+            </div>
+          </ng-template>
+        </div>
+
+        <div class="space-y-2 flex flex-col sticky bottom-[72px] bg-white border-t border-t-gray-300" *ngIf="questionFormGroup.value.type === 'fill-in'">
+          <div>
+            <nz-divider [nzText]="dividerTitleTemplate"></nz-divider>
+            <ng-template #dividerTitleTemplate>
+              <span class="font-bold text-lg text-isms-500">Write your answer</span>
+            </ng-template>
+          </div>
+          <div>
+            <textarea
+              class="py-3 px-4 border resize-none block w-full border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500"
+              rows="5"
+              placeholder="Write here..."
+              formControlName="attendeeAnswer"></textarea>
+            <!-- <tinymce [config]="participantRTinyMCEConfig" formControlName="attendeeAnswer" [loading]="tinyMCELoading"></tinymce>
+            <ng-template #tinyMCELoading>
+              <div class="p-4 space-x-2 justify-center flex items-center rounded-md">
+                <span class="ph text-lg text-gray-500 ph-spinner-gap animate-spin"></span>
+                <h3 class="text-center mb-0 text-gray-400">Loading content</h3>
+              </div>
+            </ng-template> -->
+          </div>
+        </div>
+
+        <ng-container *ngIf="questionFormGroup.value.type === 'choices'">
+          <div>
+            <nz-divider [nzText]="dividerTitleTemplate"></nz-divider>
+            <ng-template #dividerTitleTemplate>
+              <span class="font-bold text-lg text-isms-500">Choose your answer</span>
+            </ng-template>
+          </div>
+          <div class="w-full select-none" translate="no">
+            <ul class="flex flex-col space-y-2">
+              <li class="relative" *ngFor="let choice of questionFormGroup.value.choices; let choiceIndex = index">
+                <input class="sr-only peer" type="radio" formControlName="attendeeAnswer" [value]="choice.id" name="attendeeAnswer" [id]="choice.id" />
+                <label
+                  class="pr-8 flex px-5 py-4 bg-white border border-gray-300 rounded-lg cursor-pointer focus:outline-none hover:bg-gray-50 peer-checked:ring-isms-500 peer-checked:ring-2 peer-checked:border-transparent"
+                  [for]="choice.id">
+                  <span class="font-medium text-isms-500 mr-2">({{ alphabet[choiceIndex] }})</span>
+                  <!-- {{ choice.value }} -->
+                  <div [innerHTML]="choice.value"></div>
+                </label>
+                <div class="absolute hidden text-isms-500 w-5 h-5 peer-checked:block top-2 right-1">
+                  <span nz-icon nzType="check-circle" nzTheme="fill"></span>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </ng-container>
+      </div>
+    </div>
+
+    <ng-container *ngIf="questionFormGroup">
+      <!-- Mobile view -->
+      <div class="sticky bottom-0 hidden items-center justify-between px-4 flex-wrap gap-4 py-4 sm:flex bg-white">
+        <button nz-button nzType="primary" nzShape="round" nzSize="large" [disabled]="!(taskFormGroup.value.editing.categoryIndex >= 1)" (click)="onBack()">
+          <span nz-icon nzType="arrow-left" nzTheme="outline"></span>
+        </button>
+
+        <button nz-button nzType="primary" nzGhost nzShape="round" nzSize="large" (click)="submit()">End the test</button>
+
+        <button nz-button nzType="primary" nzShape="round" nzSize="large" (click)="onNext()">
+          <span nz-icon nzType="arrow-right" nzTheme="outline"></span>
+        </button>
+      </div>
+
+      <!-- Desktop View -->
+      <div class="sticky bottom-0 flex items-center justify-between px-4 flex-wrap gap-4 py-4 sm:hidden bg-white">
+        <button nz-button nzType="primary" nzShape="round" nzSize="large" [disabled]="!(taskFormGroup.value.editing.categoryIndex >= 1)" (click)="onBack()">
+          <span nz-icon nzType="arrow-left" nzTheme="outline"></span>
+          Previous Question
+        </button>
+
+        <button nz-button nzType="primary" nzGhost nzShape="round" nzSize="large" (click)="submit()">End the test</button>
+
+        <button nz-button nzType="primary" nzShape="round" nzSize="large" (click)="onNext()">
+          {{ taskFormGroup.value.editing.categoryIndex + 1 === categoriesFormArray.value.length ? "Submit" : "Next Question" }}
+          <span nz-icon nzType="arrow-right" nzTheme="outline"></span>
+        </button>
+      </div>
+    </ng-container>
+  </div>
+</nz-spin>
+
+<nz-modal
+  [(nzVisible)]="timesUpModal"
+  nzCentered
+  [nzTitle]="null"
+  [nzMaskClosable]="false"
+  [nzKeyboard]="false"
+  [nzClosable]="false"
+  [nzFooter]="null"
+  [nzWidth]="'550px'"
+  [nzBodyStyle]="{ padding: '0px' }"
+  [nzMaskStyle]="{ 'backdrop-filter': 'blur(15px)', 'background-color': 'rgb(82 76 76 / 55%)' }">
+  <!-- [nzCancelDisabled]="true"
+  [nzOkLoading]="true" -->
+  <ng-container *nzModalContent>
+    <div class="flex space-x-2">
+      <div class="flex flex-col space-y-4 text-center flex-1 px-4 pt-4 bg-gradient-to-b from-isms-100 rounded-md to-white" style="height: 450px">
+        <div class="h-12"></div>
+        <div class="w-24 h-24 bg-isms-200 rounded-full self-center border border-isms-300 text-isms-500 grid place-items-center">
+          <span class="ph-duotone ph-alarm text-5xl"></span>
+        </div>
+        <div class="flex flex-col space-y-2">
+          <span class="font-bold text-xl text-isms-500">Oops time is up!</span>
+        </div>
+        <div class="h-10"></div>
+        <div class="flex flex-col items-center space-y-4">
+          <button nz-button nzType="primary" [nzLoading]="loadingTimesUpButton" nzShape="round" nzSize="large" style="width: 300px" (click)="goToTaskResult()">
+            View Result
+            <span nz-icon nzType="arrow-right" nzTheme="outline"></span>
+          </button>
+          <button nz-button nzType="text" nzShape="round" (click)="close()">Close</button>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+</nz-modal>

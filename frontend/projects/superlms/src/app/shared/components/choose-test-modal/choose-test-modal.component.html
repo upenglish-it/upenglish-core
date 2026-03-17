@@ -1,0 +1,25 @@
+<nz-modal [(nzVisible)]="showModal" [nzWidth]="'500px'" nzTitle="Choose Test" [nzMaskClosable]="false" [nzClosable]="false" [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <form class="px-4 py-3 flex-col max-h-[500px] space-y-3 flex-1 flex overflow-auto mini-scroll-bar min-h-fit" [formGroup]="testFormGroup">
+      <div class="space-y-1.5 flex-1">
+        <label class="slms-label slms-required">Tests</label>
+        <nz-select formControlName="testId" nzShowSearch class="w-full" nzPlaceHolder="Select test" [nzDropdownMatchSelectWidth]="false">
+          @for (test of tests; track test._id) {
+            <nz-option [nzLabel]="test.name" [nzValue]="test._id"></nz-option>
+          }
+        </nz-select>
+      </div>
+    </form>
+  </ng-container>
+  <ng-container *nzModalFooter>
+    <div class="flex justify-between items-center">
+      <button class="w-fit px-0" nz-button nzType="link" (click)="createTaskModal.toggle()">Create New Template</button>
+      <div class="flex gap-2 items-center">
+        <button nz-button nzType="default" (click)="toggle()">Close</button>
+        <button nz-button nzType="primary" (click)="onCreate()">Use</button>
+      </div>
+    </div>
+  </ng-container>
+</nz-modal>
+
+<slms-create-task-modal #createTaskModal></slms-create-task-modal>

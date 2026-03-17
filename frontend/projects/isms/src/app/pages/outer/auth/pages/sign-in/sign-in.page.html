@@ -1,0 +1,61 @@
+<div class="flex mt-32 w-full">
+  <form class="w-[380px] flex flex-col space-y-4" [formGroup]="signInFormGroup" autocomplete="on">
+    <div class="flex space-y-2 flex-col items-center mb-5">
+      <h1 class="mt-0 mb-0 text-xl text-gray-800 font-semibold text-center">Hi, Welcome to UP English 👋</h1>
+      <!-- <p class="mt-0 mb-0 text-sm text-gray-500 font-regular">Have we met before?</p> -->
+    </div>
+
+    <!-- <div class="space-y-1.5">
+      <label for="" class="font-normal text-gray-700 text-sm">Email Address</label>
+      <nz-input-group [nzPrefix]="emailPrefixTemplate" nzSize="large" class="space-x-1.5">
+        <input nz-input nzSize="large" placeholder="Enter your email" formControlName="emailAddress" />
+      </nz-input-group>
+      <ng-template #emailPrefixTemplate>
+        <span class="text-base cursor-pointer text-gray-400 ph-duotone ph-envelope"></span>
+      </ng-template>
+      <ng-container *ngIf="signInFormGroup.get('emailAddress').touched">
+        <p class="isms-error-message" *ngIf="signInFormGroup.get('emailAddress').hasError('required')">Email address is required</p>
+        <p class="isms-error-message" *ngIf="signInFormGroup.get('emailAddress').hasError('email')">Invalid email address format</p>
+      </ng-container>
+    </div>
+    <div class="space-y-2">
+      <div class="space-y-1.5">
+        <label for="" class="font-normal text-gray-700 text-sm">Password</label>
+        <nz-input-group [nzPrefix]="passwordPrefixTemplate" [nzSuffix]="suffixTemplate" nzSize="large" class="space-x-1.5">
+          <input type="password" nz-input placeholder="Password" placeholder="Enter password" formControlName="password" />
+        </nz-input-group>
+        <ng-template #passwordPrefixTemplate>
+          <span class="text-base cursor-pointer text-gray-400 ph-duotone ph-lock-key"></span>
+        </ng-template>
+        <ng-container *ngIf="signInFormGroup.get('password').touched">
+          <p class="isms-error-message" *ngIf="signInFormGroup.get('password').hasError('required')">Password is required</p>
+        </ng-container>
+        <ng-template #suffixTemplate>
+          <a nzSize="small" class="font-medium text-xs" nzType="link" routerLink="/a/reset-password"> Lost Your Password? </a>
+        </ng-template>
+      </div>
+    </div> -->
+
+    <div class="pt-2 space-y-4">
+      <button (click)="loginWithSSO('microsoft')" nz-button nzType="default" nzSize="large" nzBlock [nzLoading]="loading">
+        <div class="flex items-center space-x-4 justify-center" *ngIf="!loading">
+          <img src="assets/images/microsoft.svg" alt="" width="15" />
+          <span class="font-medium"> Continue with Microsoft </span>
+        </div>
+        <span *ngIf="loading">Authenticating...</span>
+      </button>
+      <button (click)="loginWithSSO('google')" nz-button nzType="default" nzSize="large" nzBlock [nzLoading]="googleLoading">
+        <div class="flex items-center space-x-4 justify-center" *ngIf="!googleLoading">
+          <img src="assets/images/google.png" alt="" width="20" />
+          <span class="font-medium"> Continue with Google </span>
+        </div>
+        <span *ngIf="googleLoading">Authenticating...</span>
+      </button>
+    </div>
+
+    <!-- <div class="flex items-center text-sm justify-center space-x-1 flex-1">
+      <span class="text-gray-500"> Don't have an account? </span>
+      <a nzType="link" routerLink="/a/signup" class="font-medium">Sign Up</a>
+    </div> -->
+  </form>
+</div>

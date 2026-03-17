@@ -1,0 +1,148 @@
+/* You can add global styles to this file, and also import other style files */
+@import "./assets/styles/index.less";
+
+// /Users/jhalicante/Documents/Projects/UPEnglish/projects/frontend/projects/isms/src/assets/styles/src/plugins/tui-calendar.less
+// @import "../../isms/src/assets/styles/src/plugins/tui-calendar.less";
+
+/***************** Quill *****************/
+.quill-viewing-description {
+  .p-editor-container {
+    .p-editor-toolbar {
+      @apply !hidden;
+    }
+    .p-editor-content {
+      @apply !border-none;
+      .ql-editor {
+        background-color: transparent;
+        @apply p-0;
+
+        p {
+          @apply mb-0;
+          overflow-wrap: break-word;
+          line-height: normal;
+        }
+      }
+    }
+  }
+}
+
+.quill-passage-editor {
+  .p-editor-container {
+    .p-editor-content {
+      .ql-editor {
+        p {
+          // display: inline-flex;
+        }
+      }
+    }
+  }
+}
+
+.ql-slms-static-drag-n-drop {
+  @apply hover:!text-slms-500 transition-all;
+}
+.quill-slms-static-drag-n-drop {
+  width: 100px;
+  border: 1px solid #ff3333;
+  padding: 2px;
+}
+
+// .ql-slms-movable-drag-n-drop {
+//   background-color: orange !important;
+// }
+// .quill-slms-movable-drag-n-drop {
+//   width: 100px;
+//   border: 1px solid orange;
+//   padding: 2px;
+// }
+
+.ant-collapse-header {
+  @apply !items-center;
+  div {
+    @apply flex items-center;
+  }
+}
+
+/***************** App *****************/
+.slms-label {
+  @apply text-gray-500 text-xs;
+  &-left {
+    @apply pl-2;
+  }
+}
+
+.slms-required {
+  &::after {
+    content: " *";
+    @apply text-error-500;
+  }
+}
+
+.slms-error-message {
+  @apply text-error-500 text-xs font-regular mb-0;
+}
+
+/***************** Editor *****************/
+[contenteditable-placeholder]:empty::before {
+  content: attr(contenteditable-placeholder);
+  color: #555;
+}
+
+/***************** Answer Box *****************/
+slms-answer-box {
+  @apply bg-gray-100 border border-gray-300 rounded-md cursor-pointer inline-flex items-center gap-2;
+  padding-left: 4px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  input {
+    @apply bg-gray-50 rounded-sm font-medium text-center placeholder:text-gray-500 outline-none focus:ring focus:ring-slms-300;
+    width: 100px;
+  }
+  &[view-mode="editing"]:hover {
+    @apply bg-slms-100;
+  }
+
+  &[type="movable-dropzone"] {
+    @apply absolute z-20;
+  }
+
+  //--- Dropzone
+  .dropzone-editing {
+    @apply bg-gray-200 border border-dashed border-gray-400 rounded-md px-2;
+    min-width: 48px;
+    .cdk-drag-placeholder {
+      @apply hidden;
+    }
+  }
+  .dropzone-editing .cdk-drop-list-receiving {
+    @apply bg-isms-300;
+  }
+}
+
+/***************** Fill In - Textbox *****************/
+slms-static-textbox {
+  @apply bg-gray-100 border border-gray-300 rounded-md cursor-pointer inline-flex items-center gap-2;
+  padding-left: 4px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  input {
+    @apply bg-gray-50 rounded-sm font-medium text-center placeholder:text-gray-500 outline-none focus:ring focus:ring-slms-300;
+    width: 100px;
+  }
+  &[view-mode="editing"]:hover {
+    @apply bg-slms-100;
+  }
+}
+slms-movable-textbox {
+  @apply absolute z-20 bg-gray-100 border border-gray-300 rounded-md cursor-pointer inline-flex items-center gap-2;
+  padding-left: 4px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  input {
+    @apply bg-gray-50 rounded-sm font-medium text-center placeholder:text-gray-500 outline-none focus:ring focus:ring-slms-300;
+    width: 100px;
+  }
+  &[view-mode="editing"]:hover {
+    @apply bg-slms-100;
+  }
+}

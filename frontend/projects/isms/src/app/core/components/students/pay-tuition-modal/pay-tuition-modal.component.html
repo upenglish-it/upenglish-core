@@ -1,0 +1,590 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  nzCentered
+  [nzKeyboard]="false"
+  [nzWidth]="'95%'"
+  [nzStyle]="{ maxWidth: '950px' }"
+  [nzTitle]="null"
+  [nzFooter]="null"
+  (nzOnOk)="(1)"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <div class="flex flex-col h-[calc(100vh-100px)] md:h-[700px] lg:h-[850px]">
+      <div class="flex flex-col lg:flex-row flex-1 overflow-auto mini-scroll-bar min-h-0">
+      <div class="w-full lg:w-[480px] flex flex-col p-3 md:p-4 space-y-3 md:space-y-4 border-b lg:border-b-0 lg:border-r">
+        <div class="flex flex-col">
+          <span class="text-sm md:text-base font-medium">
+            {{ formGroup.getRawValue().cantPayThisMonth ? "Move to Debt" : payDebtOnly ? "Pay Debt" : "Pay Tuition" }}
+          </span>
+          <span class="text-xs md:text-sm text-gray-500">Complete the form to to pay tuition.</span>
+        </div>
+        <form class="flex-col space-y-4 max-h-fit flex-1 flex overflow-auto mini-scroll-bar mini-scroll-bar" [formGroup]="formGroup">
+          <fieldset class="border border-solid border-gray-200 p-3 rounded-md relative">
+            <legend class="font-normal text-gray-600 text-xs w-fit px-0.5">Saved Draft Tuition</legend>
+            <div class="flex flex-col space-y-2">
+              <isms-draft-tuition-modal
+                #draftTuitionModal
+                [form-data]="formGroup"
+                [date-interval]="dateInterval"
+                (on-submitted)="loadDraftTuition($event)"></isms-draft-tuition-modal>
+            </div>
+          </fieldset>
+
+          <!-- <div class="p-4 bg-isms-50 rounded-md text-isms-500 text-center font-medium text-lg">This student cant pay this month</div> -->
+          <nz-alert nzType="warning" nzMessage="This student cant pay this month" nzShowIcon *ngIf="formGroup.getRawValue().cantPayThisMonth"></nz-alert>
+
+          <!-- {{ sameMonthAndHasDebt }} -->
+          <div class="flex space-x-4 items-center rounded-md border border-blue-500 bg-blue-100 p-2" *ngIf="pricing && sameMonthAndHasDebt && student.status === 'ongoing'">
+            <label nz-checkbox formControlName="skipDebt">Skip the debt?</label>
+          </div>
+
+          <div class="flex justify-items-start items-start flex-wrap" *ngIf="pricing && pricing.totalAmountOfUnpaidDays > 0 && student">
+            <ng-container *ngIf="student.debtRecords.length > 0; else noDebtRecords">
+              <div
+                *ngFor="let debt of student.debtRecords"
+                class="cursor-pointer grid place-items-center bg-yellow-100 border border-yellow-500 text-[9px] h-6 rounded-md px-2 m-[3px]"
+                nz-tooltip
+                [nzTooltipTitle]="debt.totalAmount | formattedCurrency">
+                <span class="text-yellow-500 text-xs">{{ debt.date | date: "MMM YYYY" }}</span>
+              </div>
+            </ng-container>
+            <ng-template #noDebtRecords>
+              <div class="grid place-items-center text-xs text-gray-400">No record(s) of debt</div>
+            </ng-template>
+          </div>
+
+          <div class="flex flex-col md:flex-row md:space-x-2 space-y-3 md:space-y-0">
+            <div class="space-y-1.5 flex-1">
+              <label class="font-normal text-gray-600 text-xs">Student</label>
+              <!-- <div class="flex space-x-2 items-center">
+                <img profile-photo [letter]="'J'" class="w-5 h-5 bg-gray-100 rounded-full" />
+                <span class="text-xs font-semibold text-gray-700"> John Doe</span>
+              </div> -->
+              <nz-select formControlName="studentId" nzDisabled class="w-full" nzPlaceHolder="Select student" [nzDropdownMatchSelectWidth]="false">
+                <nz-option *ngFor="let student of students" [nzLabel]="student.firstName + ' ' + student.lastName" nzCustomContent [nzValue]="student._id">
+                  <div class="flex space-x-2 items-center">
+                    <img profile-photo [letter]="student.firstName[0]" class="w-5 h-5 bg-gray-100 rounded-full" />
+                    <span class="text-xs font-normal text-gray-500"> {{ student.firstName }} {{ student.lastName }} </span>
+                  </div>
+                </nz-option>
+              </nz-select>
+            </div>
+            <div class="space-y-1.5 flex-1">
+              <label class="font-normal text-gray-600 text-xs">Class enrolled</label>
+              <!-- <div class="flex space-x-2 items-center">
+                <span class="text-xs text-gray-700 font-semibold">English Pro</span>
+              </div> -->
+              <nz-select formControlName="classId" nzDisabled class="w-full" nzPlaceHolder="Select class" [nzDropdownMatchSelectWidth]="false">
+                <nz-option *ngFor="let class of classes" [nzLabel]="class.name" [nzValue]="class._id"></nz-option>
+              </nz-select>
+            </div>
+          </div>
+
+          <div class="space-y-1.5 flex flex-col">
+            <label class="font-normal text-gray-600 text-xs required">Mode Of Payment</label>
+            <nz-radio-group formControlName="modeOfPayment" [nzDisabled]="formGroup.getRawValue().cantPayThisMonth">
+              <label nz-radio nzValue="cash">Cash</label>
+              <label nz-radio nzValue="bank">Bank</label>
+            </nz-radio-group>
+          </div>
+
+          <div class="space-y-1.5 flex flex-col">
+            <label class="font-normal text-gray-600 text-xs required">Payment Type</label>
+            <nz-radio-group formControlName="paymentType">
+              @if (formGroup.value.classTypeOfRate === "monthly-rate") {
+                <label nz-radio nzValue="monthly">Monthly</label>
+                <label nz-radio nzValue="package">Package</label>
+              }
+              @if (formGroup.value.classTypeOfRate === "hourly-rate") {
+                <label nz-radio nzValue="hourly-monthly">Hourly (Monthly)</label>
+                <label nz-radio nzValue="hourly-package">Hourly (Package)</label>
+              }
+            </nz-radio-group>
+          </div>
+
+          <div class="flex flex-col md:flex-row md:space-x-2 space-y-3 md:space-y-0">
+            <div class="space-y-1.5 flex flex-col flex-1">
+              <label class="isms-label-left ismns-required">Discount</label>
+              <nz-input-number
+                formControlName="discount"
+                style="width: 100%"
+                [nzDisabled]="(formGroup.value.paymentType === 'monthly' && formGroup.getRawValue().cantPayThisMonth) || viewState === 'loading' || student.status !== 'ongoing'"
+                [nzMin]="0"
+                [nzMax]="100"
+                [nzStep]="1"
+                [nzFormatter]="formatterPercent"
+                [nzParser]="parserPercent"></nz-input-number>
+            </div>
+          </div>
+
+          <div class="flex flex-col md:flex-row md:space-x-2 space-y-3 md:space-y-0">
+            <div class="space-y-1.5 flex-1 flex flex-col">
+              <label class="font-normal text-gray-600 text-xs required">From Date</label>
+              <!-- [nzDisabledDate]="disabledPreviousDate" -->
+              <nz-date-picker
+                [nzDisabledDate]="disabledPreviousDate"
+                [nzDisabled]="formGroup.getRawValue().cantPayThisMonth"
+                [nzAllowClear]="false"
+                nzPlaceHolder="Select date"
+                nzMode="month"
+                nzFormat="MMM yyyy"
+                formControlName="fromDate"></nz-date-picker>
+            </div>
+            <div class="space-y-1.5 flex-1 flex flex-col">
+              <label class="font-normal text-gray-600 text-xs required">To Date</label>
+              <!-- [nzDisabled]="formGroup.value.paymentType === 'monthly'" -->
+
+              <!-- [nzDisabledDate]="disabledPreviousDate" -->
+              <nz-date-picker
+                [nzDisabledDate]="disabledPreviousDate"
+                [nzDisabled]="formGroup.value.paymentType === 'monthly'"
+                [nzAllowClear]="false"
+                nzPlaceHolder="Select date"
+                nzMode="month"
+                nzFormat="MMM yyyy"
+                formControlName="toDate"></nz-date-picker>
+            </div>
+          </div>
+
+          <div class="space-y-1.5">
+            <!-- <label nz-checkbox formControlName="payDebtOfAMonth" [nzDisabled]="formGroup.value.cantPayThisMonth">Pay the debt of a month</label>
+            <br /> -->
+            <label nz-checkbox formControlName="includeNextMonthInPayment" [nzDisabled]="formGroup.getRawValue().cantPayThisMonth || payDebtOnly">Pay the following month(s)</label>
+
+            <nz-alert
+              nzType="warning"
+              nzMessage="Note: The days won't show if its already been paid"
+              nzShowIcon
+              *ngIf="formGroup.getRawValue().includeNextMonthInPayment && dateInterval.length === 0"></nz-alert>
+
+            <fieldset class="border border-solid border-gray-200 p-3 rounded-md relative" *ngIf="formGroup.getRawValue().includeNextMonthInPayment && dateInterval.length > 0">
+              <legend class="font-normal text-gray-600 text-xs w-fit px-0.5">
+                <ng-container *ngIf="!formGroup.getRawValue().cantPayThisMonth">Days of class</ng-container>
+                <ng-container *ngIf="formGroup.getRawValue().cantPayThisMonth">Days of class for next month</ng-container>
+              </legend>
+              <label class="font-normal text-xs absolute top-[-22px] right-[15px] bg-white px-1 cursor-pointer text-isms-500">
+                <nz-switch
+                  nzSize="small"
+                  [ngModelOptions]="{ standalone: true }"
+                  [nzDisabled]="!pricing"
+                  [(ngModel)]="showAllDaysOfClass"
+                  (ngModelChange)="toggleShowAllDaysOfClass()"></nz-switch>
+                {{ !showAllDaysOfClass ? "Show past days" : "Hide past days" }}
+              </label>
+              <div class="flex flex-col space-y-2">
+                <ng-container *ngFor="let date of dateInterval; let intervalIndex = index">
+                  <div class="flex flex-col">
+                    <span class="text-gray-500">
+                      {{ date.date | date: "LLLL y" }}
+                    </span>
+                    <div class="flex justify-items-start items-start flex-wrap">
+                      <ng-container *ngFor="let day of date.days; let dayIndex = index">
+                        <div
+                          *ngIf="day.included"
+                          class="w-6 h-6 md:w-7 md:h-7 m-[3px] cursor-pointer grid place-items-center text-[10px] md:text-xs rounded-full text-white"
+                          [ngClass]="{ 'bg-isms-500': day.enable, 'bg-gray-500': !day.enable }"
+                          nz-tooltip
+                          nzTooltipTitle="Click to include or exclude"
+                          (click)="excludeDate(intervalIndex, dayIndex)">
+                          <!-- nz-tooltip
+                        nzTooltipTitle="Click to include or exclude"
+                        (click)="excludeDate(intervalIndex, dayIndex)" -->
+                          {{ day.date | date: "d" }}
+                        </div>
+                      </ng-container>
+                    </div>
+                  </div>
+                </ng-container>
+              </div>
+            </fieldset>
+          </div>
+
+          <div class="flex flex-col md:flex-row md:space-x-2 space-y-3 md:space-y-0">
+            <div class="space-y-1.5 flex flex-col flex-1">
+              <label class="isms-label-left ismns-required">Addition</label>
+              <nz-input-number
+                [nzDisabled]="formGroup.getRawValue().cantPayThisMonth || viewState === 'loading'"
+                formControlName="addition"
+                style="width: 100%"
+                [nzMin]="0"
+                [nzStep]="1"
+                [nzFormatter]="formatterVND"
+                [nzParser]="parserVND"></nz-input-number>
+            </div>
+            <div class="space-y-1.5 flex flex-col flex-1">
+              <label class="isms-label-left ismns-required">Subtraction</label>
+              <nz-input-number
+                [nzDisabled]="formGroup.getRawValue().cantPayThisMonth || viewState === 'loading'"
+                formControlName="subtraction"
+                style="width: 100%"
+                [nzMin]="0"
+                [nzStep]="1"
+                [nzFormatter]="formatterVND"
+                [nzParser]="parserVND"></nz-input-number>
+            </div>
+          </div>
+
+          <div class="space-y-1.5 flex flex-col">
+            <label class="isms-label-left ismns-required">Notes</label>
+            <textarea formControlName="notes" nz-input rows="3" cols="3" placeholder="Type here"></textarea>
+          </div>
+        </form>
+      </div>
+
+      <div class="bg-gray-50 flex flex-col flex-1 p-3 md:p-4 rounded-tr-md rounded-br-md">
+        <nz-spin [nzSpinning]="viewState === 'loading'" class="flex-1 flex">
+          <div class="flex-1 h-full flex flex-col space-y-3 md:space-y-4">
+            <div class="flex flex-col">
+              <span class="text-sm md:text-base font-medium">Tuition Details</span>
+              <span class="text-xs md:text-sm text-gray-500">Summary of tuition and amount details.</span>
+            </div>
+
+            <ng-container *ngIf="pricing">
+              <div class="border-b flex-1 py-2 space-y-3">
+                <div class="flex items-center justify-between">
+                  <span class="isms-label-left">Payment Type</span>
+                  <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                  <span class="font-semibold text-gray-700">
+                    @if (formGroup.value.paymentType === "monthly") {
+                      Monthly
+                    }
+                    @if (formGroup.value.paymentType === "package") {
+                      Package
+                    }
+                    @if (formGroup.value.paymentType === "hourly-monthly") {
+                      Hourly Monthly
+                    }
+                    @if (formGroup.value.paymentType === "hourly-package") {
+                      Package Monthly
+                    }
+                  </span>
+                </div>
+
+                <div class="flex items-center justify-between" *ngIf="!formGroup.getRawValue().cantPayThisMonth">
+                  <span class="isms-label-left">Mode of Payment</span>
+                  <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                  <span class="font-semibold text-gray-700">{{ formGroup.value.modeOfPayment === "cash" ? "Cash" : "Bank" }}</span>
+                </div>
+
+                <div class="flex items-center justify-between pt-4">
+                  <span class="isms-label-left">Monthly Price </span>
+                  <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                  <span class="font-semibold text-gray-700">
+                    <ng-container>
+                      @if (formGroup.value.paymentType === "monthly" || formGroup.value.paymentType === "package") {
+                        {{ pricing.monthlyPrice | formattedCurrency }}
+                      }
+                      @if (formGroup.value.paymentType === "hourly-monthly") {
+                        {{ pricing.hourlyMonthlyPrice | formattedCurrency }}
+                      }
+                      @if (formGroup.value.paymentType === "hourly-package") {
+                        {{ pricing.hourlyPackagePrice | formattedCurrency }}
+                      }
+                    </ng-container>
+                  </span>
+                </div>
+
+                <ng-container *ngIf="formGroup.getRawValue().includeNextMonthInPayment">
+                  <div class="flex items-center justify-between pt-4">
+                    <span class="isms-label-left">Month(s)</span>
+                    <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                    <!-- <span class="font-semibold text-gray-700"> {{ pricing.fromDate | date : "MMM" }} to {{ pricing.toDate | date : "MMM yyyy" }} </span> -->
+
+                    <ng-container *ngIf="formGroup.value.paymentType === 'monthly'">
+                      <span class="font-semibold text-gray-700">{{ pricing.toDate | date: "MMM yyyy" }}</span>
+                    </ng-container>
+                    <ng-container *ngIf="formGroup.value.paymentType === 'package'">
+                      <span class="font-semibold text-gray-700">{{ pricing.fromDate | date: "MMM" }}</span>
+                      <span class="px-2">to</span>
+                      <span class="font-semibold text-gray-700">{{ pricing.toDate | date: "MMM yyyy" }}</span>
+                    </ng-container>
+                  </div>
+
+                  <div class="flex items-center justify-between">
+                    <span class="isms-label-left">Total of Days in Class</span>
+                    <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                    <span class="font-semibold text-gray-700">
+                      <ng-container>
+                        {{ pricing.totalAddedDays }}
+                      </ng-container>
+                    </span>
+                  </div>
+
+                  <div class="flex items-center justify-between">
+                    <span class="isms-label-left">Total Amount of Days in Class</span>
+                    <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                    <span class="font-semibold text-gray-700">
+                      <ng-container>
+                        {{ pricing.totalAmountOfAddedDays | formattedCurrency }}
+                      </ng-container>
+                    </span>
+                  </div>
+                </ng-container>
+
+                <div class="flex items-center justify-between pt-4">
+                  <span class="isms-label-left">Total of Unpaid Days</span>
+                  <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                  <span class="font-semibold text-gray-700">
+                    <ng-container>
+                      {{ pricing.totalUnpaidDays }}
+                    </ng-container>
+                  </span>
+                </div>
+
+                <!-- <div class="flex items-center justify-between pt-4">
+              <span class="isms-label-left">Total Days of Class</span>
+              <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+              <span class="font-semibold text-gray-700">
+                <ng-container>
+                  {{ pricing.totalOfClassDaysToPay }}
+                </ng-container>
+              </span>
+            </div> -->
+
+                <!-- <ng-container *ngIf="pricing.totalOfOffDays > 0">
+                  <div class="flex items-center justify-between pt-4">
+                    <span class="isms-label-left">Total of Off Days</span>
+                    <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                    <span class="font-semibold text-gray-700">
+                      <ng-container>
+                        {{ pricing.totalOfOffDays }}
+                      </ng-container>
+                    </span>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <span class="isms-label-left">Total Amount of Off Days</span>
+                    <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                    <span class="font-semibold text-gray-700">
+                      <ng-container>
+                        {{ pricing.totalAmountOfOffDays | formattedCurrency }}
+                      </ng-container>
+                    </span>
+                  </div>
+                </ng-container> -->
+
+                <div class="flex items-center justify-between pt-4">
+                  <span class="isms-label-left">Discount</span>
+                  <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                  <span class="font-semibold text-gray-700">
+                    <ng-container> {{ pricing.discount }}% </ng-container>
+                  </span>
+                </div>
+
+                <div class="flex items-center justify-between pt-4">
+                  <span class="text-gray-900 font-semibold">Sub Total</span>
+                  <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                  <span class="font-semibold text-gray-700">
+                    <ng-container>
+                      {{ pricing.subTotalAmount | formattedCurrency }}
+                    </ng-container>
+                  </span>
+                </div>
+
+                <div class="flex items-center justify-between pt-8">
+                  <span class="isms-label-left">Additional</span>
+                  <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                  <span class="font-semibold text-gray-700">
+                    <ng-container>
+                      {{ pricing.addition | formattedCurrency }}
+                    </ng-container>
+                  </span>
+                </div>
+
+                <div class="flex items-center justify-between">
+                  <span class="isms-label-left">Deduction</span>
+                  <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                  <span class="font-semibold text-gray-700">
+                    <ng-container>
+                      {{ pricing.subtraction | formattedCurrency }}
+                    </ng-container>
+                  </span>
+                </div>
+
+                <div class="flex items-center justify-between" *ngIf="!formGroup.value.skipDebt">
+                  <span class="isms-label-left">Debt</span>
+                  <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                  <span class="font-semibold text-gray-700">
+                    <ng-container>{{ pricing.totalAmountOfUnpaidDays | formattedCurrency }}</ng-container>
+                  </span>
+                </div>
+
+                <!-- <fieldset class="border border-solid border-gray-200 p-3 rounded-md" *ngIf="formGroup.value.includeNextMonthInPayment && dateInterval.length > 0">
+                  <legend class="font-normal text-gray-600 text-xs w-fit px-0.5">Savings</legend>
+                  <div class="flex flex-col space-y-3">
+                    <div class="flex items-center justify-between" *ngIf="pricing.savingsBalance > 0">
+                      <span class="isms-label-left">Savings Balance</span>
+                      <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                      <span class="font-semibold text-gray-700">
+                        <ng-container>{{ pricing.savingsBalance | formattedCurrency }}</ng-container>
+                      </span>
+                    </div>
+                    <div class="flex items-center justify-between" *ngIf="pricing.savingsBalance > 0">
+                      <span class="isms-label-left">Savings Remaining Balance</span>
+                      <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                      <span class="font-semibold text-gray-700">
+                        <ng-container>{{ pricing.savingsRemainingBalance | formattedCurrency }}</ng-container>
+                      </span>
+                    </div>
+
+                    <div class="flex items-center justify-between" *ngIf="pricing.savingsRedundantBalance > 0">
+                      <span class="isms-label-left">Savings Redundant Balance</span>
+                      <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                      <span class="font-semibold text-gray-700">
+                        <ng-container>{{ pricing.savingsRedundantBalance | formattedCurrency }}</ng-container>
+                      </span>
+                    </div>
+                    <div class="flex items-center justify-between" *ngIf="pricing.savingsRedundantBalance > 0">
+                      <span class="isms-label-left">Savings Redundant Remaining Balance</span>
+                      <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                      <span class="font-semibold text-gray-700">
+                        <ng-container>{{ pricing.savingsRedundantRemainingBalance | formattedCurrency }}</ng-container>
+                      </span>
+                    </div>
+                    <div class="">
+                      <table class="w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 bg-gray-50">
+                          <tr>
+                            <th scope="col" class="border px-2 py-1.5">
+                              Accumulated Off Days Amount: <span class="font-bold">{{ pricing.savingsBalance | formattedCurrency }}</span>
+                            </th>
+                            <th scope="col" class="border px-2 py-1.5">
+                              Redundant Payments: <span class="font-bold">{{ pricing.savingsRedundantBalance | formattedCurrency }}</span>
+                            </th>
+                          </tr>
+                        </thead>
+                      </table>
+                    </div>
+
+                    <a (click)="savingsBreakdownModal.toggle()">See details</a>
+                  </div>
+                </fieldset> -->
+
+                <div class="pt-1">
+                  <isms-savings-breakdown-modal
+                    *ngIf="showModal && pricing"
+                    [student-id]="formGroup.value.studentId"
+                    [in-pay-tuition]="true"
+                    [pricing]="pricing"></isms-savings-breakdown-modal>
+                </div>
+              </div>
+              <div class="hidden lg:flex items-center justify-between gap-2">
+                <span class="font-medium text-sm md:text-base text-gray-900">Total Amount</span>
+                <div class="flex space-x-1 items-center">
+                  <span class="line-through text-xs md:text-sm text-gray-500">
+                    <ng-container *ngIf="pricing && pricing.discount">
+                      {{ pricing.originalTotalAmount | formattedCurrency }}
+                    </ng-container>
+                  </span>
+                  <span class="text-lg md:text-xl font-bold text-gray-900">
+                    <ng-container>
+                      {{ pricing.deductedTotalAmount2 | formattedCurrency }}
+                    </ng-container>
+                  </span>
+                </div>
+              </div>
+
+              <!-- *ngIf="pricing.deductedTotalAmount2 > 0"  -- issue if has a savings  -->
+              <!-- {{ !disablePayButton && pricing.totalAmountOfUnpaidDays > 0 }}{{ formGroup.getRawValue().includeNextMonthInPayment && dateInterval.length === 0 }} -->
+              <!-- {{ sameMonthAndHasDebt }} -->
+
+              @if (!disablePayButton && sameMonthAndHasDebt) {
+                <button
+                  *ngIf="pricing.status !== 'stopped'"
+                  [disabled]="!formGroup.value.skipDebt"
+                  nz-button
+                  nzSize="large"
+                  [nzLoading]="viewState === 'submitting'"
+                  nzType="primary"
+                  (click)="onSubmit()"
+                  nzBlock
+                  class="hidden lg:block">
+                  <ng-container *ngTemplateOutlet="buttonTemplate"></ng-container>
+                </button>
+              } @else if (student.debtRecords.length < 0 || (formGroup.getRawValue().includeNextMonthInPayment && dateInterval.length === 0)) {
+                <button *ngIf="pricing.status !== 'stopped'" nz-button nzSize="large" [nzLoading]="viewState === 'submitting'" nzType="primary" (click)="onSubmit()" nzBlock class="hidden lg:block">
+                  <ng-container *ngTemplateOutlet="buttonTemplate"></ng-container>
+                </button>
+              } @else {
+                <button *ngIf="pricing.status !== 'stopped'" nz-button nzSize="large" [nzLoading]="viewState === 'submitting'" nzType="primary" (click)="onSubmit()" nzBlock class="hidden lg:block">
+                  <ng-container *ngTemplateOutlet="buttonTemplate"></ng-container>
+                </button>
+              }
+
+              <button *ngIf="pricing.status === 'stopped'" nz-button nzSize="large" [nzLoading]="viewState === 'submitting'" nzType="primary" (click)="onSubmit()" nzBlock class="hidden lg:block">
+                <ng-container>
+                  <span>Pay Debt</span>
+                </ng-container>
+              </button>
+            </ng-container>
+
+            <ng-container *ngIf="!pricing">
+              <nz-alert nzType="warning" nzMessage="Please select date for days of class" nzShowIcon></nz-alert>
+            </ng-container>
+          </div>
+        </nz-spin>
+      </div>
+      </div>
+      <ng-template #buttonTemplate>
+        <div class="flex space-x-1 items-center justify-center" *ngIf="viewState === 'initial'">
+          <ng-container *ngIf="payDebtOnly">
+            <span>Pay Debt</span>
+          </ng-container>
+          <ng-container *ngIf="!payDebtOnly">
+            <ng-container *ngIf="!formGroup.getRawValue().cantPayThisMonth">
+              <span *ngIf="!formGroup.getRawValue().includeNextMonthInPayment">Pay Debt</span>
+              <span *ngIf="formGroup.getRawValue().includeNextMonthInPayment">Pay</span>
+              <span class="font-semibold">{{ pricing.deductedTotalAmount | formattedCurrency }}</span>
+            </ng-container>
+            <ng-container *ngIf="formGroup.getRawValue().cantPayThisMonth">
+              <span>Move to Debt</span>
+              <span class="ph ph-caret-double-right"></span>
+            </ng-container>
+          </ng-container>
+        </div>
+      </ng-template>
+      <div class="lg:hidden border-t bg-white px-4 py-3 flex items-center justify-between gap-3 shadow-lg" *ngIf="pricing">
+        <div class="flex flex-col flex-1 min-w-0">
+          <span class="text-xs text-gray-500 mb-0.5">Total Amount</span>
+          <div class="flex items-center gap-2">
+            <span class="line-through text-xs text-gray-400" *ngIf="pricing && pricing.discount">
+              {{ pricing.originalTotalAmount | formattedCurrency }}
+            </span>
+            <span class="text-base font-bold text-gray-900">
+              {{ pricing.deductedTotalAmount2 | formattedCurrency }}
+            </span>
+          </div>
+        </div>
+        <div class="flex-shrink-0">
+          @if (!disablePayButton && sameMonthAndHasDebt) {
+            <button
+              *ngIf="pricing.status !== 'stopped'"
+              [disabled]="!formGroup.value.skipDebt"
+              nz-button
+              nzSize="large"
+              [nzLoading]="viewState === 'submitting'"
+              nzType="primary"
+              (click)="onSubmit()">
+              <ng-container *ngTemplateOutlet="buttonTemplate"></ng-container>
+            </button>
+          } @else if (student.debtRecords.length < 0 || (formGroup.getRawValue().includeNextMonthInPayment && dateInterval.length === 0)) {
+            <button *ngIf="pricing.status !== 'stopped'" nz-button nzSize="large" [nzLoading]="viewState === 'submitting'" nzType="primary" (click)="onSubmit()">
+              <ng-container *ngTemplateOutlet="buttonTemplate"></ng-container>
+            </button>
+          } @else {
+            <button *ngIf="pricing.status !== 'stopped'" nz-button nzSize="large" [nzLoading]="viewState === 'submitting'" nzType="primary" (click)="onSubmit()">
+              <ng-container *ngTemplateOutlet="buttonTemplate"></ng-container>
+            </button>
+          }
+          <button *ngIf="pricing.status === 'stopped'" nz-button nzSize="large" [nzLoading]="viewState === 'submitting'" nzType="primary" (click)="onSubmit()">
+            <ng-container>
+              <span>Pay Debt</span>
+            </ng-container>
+          </button>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+  <!-- <isms-savings-breakdown-modal #savingsBreakdownModal *ngIf="showModal"></isms-savings-breakdown-modal> -->
+</nz-modal>

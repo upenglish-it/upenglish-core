@@ -1,0 +1,126 @@
+@let mode = formGroup.value.stateSettings.mode;
+@let action = formGroup.value.stateSettings.action;
+
+<div class="flex w-full flex-col gap-3" [formGroup]="itemFormGroup">
+  @if (mode === "editing") {
+    <div class="flex items-center gap-2 justify-between">
+      <div class="flex items-center gap-2">
+        <span class="font-bold bg-gray-200 text-gray-600 rounded-md p-2">Check box ticking</span>
+        <input nz-input placeholder="Item No." formControlName="itemNumber" style="width: 80px" />
+      </div>
+      <div class="flex items-center gap-1">
+        <span class="font-semibold">Points:</span>
+        <nz-input-number style="text-align: center" formControlName="points" nzMin="0" />
+      </div>
+    </div>
+  }
+
+  @if (mode === "viewing") {
+    <div class="flex items-center gap-2 justify-between">
+      <div>
+        Check box ticking: <span class="font-bold">#{{ itemFormGroup.value.itemNumber }}</span>
+      </div>
+      <div>
+        Points: <span class="font-bold">{{ itemFormGroup.value.points }}</span>
+      </div>
+    </div>
+  }
+
+  <div class="relative flex-1 bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm overflow-x-auto">
+    <slms-editor [mode]="editorMode" [content-form-control]="descriptionFormControl" [editor-id]="boxTickingEditorId" [min-height]="80" [enable-fill-in-blank]="false">
+    </slms-editor>
+    <table class="box-ticking-table w-full border-collapse table-fixed min-w-[320px]">
+      <thead>
+        <tr class="border-b border-gray-300">
+          <th class="box-ticking-question-col p-2 text-center font-medium text-gray-600"></th>
+          @for (cfg of choicesFormArray.controls; track cfg.value.id) {
+            <th class="p-2 text-center font-medium text-gray-700 border-l border-gray-200 w-[4rem]">{{ cfg.value.text }}</th>
+          }
+          @if (mode === "editing") {
+            <th class="p-2 w-12 border-l border-gray-200"></th>
+          }
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of rowsFormArray.controls; track $index; let rowIndex = $index) {
+          <tr class="border-b border-gray-200" [formGroup]="rowFormGroup(rowIndex)">
+            @if (mode === "editing") {
+              <td class="box-ticking-question-col p-2 align-top border-r border-gray-200 bg-gray-50">
+                <input nz-input type="text" formControlName="question" placeholder="e.g. Where is letter B?" class="w-full border-0 bg-transparent" />
+              </td>
+              @for (cfg of choicesFormArray.controls; track cfg.value.id) {
+                <td class="p-2 text-center align-top border-l border-gray-100">
+                  <button
+                    nz-tooltip
+                    nzTooltipTitle="Set as correct answer"
+                    nzTooltipPlacement="top"
+                    nz-button
+                    nzType="link"
+                    nzShape="circle"
+                    type="button"
+                    class="bg-transparent"
+                    (click)="rowFormGroup(rowIndex).get('originalAnswer').setValue(cfg.value.id)">
+                    <span
+                      class="ph text-xl"
+                      [ngClass]="{
+                        'ph-circle': rowFormGroup(rowIndex).value.originalAnswer !== cfg.value.id,
+                        'ph-fill ph-check-circle text-slms-500': rowFormGroup(rowIndex).value.originalAnswer === cfg.value.id,
+                      }"></span>
+                  </button>
+                </td>
+              }
+              <td class="p-2 text-center align-top border-l border-gray-100 w-12">
+                <button
+                  nz-tooltip
+                  nzTooltipTitle="Remove row"
+                  nzTooltipPlacement="left"
+                  nz-button
+                  nzType="text"
+                  nzDanger
+                  nzShape="circle"
+                  type="button"
+                  [disabled]="rowsFormArray.length <= 1"
+                  (click)="removeRow(rowIndex)">
+                  <span class="ph ph-trash"></span>
+                </button>
+              </td>
+            } @else {
+              <td class="box-ticking-question-col p-2 align-middle border-r border-gray-200 bg-gray-50 font-medium text-gray-800">
+                {{ rowFormGroup(rowIndex).value.question || "Question" }}
+              </td>
+              <td class="p-2 border-l border-gray-100" [attr.colspan]="choicesFormArray.length">
+                <nz-radio-group formControlName="participantAnswer" class="!flex !flex-row !w-full !justify-around !gap-0" [nzDisabled]="action === 'student-viewing-results'">
+                  @for (cfg of choicesFormArray.controls; track cfg.value.id) {
+                    <label nz-radio [nzValue]="cfg.value.id" class="!ml-0"></label>
+                  }
+                </nz-radio-group>
+              </td>
+            }
+          </tr>
+        }
+      </tbody>
+    </table>
+    @if (mode === "editing") {
+      <div class="p-2 border-t border-gray-200 bg-gray-50">
+        <button nz-button nzType="primary" nzGhost type="button" (click)="addRow()">
+          <span class="ph ph-plus"></span>
+          Add another row
+        </button>
+      </div>
+    }
+  </div>
+
+  @if (mode === "viewing" && action === "student-viewing-results") {
+    <div class="font-bold">Score: {{ itemFormGroup.get("score").value }}</div>
+    <div class="font-bold"> Correct: {{ correctRowCount }} of {{ totalRowCount }} row(s) </div>
+    <div class="font-bold">
+      @if (correctRowCount === totalRowCount && totalRowCount > 0) {
+        <p-tag severity="success" value="Correct"></p-tag>
+      } @else if (correctRowCount > 0) {
+        <p-tag severity="warning" value="Partially correct"></p-tag>
+      } @else {
+        <p-tag severity="danger" value="Incorrect"></p-tag>
+      }
+    </div>
+  }
+</div>

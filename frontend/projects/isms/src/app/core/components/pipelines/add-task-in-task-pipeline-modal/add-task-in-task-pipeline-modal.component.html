@@ -1,0 +1,24 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  nzCentered
+  nzTitle="Add Task"
+  nzWidth="480px"
+  nzOkText="Save"
+  [nzCancelText]="'Cancel'"
+  (nzOnOk)="onSubmit()"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="showModal = false">
+  <ng-container *nzModalContent>
+    <div class="flex flex-col space-y-4" [formGroup]="formGroup">
+      <div class="space-y-1.5">
+        <label class="hc-label">Name</label>
+        <input nz-input formControlName="name" placeholder="Task name" />
+      </div>
+
+      <div class="space-y-1.5">
+        <label class="hc-label">Notes</label>
+        <textarea nz-input formControlName="notes" rows="4" placeholder="Optional notes"></textarea>
+      </div>
+    </div>
+  </ng-container>
+</nz-modal>

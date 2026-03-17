@@ -1,0 +1,291 @@
+<div class="relative flex flex-col w-full h-full">
+  <!-- {{ screenViewType }} -->
+
+  <!-- Desktop View -->
+  <ng-container *ngIf="screenViewType === 'desktop'">
+    <div class="flex">
+      <!-- Side Navigation -->
+      <div class="h-screen flex overflow-auto shadow sticky">
+        <!-- Parent navigation container -->
+        <div class="w-14 bg-[#12344d] flex flex-col">
+          <!-- Logo -->
+          <div class="h-14 grid place-items-center">
+            <img src="assets/images/logo.png" alt="" width="35" routerLink="/i/dashboard" class="cursor-pointer" />
+          </div>
+
+          <!-- navigations -->
+          <div class="flex-1 overflow-auto mini-scroll-bar grid place-items-center">
+            <div class="flex-1 space-y-3">
+              <a
+                *ngFor="let navigation of navigations; let i = index"
+                class="w-14 relative text-lg group grid place-items-center cursor-pointer text-gray-300"
+                nz-tooltip
+                [nzTooltipTitle]="navigation.name"
+                nzTooltipColor="#ff3823"
+                nzTooltipOverlayClassName="primary-tooltip-arrow"
+                nzTooltipPlacement="right"
+                [routerLink]="navigation.route"
+                routerLinkActive="isms-active-parent-navigation"
+                [routerLinkActiveOptions]="{ exact: false }">
+                <div class="rounded-full h-9 w-9 grid place-items-center group-hover:bg-isms-100 duration-500 transition-all">
+                  <span
+                    [ngClass]="{ 'text-isms-500': currentRoute === navigation.route }"
+                    class="group-hover:scale-125 text-xl group-hover:text-isms-500 transition-transform {{ navigation.icon }} ph-duotone"></span>
+                </div>
+              </a>
+            </div>
+          </div>
+
+          <!-- bottom navigation -->
+          <div>
+            <div class="flex-1 overflow-auto invisible-scroll-bar">
+              <!-- notification -->
+              <isms-notification-drawer #notificationDrawer></isms-notification-drawer>
+
+              <!-- switch workspace -->
+              <!-- [nzTooltipTitle]="accountStore.account.role ==='student' accountStore.account.propertiesBranches.length > 1 ? branchesTooltipTemplate : null" -->
+              <div
+                class="flex flex-col items-center py-2 border-t border-t-gray-600"
+                nz-tooltip
+                [nzTooltipTitle]="assignedBranches.length >= 2 ? branchesTooltipTemplate : null"
+                nzTooltipOverlayClassName="white-tooltip-arrow"
+                nzTooltipColor="#ffffff"
+                nzTooltipPlacement="rightBottom"
+                [nzTooltipOverlayStyle]="{ padding: '0' }">
+                <div class="border-4 border-gray-200 cursor-pointer p-0.5 transition-all rounded-full hover:border-isms-200">
+                  <img draggable="false" profile-photo [letter]="selectedBranchInfo?.name[0].toUpperCase() || '🚀'" [photo]="null" class="rounded-full bg-gray-300 w-9 h-9" />
+                </div>
+              </div>
+
+              <!-- my profile -->
+              <a
+                class="w-14 relative h-14 text-gray-400 text-lg group grid place-items-center cursor-pointer"
+                nz-tooltip
+                [nzTooltipTitle]="settingsTooltipTemplate"
+                nzTooltipColor="#ffffff"
+                nzTooltipOverlayClassName="white-tooltip-arrow"
+                nzTooltipPlacement="rightBottom"
+                [nzTooltipVisible]="false"
+                *ngIf="accountStore.account">
+                <img profile-photo [letter]="accountStore.fullName[0].toUpperCase()" [photo]="accountStore.account.profilePhoto" alt="" class="w-9 h-9 bg-gray-200 rounded-full" />
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Content -->
+      <div class="flex-1 m-auto h-screen relative border-l border-l-gray-200">
+        <router-outlet></router-outlet>
+      </div>
+    </div>
+  </ng-container>
+
+  <!-- Mobile View -->
+  <div *ngIf="screenViewType === 'mobile'" class="flex flex-col">
+    <div class="bg-[#12344d] flex justify-between px-2">
+      <div class="flex gap-3 items-center">
+        <!-- Menu -->
+        <span
+          class="w-14 relative text-lg group grid place-items-center cursor-pointer text-gray-300 isms-active-parent-navigation"
+          nz-tooltip
+          [nzTooltipTitle]="navigationListTemplate"
+          nzTooltipOverlayClassName="white-tooltip-arrow"
+          nzTooltipColor="#ffffff"
+          nzTooltipPlacement="rightBottom"
+          [nzTooltipOverlayStyle]="{ padding: '0' }">
+          <div class="rounded-full h-9 w-9 grid place-items-center group-hover:bg-isms-100 duration-500 transition-all">
+            <span class="group-hover:scale-125 text-xl group-hover:text-isms-500 transition-transform ph-list text-white ph-duotone"></span>
+          </div>
+        </span>
+
+        <!-- Logo -->
+        <div class="h-14 grid place-items-center">
+          <img src="assets/images/logo.png" alt="" width="35" routerLink="/i/dashboard" class="cursor-pointer" />
+        </div>
+      </div>
+
+      <div class="flex gap-3 items-center">
+        <!-- Notifications -->
+        <isms-notification-drawer #notificationDrawer></isms-notification-drawer>
+
+        <!-- Profile -->
+        <a
+          class="w-14 relative h-14 text-gray-400 text-lg group grid place-items-center cursor-pointer"
+          nz-tooltip
+          [nzTooltipTitle]="settingsTooltipTemplate"
+          nzTooltipColor="#ffffff"
+          nzTooltipOverlayClassName="white-tooltip-arrow"
+          nzTooltipPlacement="rightBottom"
+          [nzTooltipVisible]="false"
+          *ngIf="accountStore.account">
+          <img profile-photo [letter]="accountStore.fullName[0].toUpperCase()" [photo]="accountStore.account.profilePhoto" alt="" class="w-9 h-9 bg-gray-200 rounded-full" />
+        </a>
+
+        <!-- Branches -->
+        <div
+          class="flex flex-col items-center py-2 border-t border-t-gray-600"
+          nz-tooltip
+          [nzTooltipTitle]="assignedBranches.length >= 2 ? branchesTooltipTemplate : null"
+          nzTooltipOverlayClassName="white-tooltip-arrow"
+          nzTooltipColor="#ffffff"
+          nzTooltipPlacement="rightBottom"
+          [nzTooltipOverlayStyle]="{ padding: '0' }">
+          <div class="border-4 border-gray-200 cursor-pointer p-0.5 transition-all rounded-full hover:border-isms-200">
+            <img draggable="false" profile-photo [letter]="selectedBranchInfo?.name[0].toUpperCase() || '🚀'" [photo]="null" class="rounded-full bg-gray-300 w-9 h-9" />
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="flex-1">
+      <router-outlet></router-outlet>
+    </div>
+  </div>
+</div>
+
+<!-- Account template -->
+<ng-template #settingsTooltipTemplate>
+  <div class="w-80">
+    <div class="relative inline-flex items-center justify-center w-full mt-2 space-x-2 transition-all">
+      <img profile-photo [photo]="accountStore.account.profilePhoto" [letter]="accountStore.fullName[0].toUpperCase()" alt="" class="w-10 h-10 bg-gray-200 rounded-full" />
+      <div class="flex-1">
+        <h4 class="text-base mb-0 font-medium text-gray-600">
+          {{ accountStore.fullName }} <sup class="font-semibold capitalize text-isms-500">{{ accountStore.account.role }}</sup>
+        </h4>
+        <div class="text-xs text-gray-500">{{ accountStore.emailAddress }}</div>
+      </div>
+    </div>
+
+    <div class="h-[1px] bg-gray-200 my-2"></div>
+
+    <ul class="mt-4 space-y-4">
+      <ng-container *ngFor="let navigation of accountNavigations; let i = index">
+        <ng-container *ngIf="navigation.separator">
+          <div class="h-[1px] bg-gray-200 my-3"></div>
+        </ng-container>
+
+        <ng-container *ngIf="!navigation.separator">
+          <li class="flex items-center space-x-2 text-gray-600 rounded cursor-pointer hover:text-isms-500" (click)="onClickSettingsNavigation(navigation)">
+            <span class="ph-duotone text-lg {{ navigation.icon }}"></span>
+            <span class=""> {{ navigation.name }} </span>
+          </li>
+        </ng-container>
+      </ng-container>
+    </ul>
+  </div>
+</ng-template>
+
+<!-- Workspace template -->
+<ng-template #branchesTooltipTemplate let-thing>
+  <div class="">
+    <div class="relative inline-flex items-center justify-center w-full mt-2 space-x-2 transition-all">
+      <img profile-photo [letter]="selectedBranchInfo?.name[0].toUpperCase() || '🚀'" [photo]="null" alt="" class="w-10 h-10 bg-gray-200 rounded-full" />
+      <div class="flex-1 space-y-0.5">
+        <h4 class="text-sm mb-0 font-medium text-gray-600">{{ selectedBranchInfo?.name || "All Branches" }}</h4>
+        <div class="flex justify-between">
+          <div class="text-xs text-gray-500">{{ assignedBranches.length }} branches</div>
+          <div class="text-xs text-gray-500">
+            <a
+              nz-tooltip
+              nzTooltipTitle="Show all the data of multiple branches."
+              nzTooltipColor="#ff3823"
+              nzTooltipOverlayClassName="primary-tooltip-arrow"
+              nzTooltipPlacement="top"
+              (click)="onSelectBranch(null)">
+              View All Branches' Data
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="relative inline-flex flex-col w-full mt-1 space-y-1.5 transition-all cursor-pointer">
+      <nz-input-group [nzPrefix]="searchBranchesPrefixTemplate" class="space-x-1.5">
+        <input nz-input placeholder="Find your branches" type="text" />
+      </nz-input-group>
+      <ng-template #searchBranchesPrefixTemplate>
+        <span class="text-base cursor-pointer text-gray-400 ph ph-magnifying-glass"></span>
+      </ng-template>
+    </div>
+
+    <ul class="mt-2 h-64 overflow-auto mini-scroll-bar">
+      <ng-container *ngFor="let branch of assignedBranches">
+        <li
+          class="flex items-center space-x-2 rounded group cursor-pointer hover:bg-gray-100 transition-all p-1.5"
+          (click)="onSelectBranch(branch)"
+          [ngClass]="{ 'bg-isms-200 pointer-events-none': selectedBranch === branch._id }">
+          <img profile-photo [letter]="branch.name[0].toUpperCase()" [photo]="null" alt="" class="w-9 h-9 bg-gray-200 rounded-full" />
+          <div class="flex flex-col flex-1">
+            <span class="text-xs font-medium flex-1" [ngClass]="{ 'text-isms-500': selectedBranch === branch._id, 'text-gray-500': selectedBranch !== branch._id }">{{
+              branch.name
+            }}</span>
+            <span class="text-xs font-norma flex-1" [ngClass]="{ 'text-isms-500': selectedBranch === branch._id, 'text-gray-500': selectedBranch !== branch._id }">{{
+              branch.address
+            }}</span>
+          </div>
+          <span class="ph ph-caret-right group-hover:visible invisible text-gray-500" *ngIf="selectedBranch !== branch._id"></span>
+          <span class="ph-fill text-lg ph-check-circle text-isms-500" *ngIf="selectedBranch === branch._id"></span>
+        </li>
+      </ng-container>
+    </ul>
+  </div>
+  <div class="p-1 mb-1 text-sm text-gray-500 text-center">
+    <a class="flex items-center justify-center space-x-1.5" routerLink="/i/settings/general/branches">
+      <span class="ph-fill ph-gear-six"></span>
+      <span>Manage All Branches</span>
+    </a>
+  </div>
+</ng-template>
+
+<!-- Workspace template -->
+<ng-template #navigationListTemplate let-thing>
+  <div class="flex-1 space-y-3">
+    <a
+      *ngFor="let navigation of navigations; let i = index"
+      class="flex relative group items-center cursor-pointer gap-2 text-gray-300"
+      nz-tooltip
+      [nzTooltipTitle]="navigation.name"
+      nzTooltipColor="#ff3823"
+      nzTooltipOverlayClassName="primary-tooltip-arrow"
+      nzTooltipPlacement="right"
+      [routerLink]="navigation.route"
+      routerLinkActive="isms-active-parent-navigation"
+      [routerLinkActiveOptions]="{ exact: false }">
+      <div class="rounded-full h-9 w-9 grid place-items-center group-hover:bg-isms-100 duration-500 transition-all">
+        <span
+          [ngClass]="{ 'text-isms-500': currentRoute === navigation.route }"
+          class="group-hover:scale-125 text-xl group-hover:text-isms-500 transition-transform {{ navigation.icon }} ph-duotone"></span>
+      </div>
+      <span class="text-gray-700">{{ navigation.name }}</span>
+    </a>
+  </div>
+</ng-template>
+
+<!-- Preparing Lockscreen -->
+<div class="flex items-center justify-center fixed z-50 right-0 top-0 left-0 bottom-0 bg-white w-full h-full" [@default] *ngIf="!lockScreenLoaded">
+  <h1 class="mt-0 mb-0 text-xl text-gray-500 font-semibold">Loading...</h1>
+  {{ lockScreenLoaded }}
+</div>
+
+<!-- Lockscreen -->
+<div class="flex items-center justify-center fixed z-50 right-0 top-0 left-0 bottom-0 bg-white w-full h-full" [@default] *ngIf="idleState === 'TIMED_OUT'">
+  <form class="w-[320px] pb-24 flex flex-col space-y-4" [formGroup]="lockScreenFormGroup" autocomplete="off" (ngSubmit)="unlockScreen()">
+    <div class="flex space-y-2 flex-col mb-1">
+      <h1 class="mt-0 mb-0 text-xl text-gray-800 font-semibold">Hi {{ accountStore.account.firstName }} {{ accountStore.account.lastName }},</h1>
+    </div>
+    <div class="space-y-1.5 flex flex-col">
+      <label class="font-normal text-gray-500 text-xs">Unlock the screen to continue</label>
+      <div class="flex space-x-2">
+        <input nz-input type="text" placeholder="Type here" formControlName="code" />
+        <button type="submit" nz-button nzShape="circle">
+          <span nz-icon nzType="arrow-right"></span>
+        </button>
+      </div>
+      <span class="text-error-500" *ngIf="lockScreenErrorMessage">{{ lockScreenErrorMessage }}</span>
+    </div>
+  </form>
+</div>
+
+<!-- <isms-system-notification-activation-modal></isms-system-notification-activation-modal> -->
+
+<ng-template #notificationBtnTpl let-notification>
+  <button nz-button nzType="primary" nzSize="small" (click)="navigateToStudents()">Confirm</button>
+</ng-template>

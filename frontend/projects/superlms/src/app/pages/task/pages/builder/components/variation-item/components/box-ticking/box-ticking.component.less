@@ -1,0 +1,18 @@
+// Box ticking v2 table styles: fixed width question column, responsive table
+.box-ticking-table {
+  table-layout: fixed;
+}
+
+.box-ticking-question-col {
+  width: 240px;
+  min-width: 200px;
+  max-width: 320px;
+}
+
+@media (max-width: 640px) {
+  .box-ticking-question-col {
+    width: 180px;
+    min-width: 160px;
+    max-width: 240px;
+  }
+}

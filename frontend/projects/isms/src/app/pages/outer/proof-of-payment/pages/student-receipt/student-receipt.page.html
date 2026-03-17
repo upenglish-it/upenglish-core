@@ -1,0 +1,70 @@
+<div class="student-receipt-container" *ngIf="studentReceipt; else noResult">
+  <div class="text-left">
+    <h4 style="padding-top: 2pt; padding-left: 5pt; text-indent: 0pt; text-align: left; line-height: 163%">CÔNG TY TNHH MTV GIÁO DỤC VÀ ĐÀO TẠO QUÂN NGUYỄN</h4>
+    <p class="s1" style="padding-left: 5pt; text-indent: 0pt; text-align: left; line-height: 163%">82, Ngô Chí Quốc, tổ 85, khu phố 13, phường Phú Cường, TP.TDM, Bình Dương.</p>
+    <h3 style="padding-top: 3pt; padding-left: 5pt; text-indent: 0pt; text-align: left; line-height: 163%">Số: {{ studentReceipt.paymentHistory.transactionId }}</h3>
+  </div>
+
+  <div class="text-center">
+    <h1 class="capitalize">Biên lai thu tiền</h1>
+    <p class="s2">
+      Ngày {{ studentReceipt.paymentHistory.createdAt | date: "d" }} tháng {{ studentReceipt.paymentHistory.createdAt | date: "M" }} năm
+      {{ studentReceipt.paymentHistory.createdAt | date: "yyyy" }}
+    </p>
+  </div>
+  <p style="text-indent: 0pt; text-align: left"><br /></p>
+  <p style="padding-left: 5pt; text-indent: 0pt; line-height: 163%; text-align: left"
+    >Họ và tên người nộp tiền: {{ studentReceipt.account.firstName }} {{ studentReceipt.account.lastName }}</p
+  >
+  <p style="padding-left: 5pt; text-indent: 0pt; line-height: 163%; text-align: left">Ngày sinh: {{ studentReceipt.account.birthDate }}</p>
+  @if (studentReceipt.account.cmnd) {
+    <p style="padding-left: 5pt; text-indent: 0pt; text-align: left; line-height: 163%">CMND/CCCD: {{ studentReceipt.account.cmnd }}</p>
+  }
+  <p style="padding-left: 5pt; text-indent: 0pt; line-height: 163%; text-align: left">
+    <ng-container
+      *ngIf="
+        studentReceipt.account?.address?.street ||
+        studentReceipt.account?.address?.state ||
+        studentReceipt.account?.address?.city ||
+        studentReceipt.account?.address?.country ||
+        studentReceipt.account?.address?.postalCode
+      ">
+      Địa chỉ: {{ studentReceipt.account.address.street }}, {{ studentReceipt.account.address.state }}, {{ studentReceipt.account.address.city }},
+      {{ studentReceipt.account.address.country }},
+      {{ studentReceipt.account.address.postalCode }}
+    </ng-container>
+  </p>
+  <p style="padding-left: 5pt; text-indent: 0pt; line-height: 163%; text-align: left">
+    Số tiền thu: <span style="font-family: &quot;Times New Roman&quot;, Times, serif">{{ studentReceipt.paymentHistory.data.deductedTotalAmount | formattedCurrency }}</span>
+  </p>
+  <p style="padding-left: 5pt; text-indent: 0pt; text-align: left; line-height: 163%">
+    Nội dung thu: Nộp học phí lớp tháng <b>{{ studentReceipt.class.name }}</b>
+    <ng-container *ngIf="studentReceipt.paymentHistory.data.dates[0].paymentType === 'package'">
+      {{ studentReceipt.paymentHistory.data.fromDate | date: "MMMM yyyy" }} - {{ studentReceipt.paymentHistory.data.toDate | date: "MMMM yyyy" }}
+    </ng-container>
+    <ng-container
+      *ngIf="
+        studentReceipt.paymentHistory.data.dates[0].paymentType === 'monthly' ||
+        studentReceipt.paymentHistory.data.dates[0].paymentType === 'hourly-monthly' ||
+        studentReceipt.paymentHistory.data.dates[0].paymentType === 'hourly-package'
+      ">
+      {{ studentReceipt.paymentHistory.data.toDate | date: "MMMM yyyy" }}
+    </ng-container>
+  </p>
+  <p style="text-indent: 0pt; text-align: left"><br /></p>
+  <h2 style="padding-left: 215pt; text-indent: 0pt; line-height: 13pt; text-align: right; line-height: 163%" class="mb-0">NGƯỜI THU TIỀN</h2>
+  <p style="padding-left: 217pt; text-indent: 0pt; line-height: 13pt; text-align: right; line-height: 163%">(Ký và ghi rõ họ tên)</p>
+  <p style="text-indent: 0pt; text-align: left">
+    <br />
+    <br />
+    <br />
+  </p>
+  <p class="s2" class="text-center"
+    >* Người nộp tiền vui lòng kiểm tra kỹ thông tin trước khi duyệt mẫu, giữ lại biên lai cần thận và xuất trình khi công ty yêu câu*" into "* Người nộp tiền vui lòng kiểm tra kỹ
+    thông tin, giữ lại biên lai cần thận và xuất trình khi công ty yêu câu*</p
+  >
+</div>
+
+<ng-template #noResult>
+  <h1 class="text-lg text-center p-8">Not available</h1>
+</ng-template>

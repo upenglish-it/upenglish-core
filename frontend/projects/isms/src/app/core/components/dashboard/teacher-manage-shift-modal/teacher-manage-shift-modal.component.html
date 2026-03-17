@@ -1,0 +1,45 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  nzCentered
+  [nzWidth]="'480px'"
+  [nzTitle]="null"
+  [nzFooter]="null"
+  (nzOnOk)="(1)"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <div class="w-full flex flex-col p-4 space-y-4 h-[400px] overflow-auto mini-scroll-bar">
+      <div class="flex flex-col">
+        <span class="text-base font-medium">Add Report</span>
+        <span class="text-gray-500">Add report ex: instructions or reminders.</span>
+      </div>
+      <form class="flex-col space-y-4 max-h-fit flex-1 flex overflow-auto mini-scroll-bar mini-scroll-bar" [formGroup]="formGroup">
+        <div class="space-y-1.5 flex flex-col">
+          <label class="font-normal text-gray-600 text-xs required">Report</label>
+          <textarea formControlName="notes" nz-input rows="10" cols="20" placeholder="Type here"></textarea>
+        </div>
+
+        <!-- <ul class="mb-0 flex flex-col space-y-1.5 !list-disc" *ngIf="getNotes(itemMeta.item.shift, itemMeta.item.start.toDate()).length > 0">
+          <li *ngFor="let note of getNotes(itemMeta.item.shift, itemMeta.item.start.toDate())" class="text-sm text-gray-500 font-normal">
+            • {{ note.notes }} -
+            <small>{{ note.date }}</small>
+          </li>
+        </ul> -->
+      </form>
+      <button nz-button nzType="primary" (click)="onSubmit()">
+        <div class="flex space-x-1 items-center justify-center">
+          <span>Save Note</span>
+        </div>
+      </button>
+    </div>
+  </ng-container>
+</nz-modal>
+
+<!-- <ng-template #statusTemplate
+  >
+  <ng-container *ngIf="formGroup.value.status === 'present'">Present</ng-container>
+  <ng-container *ngIf="formGroup.value.status === 'absent'">Absent</ng-container>
+  <ng-container *ngIf="formGroup.value.status === 'absent-with-notice'">Absent With Notice</ng-container>
+  <ng-container *ngIf="formGroup.value.status === 'off-day'">Off Day</ng-container>
+</ng-template> -->

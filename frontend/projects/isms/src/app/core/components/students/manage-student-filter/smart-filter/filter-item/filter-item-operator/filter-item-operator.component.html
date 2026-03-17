@@ -1,0 +1,39 @@
+<div class="w-full">
+  <ng-container [formGroup]="filterFormGroup">
+    <ng-container *ngIf="filterFormGroup.value.parameter.value === 'student/status'">
+      <nz-select nzPlaceHolder="Operator" class="w-full" formControlName="operator" [compareWith]="compareValue" [nzDropdownMatchSelectWidth]="false">
+        <nz-option *ngFor="let operator of statusOperators" [nzValue]="operator" [nzLabel]="operator.name"> </nz-option>
+      </nz-select>
+    </ng-container>
+
+    <ng-container *ngIf="filterFormGroup.value.parameter.value === 'student/country'">
+      <nz-select nzPlaceHolder="Operator" class="w-full" formControlName="operator" [compareWith]="compareValue" [nzDropdownMatchSelectWidth]="false">
+        <nz-option *ngFor="let operator of countryOperators" [nzValue]="operator" [nzLabel]="operator.name"> </nz-option>
+      </nz-select>
+    </ng-container>
+
+    <ng-container *ngIf="filterFormGroup.value.parameter.value === 'student/gender'">
+      <nz-select nzPlaceHolder="Operator" class="w-full" formControlName="operator" [compareWith]="compareValue" [nzDropdownMatchSelectWidth]="false">
+        <nz-option *ngFor="let operator of genderOperators" [nzValue]="operator" [nzLabel]="operator.name"> </nz-option>
+      </nz-select>
+    </ng-container>
+
+    <ng-container *ngIf="filterFormGroup.value.parameter.value === 'student/age'">
+      <nz-select nzPlaceHolder="Operator" class="w-full" formControlName="operator" [compareWith]="compareValue" [nzDropdownMatchSelectWidth]="false">
+        <nz-option *ngFor="let operator of ageOperators" [nzValue]="operator" [nzLabel]="operator.name"> </nz-option>
+      </nz-select>
+    </ng-container>
+
+    <ng-container *ngIf="filterFormGroup.value.parameter.value === 'student/branch'">
+      <nz-select nzPlaceHolder="Operator" class="w-full" formControlName="operator" [compareWith]="compareValue" [nzDropdownMatchSelectWidth]="false">
+        <nz-option *ngFor="let operator of branchOperators" [nzValue]="operator" [nzLabel]="operator.name"> </nz-option>
+      </nz-select>
+    </ng-container>
+
+    <ng-container *ngIf="filterFormGroup.value.parameter.value === 'student/lead'">
+      <nz-select nzPlaceHolder="Operator" class="w-full" formControlName="operator" [compareWith]="compareValue" [nzDropdownMatchSelectWidth]="false">
+        <nz-option *ngFor="let operator of leadOperators" [nzValue]="operator" [nzLabel]="operator.name"> </nz-option>
+      </nz-select>
+    </ng-container>
+  </ng-container>
+</div>

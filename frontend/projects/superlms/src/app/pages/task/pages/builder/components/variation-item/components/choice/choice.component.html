@@ -1,0 +1,86 @@
+@let mode = formGroup.value.stateSettings.mode;
+@let action = formGroup.value.stateSettings.action;
+
+<div class="flex w-full flex-col gap-3" [formGroup]="itemFormGroup">
+  @if (mode === "editing") {
+    <div class="flex items-center gap-2 justify-between">
+      <div class="flex items-center gap-2">
+        <span class="font-bold bg-gray-200 text-gray-600 rounded-md p-2">Choice</span>
+        <input nz-input placeholder="Item No." formControlName="itemNumber" style="width: 80px" />
+      </div>
+      <div class="flex items-center gap-1">
+        <span class="font-semibold">Points:</span>
+        <nz-input-number style="text-align: center" formControlName="points" [nzDisabled]="mode === 'viewing'" [nzReadOnly]="mode === 'viewing'" nzMin="0" />
+      </div>
+    </div>
+  }
+
+  @if (mode === "viewing") {
+    <div class="flex items-center gap-2 justify-between">
+      <div>
+        Choice: <span class="font-bold">#{{ itemFormGroup.value.itemNumber }} </span>
+      </div>
+      <div>
+        Points: <span class="font-bold">{{ itemFormGroup.value.points }} </span>
+      </div>
+    </div>
+  }
+
+  <div class="relative flex-1 bg-gray-50 border border-dashed border-gray-300 p-4 rounded-md flex-nowrap flex flex-col gap-4">
+    <!-- @if (mode === "viewing") {
+      <span class="font-bold bg-slms-100 text-slms-500 rounded-md py-1 px-2 absolute -top-3 -left-2">{{ itemFormGroup.value.itemNumber }}</span>
+    } -->
+    @if (mode === "viewing") {
+      <p class="mb-0">{{ itemFormGroup.value.title }}</p>
+      <h4 class="font-medium mb-0">Choices:</h4>
+      <nz-radio-group formControlName="participantAnswer" class="!flex flex-col gap-3" [nzDisabled]="action === 'student-viewing-results'">
+        @for (cfg of choicesFormArray.controls; track cfg.value.id) {
+          <label nz-radio [nzValue]="cfg.value.id">{{ cfg.value.text }}</label>
+        }
+      </nz-radio-group>
+    } @else if (mode === "editing") {
+      <input nz-input type="text" formControlName="title" />
+      <h4 class="font-medium mb-0">Choices:</h4>
+      <div class="!flex flex-col gap-3" formArrayName="choices">
+        @for (cfg of choicesFormArray.controls; track cfg.value.id; let choiceIndex = $index) {
+          <div [formGroup]="choiceFormGroup(choiceIndex)" class="flex gap-2">
+            <input nz-input type="text" formControlName="text" />
+            <button
+              nzTooltipTitle="Click to select as correct answer"
+              nzTooltipPlacement="left"
+              nz-tooltip
+              nz-button
+              nzType="primary"
+              nzShape="circle"
+              (click)="itemFormGroup.get('originalAnswer').setValue(cfg.value.id)">
+              <span class="ph-fill ph-check-circle text-xl text-gray-400" [ngClass]="{ 'text-slms-500': itemFormGroup.value.originalAnswer === cfg.value.id }"></span>
+            </button>
+          </div>
+        }
+      </div>
+      <div class="pt-2">
+        <a (click)="addChoice()" class="inline-block">
+          <div class="flex items-center gap-1">
+            <span>Add New Choice</span>
+            <span class="ph-bold ph-plus"></span>
+          </div>
+        </a>
+      </div>
+    } @else {
+      not listed
+    }
+  </div>
+
+  @if (action === "student-viewing-results") {
+    <div class="font-bold">Score: {{ itemFormGroup.value.score }}</div>
+
+    <div class="font-bold">
+      Answer is:
+      @if (answerStatus) {
+        <p-tag severity="primary" value="Correct"></p-tag>
+      } @else {
+        <p-tag severity="danger" value="Incorrect"></p-tag>
+      }
+    </div>
+  }
+</div>

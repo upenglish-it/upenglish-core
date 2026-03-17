@@ -1,0 +1,67 @@
+<div class="h-screen flex flex-col relative">
+  <!-- <div class="h-[100px] absolute top-0 w-full rounded-b-[10px] bg-blue-500">
+    <div class="p-5 text-center text-2xl text-white">Footer</div>
+  </div> -->
+
+  <div class="banner-container">
+    <div class="banner-header"></div>
+  </div>
+
+  <div class="flex place-items-center gap-4 absolute items-center top-24 justify-center w-full">
+    <span class="ph-bold ph-arrow-bend-up-left text-4xl text-white cursor-pointer z-10" (click)="backToHome()"></span>
+    <span class="text-3xl mb-0 font-bold text-white text-center">Task - Challenges and Homework</span>
+  </div>
+
+  <div class="absolute top-64 px-6 space-y-2 flex flex-col h-80 self-center">
+    <!-- <ng-container *ngFor="let task of tasks">
+      <a [href]="'/tasks/'+task._id" target="_blank" class="py-4 px-8 rounded-md bg-isms-50 hover:border-isms-500 hover:shadow-sm border border-isms-200">
+        {{task.generalInfo.title}} -
+        <ng-container *ngIf="task">
+          <nz-tag [nzColor]="'blue'" *ngIf="task.generalInfo?.type === 'challenge'">Challenge</nz-tag>
+          <nz-tag [nzColor]="'orange'" *ngIf="task.generalInfo?.type === 'homework'">Homework</nz-tag>
+        </ng-container>
+      </a>
+    </ng-container> -->
+
+    <div class="max-w-[500px] w-full flex flex-col space-y-4">
+      <ng-container *ngFor="let task of tasks; let taskIndex = index">
+        <nz-collapse nzExpandedIcon="left">
+          <nz-collapse-panel [nzHeader]="headerTemplate" [nzActive]="true">
+            <div class="flex flex-col space-y-4">
+              <div *ngIf="task.submissions">
+                <h3 class="font-bold text-isms-500">Submitted Tasks</h3>
+                <ul class="flex space-y-2 flex-col">
+                  <li class="font-medium flex space-x-2 items-center" *ngFor="let submission of task.submissions">
+                    <span class="text-isms-500 cursor-pointer hover:text-isms-800" (click)="showSubmissionResult(submission._id)">
+                      {{ submission.createdAt | date: "MM/d/YY • hh:mm a" }}
+                    </span>
+                    <span> - </span>
+                    <div>
+                      <nz-tag [nzColor]="'blue'" *ngIf="submission.task.generalInfo.type === 'challenge'">Challenge</nz-tag>
+                      <nz-tag [nzColor]="'orange'" *ngIf="submission.task.generalInfo.type === 'homework'">Homework</nz-tag>
+                    </div>
+                    <nz-tag [nzColor]="'green'">{{ submission.task.type === "official" ? "Official" : "Training" }}</nz-tag>
+                  </li>
+                </ul>
+              </div>
+              <div class="flex space-x-2">
+                <button nz-button nzType="primary" nzGhost nzSize="small" (click)="loadSubmissions(taskIndex)" nzBlock>Show Submitted Tasks</button>
+                <a nzSize="small" nz-button nzType="primary" nzBlock nzGhost [href]="'/tasks/' + task._id + '?type=' + task.mode">Start Task</a>
+              </div>
+            </div>
+
+            <ng-template #headerTemplate>
+              <div class="flex flex-col gap-2">
+                <span> {{ task.generalInfo.title + " - " + task.generalInfo.type.toLocaleUpperCase() }} </span>
+                <div>
+                  <nz-tag [nzColor]="task.mode === 'training' ? 'green' : 'red'">{{ task.mode.toLocaleUpperCase() }}</nz-tag>
+                </div>
+              </div>
+            </ng-template>
+          </nz-collapse-panel>
+        </nz-collapse>
+      </ng-container>
+    </div>
+  </div>
+</div>
+<isms-review-task-submission-modal #reviewTaskSubmissionModal view-type="viewing-modal"></isms-review-task-submission-modal>

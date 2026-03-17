@@ -1,0 +1,35 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  nzCentered
+  nzTitle="Add Note"
+  nzWidth="600px"
+  (nzAfterClose)="formGroup.reset()"
+  nzOkText="Save Note"
+  [nzCancelText]="hideCancel ? null : 'Cancel'"
+  (nzOnOk)="onSubmit()"
+  [nzMaskClosable]="hideCancel"
+  (nzOnCancel)="toggle()">
+  <ng-container *nzModalContent>
+    <form class="flex flex-col space-y-4 overflow-auto" [formGroup]="formGroup">
+      <div class="space-y-1.5">
+        <label class="isms-label">Title</label>
+        <nz-input-group [nzPrefix]="prefixPosition" class="space-x-1.5">
+          <input nz-input placeholder="Ex. Advance English Prospecting" formControlName="title" />
+        </nz-input-group>
+        <ng-template #prefixPosition>
+          <span class="text-base text-gray-400 ph-duotone ph-briefcase"></span>
+        </ng-template>
+        <ng-container *ngIf="formGroup.get('title').touched">
+          <p class="isms-error-message" *ngIf="formGroup.get('title').hasError('required')">Title is required</p>
+        </ng-container>
+      </div>
+      <div class="space-y-1.5">
+        <label class="isms-label">Message</label>
+        <textarea formControlName="message" nz-input rows="10" [nzAutosize]="{ minRows: 2, maxRows: 6 }" placeholder="Type here"></textarea>
+        <ng-container *ngIf="formGroup.get('message').touched">
+          <p class="isms-error-message" *ngIf="formGroup.get('message').hasError('required')">Message is required</p>
+        </ng-container>
+      </div>
+    </form>
+  </ng-container>
+</nz-modal>

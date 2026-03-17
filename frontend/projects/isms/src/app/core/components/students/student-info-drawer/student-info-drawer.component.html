@@ -1,0 +1,539 @@
+<nz-drawer
+  [nzVisible]="showDrawer"
+  nzCentered
+  [nzKeyboard]="false"
+  nzWidth="580px"
+  [nzTitle]="titleTemplate"
+  (nzOnOk)="(1)"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzFooter]="footerTemplate"
+  nzPlacement="right"
+  [nzClosable]="false"
+  [nzBodyStyle]="{ 'padding-top': '4px' }">
+  <ng-container *nzDrawerContent>
+    <nz-spin nzTip="Processing data please wait..." [nzSpinning]="loading">
+      <ng-container *ngIf="segmentIndex === 0">
+        <form class="py-4 flex-col space-y-5 flex-1 flex overflow-auto mini-scroll-bar min-h-fit" [formGroup]="createStudentFormGroup">
+          <div class="p-4 bg-isms-50 rounded-md text-isms-500 text-center font-medium text-lg">{{ createStudentFormGroup.value.accountId }}</div>
+          <div class="space-x-2 items-center flex flex-1">
+            <nz-switch formControlName="active" nzSize="small"></nz-switch>
+            <label class="text-gray-700 text-xs font-normal">
+              {{ createStudentFormGroup.value.active ? "Active" : "Inactive" }}
+              <span
+                class="cursor-pointer ml-1"
+                nz-icon
+                nzType="info-circle"
+                nzTheme="twotone"
+                nz-tooltip
+                nzTooltipTitle="The inactive student will not show in the student list"></span>
+            </label>
+            <!-- <nz-select formControlName="branches" nzShowSearch nzMode="multiple" class="w-full" nzPlaceHolder="Select branch" [nzDropdownMatchSelectWidth]="false">
+              <nz-option *ngFor="let branch of branches" [nzLabel]="branch.name" [nzValue]="branch._id" [nzHide]="hideSelectedBranch(branch._id)"></nz-option>
+            </nz-select> -->
+          </div>
+
+          <div class="space-y-1.5 flex-1">
+            <label class="text-gray-700 text-xs font-medium isms-required">
+              Assigned To:
+              <span
+                class="cursor-pointer ml-1"
+                nz-icon
+                nzType="info-circle"
+                nzTheme="twotone"
+                nz-tooltip
+                nzTooltipTitle="The inactive student will not show in the student list"></span>
+            </label>
+            <nz-select formControlName="assignedTo" class="w-full" nzPlaceHolder="Select staff" [nzDropdownMatchSelectWidth]="false">
+              <nz-option *ngFor="let staff of staffs" [nzLabel]="staff.firstName + ' ' + staff.lastName" [nzValue]="staff._id"></nz-option>
+            </nz-select>
+          </div>
+
+          <div class="space-y-1.5 flex-1">
+            <label class="text-gray-700 text-xs font-medium">This student was added to this branches:</label>
+            <nz-select formControlName="branches" nzShowSearch nzMode="multiple" class="w-full" nzPlaceHolder="Select branch" [nzDropdownMatchSelectWidth]="false">
+              <nz-option *ngFor="let branch of branches" [nzLabel]="branch.name" [nzValue]="branch._id" [nzHide]="hideSelectedBranch(branch._id)"></nz-option>
+            </nz-select>
+          </div>
+
+          <div class="space-y-1.5 flex-1" formArrayName="emailAddresses">
+            <ng-container *ngIf="emailAddressesFormArray.controls.length > 0">
+              <label class="font-normal text-gray-600 text-xs isms-required">
+                Email Address
+                <span class="cursor-pointer ml-1" nz-icon nzType="info-circle" nzTheme="twotone" nz-tooltip nzTooltipTitle="Use to login in with microsoft."></span>
+              </label>
+              <ng-container *ngFor="let formGroup of emailAddressesFormArray.controls; let emailAddressIndex = index">
+                <div class="flex space-x-1 items-center">
+                  <!-- <div>
+              <div class="h-6 w-6 rounded-full grid place-items-center bg-white border cursor-grab hover:group">
+                <span class="ph ph-list group-hover:scale-125"></span>
+              </div>
+            </div> -->
+                  <!-- nzStatus="warning" -->
+                  @if (account.role === "admin" || account.role === "receptionist") {
+                    <input nz-input placeholder="Type here" [formControlName]="emailAddressIndex" />
+                  } @else {
+                    <input nz-input placeholder="Type here" readonly disabled [value]="formGroup.value" *ngIf="!noEmailAddress" />
+                    <input nz-input placeholder="Type here" [formControlName]="emailAddressIndex" *ngIf="noEmailAddress" />
+                  }
+
+                  <!-- Since we use microsoft login no need to show add email -->
+                  <!-- <div>
+                <div
+                  class="h-6 w-6 rounded-full hover:bg-error-400 text-gray-500 hover:border-error-500 transition-all hover:text-white grid place-items-center bg-white border cursor-pointer"
+                  (click)="removeEmailAddress(emailAddressIndex)"
+                >
+                  <span class="ph-bold ph-trash"></span>
+                </div>
+              </div> -->
+                </div>
+                <ng-container *ngIf="emailAddressesFormArray.controls[emailAddressIndex].touched">
+                  <p class="isms-error-message" *ngIf="emailAddressesFormArray.controls[emailAddressIndex].hasError('required')">Email address is required</p>
+                  <p class="isms-error-message" *ngIf="emailAddressesFormArray.controls[emailAddressIndex].hasError('maxlength')">
+                    Email address should not be more than {{ emailAddressesFormArray.controls[emailAddressIndex].errors["maxlength"].requiredLength }} characters
+                  </p>
+                  <p
+                    class="isms-error-message"
+                    *ngIf="emailAddressesFormArray.controls[emailAddressIndex].hasError('email') || emailAddressesFormArray.controls[emailAddressIndex].hasError('pattern')">
+                    Email address is invalid format
+                  </p>
+                </ng-container>
+              </ng-container>
+            </ng-container>
+
+            <!-- Since we use microsoft login no need to show add email -->
+            <!-- <div [class.pt-2]="emailAddressesFormArray.controls.length > 0">
+          <a class="flex items-center space-x-1" (click)="addEmailAddress()">
+            <span nz-icon nzType="plus" nzTheme="outline"></span>
+            <span>Add Email Address</span>
+          </a>
+        </div> -->
+          </div>
+
+          <div class="space-y-1.5 flex-1">
+            <label class="font-normal text-gray-600 text-xs">CMND/CCCD</label>
+            <input nz-input placeholder="Type here" formControlName="cmnd" />
+          </div>
+
+          <div class="flex space-x-2">
+            <div class="space-y-1.5 flex-1">
+              <label class="font-normal text-gray-600 text-xs isms-required">First Name</label>
+              <input nz-input placeholder="Type here" formControlName="firstName" />
+              <ng-container *ngIf="createStudentFormGroup.get('firstName').touched">
+                <p class="isms-error-message" *ngIf="createStudentFormGroup.get('firstName').hasError('required')">First name is required</p>
+                <p class="isms-error-message" *ngIf="createStudentFormGroup.get('firstName').hasError('maxlength')">
+                  First name should not be more than {{ createStudentFormGroup.get("firstName").errors["maxlength"].requiredLength }} characters
+                </p>
+                <p class="isms-error-message" *ngIf="createStudentFormGroup.get('firstName').hasError('pattern')">First name is invalid format</p>
+              </ng-container>
+            </div>
+
+            <div class="space-y-1.5 flex-1">
+              <label class="font-normal text-gray-600 text-xs isms-required">Last Name</label>
+              <input nz-input placeholder="Type here" formControlName="lastName" />
+              <ng-container *ngIf="createStudentFormGroup.get('lastName').touched">
+                <p class="isms-error-message" *ngIf="createStudentFormGroup.get('lastName').hasError('required')">Last name is required</p>
+                <p class="isms-error-message" *ngIf="createStudentFormGroup.get('lastName').hasError('maxlength')">
+                  Last name should not be more than {{ createStudentFormGroup.get("lastName").errors["maxlength"].requiredLength }} characters
+                </p>
+                <p class="isms-error-message" *ngIf="createStudentFormGroup.get('lastName').hasError('pattern')">Last name is invalid format</p>
+              </ng-container>
+            </div>
+          </div>
+
+          <div class="space-y-1.5 flex-1">
+            <label class="font-normal text-gray-600 text-xs">Gender</label>
+            <nz-select formControlName="gender" nzShowSearch class="w-full" nzPlaceHolder="Select gender" [nzDropdownMatchSelectWidth]="false">
+              <nz-option nzLabel="Male" nzValue="male"></nz-option>
+              <nz-option nzLabel="Female" nzValue="female"></nz-option>
+            </nz-select>
+            <ng-container *ngIf="createStudentFormGroup.get('gender').touched">
+              <p class="isms-error-message" *ngIf="createStudentFormGroup.get('gender').hasError('required')">Gender is required</p>
+            </ng-container>
+          </div>
+
+          <div class="space-y-1.5 flex-1">
+            <label class="font-normal text-gray-600 text-xs">Birth Date</label>
+            <nz-date-picker formControlName="birthDate" class="w-full"></nz-date-picker>
+            <ng-container *ngIf="createStudentFormGroup.get('birthDate').touched">
+              <p class="isms-error-message" *ngIf="createStudentFormGroup.get('birthDate').hasError('required')">Birth date is required</p>
+            </ng-container>
+          </div>
+
+          <fieldset class="border border-solid border-gray-200 p-3 rounded-md" formGroupName="contactNumbers">
+            <legend class="font-normal text-gray-600 text-xs w-fit px-0.5">Contact Numbers</legend>
+            <div class="space-y-1.5 flex-1">
+              <ng-container *ngIf="contactNumbersFormArray.controls.length > 0">
+                <ng-container *ngFor="let formGroup of contactNumbersFormArray.controls; let contactNumberIndex = index">
+                  <div class="flex space-x-1 items-center" [formGroup]="toFormGroup(formGroup)">
+                    <div class="space-x-1.5 flex flex-1">
+                      <nz-select formControlName="type" nzShowSearch class="min-w-[80px]" [nzDropdownMatchSelectWidth]="false">
+                        <nz-option *ngFor="let type of contactNumberTypes" [nzLabel]="type.name" [nzValue]="type.value"> </nz-option>
+                      </nz-select>
+                      <nz-select formControlName="countryCallingCode" nzShowSearch class="min-w-[80px]" [nzCustomTemplate]="contactNumber" [nzDropdownMatchSelectWidth]="false">
+                        <nz-option
+                          *ngFor="let numberCountry of numberCountries"
+                          [nzLabel]="numberCountry.flag + ' (' + numberCountry.countryCallingCode + ') ' + numberCountry.name"
+                          [nzValue]="numberCountry.countryCallingCode">
+                        </nz-option>
+                      </nz-select>
+                      <ng-template #contactNumber let-selected>{{ selected.nzValue }}</ng-template>
+                      <input nz-input type="text" numberOnly placeholder="Type here" class="w-full" formControlName="number" />
+                    </div>
+                    <div>
+                      <div
+                        class="h-6 w-6 rounded-full hover:bg-error-400 text-gray-500 hover:border-error-500 transition-all hover:text-white grid place-items-center bg-white border cursor-pointer"
+                        (click)="removeContactNumber(contactNumberIndex)">
+                        <span class="ph-bold ph-trash"></span>
+                      </div>
+                    </div>
+                  </div>
+                </ng-container>
+              </ng-container>
+              <div [class.pt-2]="contactNumbersFormArray.controls.length > 0">
+                <a class="flex items-center space-x-1" (click)="addContactNumber()">
+                  <span nz-icon nzType="plus" nzTheme="outline"></span>
+                  <span>Add Contact Number</span>
+                  <span class="cursor-pointer" nz-icon nzType="info-circle" nzTheme="twotone" nz-tooltip nzTooltipTitle="Student contact number"></span>
+                </a>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="border border-solid border-gray-200 p-3 rounded-md" formGroupName="address">
+            <legend class="font-normal text-gray-600 text-xs w-fit px-0.5">Address Information</legend>
+            <div class="flex-col flex space-y-3">
+              <div class="space-y-1.5 flex-1">
+                <label class="font-normal text-gray-600 text-xs">Street</label>
+                <input nz-input placeholder="Type here" formControlName="street" />
+                <ng-container *ngIf="createStudentFormGroup.get('address').get('street').touched">
+                  <p class="isms-error-message" *ngIf="createStudentFormGroup.get('address').get('street').hasError('required')">Street is required</p>
+                </ng-container>
+              </div>
+              <div class="space-y-1.5 flex-1">
+                <label class="font-normal text-gray-600 text-xs">City</label>
+                <input nz-input placeholder="Type here" formControlName="city" />
+                <ng-container *ngIf="createStudentFormGroup.get('address').get('city').touched">
+                  <p class="isms-error-message" *ngIf="createStudentFormGroup.get('address').get('city').hasError('required')">City is required</p>
+                </ng-container>
+              </div>
+              <div class="space-y-1.5 flex-1">
+                <label class="font-normal text-gray-600 text-xs">State / Province / Region</label>
+                <input nz-input placeholder="Type here" formControlName="state" />
+                <ng-container *ngIf="createStudentFormGroup.get('address').get('state').touched">
+                  <p class="isms-error-message" *ngIf="createStudentFormGroup.get('address').get('state').hasError('required')">State is required</p>
+                </ng-container>
+              </div>
+              <div class="space-y-1.5 flex-1">
+                <label class="font-normal text-gray-600 text-xs">Country</label>
+                <nz-select formControlName="country" nzPlaceHolder="Select country" nzShowSearch class="w-full" [nzDropdownMatchSelectWidth]="false">
+                  <nz-option *ngFor="let country of countries" [nzLabel]="country.name" [nzValue]="country.code"> </nz-option>
+                </nz-select>
+                <ng-container *ngIf="createStudentFormGroup.get('address').get('country').touched">
+                  <p class="isms-error-message" *ngIf="createStudentFormGroup.get('address').get('country').hasError('required')">Country is required</p>
+                </ng-container>
+              </div>
+              <div class="space-y-1.5 flex-1">
+                <label class="font-normal text-gray-600 text-xs">Postal code</label>
+                <input nz-input numberOnly placeholder="Type here" formControlName="postalCode" />
+                <ng-container *ngIf="createStudentFormGroup.get('address').get('postalCode').touched">
+                  <p class="isms-error-message" *ngIf="createStudentFormGroup.get('address').get('postalCode').hasError('required')">Postal code is required</p>
+                </ng-container>
+              </div>
+              <div class="space-y-1.5 flex-1">
+                <label class="font-normal text-gray-600 text-xs">Timezone</label>
+                <nz-select formControlName="timezone" nzShowSearch nzPlaceHolder="Select timezone" class="w-full" [nzDropdownMatchSelectWidth]="false">
+                  <nz-option *ngFor="let timezone of timezones" [nzLabel]="timezone.label + ' (' + timezone.offset + ')'" [nzValue]="timezone.timezone"> </nz-option>
+                </nz-select>
+                <ng-container *ngIf="createStudentFormGroup.get('address').get('timezone').touched">
+                  <p class="isms-error-message" *ngIf="createStudentFormGroup.get('address').get('timezone').hasError('required')">Timezone is required</p>
+                </ng-container>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="border border-solid border-gray-200 p-3 rounded-md" formGroupName="guardians">
+            <legend class="font-normal text-gray-600 text-xs w-fit px-0.5">Guardian</legend>
+            <div class="flex-col flex space-y-23">
+              <ng-container *ngIf="guardiansFormArray.controls.length > 0">
+                <div class="space-y-2 flex-1 flex flex-col gap-1">
+                  <ng-container *ngFor="let formGroup of guardiansFormArray.controls; let guardianIndex = index">
+                    <div class="flex space-x-1 items-center" [formGroup]="toFormGroup(formGroup)">
+                      <div class="space-x-1.5 flex flex-1 gap-2">
+                        <div class="space-y-1.5 flex-1">
+                          <label class="font-normal text-gray-600 text-xs isms-required">Name</label>
+                          <input nz-input placeholder="Type here" formControlName="name" />
+                          <ng-container *ngIf="guardiansFormArray.controls[guardianIndex].get('name').touched">
+                            <p class="isms-error-message" *ngIf="guardiansFormArray.controls[guardianIndex].get('name').hasError('required')">Name is required</p>
+                            <p class="isms-error-message" *ngIf="guardiansFormArray.controls[guardianIndex].get('name').hasError('maxlength')">
+                              Name should not be more than {{ guardiansFormArray.controls[guardianIndex].get("name").errors["maxlength"].requiredLength }} characters
+                            </p>
+                            <p class="isms-error-message" *ngIf="guardiansFormArray.controls[guardianIndex].get('name').hasError('pattern')">Name is invalid format</p>
+                          </ng-container>
+                        </div>
+                        <div class="space-y-1.5 flex-1">
+                          <label class="font-normal text-gray-600 text-xs isms-required">Relationship</label>
+                          <nz-select formControlName="relationship" nzShowSearch class="w-full" nzPlaceHolder="Select relationship" [nzDropdownMatchSelectWidth]="false">
+                            <ng-container *ngFor="let tag of tags">
+                              <nz-option *ngIf="tag.type === 'relationship'" [nzLabel]="tag.value" [nzValue]="tag.value"></nz-option>
+                            </ng-container>
+                          </nz-select>
+                        </div>
+                        <div class="space-y-1.5 flex-1">
+                          <label class="font-normal text-gray-600 text-xs isms-required">Primary #</label>
+                          <input nz-input formControlName="primaryNumber" />
+                          <ng-container *ngIf="guardiansFormArray.controls[guardianIndex].get('primaryNumber').touched">
+                            <p class="isms-error-message" *ngIf="guardiansFormArray.controls[guardianIndex].get('primaryNumber').hasError('required')"
+                              >Primary number is required</p
+                            >
+                          </ng-container>
+                        </div>
+                        <div class="space-y-1.5 flex-1">
+                          <label class="font-normal text-gray-600 text-xs isms-required">Secondary #</label>
+                          <input nz-input formControlName="secondaryNumber" />
+                        </div>
+                      </div>
+                      <div>
+                        <div
+                          class="h-6 w-6 rounded-full hover:bg-error-400 text-gray-500 hover:border-error-500 transition-all hover:text-white grid place-items-center bg-white border cursor-pointer"
+                          (click)="removeGuardian(guardianIndex)">
+                          <span class="ph-bold ph-trash"></span>
+                        </div>
+                      </div>
+                    </div>
+                  </ng-container>
+                </div>
+              </ng-container>
+
+              <div [class.pt-3]="guardiansFormArray.controls.length > 0">
+                <a class="flex items-center space-x-1" (click)="addGuardian()">
+                  <span nz-icon nzType="plus" nzTheme="outline"></span>
+                  <span>Add Guardian</span>
+                </a>
+              </div>
+            </div>
+          </fieldset>
+
+          <div class="space-y-1.5 flex-1">
+            <label class="font-normal text-gray-600 text-xs">Additional Notes</label>
+            <textarea nz-input formControlName="additionalNotes" placeholder="Type here" [nzAutosize]="{ minRows: 2, maxRows: 6 }"></textarea>
+          </div>
+
+          <div class="space-y-1.5 flex-1" formArrayName="sources">
+            <ng-container *ngIf="sourcesFormArray.controls.length > 0">
+              <label class="font-normal text-gray-600 text-xs">Sources</label>
+              <ng-container *ngFor="let formGroup of sourcesFormArray.controls; let sourceIndex = index">
+                <div class="flex space-x-1 items-center">
+                  <!-- <input nz-input placeholder="Type here" [formControlName]="sourceIndex" /> -->
+                  <nz-select [formControlName]="sourceIndex" nzShowSearch class="w-full" nzPlaceHolder="Select source" [nzDropdownMatchSelectWidth]="false">
+                    <nz-option *ngFor="let source of sources" [nzLabel]="source.value" [nzValue]="source.value"></nz-option>
+                  </nz-select>
+                  <div>
+                    <div
+                      class="h-6 w-6 rounded-full hover:bg-error-400 text-gray-500 hover:border-error-500 transition-all hover:text-white grid place-items-center bg-white border cursor-pointer"
+                      (click)="removeSource(sourceIndex)">
+                      <span class="ph-bold ph-trash"></span>
+                    </div>
+                  </div>
+                </div>
+                <ng-container *ngIf="sourcesFormArray.controls[sourceIndex].touched">
+                  <p class="isms-error-message" *ngIf="sourcesFormArray.controls[sourceIndex].hasError('required')">Source is required</p>
+                  <p class="isms-error-message" *ngIf="sourcesFormArray.controls[sourceIndex].hasError('maxlength')">
+                    Source should not be more than {{ sourcesFormArray.controls[sourceIndex].errors["maxlength"].requiredLength }} characters
+                  </p>
+                </ng-container>
+              </ng-container>
+            </ng-container>
+            <div [class.pt-2]="sourcesFormArray.controls.length > 0">
+              <a class="flex items-center space-x-1" (click)="addSource()">
+                <span nz-icon nzType="plus" nzTheme="outline"></span>
+                <span>Add Source</span>
+                <span
+                  class="cursor-pointer"
+                  nz-icon
+                  nzType="info-circle"
+                  nzTheme="twotone"
+                  nz-tooltip
+                  nzTooltipTitle="Identify the student where it came from. Ex: facebook.com, instagram.com"></span>
+              </a>
+            </div>
+          </div>
+
+          <div class="space-y-1.5 flex-1" formArrayName="tags">
+            <ng-container *ngIf="tagsFormArray.controls.length > 0">
+              <label class="font-normal text-gray-600 text-xs">Tags</label>
+              <ng-container *ngFor="let formGroup of tagsFormArray.controls; let sourceIndex = index">
+                <div class="flex space-x-1 items-center">
+                  <!-- <input nz-input placeholder="Type here" [formControlName]="sourceIndex" /> -->
+                  <!-- {{ tags | json }} -->
+                  <nz-select [formControlName]="sourceIndex" nzShowSearch class="w-full" nzPlaceHolder="Select tags" [nzDropdownMatchSelectWidth]="false">
+                    <nz-option *ngFor="let tag of tags" [nzLabel]="tag.value" [nzValue]="tag._id"></nz-option>
+                  </nz-select>
+                  <div>
+                    <div
+                      class="h-6 w-6 rounded-full hover:bg-error-400 text-gray-500 hover:border-error-500 transition-all hover:text-white grid place-items-center bg-white border cursor-pointer"
+                      (click)="removeTag(sourceIndex)">
+                      <span class="ph-bold ph-trash"></span>
+                    </div>
+                  </div>
+                </div>
+                <ng-container *ngIf="tagsFormArray.controls[sourceIndex].touched">
+                  <p class="isms-error-message" *ngIf="tagsFormArray.controls[sourceIndex].hasError('required')">Tag is required</p>
+                  <p class="isms-error-message" *ngIf="tagsFormArray.controls[sourceIndex].hasError('maxlength')">
+                    Tag should not be more than {{ tagsFormArray.controls[sourceIndex].errors["maxlength"].requiredLength }} characters
+                  </p>
+                </ng-container>
+              </ng-container>
+            </ng-container>
+            <div [class.pt-2]="tagsFormArray.controls.length > 0">
+              <a class="flex items-center space-x-1" (click)="addTag()">
+                <span nz-icon nzType="plus" nzTheme="outline"></span>
+                <span>Add Tag</span>
+                <span class="cursor-pointer" nz-icon nzType="info-circle" nzTheme="twotone" nz-tooltip nzTooltipTitle="Tag the student. Ex: beginner, dropped"></span>
+              </a>
+            </div>
+          </div>
+        </form>
+      </ng-container>
+
+      <ng-container *ngIf="segmentIndex === 1">
+        <div class="space-y-4 py-4">
+          <isms-savings-breakdown-modal [refund]="true" [student-id]="studentId"></isms-savings-breakdown-modal>
+
+          <table class="w-full text-sm text-left text-gray-500">
+            <thead class="text-xs text-gray-700 bg-gray-50">
+              <tr>
+                <!-- <th scope="col" class="border px-2 py-1.5">
+                  Total Savings: <span class="font-bold">{{ createStudentFormGroup.value.saving | formattedCurrency }}</span>
+                </th> -->
+                <th scope="col" class="border px-2 py-1.5">
+                  Total Debt: <span class="font-bold">{{ totalAmountDebt | formattedCurrency }}</span>
+                </th>
+              </tr>
+            </thead>
+          </table>
+
+          <nz-collapse *ngIf="enrolledClasses.length > 0" class="select-none">
+            <nz-collapse-panel
+              *ngFor="let class of enrolledClasses"
+              [nzHeader]="headerTemplate"
+              [nzActive]="class.active"
+              [nzExtra]="extraTpl"
+              nzExpandedIcon="right"
+              [ngClass]="{
+                'opacity-60 ': class.status !== 'ongoing',
+                'bg-error-100': class.totalAmountNotPaid > 0,
+                'bg-green-100': class.totalAmountNotPaid === 0,
+              }">
+              <div class="flex-1 space-y-3">
+                <div class="flex items-center justify-between">
+                  <span class="font-medium text-gray-700">Course</span>
+                  <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                  <span class="font-semibold text-gray-700">
+                    {{ class.course.name }}
+                  </span>
+                </div>
+
+                <div class="flex items-center justify-between">
+                  <span class="font-medium text-gray-700">Class Date</span>
+                  <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                  <div class="flex items-center gap-2">
+                    <span class="font-semibold text-gray-700">
+                      {{ class.firstRecord.year + "-" + class.firstRecord.month + "-" + class.firstRecord.day | date: "MMM dd, yyyy" }}
+                    </span>
+                    <span>to</span>
+                    <span class="font-semibold text-gray-700">
+                      {{ class.latestRecord.year + "-" + class.latestRecord.month + "-" + class.latestRecord.day | date: "MMM dd, yyyy" }}
+                    </span>
+                  </div>
+                </div>
+                <!-- 
+                <div class="flex items-center justify-between">
+                  <span class="font-medium text-gray-700">Last Attendance</span>
+                  <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                  <span class="font-semibold text-gray-700">
+                    {{ class.lastAttendance | date : "MMM dd, yyyy" }}
+                  </span>
+                </div> -->
+
+                <div class="flex items-center justify-between">
+                  <span class="font-medium text-gray-700">Days of class</span>
+                  <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                  <span class="font-semibold text-gray-700">
+                    {{ class.totalDays }}
+                  </span>
+                </div>
+
+                <div class="flex items-center justify-between">
+                  <span class="font-medium text-gray-700">Amount Paid</span>
+                  <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                  <span class="font-semibold text-gray-700">
+                    {{ class.totalAmountPaid ? (class.totalAmountPaid | formattedCurrency) : "0" }}
+                  </span>
+                </div>
+
+                <div class="flex items-center justify-between">
+                  <span class="font-medium text-gray-700">Debt</span>
+                  <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+                  <span class="font-semibold text-gray-700">
+                    {{ class.totalAmountNotPaid ? (class.totalAmountNotPaid | formattedCurrency) : "0" }}
+                  </span>
+                </div>
+
+                <div class="flex justify-items-start items-start flex-wrap">
+                  <div
+                    *ngFor="let debt of class.debtRecords"
+                    class="cursor-pointer grid place-items-center bg-yellow-100 border border-yellow-500 text-[9px] h-6 rounded-md px-2 m-[3px]"
+                    nz-tooltip
+                    [nzTooltipTitle]="debt.totalAmount | formattedCurrency">
+                    <span class="text-yellow-500 text-xs">{{ debt.date | date: "MMM YYYY" }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <ng-template #expandedIcon let-active>
+                <span nz-icon nzType="caret-right" class="ant-collapse-arrow"></span>
+              </ng-template>
+
+              <ng-template #headerTemplate let-active>
+                <div class="flex gap-2 items-center">
+                  <span class="mr-2 font-medium">{{ class.name }}</span>
+                  <div>
+                    <div class="px-1.5 text-xs grid place-items-center border border-blue-400 text-blue-500 bg-blue-50 rounded-md" *ngIf="class.status === 'ongoing'">Active</div>
+                    <div class="px-1.5 text-xs grid place-items-center border border-error-400 text-error-500 bg-error-50 rounded-md" *ngIf="class.status !== 'ongoing'">
+                      Inactive
+                    </div>
+                  </div>
+                </div>
+              </ng-template>
+
+              <ng-template #extraTpl> Amount Paid: {{ class.totalAmountPaid ? (class.totalAmountPaid | formattedCurrency) : "0" }}</ng-template>
+            </nz-collapse-panel>
+          </nz-collapse>
+
+          <nz-alert *ngIf="enrolledClasses.length === 0" nzType="warning" nzMessage="No class enrolled" nzShowIcon></nz-alert>
+        </div>
+      </ng-container>
+
+      <!-- <ng-container *ngIf="segmentIndex === 2">
+        <div class="py-4">performance or challenges goes here</div>
+      </ng-container> -->
+    </nz-spin>
+  </ng-container>
+
+  <ng-template #titleTemplate>
+    <div class="">
+      <!-- <span>Student Information</span> -->
+      <!-- <div class=""> -->
+      <isms-segmented-selector [options]="segmentOptions" [current-index]="segmentIndex" (on-changed)="onChangeSegmentSelector($event)"> </isms-segmented-selector>
+      <!-- </div> -->
+    </div>
+  </ng-template>
+
+  <ng-template #footerTemplate>
+    <div class="flex space-x-2">
+      <button nz-button nzDanger (click)="toggle()" nzBlock>Close</button>
+      <button nz-button nzType="primary" [nzLoading]="loading" (click)="onUpdate()" nzBlock [disabled]="createStudentFormGroup.invalid">Save Changes</button>
+    </div>
+  </ng-template>
+</nz-drawer>

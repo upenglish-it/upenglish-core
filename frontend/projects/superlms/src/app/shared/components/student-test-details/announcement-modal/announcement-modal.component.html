@@ -1,0 +1,25 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  [nzWidth]="'600px'"
+  [nzTitle]="announcementFormGroup.value._id ? 'Edit Announcement' : 'Create Announcement'"
+  [nzMaskClosable]="false"
+  [nzClosable]="false"
+  nzCancelText="Close"
+  (nzOnCancel)="toggle()"
+  [nzOkText]="announcementFormGroup.value._id ? 'Save' : 'Create'"
+  (nzOnOk)="onSubmit()"
+  [nzOkDisabled]="announcementFormGroup.invalid"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <form class="px-4 py-3 flex-col max-h-[500px] space-y-3 flex-1 flex overflow-auto mini-scroll-bar min-h-fit" [formGroup]="announcementFormGroup">
+      <div class="space-y-1.5 flex-1">
+        <label class="slms-label slms-required">Title</label>
+        <input nz-input formControlName="title" placeholder="Enter title" />
+      </div>
+      <div class="space-y-1.5 flex-1">
+        <label class="slms-label slms-required">Message</label>
+        <textarea nz-input formControlName="message" class="resize-none" [nzAutosize]="{ minRows: 10 }" placeholder="Type here..."></textarea>
+      </div>
+    </form>
+  </ng-container>
+</nz-modal>

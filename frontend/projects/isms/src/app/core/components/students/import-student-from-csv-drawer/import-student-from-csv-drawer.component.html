@@ -1,0 +1,210 @@
+<nz-drawer
+  [nzVisible]="showDrawer"
+  nzCentered
+  [nzWidth]="drawerWidth"
+  [nzTitle]="importCSVFormGroup.value.stepView != 'success' ? titleTemplate : null"
+  (nzOnOk)="(1)"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzFooter]="importCSVFormGroup.value.stepView != 'success' ? footerTemplate : null"
+  nzPlacement="right"
+  [nzClosable]="false">
+  <ng-container *nzDrawerContent>
+    <!-- Upload csv -->
+    <ng-container *ngIf="importCSVFormGroup.value.stepView === 'upload-csv'">
+      <label
+        upload-file
+        (fileDropped)="onDropFile($event)"
+        class="flex justify-center items-center w-full h-24 md:h-32 px-3 md:px-4 transition bg-white border border-gray-300 border-dashed rounded-md appearance-none cursor-pointer hover:border-gray-400 focus:outline-none"
+        for="import-csv">
+        <span class="flex flex-col sm:flex-row items-center space-y-1 sm:space-y-0 sm:space-x-2 text-center">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-gray-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+          </svg>
+          <span class="text-xs md:text-sm font-medium text-gray-400">
+            Drop CSV to Attach, or
+            <span class="text-blue-600 underline">browse</span>
+          </span>
+        </span>
+        <input type="file" name="import-csv" id="import-csv" accept=".csv" class="hidden" (change)="onUploadFile($event)" />
+      </label>
+    </ng-container>
+
+    <!-- Map Data -->
+    <ng-container *ngIf="importCSVFormGroup.value.stepView === 'map-data'">
+      <div class="flex flex-col lg:flex-row overflow-x-auto">
+        <!-- columns in csv file -->
+        <div class="flex flex-col flex-1 min-w-0 lg:min-w-[200px]">
+          <h4 class="mb-0 text-center p-2 md:p-4 text-xs md:text-sm font-bold">Column in CSV file</h4>
+          <div class="min-h-[60px] md:h-16 grid place-items-center bg-gray-50 px-2 md:px-4 border-t border-r border-b lg:border-b-0 last:lg:border-b" *ngFor="let header of importCSVFormGroup.value.header; let isLast = last">
+            <h4 class="mb-0 text-xs md:text-sm text-gray-500 font-semibold truncate w-full text-center">{{ header.csvField }}</h4>
+            <!-- <span>{{ header | json }}</span> -->
+          </div>
+        </div>
+        <!-- columns in up -->
+        <div class="flex flex-col flex-1 min-w-0 lg:min-w-[200px]">
+          <h4 class="mb-0 p-2 md:p-4 text-center text-xs md:text-sm font-bold">Column in UP English</h4>
+          <div class="min-h-[60px] md:h-16 grid place-items-center px-2 md:px-4 border-t border-r border-b lg:border-b-0 last:lg:border-b" *ngFor="let header of importCSVFormGroup.value.header; let isLast = last">
+            <nz-select
+              class="w-full"
+              nzPlaceHolder="Select field or skip this"
+              nzAllowClear
+              class="value"
+              [(ngModel)]="header.systemField"
+              nzShowSearch
+              [nzDropdownMatchSelectWidth]="false">
+              <nz-option *ngFor="let field of systemFields" [nzValue]="field.value" [nzLabel]="field.name"></nz-option>
+            </nz-select>
+          </div>
+        </div>
+        <!-- preview info -->
+        <div class="flex flex-col flex-1 min-w-0 lg:min-w-[200px]">
+          <div class="p-2 md:p-4 flex items-center justify-center space-x-1">
+            <h4 class="mb-0 text-xs md:text-sm font-bold">Preview information</h4>
+            <a class="ph ph-arrows-clockwise text-sm md:text-base cursor-pointer" (click)="previewRecords()"></a>
+          </div>
+          <div class="min-h-[60px] md:h-16 grid place-items-center px-2 md:px-4 border-t border-r border-b last:border-b" *ngFor="let header of importCSVFormGroup.value.header; let headerIndex = index; let isLast = last">
+            <h4 class="mb-0 text-xs md:text-sm text-gray-500 truncate w-full text-center">{{ importCSVFormGroup.value.previewRecords[importCSVFormGroup.value.previewRecordsIndex][headerIndex] }}</h4>
+          </div>
+        </div>
+      </div>
+    </ng-container>
+
+    <ng-container *ngIf="importCSVFormGroup.value.stepView === 'add-reference'">
+      <form class="px-3 md:px-4 py-2 md:py-3 flex-col max-h-[500px] space-y-2 md:space-y-3 flex-1 flex overflow-auto mini-scroll-bar mini-scroll-bar min-h-fit" [formGroup]="importCSVFormGroup">
+        <div class="space-y-1.5 flex-1">
+          <label class="font-normal text-gray-600 text-xs">Add to multiple branches</label>
+          <nz-select formControlName="branches" nzShowSearch nzMode="multiple" class="w-full" nzPlaceHolder="Select branch" [nzDropdownMatchSelectWidth]="false">
+            <nz-option *ngFor="let branch of branches" [nzLabel]="branch.name" [nzValue]="branch._id" [nzHide]="hideSelectedBranch(branch._id)"></nz-option>
+          </nz-select>
+        </div>
+
+        <div class="space-y-1.5 flex-1" formArrayName="sources">
+          <ng-container *ngIf="sourcesFormArray.controls.length > 0">
+            <label class="font-normal text-gray-600 text-xs">Sources</label>
+            <ng-container *ngFor="let formGroup of sourcesFormArray.controls; let sourceIndex = index">
+              <div class="flex space-x-1 items-center">
+                <input nz-input placeholder="Type here" [formControlName]="sourceIndex" class="flex-1" />
+                <div class="flex-shrink-0">
+                  <div
+                    class="h-6 w-6 rounded-full hover:bg-error-400 text-gray-500 hover:border-error-500 transition-all hover:text-white grid place-items-center bg-white border cursor-pointer"
+                    (click)="removeSource(sourceIndex)">
+                    <span class="ph-bold ph-trash text-xs"></span>
+                  </div>
+                </div>
+              </div>
+              <ng-container *ngIf="sourcesFormArray.controls[sourceIndex].touched">
+                <p class="isms-error-message" *ngIf="sourcesFormArray.controls[sourceIndex].hasError('required')">Source is required</p>
+                <p class="isms-error-message" *ngIf="sourcesFormArray.controls[sourceIndex].hasError('maxlength')">
+                  Source should not be more than {{ sourcesFormArray.controls[sourceIndex].errors["maxlength"].requiredLength }} characters
+                </p>
+              </ng-container>
+            </ng-container>
+          </ng-container>
+          <div [class.pt-2]="sourcesFormArray.controls.length > 0">
+            <a class="flex items-center space-x-1" (click)="addSource()">
+              <span nz-icon nzType="plus" nzTheme="outline"></span>
+              <span>Add Source</span>
+              <span
+                class="cursor-pointer"
+                nz-icon
+                nzType="info-circle"
+                nzTheme="twotone"
+                nz-tooltip
+                nzTooltipTitle="Identify the student where it came from. Ex: facebook.com, instagram.com"></span>
+            </a>
+          </div>
+        </div>
+
+        <div class="space-y-1.5 flex-1" formArrayName="tags">
+          <ng-container *ngIf="tagsFormArray.controls.length > 0">
+            <label class="font-normal text-gray-600 text-xs">Tags</label>
+            <ng-container *ngFor="let formGroup of tagsFormArray.controls; let sourceIndex = index">
+              <div class="flex space-x-1 items-center">
+                <input nz-input placeholder="Type here" [formControlName]="sourceIndex" class="flex-1" />
+                <div class="flex-shrink-0">
+                  <div
+                    class="h-6 w-6 rounded-full hover:bg-error-400 text-gray-500 hover:border-error-500 transition-all hover:text-white grid place-items-center bg-white border cursor-pointer"
+                    (click)="removeTag(sourceIndex)">
+                    <span class="ph-bold ph-trash text-xs"></span>
+                  </div>
+                </div>
+              </div>
+              <ng-container *ngIf="tagsFormArray.controls[sourceIndex].touched">
+                <p class="isms-error-message" *ngIf="tagsFormArray.controls[sourceIndex].hasError('required')">Tag is required</p>
+                <p class="isms-error-message" *ngIf="tagsFormArray.controls[sourceIndex].hasError('maxlength')">
+                  Tag should not be more than {{ tagsFormArray.controls[sourceIndex].errors["maxlength"].requiredLength }} characters
+                </p>
+              </ng-container>
+            </ng-container>
+          </ng-container>
+          <div [class.pt-2]="tagsFormArray.controls.length > 0">
+            <a class="flex items-center space-x-1" (click)="addTag()">
+              <span nz-icon nzType="plus" nzTheme="outline"></span>
+              <span>Add Tag</span>
+            </a>
+          </div>
+        </div>
+      </form>
+    </ng-container>
+
+    <ng-container *ngIf="importCSVFormGroup.value.stepView === 'success'">
+      <div class="flex h-full flex-col items-center justify-center space-y-3 md:space-y-4 px-4">
+        <p class="text-sm md:text-lg text-gray-500 text-center">
+          Successfully uploaded. <br />
+          You will get a notification once process is completed
+        </p>
+        <svg class="isms-checkmark w-32 h-32 md:w-40 md:h-40" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+          <circle class="animated-__circle" cx="26" cy="26" r="25" fill="none" />
+          <path class="animated-__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" />
+        </svg>
+
+        <button nz-button nzSize="large" (click)="uploadNewFile()" class="w-full sm:w-auto">Upload New CSV</button>
+
+        <a (click)="toggle()" class="text-sm md:text-base cursor-pointer text-gray-600 hover:text-gray-900">Close</a>
+      </div>
+    </ng-container>
+  </ng-container>
+
+  <ng-template #titleTemplate>
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2 flex-1 min-w-0">
+        <span class="text-sm md:text-base font-medium truncate">Import Students From CSV</span>
+        <span class="text-xs md:text-sm text-gray-500" *ngIf="recordsFormArray.length > 0">
+          CSV file contains <mark class="bg-yellow-200 px-1 rounded">{{ recordsFormArray.length }}</mark> records
+        </span>
+      </div>
+      <a href="/assets/files/students-template.csv" class="text-xs md:text-sm text-blue-600 hover:text-blue-800 underline flex-shrink-0">Download student template</a>
+    </div>
+  </ng-template>
+
+  <ng-template #footerTemplate>
+    <div class="flex flex-col sm:flex-row gap-2 sm:space-x-2 sm:space-y-0 space-y-2">
+      <button nz-button (click)="toggle()" nzBlock class="w-full sm:w-auto" *ngIf="importCSVFormGroup.value.stepView === 'upload-csv'">Cancel</button>
+      <button
+        nz-button
+        (click)="goBack()"
+        nzBlock
+        class="w-full sm:w-auto"
+        *ngIf="importCSVFormGroup.value.stepView === 'map-data' || importCSVFormGroup.value.stepView === 'add-reference' || importCSVFormGroup.value.stepView === 'add-reference'">
+        Go Back
+      </button>
+      <button
+        nz-button
+        nzBlock
+        class="w-full sm:w-auto"
+        *ngIf="recordsFormArray.length > 0"
+        nz-popconfirm
+        nzPopconfirmTitle="The uploaded data will discard"
+        (nzOnConfirm)="uploadNewFile()"
+        (nzOnCancel)="(0)"
+        nzPopconfirmPlacement="top">
+        Upload New CSV
+      </button>
+      <button nz-button nzType="primary" (click)="onNextStep()" nzBlock class="w-full sm:w-auto" *ngIf="recordsFormArray.length > 0">
+        <!-- <ng-container  *ngIf="importCSVFormGroup.value.stepView === 'success'">Next</ng-container> -->
+        Next
+      </button>
+    </div>
+  </ng-template>
+</nz-drawer>

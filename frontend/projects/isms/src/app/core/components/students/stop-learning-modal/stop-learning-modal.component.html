@@ -1,0 +1,81 @@
+<nz-modal
+  [nzVisible]="showModal"
+  [nzClosable]="viewState !== 'submitting'"
+  [nzMaskClosable]="false"
+  nzCentered
+  [nzTitle]="null"
+  [nzFooter]="null"
+  nzWidth="580px"
+  (nzOnCancel)="toggle()">
+  <ng-container *nzModalContent>
+    <div class="flex items-center justify-center">
+      <div class="absolute -top-6 text-2xl self-center w-12 h-12 border-2 border-white rounded-full bg-isms-500 text-white grid place-items-center">
+        <span class="ph-duotone ph-prohibit"></span>
+      </div>
+    </div>
+
+    <div class="py-2 space-y-6 flex flex-col justify-center">
+      <div class="flex mt-6 flex-col justify-center items-center">
+        <h3 class="text-gray-600 text-center text-lg font-medium">Stop Learning</h3>
+        <p class="text-center text-gray-500 text-xs">Students cease their learning journey without prior notice.</p>
+      </div>
+
+      <div class="bg-gry-100 border-isms-200 flex-1 flex flex-col space-y-4 rounded-tr-md rounded-br-md">
+        <div class="space-y-1.5 flex flex-col" [formGroup]="formGroup">
+          <label class="isms-label-left ismns-required">Stop Learning After</label>
+          <nz-date-picker formControlName="stoppedDate" [nzDisabled]="viewState === 'submitting'"></nz-date-picker>
+        </div>
+
+        <nz-alert *ngIf="offDaysMessage" nzType="info" nzShowIcon [nzMessage]="offDaysMessage"></nz-alert>
+
+        <div class="flex items-center justify-between pt-2" *ngIf="stopLearning">
+          <span class="isms-label-left">Savings</span>
+          <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+          <span class="font-semibold text-gray-700">
+            {{ stopLearning.redundantSavings | formattedCurrency }}
+          </span>
+        </div>
+
+        <div class="flex items-center justify-between pt-2" *ngIf="stopLearning">
+          <span class="isms-label-left">Debt</span>
+          <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+          <span class="font-semibold text-gray-700">
+            <ng-container>
+              {{ stopLearning.debt | formattedCurrency }}
+            </ng-container>
+          </span>
+        </div>
+        <div class="space-y-1.5" *ngIf="unpaidDaysInterval.length > 0">
+          <fieldset class="border border-solid border-gray-200 p-3 rounded-md">
+            <legend class="font-normal text-gray-600 text-xs w-fit px-0.5">Unpaid days</legend>
+            <div class="flex flex-col space-y-2">
+              <ng-container *ngIf="unpaidDaysInterval.length > 0">
+                <ng-container *ngFor="let date of unpaidDaysInterval; let intervalIndex = index">
+                  <div class="flex flex-col">
+                    <span class="text-gray-500">
+                      {{ date.date.toFormat("LLLL y") }}
+                    </span>
+                    <div class="flex justify-items-start items-start flex-wrap">
+                      <ng-container *ngFor="let day of date.days; let dayIndex = index">
+                        <div *ngIf="day.included" class="w-7 m-[3px] cursor-pointer grid place-items-center text-xs h-7 rounded-full text-white bg-gray-400">
+                          {{ day.date.toFormat("d") }}
+                        </div>
+                      </ng-container>
+                    </div>
+                  </div>
+                </ng-container>
+              </ng-container>
+            </div>
+          </fieldset>
+        </div>
+      </div>
+
+      <button nz-button nzSize="large" [disabled]="false" nzType="primary" [nzLoading]="viewState === 'submitting'" (click)="onSubmit()" nzBlock>
+        <div class="flex space-x-1 items-center justify-center" *ngIf="viewState === 'initial'">
+          <span>Stop Learning</span>
+          <span class="ph ph-caret-double-right"></span>
+        </div>
+      </button>
+    </div>
+  </ng-container>
+</nz-modal>

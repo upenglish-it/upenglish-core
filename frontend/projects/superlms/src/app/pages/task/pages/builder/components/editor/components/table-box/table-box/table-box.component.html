@@ -1,0 +1,99 @@
+@if (element) {
+  @if (viewMode === "editing") {
+    <div class="relative group bg-white" contenteditable="false">
+      <ng-container [ngTemplateOutlet]="questionTemplate"></ng-container>
+
+      <!-- Add answer choices column  -->
+      <div class="absolute -right-2 -top-2 hidden group-hover:flex gap-2">
+        <button nz-button nzType="primary" nzDanger nzShape="circle" (click)="delete()">
+          <span class="ph-bold ph-x"></span>
+        </button>
+      </div>
+
+      <!-- Add question row  -->
+      <div class="absolute -bottom-3 left-[50%] hidden group-hover:flex gap-3">
+        <button nz-button nzType="primary" nzGhost nzShape="circle" (click)="tableBoxConfigModal.setToEdit('questions'); tableBoxConfigModal.toggle()">
+          <span class="ph-bold ph-gear"></span>
+        </button>
+        <button nz-button nzType="primary" nzShape="circle" (click)="addQuestion()">
+          <span class="ph-bold ph-rows-plus-bottom"></span>
+        </button>
+      </div>
+
+      <!-- Add answer choices column  -->
+      <div class="absolute -right-3 top-[50%] hidden group-hover:flex flex-col gap-3">
+        <button nz-button nzType="primary" nzGhost nzShape="circle" (click)="tableBoxConfigModal.setToEdit('answer-options'); tableBoxConfigModal.toggle()">
+          <span class="ph-bold ph-gear"></span>
+        </button>
+        <button nz-button nzType="primary" nzShape="circle" (click)="addAnswerChoice()">
+          <span class="ph-bold ph-columns-plus-right"></span>
+        </button>
+      </div>
+    </div>
+    <slms-table-box-config-modal
+      #tableBoxConfigModal
+      [view-type]="viewType"
+      [questions-form-array]="questionsFormArray"
+      [answer-choices-form-array]="answerChoicesFormArray"></slms-table-box-config-modal>
+  }
+
+  @if (viewMode === "viewing") {
+    <ng-container [ngTemplateOutlet]="questionTemplate"></ng-container>
+  }
+}
+
+<ng-template #questionTemplate>
+  <div class="border border-gray-200 rounded-md shadow-xs overflow-hidden bg-white" contenteditable="false">
+    <table class="min-w-full divide-y divide-gray-200">
+      @if (viewMode === "viewing") {
+        <caption style="caption-side: top" class="text-center py-3 text-gray-500">{{ tableTitleFormControl.value }}</caption>
+      }
+      @if (viewMode === "editing") {
+        <caption style="caption-side: top" class="pl-2 py-3 pr-6">
+          <input nz-input placeHolder="Type title here" style="width: 100%" [formControl]="tableTitleFormControl" />
+        </caption>
+      }
+      <thead>
+        <tr class="divide-x divide-gray-200">
+          <th scope="col" class="px-6 py-5 text-left text-xs text-gray-500 uppercase">
+            <!-- Questions {{ questionsFormArray.length > 0 ? " (" + questionsFormArray.length + ")" : "" }} -->
+          </th>
+          @for (answerChoiceFormGroup of answerChoicesFormArray.controls; track $index) {
+            <th scope="col" class="px-6 py-3 text-left text-xs text-gray-500 uppercase">{{ answerChoiceFormGroup.value.title }}</th>
+          }
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-solid divide-gray-200">
+        @for (questionFormGroup of questionsFormArray.controls; track $index; let qi = $index) {
+          <tr class="odd:bg-white even:bg-gray-100 divide-x divide-gray-200">
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-800">{{ questionFormGroup.value.question }}</td>
+
+            @if (viewType === "radio") {
+              @for (answerChoiceFormGroup of answerChoicesFormArray.controls; track $index; let aci = $index) {
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">
+                  <p-radiobutton
+                    [ngClass]="{ 'pointer-events-none': viewMode === 'editing' }"
+                    [name]="questionFormGroup.value.id"
+                    [(ngModel)]="questionFormGroup.value.studentAnswer"
+                    [value]="answerChoiceFormGroup.value.answerValue" />
+                </td>
+              }
+            }
+
+            @if (viewType === "input") {
+              @for (questionAnswerChoiceFormGroup of questionAnswerChoicesFormArray(qi).controls; track $index; let aci = $index) {
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">
+                  @if (viewMode === "editing") {
+                    <div [slmsTableBoxAnswerChoiceEditorRenderer]="questionAnswerChoiceFormGroup.value.answerValue" class="!relative p-4 outline-none"> </div>
+                  } @else {
+                    viewing content
+                  }
+                </td>
+              }
+            }
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</ng-template>

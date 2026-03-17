@@ -1,0 +1,42 @@
+<div class="h-screen flex flex-col">
+  <div class="h-[55px] bg-white flex whitespace-normal justify-between relative border-b border-b-gray-200 items-center px-4">
+    <div class="flex space-x-2 items-center z-10 relative">
+      <button nz-button nzShape="circle" routerLink="/i/pipelines">
+        <span nz-icon nzType="arrow-left"></span>
+      </button>
+      <h6 class="text-base mb-0 font-medium text-gray-700 cursor-pointer" *ngIf="pipeline">{{ pipeline.details.title }}</h6>
+    </div>
+    <div class="flex items-center flex-1 box-content justify-center self-center z-0 absolute top-0 right-0 bottom-0 left-0 m-auto">
+      <div class="flex space-x-3 items-center justify-center flex-1">
+        <ng-container *ngFor="let navigation of tabNavigations; let i = index; let l = last">
+          <div
+            class="rounded-md border border-gray-300 font-medium flex items-center cursor-pointer px-3 space-x-2 py-[5px]"
+            [routerLink]="navigation.route + '/' + pipelineId + '/' + pipelineType"
+            routerLinkActive="segmented-active-tab-navigation"
+            [routerLinkActiveOptions]="{ exact: true }">
+            <span class="text-sm ph-duotone {{ navigation.icon }}"></span>
+            <span class="">{{ navigation.name }}</span>
+          </div>
+          <span *ngIf="!l" class="text-gray-400 text-base ph-fill ph-git-commit"></span>
+        </ng-container>
+      </div>
+    </div>
+    <div class="space-x-5 flex items-center relative z-10"></div>
+  </div>
+
+  <div class="bg-white flex flex-col flex-1 overflow-hidden">
+    <!-- <div class="h-[55px] bg-white flex border-b items-center px-4">
+      <div class="flex space-x-2 items-center justify-center flex-1">
+        <div class="rounded-md border py-1 font-medium px-4 flex items-center space-x-2 cursor-pointer">
+          <span class="text-gray-500">Add Candidate</span>
+          <span class="text-sm ph text-gray-500 ph-plus"></span>
+        </div>
+      </div>
+    </div> -->
+
+    <!-- Content -->
+    <!-- <div class="overflow-auto bg-white mini-scroll-bar flex-1"> -->
+    <router-outlet></router-outlet>
+    <!-- </div> -->
+  </div>
+</div>

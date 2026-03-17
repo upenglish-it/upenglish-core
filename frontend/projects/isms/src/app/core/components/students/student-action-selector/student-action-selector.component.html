@@ -1,0 +1,130 @@
+<div class="flex items-center flex-1 space-x-4" *ngIf="candidateIds.length > 0" [@default]>
+  <nz-button-group>
+    <button nz-button nz-dropdown [nzDropdownMenu]="deselectDropdownMenu">
+      <div class="flex items-center space-x-2">
+        <span class="px-1 rounded-md bg-hrclap-100 border border-hrclap-400 text-hrclap-500 leading-[1.1]">{{ candidateIds.length }}</span>
+        <i class="ph-caret-down ph-bold"></i>
+      </div>
+    </button>
+    <nz-dropdown-menu #deselectDropdownMenu="nzDropdownMenu">
+      <ul nz-menu>
+        <li nz-menu-item (click)="onAction.emit('select-all')">
+          <div class="flex items-center space-x-2 text-xs">
+            <i class="text-base ph-check-square ph"></i>
+            <span>Select All</span>
+          </div>
+        </li>
+        <li nz-menu-item (click)="onAction.emit('deselect-all')">
+          <div class="flex items-center space-x-2 text-xs">
+            <i class="text-base ph-minus-square ph"></i>
+            <span>Deselect All</span>
+          </div>
+        </li>
+      </ul>
+    </nz-dropdown-menu>
+    <!-- <button nz-button (click)="(1)">
+      <div class="flex items-center space-x-2">
+        <span>Add Tag</span>
+        <i class="text-sm ph-tag ph-duotone"></i>
+      </div>
+    </button>
+    <button nz-button (click)="(1)">
+      <div class="flex items-center space-x-2">
+        <span>Add Source</span>
+        <i class="text-sm ph-webhooks-logo ph-duotone"></i>
+      </div>
+    </button>
+    <button nz-button (click)="(1)">
+      <div class="flex items-center space-x-2">
+        <span>Add Note To This Job</span>
+        <i class="text-sm ph-note ph-duotone"></i>
+      </div>
+    </button> -->
+    <button nz-button *ngIf="removeFromThisPipelineId" (click)="removeFromThisPipeline()">
+      <div class="flex items-center space-x-2">
+        <span>Remove From This Pipeline</span>
+        <i class="text-sm ph-minus ph"></i>
+      </div>
+    </button>
+    <!-- <button nz-button nz-dropdown [nzDropdownMenu]="menu">
+      <div class="flex items-center space-x-2">
+        <span>More Options</span>
+        <i class="text-sm ph-caret-down ph-bold"></i>
+      </div>
+    </button>
+    <nz-dropdown-menu #menu="nzDropdownMenu">
+      <ul nz-menu>
+        <li nz-menu-item>
+          <div class="flex items-center space-x-2 text-xs">
+            <i class="text-base ph-envelope-simple ph-duotone"></i>
+            <span>Send Email</span>
+          </div>
+        </li>
+        <li nz-menu-item>
+          <div class="flex items-center space-x-2 text-xs">
+            <i class="text-base ph-chat-circle-text ph-duotone"></i>
+            <span>Send SMS</span>
+          </div>
+        </li>
+        <li nz-menu-item>
+          <div class="flex items-center space-x-2 text-xs">
+            <i class="text-base ph-calendar-plus ph-duotone"></i>
+            <span>Book Interview</span>
+          </div>
+        </li>
+        <li nz-menu-divider></li>
+        <li nz-menu-item>
+          <div class="flex items-center space-x-2 text-xs">
+            <i class="text-base ph-plus ph"></i>
+            <span>Add To Other Job(s)</span>
+          </div>
+        </li>
+        <li nz-menu-item>
+          <div class="flex items-center space-x-2 text-xs">
+            <i class="text-base ph-minus ph"></i>
+            <span>Remove From Other Job(s)</span>
+          </div>
+        </li>
+        <li nz-menu-item>
+          <i class="text-base ph-chalkboard-teacher ph-duotone"></i>
+          <span>Add To Job Stage </span>
+        </li>
+        <li nz-submenu [nzTitle]="selectStagesSubMenu">
+          <ul>
+            <li nz-menu-item>
+              <span>Applied</span>
+            </li>
+            <li nz-menu-item>
+              <span>Sourcing</span>
+            </li>
+            <li nz-menu-item>
+              <span>Hired</span>
+            </li>
+            <li nzDanger nz-menu-item>
+              <span>Rejected</span>
+            </li>
+          </ul>
+          <ng-template #selectStagesSubMenu>
+            <span class="inline-flex items-center space-x-2 text-xs">
+              <i class="text-base ph-kanban ph-duotone"></i>
+              <span class="text-xs">Move to stage</span>
+            </span>
+          </ng-template>
+        </li>
+        <li nz-menu-divider></li>
+        <li nz-menu-item>
+          <div class="flex items-center space-x-2 text-xs">
+            <i class="text-base ph-thumbs-up ph-duotone"></i>
+            <span>Requalify</span>
+          </div>
+        </li>
+        <li nzDanger nz-menu-item>
+          <div class="flex items-center space-x-2 text-xs">
+            <i class="text-base ph-thumbs-down ph-duotone"></i>
+            <span>Disqualify</span>
+          </div>
+        </li>
+      </ul>
+    </nz-dropdown-menu> -->
+  </nz-button-group>
+</div>

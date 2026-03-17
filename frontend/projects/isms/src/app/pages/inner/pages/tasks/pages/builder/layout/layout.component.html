@@ -1,0 +1,44 @@
+<div class="h-screen flex flex-col">
+  <div class="bg-white border-b border-b-gray-200 px-3 md:px-4 py-2 md:py-4">
+    <div class="flex flex-col lg:flex-row justify-between items-center gap-3 lg:gap-4 lg:w-full">
+      <div class="flex space-x-2 items-center w-full lg:w-full">
+        <button nz-button nzType="default" nzShape="circle" routerLink="/i/tasks">
+          <span nz-icon nzType="arrow-left"></span>
+        </button>
+        <div class="flex flex-col justify-between min-w-0">
+          <div class="flex items-center space-x-2">
+            <h6 class="text-sm md:text-base mb-0 font-medium text-gray-700 cursor-pointer truncate">
+              {{ task?.generalInfo?.title || "" }}
+            </h6>
+            <ng-container *ngIf="task">
+              <nz-tag [nzColor]="'blue'" *ngIf="task.generalInfo?.type === 'challenge'">Challenge</nz-tag>
+              <nz-tag [nzColor]="'orange'" *ngIf="task.generalInfo?.type === 'homework'">Homework</nz-tag>
+            </ng-container>
+          </div>
+          <!-- <span class="text-gray-500 text-xs" *ngIf="task">Last Update: {{ task.updatedAt | date : "MMM d, YYYY • hh:mm a" }}</span> -->
+        </div>
+      </div>
+
+      <div class="flex items-center justify-center w-full lg:w-full">
+        <isms-segmented-selector
+          [options]="segmentOptions"
+          [current-index]="segmentIndex"
+          (on-changed)="onChangeSegmentSelector($event)">
+        </isms-segmented-selector>
+      </div>
+
+      <div class="hidden lg:block lg:w-full"></div>
+
+      <!--
+      <div class="hidden lg:flex items-center space-x-2">
+        <button nz-button (click)="(1)">Save as Draft</button>
+        <button nz-button nzType="primary" (click)="(1)">
+          Publish
+          <span nz-icon nzType="check-circle" nzTheme="fill"></span>
+        </button>
+      </div>
+      -->
+    </div>
+  </div>
+  <router-outlet></router-outlet>
+</div>

@@ -1,0 +1,645 @@
+/* Teacher Grammar Editor Mobile Specific Styles */
+
+.grammar-mobile-card {
+    display: none;
+    background: white;
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 12px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.grammar-mobile-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+
+.grammar-mobile-card-index {
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: #94a3b8;
+    background: #f8fafc;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+}
+
+.grammar-mobile-card-type {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: #e0e7ff;
+    color: #4f46e5;
+}
+
+.grammar-mobile-card-content {
+    margin-bottom: 16px;
+}
+
+.grammar-mobile-card-purpose {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 4px;
+}
+
+.grammar-mobile-card-text {
+    font-size: 0.9rem;
+    color: #64748b;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.grammar-mobile-card-actions {
+    display: flex;
+    gap: 8px;
+    border-top: 1px solid #f1f5f9;
+    padding-top: 12px;
+}
+
+.grammar-mobile-card-actions button {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-weight: 700;
+}
+
+/* Modal Adjustments */
+.teacher-grammar-modal {
+    width: 100% !important;
+    max-width: 900px !important;
+    height: min(90dvh, 90vh) !important;
+    max-height: min(90dvh, 90vh) !important;
+}
+
+/* Variation Tabs Scroll */
+.variation-tabs-wrapper {
+    display: flex;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.variation-tabs-wrapper::-webkit-scrollbar {
+    display: none;
+}
+
+.variation-tab-item {
+    flex: 0 0 auto;
+    min-width: 120px;
+    text-align: center;
+    padding: 12px 16px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+    border-bottom: 2px solid transparent;
+}
+
+.variation-tab-item.active {
+    background: white;
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+}
+
+@media (max-width: 768px) {
+    .teacher-grammar-editor-page .admin-header-actions {
+        width: 100%;
+    }
+
+    .teacher-grammar-editor-page .admin-btn.admin-btn-primary {
+        width: 100%;
+    }
+
+    .teacher-grammar-editor-page .admin-table-container {
+        display: none;
+    }
+
+    .grammar-mobile-card {
+        display: block;
+    }
+
+    /* Modal Mobile */
+    .admin-modal {
+        border-radius: 24px !important;
+    }
+
+    .modal-grid-config {
+        grid-template-columns: 1fr !important;
+        gap: 12px !important;
+    }
+
+    .variation-header-actions {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 12px !important;
+    }
+
+    .ai-btn-wrapper {
+        width: 100%;
+    }
+
+    .ai-btn-wrapper button {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .options-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    .matching-pair-row {
+        flex-direction: column !important;
+        align-items: stretch !important;
+    }
+
+    .categorization-layout {
+        flex-direction: column !important;
+    }
+
+    .admin-modal-overlay {
+        padding: 10px !important;
+    }
+
+    .grammar-form-footer {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .grammar-form-footer button {
+        width: 100%;
+    }
+}
+
+/* Fix Quill Editor text color in Admin (forced by global p style in index.css) */
+.teacher-grammar-editor-page .ql-editor,
+.admin-modal .ql-editor {
+    color: #1e293b;
+    font-size: 1rem;
+    line-height: 1.6;
+}
+
+/* Minimal rich text input for question text fields (B/I/U only) */
+.grammar-rich-text-input .ql-editor {
+    min-height: 80px;
+    max-height: 200px;
+    overflow-y: auto;
+    font-size: 0.95rem;
+    padding: 10px 14px;
+}
+
+.grammar-rich-text-input .ql-container.ql-snow {
+    border-radius: 0 0 8px 8px;
+    border-color: #e2e8f0;
+}
+
+.grammar-rich-text-input .ql-toolbar.ql-snow {
+    border-radius: 8px 8px 0 0;
+    border-color: #e2e8f0;
+    background: #f8fafc;
+    padding: 4px 8px;
+}
+
+.grammar-rich-text-input .ql-toolbar.ql-snow button {
+    width: 28px;
+    height: 28px;
+    padding: 2px;
+    border-radius: 4px;
+}
+
+.grammar-rich-text-input .ql-toolbar.ql-snow button:hover {
+    background: #e0e7ff;
+}
+
+.grammar-rich-text-input .ql-toolbar.ql-snow button.ql-active {
+    background: #e0e7ff;
+    color: #4f46e5;
+}
+
+.grammar-rich-text-input .ql-editor.ql-blank::before {
+    font-size: 0.9rem;
+    left: 14px;
+}
+
+/* Fix ql-video (iframe YouTube) responsive — Quill chỉ set max-width, không set height */
+/* Dùng padding-bottom 56.25% = 16:9 ratio */
+.ql-editor iframe,
+.ql-editor iframe.ql-video,
+.ql-editor .ql-video {
+    width: 100% !important;
+    min-height: 250px;
+    height: auto !important;
+    aspect-ratio: 16 / 9;
+    display: block;
+    border: none;
+    margin: 16px 0;
+    border-radius: 12px;
+}
+
+/* Fallback cho trình duyệt không hỗ trợ aspect-ratio */
+@supports not (aspect-ratio: 16 / 9) {
+    .ql-editor .ql-video-wrapper {
+        position: relative;
+        padding-bottom: 56.25%;
+        height: 0;
+        overflow: hidden;
+    }
+
+    .ql-editor iframe.ql-video {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        min-height: unset;
+    }
+}
+
+/* Đảm bảo iframe trong read-only context display cũng hiển thị đúng */
+div.ql-editor iframe,
+div.ql-editor iframe.ql-video,
+div.ql-editor .ql-video {
+    width: 100% !important;
+    min-height: 250px;
+    aspect-ratio: 16 / 9;
+    display: block;
+    border: none;
+    border-radius: 12px;
+    margin: 16px 0;
+}
+
+.teacher-grammar-editor-page .ql-editor p,
+.teacher-grammar-editor-page .ql-editor ol,
+.teacher-grammar-editor-page .ql-editor ul,
+.teacher-grammar-editor-page .ql-editor li,
+.admin-modal .ql-editor p,
+.admin-modal .ql-editor ol,
+.admin-modal .ql-editor ul,
+.admin-modal .ql-editor li,
+.section-preview-card .ql-editor,
+.section-preview-card .ql-editor p,
+.section-preview-card .ql-editor ol,
+.section-preview-card .ql-editor ul,
+.section-preview-card .ql-editor li {
+    color: #1e293b !important;
+}
+
+/* Allow inline colors to override the !important above */
+.ql-editor span[style*="color"] {
+    color: inherit;
+}
+
+/* Style links in editor to be more visible on white background */
+.ql-editor a {
+    color: #4f46e5 !important;
+    text-decoration: underline !important;
+}
+
+/* Use a lighter color for placeholder */
+.ql-editor.ql-blank::before {
+    color: #94a3b8 !important;
+    font-style: italic !important;
+    left: 15px !important;
+}
+
+/* Quill Tooltip & Container Fixes */
+.ql-container.ql-snow {
+    overflow: visible !important;
+    border-radius: 0 0 12px 12px;
+    border-color: #e2e8f0 !important;
+}
+
+.ql-snow .ql-tooltip {
+    left: 50% !important;
+    transform: translate(-50%, 10px) !important;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+    padding: 10px 14px !important;
+    z-index: 1000 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    width: auto !important;
+    max-width: 90vw !important;
+}
+
+.ql-snow .ql-tooltip.ql-hidden {
+    display: none !important;
+}
+
+.ql-snow .ql-tooltip input[type=text] {
+    flex: 1 !important;
+    min-width: 140px !important;
+    border-radius: 6px !important;
+    padding: 6px 10px !important;
+    border: 1px solid #cbd5e1 !important;
+    font-size: 14px !important;
+}
+
+.ql-snow .ql-tooltip a.ql-action {
+    flex-shrink: 0 !important;
+    font-weight: 700 !important;
+    color: #4f46e5 !important;
+    text-decoration: none !important;
+    padding: 4px 8px !important;
+    background: #eff6ff !important;
+    border-radius: 6px !important;
+}
+
+/* Tooltip mobile refinement */
+@media (max-width: 480px) {
+    .ql-snow .ql-tooltip {
+        width: 320px !important;
+        padding: 8px !important;
+    }
+
+    .ql-snow .ql-tooltip input[type=text] {
+        width: auto !important;
+    }
+}
+
+/* ============================================
+   Quill Toolbar — Scrollable trên mobile
+   Ngăn nút video bị ẩn do toolbar overflow
+   ============================================ */
+.ql-toolbar.ql-snow {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    position: relative;
+    overflow: visible !important;
+}
+
+.ql-toolbar.ql-snow::-webkit-scrollbar {
+    display: none;
+}
+
+.ql-toolbar.ql-snow .ql-formats {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+}
+
+/* Fix missing video button icon in react-quill-new */
+.ql-snow .ql-toolbar button.ql-video,
+.ql-snow.ql-toolbar button.ql-video {
+    position: relative;
+    width: 28px;
+    height: 24px;
+}
+
+.ql-snow .ql-toolbar button.ql-video svg,
+.ql-snow.ql-toolbar button.ql-video svg {
+    display: none !important;
+}
+
+.ql-snow .ql-toolbar button.ql-video::after,
+.ql-snow.ql-toolbar button.ql-video::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 18px;
+    height: 14px;
+    background: no-repeat center / contain;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 14'%3E%3Crect x='0.5' y='0.5' width='17' height='13' rx='2' fill='none' stroke='%23444' stroke-width='1'/%3E%3Cpolygon points='7,3 13,7 7,11' fill='%23444'/%3E%3C/svg%3E");
+}
+
+.ql-snow .ql-toolbar button.ql-video:hover::after,
+.ql-snow.ql-toolbar button.ql-video:hover::after,
+.ql-snow .ql-toolbar button.ql-video.ql-active::after,
+.ql-snow.ql-toolbar button.ql-video.ql-active::after {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 14'%3E%3Crect x='0.5' y='0.5' width='17' height='13' rx='2' fill='none' stroke='%234f46e5' stroke-width='1'/%3E%3Cpolygon points='7,3 13,7 7,11' fill='%234f46e5'/%3E%3C/svg%3E");
+}
+
+/* Fix Quill Color/Background Picker Grid */
+.ql-snow .ql-picker.ql-color-picker .ql-picker-options {
+    width: 152px !important;
+    padding: 8px !important;
+    background-color: #fff !important;
+    border: 1px solid #ccc !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    z-index: 1000 !important;
+}
+
+.ql-snow .ql-picker.ql-color-picker .ql-picker-item {
+    float: left !important;
+    width: 16px !important;
+    height: 16px !important;
+    margin: 2px !important;
+    padding: 0 !important;
+    border: 1px solid transparent !important;
+    cursor: pointer !important;
+}
+
+.ql-snow .ql-picker.ql-color-picker .ql-picker-item:hover {
+    border: 1px solid #000 !important;
+}
+
+/* Toolbar Indigo Theme */
+.ql-snow.ql-toolbar button:hover,
+.ql-snow .ql-toolbar button:hover,
+.ql-snow.ql-toolbar button:focus,
+.ql-snow .ql-toolbar button:focus,
+.ql-snow.ql-toolbar button.ql-active,
+.ql-snow .ql-toolbar button.ql-active,
+.ql-snow.ql-toolbar .ql-picker-label:hover,
+.ql-snow .ql-toolbar .ql-picker-label:hover,
+.ql-snow.ql-toolbar .ql-picker-label.ql-active,
+.ql-snow .ql-toolbar .ql-picker-label.ql-active,
+.ql-snow.ql-toolbar .ql-picker-item:hover,
+.ql-snow .ql-toolbar .ql-picker-item:hover,
+.ql-snow.ql-toolbar .ql-picker-item.ql-selected,
+.ql-snow .ql-toolbar .ql-picker-item.ql-selected {
+    color: #4f46e5;
+}
+
+.ql-snow.ql-toolbar button:hover .ql-stroke,
+.ql-snow .ql-toolbar button:hover .ql-stroke,
+.ql-snow.ql-toolbar button:focus .ql-stroke,
+.ql-snow .ql-toolbar button:focus .ql-stroke,
+.ql-snow.ql-toolbar button.ql-active .ql-stroke,
+.ql-snow .ql-toolbar button.ql-active .ql-stroke,
+.ql-snow.ql-toolbar .ql-picker-label:hover .ql-stroke,
+.ql-snow .ql-toolbar .ql-picker-label:hover .ql-stroke,
+.ql-snow.ql-toolbar .ql-picker-label.ql-active .ql-stroke,
+.ql-snow .ql-toolbar .ql-picker-label.ql-active .ql-stroke,
+.ql-snow.ql-toolbar .ql-picker-item:hover .ql-stroke,
+.ql-snow .ql-toolbar .ql-picker-item:hover .ql-stroke,
+.ql-snow.ql-toolbar .ql-picker-item.ql-selected .ql-stroke,
+.ql-snow .ql-toolbar .ql-picker-item.ql-selected .ql-stroke,
+.ql-snow.ql-toolbar button:hover .ql-stroke-miter,
+.ql-snow .ql-toolbar button:hover .ql-stroke-miter,
+.ql-snow.ql-toolbar button:focus .ql-stroke-miter,
+.ql-snow .ql-toolbar button:focus .ql-stroke-miter,
+.ql-snow.ql-toolbar button.ql-active .ql-stroke-miter,
+.ql-snow .ql-toolbar button.ql-active .ql-stroke-miter,
+.ql-snow.ql-toolbar .ql-picker-label:hover .ql-stroke-miter,
+.ql-snow .ql-toolbar .ql-picker-label:hover .ql-stroke-miter,
+.ql-snow.ql-toolbar .ql-picker-label.ql-active .ql-stroke-miter,
+.ql-snow .ql-toolbar .ql-picker-label.ql-active .ql-stroke-miter,
+.ql-snow.ql-toolbar .ql-picker-item:hover .ql-stroke-miter,
+.ql-snow .ql-toolbar .ql-picker-item:hover .ql-stroke-miter,
+.ql-snow.ql-toolbar .ql-picker-item.ql-selected .ql-stroke-miter,
+.ql-snow .ql-toolbar .ql-picker-item.ql-selected .ql-stroke-miter {
+    stroke: #4f46e5;
+}
+
+.ql-snow.ql-toolbar button:hover .ql-fill,
+.ql-snow .ql-toolbar button:hover .ql-fill,
+.ql-snow.ql-toolbar button:focus .ql-fill,
+.ql-snow .ql-toolbar button:focus .ql-fill,
+.ql-snow.ql-toolbar button.ql-active .ql-fill,
+.ql-snow .ql-toolbar button.ql-active .ql-fill,
+.ql-snow.ql-toolbar .ql-picker-label:hover .ql-fill,
+.ql-snow .ql-toolbar .ql-picker-label:hover .ql-fill,
+.ql-snow.ql-toolbar .ql-picker-label.ql-active .ql-fill,
+.ql-snow .ql-toolbar .ql-picker-label.ql-active .ql-fill,
+.ql-snow.ql-toolbar .ql-picker-item:hover .ql-fill,
+.ql-snow .ql-toolbar .ql-picker-item:hover .ql-fill,
+.ql-snow.ql-toolbar .ql-picker-item.ql-selected .ql-fill,
+.ql-snow .ql-toolbar .ql-picker-item.ql-selected .ql-fill {
+    fill: #4f46e5;
+}
+
+/* ============================================
+   EXAM EDITOR PAGE — Responsive (Mobile)
+   ============================================ */
+
+/* Section Tabs Bar — horizontally scrollable on all sizes */
+.exam-sections-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 20px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+}
+
+.exam-sections-bar::-webkit-scrollbar {
+    display: none;
+}
+
+.exam-sections-droppable {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+/* Context section header — label + button side by side, wrap on very small */
+.exam-context-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+/* Questions list header */
+.exam-questions-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+/* Mobile card list — hidden by default, shown on mobile */
+.exam-mobile-list {
+    display: none;
+}
+
+/* Mobile card styles */
+.exam-mobile-card {
+    background: white;
+    border-radius: 14px;
+    padding: 14px;
+    margin-bottom: 10px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
+    min-width: 0;
+}
+
+.exam-mobile-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+    min-width: 0;
+}
+
+.exam-mobile-card-index {
+    font-size: 0.85rem;
+    font-weight: 800;
+    color: #94a3b8;
+    background: #f8fafc;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+
+    /* Section tabs: always scroll, never wrap */
+    .exam-sections-bar {
+        margin-left: -4px;
+        margin-right: -4px;
+        padding-left: 4px;
+        padding-right: 4px;
+    }
+
+    /* Context header: keep row layout, allow wrap */
+    .exam-context-header {
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    /* Questions header: stack on small */
+    .exam-questions-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    /* Add question button: full width on mobile */
+    .exam-add-question-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* Hide desktop table, show mobile cards */
+    .exam-table-wrapper {
+        display: none !important;
+    }
+
+    .exam-mobile-list {
+        display: block;
+    }
+}

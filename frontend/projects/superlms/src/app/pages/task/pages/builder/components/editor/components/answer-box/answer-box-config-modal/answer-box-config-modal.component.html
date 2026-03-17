@@ -1,0 +1,45 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  [nzWidth]="'500px'"
+  nzTitle="Answer Box Configuration"
+  [nzMaskClosable]="false"
+  [nzClosable]="false"
+  nzCancelText="Close"
+  (nzOnCancel)="toggle()"
+  [nzOkDisabled]="!textboxFormGroup.dirty"
+  nzOkText="Save"
+  (nzOnOk)="submit()"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <form class="px-4 py-3 flex-col max-h-[500px] space-y-3 flex-1 flex overflow-auto mini-scroll-bar min-h-fit" [formGroup]="textboxFormGroup">
+      <div class="space-y-1.5">
+        <label class="slms-label slms-required">Answer Number</label>
+        <input nz-input placeHolder="Type here" style="width: 100%" formControlName="answerNumber" nzMin="1" />
+        @if (textboxFormGroup.get("answerNumber").touched) {
+          @if (textboxFormGroup.get("answerNumber").hasError("required")) {
+            <p class="slms-error-message">Answer Number is required</p>
+          }
+        }
+      </div>
+      <div class="space-y-1.5">
+        <label class="slms-label slms-required">Points</label>
+        <nz-input-number nzPlaceHolder="Type here" style="width: 100%" formControlName="points" nzMin="1" />
+        @if (textboxFormGroup.get("points").touched) {
+          @if (textboxFormGroup.get("points").hasError("required")) {
+            <p class="slms-error-message">Points is required</p>
+          }
+        }
+      </div>
+
+      <!-- <div class="space-y-1.5">
+        <label class="slms-label slms-required">Description</label>
+        <nz-input-number nzPlaceHolder="Type here" style="width: 100%" formControlName="description" nzMin="1" />
+        @if (textboxFormGroup.get("description").touched) {
+          @if (textboxFormGroup.get("description").hasError("required")) {
+            <p class="slms-error-message">Description is required</p>
+          }
+        }
+      </div> -->
+    </form>
+  </ng-container>
+</nz-modal>

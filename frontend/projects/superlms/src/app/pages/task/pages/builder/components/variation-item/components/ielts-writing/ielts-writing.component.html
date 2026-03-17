@@ -1,0 +1,120 @@
+@let mode = formGroup.value.stateSettings.mode;
+@let action = formGroup.value.stateSettings.action;
+
+<div class="flex flex-col w-full gap-3" [formGroup]="itemFormGroup">
+  @if (mode === "editing") {
+    <div class="flex items-center gap-2 justify-between">
+      <div class="flex items-center gap-2">
+        <span class="font-bold bg-gray-200 text-gray-600 rounded-md p-2">Writing</span>
+        <input nz-input placeholder="Item No." formControlName="itemNumber" style="width: 80px" />
+      </div>
+      <div class="flex items-center gap-1">
+        <span class="font-semibold">Points:</span>
+        <nz-input-number style="text-align: center" formControlName="points" [nzDisabled]="mode === 'viewing'" [nzReadOnly]="mode === 'viewing'" nzMin="0" />
+      </div>
+    </div>
+  }
+  @if (mode === "viewing") {
+    <div class="flex items-center gap-2 justify-between">
+      <div>
+        Writing: <span class="font-bold">#{{ itemFormGroup.value.itemNumber }} </span>
+      </div>
+      <div>
+        Points: <span class="font-bold">{{ itemFormGroup.value.points }} </span>
+      </div>
+    </div>
+  }
+
+  <div class="flex-1 bg-gray-50 border border-dashed border-gray-300 p-4 rounded-md flex-nowrap flex flex-col gap-4">
+    @if (mode === "viewing") {
+      <p [innerText]="itemFormGroup.value.ieltsWriting" class="p-0 m-0"></p>
+    } @else if (mode === "editing") {
+      <textarea nz-input [nzAutosize]="{ minRows: 3 }" formControlName="ieltsWriting"></textarea>
+
+      @if (action === "builder-editing") {
+        <h3 class="mb-0 font-bold"
+          >Word count:
+          <nz-input-number formControlName="wordCount" style="width: 80px" nzMin="0" />
+        </h3>
+      } @else {
+        <h3 class="mb-0 font-bold">Word count: {{ itemFormGroup.value.ieltsWriting.length }} of {{ itemFormGroup.value.wordCount }}</h3>
+      }
+      <div class="flex flex-col gap-2">
+        <h3 class="mb-0">Teacher's answer, special requirements or key points</h3>
+        <!-- <textarea nz-input [nzAutosize]="{ minRows: 3 }" []></textarea> -->
+        <nz-textarea-count [nzMaxCharacterCount]="300">
+          <textarea formControlName="originalAnswer" nz-input rows="2" placeholder="write any thing"></textarea>
+        </nz-textarea-count>
+      </div>
+    } @else {
+      not listed
+    }
+  </div>
+
+  @if (action === "builder-editing") {
+    <div class="flex-1 bg-gray-50 border border-dashed border-gray-300 p-4 rounded-md flex-nowrap flex flex-col gap-4">
+      <h3 class="mb-0 font-bold">AI Config</h3>
+      <nz-select formControlName="aiPrompt" nzShowSearch class="w-full" nzPlaceHolder="Select AI Prompt" [nzDropdownMatchSelectWidth]="false" [compareWith]="compareFn">
+        @for (prompt of builderService.prompts$(); track prompt._id) {
+          <nz-option [nzValue]="prompt" [nzLabel]="prompt.name"></nz-option>
+        }
+      </nz-select>
+    </div>
+  }
+
+  @if (mode === "viewing") {
+    @if (action === "student-answering") {
+      <div class="py-4">
+        <h4 class="font-medium">Your answer:</h4>
+        <textarea formControlName="participantAnswer" nz-input placeholder="Type your answer here"></textarea>
+      </div>
+    }
+
+    @if (action === "teacher-reviewing") {
+      <div class="py-4">
+        <h4 class="font-medium">Student answer:</h4>
+        <div class="text-gray-500" [innerHTML]="itemFormGroup.value.participantAnswer"></div>
+      </div>
+      <div class="py-4">
+        <h4 class="font-medium">Reviewer answer:</h4>
+        <textarea formControlName="reviewerAnswer" nz-input placeholder="Type your answer here"></textarea>
+      </div>
+
+      <div class="py-4">
+        <h4 class="font-medium">Score: {{ itemFormGroup.value.score || 0 }}/{{ itemFormGroup.value.points }}</h4>
+        <nz-input-number style="text-align: center; width: 100%" formControlName="score" nzMin="0" [nzMax]="itemFormGroup.value.points" />
+      </div>
+    }
+  }
+
+  @if (action === "student-viewing-results") {
+    <div class="py-4">
+      <h4 class="font-medium">Your Answer:</h4>
+      <div>{{ itemFormGroup.value.participantAnswer }} </div>
+    </div>
+
+    <div class="py-4">
+      <h4 class="font-medium">Reviewer answer:</h4>
+      <div [innerText]="itemFormGroup.value.reviewerAnswer"></div>
+    </div>
+
+    <hr />
+
+    <div
+      >Score: <span class="font-bold">{{ itemFormGroup.value.score }} out of {{ itemFormGroup.value.points }}</span></div
+    >
+
+    <div
+      >Task Achievement: <span class="font-bold">{{ itemFormGroup.value.ieltsWritingResult?.taskResponseBand }}</span>
+    </div>
+    <div
+      >Coherence & Cohesion: <span class="font-bold">{{ itemFormGroup.value.ieltsWritingResult?.coherenceCohesionBand }} </span></div
+    >
+    <div
+      >Lexical Resource: <span class="font-bold">{{ itemFormGroup.value.ieltsWritingResult?.lexicalResourceBand }} </span></div
+    >
+    <div
+      >Grammatical Range & Accuracy: <span class="font-bold">{{ itemFormGroup.value.ieltsWritingResult?.grammarBand }}</span>
+    </div>
+  }
+</div>

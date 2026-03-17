@@ -1,0 +1,47 @@
+<div class="flex flex-col border border-gray-200 rounded-md bg-white">
+  @if (mode === "editing") {
+    <div class="shadow-md px-2 py-2 flex items-center flex-wrap gap-2">
+      @for (toolbar of toolbars; track toolbar.id) {
+        @if (toolbar.command) {
+          <button nz-button nzType="primary" nzGhost nzShape="circle" (click)="toolbar.command()" [pTooltip]="toolbar.title" tooltipPosition="top">
+            <span class="{{ toolbar.icon }} text-slms-500"></span>
+          </button>
+        } @else {
+          <span class="{{ toolbar.icon }} text-gray-300"></span>
+        }
+      }
+      <!-- <div class="flex-1 flex gap-2">
+      <button nz-button (click)="executeCommand('bold')">B</button>
+      <button nz-button (click)="executeCommand('italic')">I</button>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button nz-button nzType="primary" nzGhost (click)="insertStaticTextbox()">Insert Static</button>
+      <button nz-button nzType="primary" nzGhost (click)="insertMovableTextbox()">Insert Draggable</button>
+      <button nz-button nzShape="circle" (click)="insertImage()">
+        <span class="ph-bold ph-image text-gray-400"></span>
+      </button>
+    </div> -->
+    </div>
+
+    <div
+      [id]="editorId"
+      [slmsEditorComponentRenderer]="editorTextContent"
+      contenteditable="true"
+      contenteditable-placeholder="Write here..."
+      class="!relative p-4 outline-none"
+      [ngStyle]="{ 'min-height': minHeight + 'px' }"
+      style="line-height: 1.4rem; height: 100%; font-family: Helvetica, Arial, sans-serif">
+    </div>
+  }
+
+  @if (mode === "viewing") {
+    <div
+      [id]="editorId"
+      [slmsEditorComponentRenderer]="editorTextContent"
+      class="!relative p-4 outline-none"
+      [ngStyle]="{ 'min-height': minHeight + 'px' }"
+      style="line-height: 1.4rem; height: 100%; font-family: Helvetica, Arial, sans-serif">
+    </div>
+  }
+</div>

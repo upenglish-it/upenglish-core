@@ -1,0 +1,99 @@
+<div class="isms-section-container-content flex flex-col space-y-6" [formGroup]="generalInfoFormGroup">
+  <div class="flex space-x-2 items-center">
+    <div class="space-y-1.5 flex-1">
+      <label class="isms-label-left isms-required">Title</label>
+      <input nz-input placeholder="Ex. Learn advance english" formControlName="title" />
+      <ng-container *ngIf="generalInfoFormGroup.get('title').touched">
+        <p class="isms-error-message" *ngIf="generalInfoFormGroup.get('title').hasError('required')">Title is required</p>
+      </ng-container>
+    </div>
+
+    <div class="space-y-1.5 flex-1" [formGroup]="formGroup">
+      <label class="isms-label-left isms-required">Mode</label>
+      <nz-select formControlName="mode" class="w-full" nzPlaceHolder="Select mode" [nzDropdownMatchSelectWidth]="false">
+        <nz-option nzLabel="Official" nzValue="official"></nz-option>
+        <nz-option nzLabel="Training" nzValue="training"></nz-option>
+      </nz-select>
+    </div>
+    <div class="space-y-1.5 flex-1" [formGroup]="formGroup">
+      <label class="isms-label-left isms-required">Status</label>
+      <nz-select formControlName="status" class="w-full" nzPlaceHolder="Select status" [nzDropdownMatchSelectWidth]="false">
+        <nz-option nzLabel="Published" nzValue="published"></nz-option>
+        <nz-option nzLabel="Unpublished" nzValue="unpublished"></nz-option>
+      </nz-select>
+    </div>
+  </div>
+  <div class="flex flex-wrap md:flex-nowrap gap-4">
+    <div class="space-y-1.5 w-fit" formGroupName="duration" *ngIf="formGroup.value.generalInfo.type === 'challenge'">
+      <div class="flex items-center space-x-2">
+        <label class="isms-label-left isms-required">Duration</label>
+        <!-- <div class="flex items-center space-x-1.5">
+          <nz-switch nzSize="small" formControlName="noExpiration"></nz-switch>
+          <span class="text-xs text-gray-400 font-weight-regular whitespace-nowrap">No expiration</span>
+          <span
+            class="ph-duotone ph-info cursor-pointer text-sm text-blueLight-500"
+            nz-tooltip
+            nzTooltipColor="#ff3823"
+            nzTooltipOverlayClassName="primary-tooltip-arrow"
+            nzTooltipTitle="If enabled the task won't expire"
+          ></span>
+        </div> -->
+      </div>
+      <div class="flex space-x-2">
+        <div class="space-y-1.5">
+          <nz-input-number class="w-40" formControlName="value" nzPlaceHolder="Type here" [nzMin]="1" [nzStep]="1"></nz-input-number>
+          <ng-container *ngIf="durationFormGroup.get('value').hasError('required')">
+            <p class="isms-error-message" *ngIf="durationFormGroup.get('value').hasError('required')">Value is required</p>
+          </ng-container>
+        </div>
+        <div class="space-y-1.5">
+          <nz-select formControlName="type" class="w-40" nzPlaceHolder="Select cycle" [nzDropdownMatchSelectWidth]="false">
+            <nz-option nzLabel="Minute(s)" nzValue="minute"></nz-option>
+            <nz-option nzLabel="Hour(s)" nzValue="hour"></nz-option>
+            <!-- <nz-option nzLabel="Month" nzValue="month"></nz-option>
+            <nz-option nzLabel="Year" nzValue="year"></nz-option> -->
+          </nz-select>
+          <ng-container *ngIf="durationFormGroup.get('type').hasError('required')">
+            <p class="isms-error-message" *ngIf="durationFormGroup.get('type').hasError('required')">Cycle is required</p>
+          </ng-container>
+        </div>
+      </div>
+    </div>
+    <div class="space-y-1.5">
+      <label class="isms-label-left isms-required">Passing Score</label>
+      <div class="flex space-x-2 items-center">
+        <nz-input-number style="width: 50%" formControlName="passing" nzPlaceHolder="Type here" [nzMin]="1" [nzMax]="totalPoints" [nzStep]="1"></nz-input-number>
+        <div class="flex items-center space-x-1.5" *ngIf="task">
+          <span class="text-gray-300">/</span>
+          <span class="font-bold">{{ totalPoints }}</span>
+          <span class="text-gray-400">points</span>
+        </div>
+      </div>
+      <ng-container *ngIf="generalInfoFormGroup.get('passing').hasError('required')">
+        <p class="isms-error-message" *ngIf="generalInfoFormGroup.get('passing').hasError('required')">Value is required</p>
+      </ng-container>
+    </div>
+
+    <!-- *ngIf="generalInfoFormGroup.value.type === 'homework'" -->
+    <div class="space-y-1.5 w-52" [formGroup]="formGroup">
+      <label class="isms-label-left isms-required">Course</label>
+      <nz-select formControlName="course" class="w-full" nzPlaceHolder="Select course" [nzDropdownMatchSelectWidth]="false">
+        <nz-option *ngFor="let course of courses" [nzLabel]="course.name" [nzValue]="course._id"></nz-option>
+      </nz-select>
+    </div>
+
+    <div class="space-y-1.5 w-52" *ngIf="formGroup.value.generalInfo.type === 'homework'">
+      <label class="isms-label-left">
+        Number of Instances
+        <span nz-tooltip nzTooltipTitle="Total number of instances allowed for taking the examination." class="ph-duotone ph-info text-sm cursor-pointer text-isms-500"></span>
+      </label>
+      <nz-input-number style="width: 100%" formControlName="instances" nzPlaceHolder="Type here" [nzMin]="1" [nzMax]="10" [nzStep]="1"></nz-input-number>
+    </div>
+    <!-- <div class="space-y-1.5 w-52" [formGroup]="formGroup">
+      <label class="isms-label-left isms-required">Class</label>
+      <nz-select formControlName="class" class="w-full" nzPlaceHolder="Select class" [nzDropdownMatchSelectWidth]="false">
+        <nz-option *ngFor="let class of classes" [nzLabel]="class.name" [nzValue]="class._id"></nz-option>
+      </nz-select>
+    </div> -->
+  </div>
+</div>

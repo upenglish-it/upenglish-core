@@ -1,0 +1,120 @@
+<!-- <div class="flex flex-col space-y-4 px-4 overflow-auto mini-scroll-bar h-screen">
+  <br />
+  <div class="p-4 border rounded-md shadow-xs" *ngFor="let item of [0]">
+  <staff-scheduler [items]="items" [periods]="periods" [sections]="sections" [events]="events" [showBusinessDayOnly]="false" [allowDragging]="false"> </staff-scheduler>
+  <staff-scheduler
+    *ngIf="scheduleSections.length>0 && scheduleItems.length>0"
+    [sections]="scheduleSections"
+    [items]="scheduleItems"
+    [periods]="schedulePeriods"
+    [events]="events"
+    [showBusinessDayOnly]="false"
+    [allowDragging]="false"
+  >
+  </staff-scheduler>
+
+  <pre>
+    {{scheduleSections|json}} {{scheduleItems|json}} {{schedulePeriods |json }}
+    </pre>
+  <staff-scheduler [items]="items" [periods]="periods" [sections]="sections" [events]="events" [showBusinessDayOnly]="false" [allowDragging]="false"> </staff-scheduler>
+    <class-scheduler #classScheduler [items]="classItems" [periods]="classPeriods" [sections]="sections" [events]="events" [showBusinessDayOnly]="false" [allowDragging]="false"> </class-scheduler>
+    </div>
+</div>
+
+<h3>Event output</h3>
+<label>
+  <textarea placeholder="Event output" [(ngModel)]="eventOutput" name="event-output" style="width: 80%; height: 50px"></textarea>
+</label>
+<br />
+
+<button (click)="addItem()">Add Item</button>
+<button (click)="popItem()">Pop Item</button>
+<button (click)="removeItem()">Remove Item</button>
+<button (click)="addSection()">Add Section</button>
+<button (click)="popSection()">Pop Section</button>
+<button (click)="removeSection()">Remove Section</button>
+<button (click)="refresh()">Refresh</button> -->
+
+<div class="h-screen flex flex-col">
+  <!-- <div class="h-[55px] bg-white justify-between flex border-b border-b-gray-200 items-center px-4 space-x-4 relative">
+    <h6 class="text-base mb-0 font-medium text-gray-700 cursor-pointer">All Students ({{filteredStudents.length}})</h6>
+  </div> -->
+
+  <div class="h-[55px] bg-white justify-between flex border-b border-b-gray-200 items-center px-4 space-x-4 relative">
+    <div>
+      <h6 class="text-base mb-0 font-medium text-gray-700 cursor-pointer">{{ segmentOptions[segmentIndex].label }}</h6>
+      <span>{{ segmentOptions[segmentIndex].description }}</span>
+    </div>
+    <div class="flex items-center flex-1 box-content justify-center self-center z-0 absolute top-0 right-0 bottom-0 left-0 m-auto">
+      <isms-segmented-selector [options]="segmentOptions" [current-index]="segmentIndex" (on-changed)="onChangeSegmentSelector($event)"> </isms-segmented-selector>
+    </div>
+    <div class="space-x-6 flex items-center">
+      <div class="space-x-2 flex items-center">
+        <button nz-button nzType="primary" *ngIf="segmentIndex === 1" (click)="manageStaffScheduleDrawer.toggle()">
+          Add Weekly Schedule
+          <span nz-icon nzType="plus" nzTheme="outline"></span>
+        </button>
+        <button nz-button nzType="primary" *ngIf="segmentIndex === 0" (click)="manageStaffScheduleShiftDrawer.toggle()">
+          Add Staff Shift
+          <span nz-icon nzType="plus" nzTheme="outline"></span>
+        </button>
+        <!-- <nz-dropdown-menu #addDropdownMenu="nzDropdownMenu">
+          <ul nz-menu>
+            <li nz-menu-item (click)="manageStaffScheduleDrawer.toggle()">Add Time Slot</li>
+            <li nz-menu-item (click)="manageStaffScheduleShiftDrawer.toggle()">Add Staff Shift</li>
+          </ul>
+        </nz-dropdown-menu> -->
+      </div>
+    </div>
+  </div>
+
+  <!-- <div *ngIf="segmentIndex===0"> -->
+  <!-- weekByClassSections:{{weekByClassSections|json}} <br />
+  weekByClassItems:{{weekByClassItems|json}} <br />
+  schedulePeriods:{{schedulePeriods|json}} <br />
+  events:{{events|json}} -->
+  <isms-staff-scheduler
+    style="height: calc(100vh - 55px); overflow: auto"
+    view="week-by-class"
+    [sections]="weekByClassSections"
+    [items]="weekByClassItems"
+    [periods]="schedulePeriods"
+    [events]="events"
+    [showBusinessDayOnly]="false"
+    [allowDragging]="false">
+  </isms-staff-scheduler>
+  <!-- </div> -->
+
+  <div *ngIf="segmentIndex === 1">
+    <isms-staff-scheduler
+      view="week"
+      *ngIf="scheduleSections.length > 0 && scheduleItems.length > 0"
+      [sections]="scheduleSections"
+      [items]="scheduleItems"
+      [periods]="schedulePeriods"
+      [events]="events"
+      [showBusinessDayOnly]="false"
+      [allowDragging]="false">
+    </isms-staff-scheduler>
+  </div>
+
+  <div [class.hidden]="segmentIndex !== 2" [class.block]="segmentIndex === 2">
+    <!-- <class-scheduler #classScheduler [items]="items" [periods]="periods" [sections]="sections" [events]="events" [showBusinessDayOnly]="false" [allowDragging]="false"> </class-scheduler> -->
+    <!-- <staff-scheduler
+      *ngIf="dayViewSections.length > 0 && dayViewItems.length>0"
+      view="day"
+      [sections]="dayViewSections"
+      [items]="dayViewItems"
+      [periods]="dayViewPeriods"
+      [events]="dayViewEvents"
+      [showBusinessDayOnly]="false"
+      [allowDragging]="false"
+      [start]="dayViewStartDate"
+      [end]="dayViewEndDate"
+    >
+    </staff-scheduler> -->
+  </div>
+</div>
+
+<isms-manage-staff-schedule-drawer #manageStaffScheduleDrawer (on-submitted)="ngOnInit()"></isms-manage-staff-schedule-drawer>
+<isms-manage-staff-schedule-shift-drawer #manageStaffScheduleShiftDrawer (on-submitted)="ngOnInit()"></isms-manage-staff-schedule-shift-drawer>

@@ -1,0 +1,21 @@
+<div class="grid grid-cols-1 gap-4">
+  <div class="bg-white border border-gray-200 rounded-md">
+    <div class="border-b border-gray-200 font-medium px-4 py-3">
+      <div class="flex items-center space-x-2">
+        <span class="text-base ph-duotone ph-crown text-gray-500"></span>
+        <h6 class="text-xs font-medium text-gray-500 uppercase mb-0 p-0">Won & Lost</h6>
+      </div>
+    </div>
+    <div class="mb-0">
+      <apx-chart
+        *ngIf="wonLostPieChart"
+        dir="ltr"
+        [series]="wonLostPieChart.series"
+        [chart]="wonLostPieChart.chart"
+        [labels]="wonLostPieChart.labels"
+        [legend]="wonLostPieChart.legend"
+        [colors]="wonLostPieChart.colors">
+      </apx-chart>
+    </div>
+  </div>
+</div>

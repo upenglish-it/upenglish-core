@@ -1,0 +1,156 @@
+<!-- Accounts => Sub Account -->
+<nz-modal
+  [(nzVisible)]="showModal"
+  nzCentered
+  nzTitle="Choose Leads"
+  nzWidth="1024px"
+  [nzOkDisabled]="selectedStudentsFormArray.length === 0"
+  [nzOkText]="'Add Lead (' + selectedStudentsFormArray.length + ')'"
+  [nzCancelText]="'Cancel'"
+  (nzOnOk)="showModal = false; onSelectEmitter.emit(this.selectedStudentsFormArray.value)"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <div class="flex" style="height: 680px">
+      <div class="overflow-auto bg-gray-50 hidden mini-scroll-bar w-60 p-4 space-y-5 select-none">
+        <div class="space-y-2">
+          <div class="flex items-center justify-between cursor-pointer" (click)="showGrouping = !showGrouping">
+            <span class="text-gray-600 font-medium">Grouping</span>
+            <span class="text-gray-600 ph ph-caret-up-down"></span>
+          </div>
+          <nz-checkbox-wrapper class="w-full" (nzOnChange)="groupingChange($event)" *ngIf="showGrouping" [@default]>
+            <div class="flex flex-col space-y-2">
+              <div *ngFor="let item of ['Engineering', 'HR Specialist', 'IT Support', 'Assistant Manager']" class="text-gray-600">
+                <label nz-checkbox nzValue="A">
+                  <span class="w-full text-gray-500">
+                    {{ item }}
+                  </span>
+                  <span class="font-medium text-gray-500">(3)</span>
+                </label>
+              </div>
+            </div>
+          </nz-checkbox-wrapper>
+        </div>
+
+        <div class="space-y-2">
+          <div class="flex items-center justify-between cursor-pointer" (click)="showSmartFilter = !showSmartFilter">
+            <span class="text-gray-600 font-medium">Smart Filter</span>
+            <span class="text-gray-600 ph ph-caret-up-down"></span>
+          </div>
+          <nz-checkbox-wrapper class="w-full" (nzOnChange)="groupingChange($event)" *ngIf="showSmartFilter" [@default]>
+            <div class="flex flex-col space-y-2">
+              <div *ngFor="let item of ['Engineering', 'HR Specialist', 'IT Support', 'Assistant Manager']" class="text-gray-600">
+                <label nz-checkbox nzValue="A">
+                  <span class="w-full text-gray-500">
+                    {{ item }}
+                  </span>
+                  <span class="font-medium text-gray-500">(3)</span>
+                </label>
+              </div>
+            </div>
+          </nz-checkbox-wrapper>
+        </div>
+      </div>
+      <div class="flex-1 flex flex-col">
+        <div class="h-[55px] bg-white justify-between flex border-b items-center px-4">
+          <div class="flex items-center flex-1 space-x-4">
+            <div class="max-w-sm w-full">
+              <nz-input-group [nzPrefix]="searchPrefixTemplate" [nzSuffix]="searchSuffixTemplate" class="space-x-1.5">
+                <input nz-input placeholder="Search for: Title" nzShape="round" />
+              </nz-input-group>
+              <ng-template #searchPrefixTemplate>
+                <span class="text-base cursor-pointer text-gray-400 ph ph-magnifying-glass"></span>
+              </ng-template>
+              <ng-template #searchSuffixTemplate>
+                <span nz-icon class="ant-input-clear-icon" nzTheme="fill" nzType="close-circle"></span>
+              </ng-template>
+            </div>
+          </div>
+          <div class="space-x-6 flex items-center">
+            <div class="space-x-2 flex items-center">
+              <button nz-button nzType="primary" nz-dropdown [nzDropdownMenu]="createStudentMenu">
+                Create Lead
+                <span nz-icon nzType="down" nzTheme="outline"></span>
+              </button>
+              <nz-dropdown-menu #createStudentMenu="nzDropdownMenu">
+                <ul nz-menu>
+                  <li nz-menu-item (click)="createStudentManually()">Create Manually</li>
+                  <!-- <li nz-menu-item (click)="importStudentFromCSVDrawer.toggle()">
+                    From CSV file
+                    <span nz-icon nzType="info-circle" nzTheme="outline" nz-tooltip nzTooltipTitle="Import CV/Resume"></span>
+                  </li> -->
+                </ul>
+              </nz-dropdown-menu>
+            </div>
+          </div>
+        </div>
+        <div class="overflow-auto bg-white mini-scroll-bar flex-1">
+          <table role="table" class="min-w-full divide-y divide-gray-200 isms-table">
+            <thead>
+              <tr class="font-bold text-gray-700">
+                <th class="sticky top-0 z-10 w-10 px-4 py-3">
+                  <div class="relative grid place-items-center">
+                    <label nz-checkbox [nzIndeterminate]="nzIndeterminateStudent" (nzCheckedChange)="onSelectAll('all')" class="absolute top-[-11px]"></label>
+                  </div>
+                </th>
+                <th class="sticky top-0 px-4 py-3 pl-0 text-xs tracking-wider text-left group">
+                  <div class="flex items-center justify-between">Full Name</div>
+                </th>
+                <th class="sticky top-0 px-4 py-3 pl-0 text-xs tracking-wider text-left group">
+                  <div class="flex items-center justify-between">Email Address</div>
+                </th>
+                <th class="sticky top-0 px-4 py-3 pl-0 text-xs tracking-wider text-left group">
+                  <div class="flex items-center justify-between">Contact Number</div>
+                </th>
+                <th class="">
+                  <div class="flex items-center justify-between">Sources</div>
+                </th>
+                <th class="sticky top-0 px-4 py-3 pl-0 text-xs tracking-wider text-left group">
+                  <div class="flex items-center justify-between">Date Created</div>
+                </th>
+              </tr>
+            </thead>
+            <tbody class="text-sm bg-white divide-y divide-gray-200">
+              <tr *ngFor="let student of students; let i = index">
+                <td class="" [class.selected-td]="student.selected">
+                  <div class="relative grid place-items-center">
+                    <label nz-checkbox [(ngModel)]="student.selected" (nzCheckedChange)="onSelectAll(student._id)" class="absolute top-[-11px]"></label>
+                  </div>
+                </td>
+                <td [class.selected-td]="student.selected">
+                  <div class="flex items-center space-x-3">
+                    <img profile-photo [photo]="student.profilePhoto" [letter]="student.firstName + ' ' + student.lastName" class="w-7 h-7 bg-gray-100 rounded-full" />
+                    <span class="text-xs font-normal text-gray-700"> {{ student.firstName }} {{ student.lastName }} </span>
+                  </div>
+                </td>
+
+                <td class="font-normal text-xs text-gray-500" [class.selected-td]="student.selected">
+                  <ng-container *ngFor="let emailAddress of student.emailAddresses"> {{ emailAddress }} </ng-container>
+                </td>
+
+                <td class="font-normal text-xs text-gray-500" [class.selected-td]="student.selected">
+                  <ng-container *ngFor="let number of student.contactNumbers"> {{ number.countryCallingCode }}{{ number.number }} </ng-container>
+                </td>
+
+                <td class="font-normal text-xs text-gray-500" [class.selected-td]="student.selected">
+                  <nz-tag [nzColor]="'geekblue'" class="capitalize" *ngFor="let source of student.sources | slice: 0 : 5">{{ source }}</nz-tag>
+                </td>
+
+                <td class="font-normal text-xs text-gray-500" [class.selected-td]="student.selected">{{ student.createdAt | date: "MM/d/YY • hh:mm a" }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+</nz-modal>
+
+<!-- <add-student-manually-modal #addStudentManuallyModal (on-submitted)="onSubmittedAddStudentManually($event)"></add-student-manually-modal>
+
+<create-student-from-file-modal #createStudentFromFileModal></create-student-from-file-modal> -->
+
+<isms-add-student-manually-modal #addStudentManuallyModal (on-submitted)="onSubmittedAddStudentManually($event)"></isms-add-student-manually-modal>
+
+<isms-import-student-from-csv-drawer #importStudentFromCSVDrawer></isms-import-student-from-csv-drawer>

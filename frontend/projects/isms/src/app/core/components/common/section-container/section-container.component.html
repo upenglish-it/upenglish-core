@@ -1,0 +1,48 @@
+<div class="border bg-white border-gray-200 rounded-md select-none" [ngClass]="{ 'ring-1 ring-isms-300 shadow-sm': active }">
+  <!-- Header -->
+  <div class="flex items-center p-3">
+    <div class="flex items-center flex-1 space-x-2 select-none">
+      <!-- <i class="text-lg ph-fill ph-check-circle text-green-500"></i> -->
+      <i
+        *ngIf="showIndicator"
+        class="text-base ph-fill ph-check-circle"
+        [ngClass]="{
+          'text-gray-400': formGroup.invalid,
+          'text-isms-400': formGroup.valid,
+        }"></i>
+      <!-- <div class="flex items-center justify-center w-6 h-6 text-gray-400 border rounded-md border-gray-200 bg-gray-100">
+        <i class="text-base ph ph-envelope"></i>
+      </div> -->
+      <div class="flex space-x-2 items-center">
+        <span class="text-xs font-medium text-gray-500">{{ title }}</span>
+        <span class="text-xs font-normal text-gray-400" *ngIf="subTitle">{{ subTitle }}</span>
+        <span
+          *ngIf="tooltip"
+          class="ph-duotone ph-info cursor-pointer text-sm text-blueLight-500"
+          nz-tooltip
+          nzTooltipColor="#ff3823"
+          nzTooltipOverlayClassName="primary-tooltip-arrow"
+          [nzTooltipTitle]="tooltipTemplate"></span>
+        <ng-template #tooltipTemplate>
+          <div class="max-w-xs w-full">{{ tooltip }}</div>
+        </ng-template>
+      </div>
+    </div>
+    <div class="flex items-center space-x-3" [formGroup]="formGroup">
+      <!-- <span class="text-xs text-gray-400 font-weight-regular whitespace-nowrap"> Turn On All Reminders </span>
+      <nz-switch nzSize="small"></nz-switch> -->
+      <ng-content select="[extra]"></ng-content>
+      <i *ngIf="collapsible" class="text-base text-gray-500 cursor-pointer ph ph-caret-up" [class.-rotate-180]="!formGroup.value.expand" (click)="toggleCollapse()"></i>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div [ngClass]="{ hidden: !formGroup.value.expand }" class="border-t">
+    <ng-content select="[content]"></ng-content>
+  </div>
+
+  <!-- Actions (Buttons, Link) -->
+  <div class="p-3 border-t empty:hidden" [ngClass]="{ hidden: !formGroup.value.expand }">
+    <ng-content select="[actions]"></ng-content>
+  </div>
+</div>

@@ -1,0 +1,172 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  nzWidth="1024px"
+  nzTitle="Table Configuration"
+  [nzMaskClosable]="false"
+  [nzClosable]="false"
+  nzCancelText="Close"
+  (nzOnCancel)="submit()"
+  [nzOkText]="null"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <div class="px-4 py-3 flex-col max-h-[500px] space-y-3 flex-1 flex overflow-auto mini-scroll-bar min-h-fit">
+      <!-- Qestions -->
+      @if (toEdit === "questions") {
+        @for (questionFormGroup of questionsFormArray.controls; track $index) {
+          <div class="flex items-start gap-3" [formGroup]="toFormGroup(questionFormGroup)">
+            <div class="space-y-1.5 flex-1">
+              <label class="slms-label slms-required">Question</label>
+              <input nz-input placeHolder="Type here" style="width: 100%" formControlName="question" />
+              @if (questionFormGroup.get("question").touched) {
+                @if (questionFormGroup.get("question").hasError("required")) {
+                  <p class="slms-error-message">Question is required</p>
+                }
+              }
+            </div>
+
+            @if (viewType === "radio") {
+              <div class="space-y-1.5 flex-1">
+                <label class="slms-label slms-required">Answer Value</label>
+                <input nz-input placeHolder="Type here" style="width: 100%" formControlName="correctAnswer" />
+                <!-- <div class="flex items-center gap-2">
+                <button nz-button nzType="primary" nzDanger nzShape="circle" (click)="answerChoicesFormArray.removeAt($index)">
+                  <span class="ph-bold ph-x"></span>
+                </button>
+              </div> -->
+                @if (questionFormGroup.get("correctAnswer").touched) {
+                  @if (questionFormGroup.get("correctAnswer").hasError("required")) {
+                    <p class="slms-error-message">Correct answer is required</p>
+                  }
+                }
+              </div>
+            }
+
+            <div class="space-y-1.5 w-28">
+              <label class="slms-label slms-required">Points</label>
+              <!-- <input nz-input placeHolder="Type here" style="width: 100%" formControlName="question" /> -->
+              <div class="flex items-center gap-2">
+                <nz-input-number formControlName="points" nzPlaceHolder="0" style="width: 100%" [nzMin]="0" [nzStep]="1"></nz-input-number>
+                <button nz-button nzType="primary" nzDanger nzShape="circle" (click)="questionsFormArray.removeAt($index)">
+                  <span class="ph-bold ph-x"></span>
+                </button>
+              </div>
+              @if (questionFormGroup.get("points").touched) {
+                @if (questionFormGroup.get("points").hasError("required")) {
+                  <p class="slms-error-message">Points is required</p>
+                }
+              }
+            </div>
+
+            @if (viewType === "input") {
+              <div class="space-y-1.5 flex-1">
+                <label class="slms-label slms-required">Question Choices</label>
+
+                @for (questionAnswerChoiceFormGroup of questionAnswerChoicesFormArray($index).controls; track $index; let aci = $index) {
+                  <div>
+                    <div class="space-y-1.5 flex-1">
+                      <!-- <label class="slms-label slms-required">Answer Value</label> -->
+                      <div class="flex items-start gap-2">
+                        <!-- <input nz-input placeHolder="Type here" style="width: 100%" formControlName="answerValue" /> -->
+                        <div class="flex-1">
+                          <slms-table-box-answer-choice-editor
+                            mode="editing"
+                            [min-height]="100"
+                            [content-form-control]="toFormControl(questionAnswerChoiceFormGroup, 'answerValue')"
+                            [editor-id]="questionAnswerChoiceFormGroup.value.id"></slms-table-box-answer-choice-editor>
+                        </div>
+                        <!-- <button nz-button nzType="primary" nzDanger nzShape="circle" (click)="answerChoicesFormArray.removeAt($index)">
+                          <span class="ph-bold ph-x"></span>
+                        </button> -->
+                      </div>
+                      <!-- @if (questionAnswerChoiceFormGroup.get("answerValue").touched) {
+                        @if (questionAnswerChoiceFormGroup.get("answerValue").hasError("required")) {
+                          <p class="slms-error-message">Answer Value is required</p>
+                        }
+                      } -->
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+
+        <div>
+          <button nz-button nzType="primary" (click)="addQuestion()">
+            <div class="flex items-center gap-2">
+              <span>Add Question</span>
+              <span class="ph-bold ph-plus"></span>
+            </div>
+          </button>
+        </div>
+      }
+
+      <!-- Answer Choices -->
+      @if (toEdit === "answer-options") {
+        @for (answerChoiceFormGroup of answerChoicesFormArray.controls; track $index) {
+          <div class="flex items-start gap-3" [formGroup]="toFormGroup(answerChoiceFormGroup)">
+            <div class="space-y-1.5 flex-1">
+              <label class="slms-label slms-required">Answer Title</label>
+              <input nz-input placeHolder="Type here" style="width: 100%" formControlName="title" />
+              @if (answerChoiceFormGroup.get("title").touched) {
+                @if (answerChoiceFormGroup.get("title").hasError("required")) {
+                  <p class="slms-error-message">Answer Title is required</p>
+                }
+              }
+            </div>
+
+            @if (viewType === "radio") {
+              <div class="space-y-1.5 flex-1">
+                <label class="slms-label slms-required">Answer Value</label>
+                <div class="flex items-center gap-2">
+                  <input nz-input placeHolder="Type here" style="width: 100%" formControlName="answerValue" />
+                  <button nz-button nzType="primary" nzDanger nzShape="circle" (click)="answerChoicesFormArray.removeAt($index)">
+                    <span class="ph-bold ph-x"></span>
+                  </button>
+                </div>
+                @if (answerChoiceFormGroup.get("answerValue").touched) {
+                  @if (answerChoiceFormGroup.get("answerValue").hasError("required")) {
+                    <p class="slms-error-message">Answer Value is required</p>
+                  }
+                }
+              </div>
+            }
+
+            <!-- @if (viewType === "input"   ) {
+              <div class="space-y-1.5 flex-1">
+                <label class="slms-label slms-required">Answer Value</label>
+                <div class="flex items-start gap-2">
+                  <input nz-input placeHolder="Type here" style="width: 100%" formControlName="answerValue" />
+                  <div class="flex-1">
+                    <slms-table-box-answer-choice-editor
+                      mode="editing"
+                      [min-height]="100"
+                      [content-form-control]="toFormControl(answerChoiceFormGroup, 'answerValue')"
+                      [editor-id]="answerChoiceFormGroup.value.id"></slms-table-box-answer-choice-editor>
+                  </div>
+                  <button nz-button nzType="primary" nzDanger nzShape="circle" (click)="answerChoicesFormArray.removeAt($index)">
+                    <span class="ph-bold ph-x"></span>
+                  </button>
+                </div>
+                @if (answerChoiceFormGroup.get("answerValue").touched) {
+                  @if (answerChoiceFormGroup.get("answerValue").hasError("required")) {
+                    <p class="slms-error-message">Answer Value is required</p>
+                  }
+                }
+              </div>
+            } -->
+          </div>
+        }
+
+        <div>
+          <button nz-button nzType="primary" (click)="addAnswerChoices()">
+            <div class="flex items-center gap-2">
+              <span>Add Choice</span>
+              <span class="ph-bold ph-plus"></span>
+            </div>
+          </button>
+        </div>
+      }
+    </div>
+  </ng-container>
+</nz-modal>

@@ -1,0 +1,348 @@
+<nz-drawer
+  [nzVisible]="showDrawer"
+  nzCentered
+  nzWidth="750px"
+  [nzTitle]="titleTemplate"
+  (nzOnOk)="(1)"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzFooter]="footerTemplate"
+  nzPlacement="right"
+  [nzClosable]="false"
+  [nzBodyStyle]="{ 'padding-top': '4px' }">
+  <ng-container *nzDrawerContent>
+    <form class="py-4 flex-col space-y-5 flex" [formGroup]="shiftFormGroup">
+      <!-- <pre>
+        {{ shiftFormGroup.value | json }}
+      </pre> -->
+
+      <!--{{ teachers.length }}
+      {{ receptionists.length }} -->
+
+      <div class="space-y-1.5">
+        <label class="font-normal text-gray-600 text-xs required">Title</label>
+        <input nz-input placeholder="Type here" formControlName="title" />
+        <ng-container *ngIf="shiftFormGroup.get('title').touched">
+          <p class="isms-error-message" *ngIf="shiftFormGroup.get('title').hasError('required')">Title is required</p>
+        </ng-container>
+      </div>
+
+      <div class="space-y-1.5 flex-1">
+        <label class="isms-label-left">Type of Schedule</label>
+        <nz-select
+          formControlName="type"
+          nzShowSearch
+          class="w-full"
+          nzPlaceHolder="Select type of schedule"
+          [nzDropdownMatchSelectWidth]="false"
+          [nzCustomTemplate]="selectedScheduleColorIndicator">
+          <nz-option nzCustomContent [nzLabel]="schedule.name" [nzValue]="schedule" *ngFor="let schedule of scheduleColorIndicator">
+            <div class="flex items-center space-x-2">
+              <div class="w-2 h-2 rounded-full" [ngStyle]="{ 'background-color': schedule.color }"></div>
+              <span>{{ schedule.name }} </span>
+            </div>
+          </nz-option>
+        </nz-select>
+        <ng-template #selectedScheduleColorIndicator let-selected>
+          <div class="flex items-center space-x-2">
+            <div class="w-2 h-2 rounded-full" [ngStyle]="{ 'background-color': selected.nzValue.color }"></div>
+            <span>{{ selected.nzLabel }} </span>
+          </div>
+        </ng-template>
+      </div>
+
+      <div class="flex space-x-2">
+        <div class="space-y-1.5 flex-1">
+          <label class="isms-label-left isms-required">Schedule</label>
+          <!-- <nz-select formControlName="scheduleId" class="w-full" nzPlaceHolder="Select schedule" [nzDropdownMatchSelectWidth]="false">
+            <nz-option *ngFor="let schedule of schedules" nzCustomContent [nzLabel]="schedule.title" [nzValue]="schedule._id">
+              <div class="flex items-center space-x-1">
+                <span class="text-gray-600 font-medium">
+                  {{ schedule.title }}
+                </span>
+                <span class="text-gray-500 text-xs"> ({{ schedule.timeRangeText }}) </span>
+              </div>
+            </nz-option>
+          </nz-select>  -->
+          <div class="w-full">
+            <isms-schedule-selector [form-group]="shiftScheduleFormGroup" [disable-all-day]="true"></isms-schedule-selector>
+          </div>
+          <!-- <ng-container *ngIf="shiftFormGroup.get('schedule').touched">
+            <p class="isms-error-message" *ngIf="shiftFormGroup.get('schedule').hasError('schedule')">Schedule is required</p>
+          </ng-container> -->
+        </div>
+        <!-- <div class="space-y-1.5 flex-1"></div> -->
+      </div>
+      <div class="flex space-x-2" *ngIf="shiftFormGroup.value.type?.value !== 'staff-work'">
+        <div class="space-y-1.5 flex-1">
+          <label class="isms-label-left isms-required">Class</label>
+          <nz-select formControlName="classId" class="w-full" nzPlaceHolder="Select class" [nzDropdownMatchSelectWidth]="false">
+            <nz-option *ngFor="let class of classes" [nzLabel]="class.name" [nzValue]="class._id"></nz-option>
+          </nz-select>
+          <ng-container *ngIf="shiftFormGroup.get('classId').touched">
+            <p class="isms-error-message" *ngIf="shiftFormGroup.get('classId').hasError('required')">Class is required</p>
+          </ng-container>
+        </div>
+
+        <div class="space-y-1.5 flex-1">
+          <label class="isms-label-left isms-required">Room</label>
+          <input nz-input placeholder="Type here" formControlName="room" />
+          <ng-container *ngIf="shiftFormGroup.get('room').touched">
+            <p class="isms-error-message" *ngIf="shiftFormGroup.get('room').hasError('required')">Room is required</p>
+          </ng-container>
+        </div>
+      </div>
+
+      <!-- <div class="flex space-x-2">
+        <div class="space-y-1.5 flex-1">
+          <label class="isms-label-left isms-required">Teacher</label>
+          <nz-select formControlName="staffId" [nzDisabled]="shiftFormGroup.value._id" class="w-full" nzPlaceHolder="Select teacher" [nzDropdownMatchSelectWidth]="false">
+            <nz-option *ngFor="let teacher of teachers" [nzLabel]="teacher.firstName + ' ' + teacher.lastName" [nzValue]="teacher._id"></nz-option>
+          </nz-select>
+          <ng-container *ngIf="shiftFormGroup.get('staffId').touched">
+            <p class="isms-error-message" *ngIf="shiftFormGroup.get('staffId').hasError('required')">Teacher is required</p>
+          </ng-container>
+        </div>
+      </div> -->
+
+      <fieldset class="border border-solid border-gray-200 p-3 rounded-md">
+        <legend class="isms-label-left w-fit px-0.5">
+          <label class="isms-label-left">{{ shiftFormGroup.value.type?.value === "staff-work" ? "Assigned Staff" : "Assigned Teacher" }}(s)</label>
+        </legend>
+        <div class="flex flex-col space-y-2 h-auto">
+          <!-- <div #tuiCalendarContainer class="h-auto border rounded-md"></div> -->
+
+          <nz-collapse *ngFor="let staffFormGroup of staffsFormArray.controls; let i = index">
+            <nz-collapse-panel [nzHeader]="headerTemplate" [nzExtra]="extraTpl" [nzShowArrow]="false" [nzActive]="false" [formGroup]="toFormGroup(staffFormGroup)">
+              <ng-template #headerTemplate>
+                <!-- <div class="flex items-center justify-end"> -->
+                <div class="flex items-center space-x-3">
+                  <!-- <img profile-photo [letter]="'AB'" class="w-7 h-7 bg-gray-100 rounded-full" /> -->
+                  <div class="flex flex-col w-full">
+                    <!-- <span class="text-xs font-medium text-gray-700 cursor-pointer" (click)="(1)">John Doe</span> -->
+                    <nz-select
+                      formControlName="id"
+                      nzShowSearch
+                      class="min-w-[400px] w-full"
+                      nzPlaceHolder="Select teacher"
+                      [nzDropdownMatchSelectWidth]="false"
+                      *ngIf="shiftFormGroup.value.type?.value !== 'staff-work'">
+                      <nz-option *ngFor="let teacher of teachers" [nzLabel]="teacher.firstName + ' ' + teacher.lastName" [nzValue]="teacher._id"></nz-option>
+                    </nz-select>
+                    <nz-select
+                      formControlName="id"
+                      class="min-w-[400px] w-full"
+                      nzPlaceHolder="Select staff"
+                      [nzDropdownMatchSelectWidth]="false"
+                      *ngIf="shiftFormGroup.value.type?.value === 'staff-work'">
+                      <nz-option *ngFor="let staff of staffs" [nzLabel]="staff.firstName + ' ' + staff.lastName" [nzValue]="staff._id"></nz-option>
+                    </nz-select>
+                    <!-- <span class="text-[11px] font-normal text-gray-400">Primary</span> -->
+                  </div>
+                </div>
+                <!-- <div class="flex">Jan 23, 2024 to March 23, 2024</div>
+                </div> -->
+              </ng-template>
+              <ng-template #extraTpl>
+                <!-- <div class="h-7 items-center flex space-x-2">
+                  <span class="text-gray-500">Jan 23, 2024 to March 23, 2024</span>
+                </div> -->
+              </ng-template>
+              <div class="flex space-y-5 flex-col">
+                <div class="flex space-x-2">
+                  <div class="space-y-1.5 flex flex-col flex-1">
+                    <label class="isms-label-left isms-required">Schedule</label>
+                    <div>
+                      <!-- <nz-range-picker class="w-1/2" [nzAllowClear]="false"></nz-range-picker> -->
+                      <isms-schedule-selector [disable-all-day]="true" [form-group]="staffScheduleFormGroup(i)"></isms-schedule-selector>
+                    </div>
+                    <ng-container *ngIf="staffFormGroup.get('id').touched">
+                      <p class="isms-error-message" *ngIf="staffFormGroup.get('id').hasError('required')"
+                        >{{ shiftFormGroup.value.type?.value === "staff-work" ? "Staff" : "Teacher" }} is required</p
+                      >
+                    </ng-container>
+                    <div class="flex w-full items-end">
+                      <button
+                        nzSize="small"
+                        nz-button
+                        nzType="primary"
+                        nzDanger
+                        nzGhost
+                        nz-popconfirm
+                        nzPopconfirmTitle="Are you sure remove this?"
+                        (nzOnConfirm)="staffsFormArray.removeAt(i)"
+                        (nzOnCancel)="(1)">
+                        <span nz-icon nzType="delete"></span>
+                        Remove {{ shiftFormGroup.value.type?.value === "staff-work" ? "Staff" : "Teacher" }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- <nz-divider nzText="Leave Dates"></nz-divider> -->
+
+                <!-- <table role="table" class="min-w-full divide-y divide-gray-200 isms-table">
+                  <thead>
+                    <tr class="font-bold text-gray-700">
+                      <th class="w-10">
+                        <div class="relative grid place-items-center">
+                          <label nz-checkbox class="absolute top-[-11px]"></label>
+                        </div>
+                      </th>
+                      <th class="">
+                        <div class="flex items-center justify-between">Leave Date</div>
+                      </th>
+                      <th class="">
+                        <div class="flex items-center justify-between">Substitute</div>
+                      </th>
+                      <th class="">
+                        <div class="flex items-center justify-between">Class Date</div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody class="text-sm bg-white divide-y divide-gray-200">
+                    <tr *ngFor="let student of [0, 0, 0, 0]; let i = index">
+                      <td>
+                        <div class="relative grid place-items-center">
+                          <label nz-checkbox class="absolute top-[-11px]"></label>
+                        </div>
+                      </td>
+                      <td class="font-normal text-xs text-gray-500">Jan 23, 2024 to March 23, 2024 (3days)</td>
+                      <td>
+                        <div class="flex items-center space-x-3">
+                          <div class="flex flex-col">
+                            <span class="text-xs font-medium text-gray-700 cursor-pointer">John Doe</span>
+                            <span class="text-[11px] font-normal text-gray-400"> emailaddress </span>
+                          </div>
+                        </div>
+                      </td>
+                      <td class="font-normal text-xs text-gray-500">{{ 1 }}</td>
+                    </tr>
+                  </tbody>
+                </table> -->
+              </div>
+            </nz-collapse-panel>
+          </nz-collapse>
+
+          <div>
+            <button nzSize="small" nz-button nzType="primary" nzGhost (click)="addStaff()">
+              <span nz-icon nzType="user-add"></span>
+              Add {{ shiftFormGroup.value.type?.value === "staff-work" ? "Staff" : "Teacher" }}
+            </button>
+          </div>
+        </div>
+      </fieldset>
+
+      <div class="flex space-x-2">
+        <div class="space-y-1.5 flex-1">
+          <label class="isms-label-left isms-required">Care Taker / Staff</label>
+          <nz-select formControlName="careTakerId" class="w-full" nzPlaceHolder="Select care taker" [nzDropdownMatchSelectWidth]="false">
+            <nz-option *ngFor="let receptionist of receptionists" [nzLabel]="receptionist.firstName + ' ' + receptionist.lastName" [nzValue]="receptionist._id"></nz-option>
+          </nz-select>
+          <ng-container *ngIf="shiftFormGroup.get('careTakerId').touched">
+            <p class="isms-error-message" *ngIf="shiftFormGroup.get('careTakerId').hasError('required')">Care taker is required</p>
+          </ng-container>
+        </div>
+      </div>
+
+      <div class="flex space-x-2" *ngIf="shiftFormGroup.value.type?.value !== 'staff-work'">
+        <div class="space-y-1.5 flex-1">
+          <label class="isms-label-left isms-required">Homework Checker</label>
+          <nz-select class="w-full" formControlName="homeworkCheckerId" nzPlaceHolder="Select homework checker" [nzDropdownMatchSelectWidth]="false">
+            <nz-option *ngFor="let teacher of teachers" [nzLabel]="teacher.firstName + ' ' + teacher.lastName" [nzValue]="teacher._id"></nz-option>
+          </nz-select>
+          <ng-container *ngIf="shiftFormGroup.get('homeworkCheckerId').touched">
+            <p class="isms-error-message" *ngIf="shiftFormGroup.get('homeworkCheckerId').hasError('required')">Homework checker is required</p>
+          </ng-container>
+        </div>
+      </div>
+
+      <div class="flex space-x-2" *ngIf="shiftFormGroup.value.schedule">
+        <div class="space-y-1.5 flex-1">
+          <label class="isms-label-left isms-required">Opening Date</label>
+          <div class="flex space-x-2 flex-1 items-center">
+            <!-- [nzDisabledDate]="disabledPreviousDate" -->
+            <nz-date-picker class="flex-1" [nzAllowClear]="false" nzFormat="MMM dd, yyyy" formControlName="startDate"></nz-date-picker>
+          </div>
+          <ng-container *ngIf="shiftFormGroup.get('startDate').touched">
+            <p class="isms-error-message" *ngIf="shiftFormGroup.get('startDate').hasError('required')">Start date is required</p>
+          </ng-container>
+        </div>
+
+        <div class="space-y-1.5 flex-1">
+          <label class="isms-label-left isms-required">From Time</label>
+          <nz-time-picker
+            formControlName="fromTime"
+            class="w-full"
+            nzFormat="h:mm a"
+            [nzMinuteStep]="10"
+            [nzUse12Hours]="true"
+            [nzDisabledHours]="disabledHours"
+            [nzDisabledMinutes]="disabledMinutes"></nz-time-picker>
+          <ng-container *ngIf="shiftFormGroup.get('fromTime').touched">
+            <p class="isms-error-message" *ngIf="shiftFormGroup.get('fromTime').hasError('required')">From time is required</p>
+          </ng-container>
+        </div>
+
+        <div class="space-y-1.5 flex-1">
+          <label class="isms-label-left isms-required">To Time</label>
+          <nz-time-picker
+            formControlName="toTime"
+            class="w-full"
+            nzFormat="h:mm a"
+            [nzMinuteStep]="10"
+            [nzUse12Hours]="true"
+            [nzDisabledHours]="disabledHours"
+            [nzDisabledMinutes]="disabledMinutes"></nz-time-picker>
+          <ng-container *ngIf="shiftFormGroup.get('toTime').touched">
+            <p class="isms-error-message" *ngIf="shiftFormGroup.get('toTime').hasError('required')">To time is required</p>
+          </ng-container>
+        </div>
+      </div>
+
+      <!-- <nz-divider nzText="Notes each week"></nz-divider>
+
+      <nz-collapse [nzExpandedIcon]="'right'">
+        <nz-collapse-panel *ngFor="let panel of panels" [nzHeader]="panel.name" [nzActive]="panel.active" [nzDisabled]="panel.disabled">
+          <p style="margin: 0">A dog is a type of domesticated animal. Known for its loyalty and faithfulness, it can be found as a welcome guest in many households across the world.</p>
+        </nz-collapse-panel>
+      </nz-collapse> -->
+    </form>
+  </ng-container>
+
+  <ng-template #titleTemplate>
+    <div class="flex items-center justify-between gap-3">
+      <h3 class="text-gray-500 mb-0 text-sm font-medium">Staff Shift</h3>
+      <button
+        *ngIf="shiftFormGroup.value._id && currentStatus"
+        nz-button
+        nzSize="small"
+        [nzLoading]="statusLoading"
+        nz-popconfirm
+        [nzPopconfirmTitle]="currentStatus === 'ongoing' ? 'Stop this shift?' : 'Resume this shift?'"
+        (nzOnConfirm)="toggleStatus()"
+        (nzOnCancel)="(0)"
+        [ngClass]="{
+          'border-red-400 text-red-500 hover:border-red-500 hover:text-red-600': currentStatus === 'ongoing',
+          'border-green-400 text-green-500 hover:border-green-500 hover:text-green-600': currentStatus === 'stopped',
+        }">
+        <span nz-icon [nzType]="currentStatus === 'ongoing' ? 'stop' : 'play-circle'"></span>
+        {{ currentStatus === "ongoing" ? "Stop Class" : "Resume Class" }}
+      </button>
+    </div>
+  </ng-template>
+
+  <ng-template #footerTemplate>
+    <div class="flex justify-between items-center space-x-2">
+      <div>
+        @if (shiftFormGroup.value._id && account.account.role === "admin") {
+          <button nz-button nzType="primary" nzGhost (click)="deleteShift()" nzBlock> Delete Shift </button>
+        }
+      </div>
+      <div class="flex items-center space-x-2">
+        <button nz-button nzDanger (click)="toggle()" nzBlock>Close</button>
+        <button nz-button nzType="primary" [nzLoading]="loading" [disabled]="shiftFormGroup.invalid && shiftFormGroup.dirty" (click)="onSubmit()" nzBlock>Save Changes</button>
+      </div>
+    </div>
+  </ng-template>
+</nz-drawer>

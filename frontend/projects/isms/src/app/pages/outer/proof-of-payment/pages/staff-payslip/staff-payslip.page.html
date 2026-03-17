@@ -1,0 +1,891 @@
+<div class="staff-payslip-container" *ngIf="staffPayslip; else noResult">
+  <div class="flex space-x-4">
+    <div class="grid place-items-center w-28">
+      <img class="w-full" src="/assets/images/logo1.png" />
+    </div>
+    <div class="flex-1 text-right">
+      <h3>CÔNG TY TRÁCH NHIỆM HỮU HẠN MỘT THÀNH VIÊN GIÁO DỤC VÀ ĐÀO TẠO</h3>
+      <h2>QUÂN NGUYỄN</h2>
+      <p class="text-xs text-gray-900">82, Ngô Chí Quốc, tổ 85, khu phố 13, phường Phú Cường, <br />Thành phố Thủ Dầu Một, Bình Dương, Việt Nam</p>
+    </div>
+  </div>
+
+  <div class="text-center my-4">
+    <h1 class="text-gray-900 font-medium mb-0 text-base">PHIẾU LƯƠNG TỪ {{ staffPayslip.workStartDate }} ĐẾN {{ staffPayslip.workEndDate }}</h1>
+    <p class="text-gray-900 font-semibold mb-0 text-xs">Payslip</p>
+  </div>
+
+  <table style="border-collapse: collapse; width: 100%" cellspacing="0" class="p-4">
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Họ và tên / <i>Fullname</i></p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 42pt; padding-right: 42pt; text-indent: 0pt; line-height: 13pt; text-align: center"
+          >{{ staffPayslip.account.firstName }} {{ staffPayslip.account.lastName }}</p
+        >
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Chức danh / <i>Position</i></p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 42pt; padding-right: 42pt; text-indent: 0pt; line-height: 13pt; text-align: center" class="capitalize">
+          <!-- {{staffPayslip.staffsEmploymentInformation.position}} -->
+        </p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Ký hiệu nhân viên / <i>Initial</i></p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 42pt; padding-right: 42pt; text-indent: 0pt; line-height: 13pt; text-align: center">---</p>
+      </td>
+    </tr>
+    <tr style="height: 27pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left"
+          >Tổng số ngày làm việc chính thức trong tháng / <i>Total workdays of the</i></p
+        >
+        <p class="s3" style="padding-left: 5pt; text-indent: 0pt; line-height: 12pt; text-align: left">month</p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-top: 6pt; padding-left: 42pt; padding-right: 42pt; text-indent: 0pt; text-align: center">{{ "---" }}</p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Số ngày nghỉ phép không được hưởng lương / <i>Unpaid days off</i></p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p style="text-indent: 0pt; text-align: left">{{ staffPayslip.totalOfUnpaidHours }}hrs • {{ staffPayslip.totalAmountOfUnpaidHours | formattedCurrency }}<br /></p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Mức lương căn bản / <i>Basic salary</i></p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 42pt; padding-right: 42pt; text-indent: 0pt; line-height: 13pt; text-align: center">{{
+          staffPayslip.basicSalary | formattedCurrency
+        }}</p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 540pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        "
+        colspan="2"
+        bgcolor="#D8D8D8">
+        <p class="s4" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Các khoản thu nhập khác / <i>Other income</i></p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Phụ cấp chuyên môn / <i>Speciality allowance</i></p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p style="text-indent: 0pt; text-align: left"><br /></p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 17pt; padding-right: 32pt; text-indent: 0pt; line-height: 13pt; text-align: center"
+          >- Mức lương giảng dạy (theo giờ) / <i>Hourly </i>t<i>eaching rate</i></p
+        >
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 42pt; padding-right: 42pt; text-indent: 0pt; line-height: 13pt; text-align: center">{{
+          staffPayslip.hourlyTeachingRate | formattedCurrency
+        }}</p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 40pt; padding-right: 32pt; text-indent: 0pt; line-height: 13pt; text-align: center"
+          >- Số giờ giảng dạy trong tháng / <i>Teaching hours of the month</i></p
+        >
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 42pt; padding-right: 42pt; text-indent: 0pt; line-height: 13pt; text-align: center">{{ staffPayslip.hourlyTeachingRateQuantity }}</p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 22pt; padding-right: 32pt; text-indent: 0pt; line-height: 13pt; text-align: center"
+          >- Mức lương kèm bổ trợ (theo giờ) / <i>Hourly tutoring rate</i></p
+        >
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 42pt; padding-right: 42pt; text-indent: 0pt; line-height: 13pt; text-align: center">{{
+          staffPayslip.hourlyTutoringRate | formattedCurrency
+        }}</p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-right: 28pt; text-indent: 0pt; line-height: 13pt; text-align: right">- Số giờ kèm bổ trợ trong tháng / <i>Tutoring hours of the month</i></p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 42pt; padding-right: 42pt; text-indent: 0pt; line-height: 13pt; text-align: center">{{ staffPayslip.hourlyTutoringRateQuantity }}</p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-right: 31pt; text-indent: 0pt; line-height: 13pt; text-align: right">- Mức lương trợ giảng trong tháng (theo giờ) / <i>Hourly TA rate</i></p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 42pt; padding-right: 42pt; text-indent: 0pt; line-height: 13pt; text-align: center">{{
+          staffPayslip.hourlyTAPARate | formattedCurrency
+        }}</p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 41pt; text-indent: 0pt; line-height: 13pt; text-align: left">- Số giờ trợ giảng trong tháng / <i>TA hours of the month</i></p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 42pt; padding-right: 42pt; text-indent: 0pt; line-height: 13pt; text-align: center">{{ staffPayslip.hourlyTAPARateQuantity }}</p>
+      </td>
+    </tr>
+    <tr style="height: 27pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 41pt; text-indent: 0pt; line-height: 13pt; text-align: left">- Hoa hồng tư vấn học viên (theo học viên) / <i>Enrollment</i></p>
+        <p class="s3" style="padding-left: 41pt; text-indent: 0pt; line-height: 12pt; text-align: left">commission (per student)</p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-top: 6pt; padding-left: 42pt; padding-right: 42pt; text-indent: 0pt; text-align: center">----</p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 20pt; padding-right: 32pt; text-indent: 0pt; line-height: 13pt; text-align: center"
+          >- Số lượng học viên tư vấn thành công / <i>Successful cases</i></p
+        >
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p style="text-indent: 0pt; text-align: left"><br /></p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Phụ cấp trách nhiệm / <i>Responsibility allowance</i></p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p style="text-indent: 0pt; text-align: left"><br /></p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Thưởng / <i>Bonus, </i>Khoản cộng khác / <i>Others</i></p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p style="text-indent: 0pt; text-align: left"><br /></p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 540pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        "
+        colspan="2"
+        bgcolor="#D8D8D8">
+        <p class="s4" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Các khoản khấu trừ / <i>Deductions</i></p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Bảo hiểm xã hội / <i>Social insurance </i>(8%)</p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        "
+        rowspan="3">
+        <!-- <p style="text-indent: 0pt; text-align: left"><br /></p> -->
+        <p class="s2" style="padding-left: 42pt; padding-right: 42pt; text-indent: 0pt; text-align: center">{{ computedInsuranceAmount | formattedCurrency }}</p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Bảo hiểm thất nghiệp / <i>Unemployment insurance </i>(1%)</p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Bảo hiểm y tế / <i>Medical insurance </i>(1,5%)</p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Phạt / <i>Fine</i></p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p style="text-indent: 0pt; text-align: left"><br /></p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Truy thu / <i>Arrear collection</i></p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p style="text-indent: 0pt; text-align: left"><br /></p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Khoản trừ khác / <i>Others</i></p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p style="text-indent: 0pt; text-align: left"><br /></p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 540pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        "
+        colspan="2"
+        bgcolor="#D8D8D8">
+        <p class="s4" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Ứng lương / <i>Advancements</i></p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Truy thu ứng lương / <i>Advancement collection</i></p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p style="text-indent: 0pt; text-align: center">{{ staffPayslip.salaryAdvancementAmountPay | formattedCurrency }}</p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Khoảng còn lại / <i>Remaining amount</i></p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="text-indent: 0pt; line-height: 13pt; text-align: center">{{ staffPayslip.salaryAdvancementBalance | formattedCurrency }}</p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s2" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Ghi chú</p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p style="text-indent: 0pt; text-align: left"><br /></p>
+      </td>
+    </tr>
+    <tr style="height: 15pt">
+      <td
+        style="
+          width: 346pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s4" style="padding-left: 5pt; text-indent: 0pt; line-height: 13pt; text-align: left">Lương thực nhận / <i>Received amount</i></p>
+      </td>
+      <td
+        style="
+          width: 194pt;
+          border-top-style: solid;
+          border-top-width: 1pt;
+          border-left-style: solid;
+          border-left-width: 1pt;
+          border-bottom-style: solid;
+          border-bottom-width: 1pt;
+          border-right-style: solid;
+          border-right-width: 1pt;
+        ">
+        <p class="s6" style="padding-left: 42pt; padding-right: 42pt; text-indent: 0pt; line-height: 13pt; text-align: center">{{
+          staffPayslip.totalStaffSalary | formattedCurrency
+        }}</p>
+      </td>
+    </tr>
+  </table>
+  <p style="text-indent: 0pt; text-align: left"><br /></p>
+  <p class="s7" style="padding-left: 12pt; text-indent: 0pt; text-align: center">Cảm ơn bạn đã đồng hành cùng UP. Chúng tôi rất trân trọng đóng góp của bạn.</p>
+  <p class="s8" style="padding-left: 12pt; text-indent: 0pt; text-align: center">Thank you for being a part of UP. We highly appreciate your contribution.</p>
+</div>
+
+<ng-template #noResult>
+  <h1 class="text-lg text-center p-8">Not available</h1>
+</ng-template>

@@ -1,0 +1,25 @@
+export enum STATUS_CODE {
+  OK = 'ok',
+  HAS_DATA = 'has-data',
+  ACCOUNT_CREATED = 'account-created',
+  AUTHENTICATED = 'authenticated',
+  ACCOUNT_PENDING_VERIFICATION = 'account-pending-verification',
+  ACCOUNT_VERIFIED = 'account-verified',
+  ACCOUNT_PENDING_PROFILE_COMPLETION = 'account-pending-profile-completion',
+  ACCOUNT_PROFILE_COMPLETED = 'account-profile-completed',
+  PASSWORD_RESET_PENDING_VERIFICATION = 'password-reset-pending-verification',
+  PASSWORD_RESET_VERIFIED = 'password-reset-verified',
+  PASSWORD_RESET_SUCCESS = 'password-reset-success',
+  INTERNAL_SERVER_ERROR = 'internal-server-error',
+  REQUEST_DENIED = 'request-denied',
+  NOT_FOUND = 'not-found',
+  UNPROCESSABLE_DATA = 'unprocessable-data',
+
+  DATA_CREATED = 'data-created',
+  DATA_UPDATED = 'data-updated',
+  DATA_DELETED = 'data-deleted',
+
+  ALREADY_EXISTS = 'already-exists',
+  EMAIL_VERIFIED = 'email-verified',
+  EMAIL_NOT_VERIFIED = 'email-not-verified',
+}

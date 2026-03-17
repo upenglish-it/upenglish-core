@@ -1,0 +1,209 @@
+https://takeielts.britishcouncil.org/sites/default/files/ielts_speaking_band_descriptors.pdf
+
+https://takeielts.britishcouncil.org/sites/default/files/ielts_writing_band_descriptors.pdf
+
+https://chatgpt.com/share/68020fa9-dc90-800e-9ae8-84c3645239be
+
+https://rtiac.clarityenglish.com/#prefix=td
+
+
+
+https://demo-ielts.inspera.com/player/?assessmentRunId=131013388&context=exam#/section/128121930/question/128121896/scorableItem/1
+Inspera Assessment
+ 
+https://demo-ielts.inspera.com/player/?assessmentRunId=131013741&context=exam#/section/128125100/question/128121843/scorableItem/1
+Inspera Assessment
+ 
+https://demo-ielts.inspera.com/player/?assessmentRunId=131012334&context=exam#/section/128121996/question/128121965/scorableItem/1
+Inspera Assessment
+
+
+
+
+http://localhost:4201/authenticate/verify?role=student&email=abc@gmail.com
+
+http://localhost:4201/authenticate/verify?role=admin&email=huynhquan.nguyen@upenglishvietnam.com
+
+http://localhost:4201/authenticate/verify?role=teacher&email=nhanvo@upenglishvietnam.com
+
+June 23 Meeting:
+Add scroll in the bottom when the student is resize 
+left and right scroll should be diff
+footer like the paginationb
+
+To add test in course:
+- go to course
+
+ 
+
+Todo: June 24, 2025
+- Choices - Done
+- Fill-in - Done
+    Dropable image component - done
+- Synching of created task - done
+- Drag n Drop component - done
+    - if the participant-answer-id has a value, use it as already answered. - to validate later
+- Box ticking - IN PROGRESS
+    - Build the table aproach for box ticking, add col aproach
+    - Questions needs to connect the left side panel
+- Fill-in - table = 
+- Writing - 
+- Speaking - 
+
+- Variation
+- Type 
+- Background Audio
+- Score below after exam - DONE
+- 
+
+
+
+Test 
+    - Variation
+        - Parts
+            - Part 1
+            - Part 2
+            - 
+
+
+
+Drag n drop: Assocuate multiple answer choice 
+
+
+
+
+
+
+
+
+
+
+///////////////////////////////////////////////////////
+
+Part 1
+    1 Variation
+        1 Parts
+            - Question 1
+            - Question 2
+        2 Parts
+            - Question 1
+            - Question 2        
+    2 Variation 
+        1 Parts
+            - Question 1
+            - Question 2        
+        2 Parts
+            - Question 1
+            - Question 2
+Part 2
+    1 Variation
+        1 Parts
+            - Question 1
+            - Question 2
+        2 Parts
+            - Question 1
+            - Question 2
+    2 Variation 
+        1 Parts
+            - Question 1
+            - Question 2
+        2 Parts
+            - Question 1
+            - Question 2
+
+
+Course is just link to the class
+
+admin has access all the courses and can create all default course
+
+Teacher can add more test that was assigned to them
+
+
+Hierarchy
+-> course 
+    --> class
+        ---> test
+
+
+teacher dashboard,
+
+teacher task builder - inprogress
+student task view mode
+
+
+
+
+
+
+backgeound audio options
+    - show controls on/off
+    
+left side panel can have multiple audio
+image with drag item when resizing
+show payment history in the dashboard
+
+
+June 17 next meeting
+ 
+Next update, is feedback feature.
+     - student will input that feedback form
+
+discuss the data migration with bier: it needed by end of the month june.
+    - student, tuition, attendance.
+
+
+
+TODO: June 13-16, 2025
+- Login Teacher and student -
+- Create Test - 
+- question - image that has a textbox in quill
+
+
+
+Mark attendance the system will issue an email for absent
+When student done the test
+
+test is recorded in timeline - tracking, require sending email 
+assignment is a - 
+new test and new assignment is the identifier
+
+"Create New Test" to "Create New Template" and remove cousrse
+
+
+
+
+Teacher 
+    - My courses
+        - list of class but course is associated based on the upenglish - WIP
+            - Click that then it will, go to the detail management
+                - Can configure the test for default purpose and also can add specifc test.
+
+    - My Classes 
+        - Is to show the list of classes
+            - Click it, it will show the list of student and the details of test 
+                - Click student will show the result of student
+
+
+
+Notes: Nov 25, 2025
+
+Add comment after the test - Inprogress
+
+Test result:
+    Mini test has a different mini test
+
+    combine all the duration
+
+    compute the average 
+
+    Add a difficulty - A1 
+
+    CEFR is the difficulty of the - Quan will provide
+
+
+Test builder
+    - 
+
+
+//--- UPenglish
+Student name cant search due to veitname letters in the enroll class

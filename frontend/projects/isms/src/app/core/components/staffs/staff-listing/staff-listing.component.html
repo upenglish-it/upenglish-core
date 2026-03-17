@@ -1,0 +1,166 @@
+<div class=" bg-white justify-between flex flex-col md:flex-row lg:justify-between lg:items-center gap-2 lg:gap-0 border-b items-center px-4 py-2 w-full">
+  <div class="flex items-center space-x-4 w-full">
+    <div class="max-w-sm w-full" [formGroup]="filterFormGroup">
+      <nz-input-group [nzPrefix]="searchPrefixTemplate" [nzSuffix]="searchSuffixTemplate" class="space-x-1.5">
+        <input nz-input placeholder="Search for: First Name or Last Name" nzShape="round" formControlName="searchQuery" />
+      </nz-input-group>
+      <ng-template #searchPrefixTemplate>
+        <span class="text-base cursor-pointer text-gray-400 ph ph-magnifying-glass"></span>
+      </ng-template>
+      <ng-template #searchSuffixTemplate>
+        <span nz-icon class="ant-input-clear-icon" nzTheme="fill" nzType="close-circle"></span>
+      </ng-template>
+    </div>
+    <!-- <isms-manage-student-filter (on-smart-filter-output)="onSmartFilterOutput($event)" [student-ids]="selectedStudents"></isms-manage-student-filter> -->
+  </div>
+  <div class="space-x-6 w-full lg:w-fit">
+    <div class=" flex flex-col md:flex-row gap-2 items-center w-full">
+      <button class="w-full lg:w-fit" nz-button export-json-to-csv [data]="filteredStaffs" *ngIf="filteredStaffs.length > 0">
+        Export To CSV
+        <span nz-icon nzType="export" nzTheme="outline"></span>
+      </button>
+      <button class="w-full lg:w-fit" nz-button nzType="primary" (click)="addStaffManuallyModal.toggle()">
+        <!-- nz-dropdown [nzDropdownMenu]="createCandidateMenu" -->
+        Add New Staff
+        <span nz-icon nzType="down" nzTheme="outline"></span>
+      </button>
+      <!-- <nz-dropdown-menu #createCandidateMenu="nzDropdownMenu">
+        <ul nz-menu>
+          <li nz-menu-item (click)="(1)">Manually</li>
+          <li nz-menu-item (click)="(1)">
+            <div class="space-x-2 flex items-center">
+              <span> From CSV file</span>
+              <span nz-icon nzType="info-circle" nzTheme="outline" nz-tooltip nzTooltipTitle="Import CV/Resume"></span>
+            </div>
+          </li>
+        </ul>
+      </nz-dropdown-menu> -->
+    </div>
+  </div>
+</div>
+
+<div class="overflow-auto bg-white mini-scroll-bar flex flex-1 h-[calc(100vh-310px)] lg:h-[calc(100vh-110px)] w-full" reach-scroll-to-bottom (on-reach)="loadData()">
+  <div class="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 w-full">
+    <table role="table" class="min-w-full divide-y divide-gray-200 isms-table">
+      <thead class="bg-gray-50 sticky top-0 z-10">
+        <tr class="font-bold text-gray-700">
+          <th class="w-10 px-2 md:px-4">
+            <div class="relative grid place-items-center">
+              <label nz-checkbox (nzCheckedChange)="onAllCandidateChecked($event)" class="absolute top-[-11px]"></label>
+            </div>
+          </th>
+          <th class="min-w-[200px] px-2 md:px-4">
+            <div class="flex items-center justify-between text-xs md:text-sm">Full Name</div>
+          </th>
+          <th class="min-w-[100px] px-2 md:px-4">
+            <div class="flex items-center justify-between text-xs md:text-sm">Status</div>
+          </th>
+          <!-- <th class="">
+            <div class="flex items-center justify-between">Email Address</div>
+          </th> -->
+          <th class="min-w-[130px] px-2 md:px-4">
+            <div class="flex items-center justify-between text-xs md:text-sm">Contact Number</div>
+          </th>
+          <th class="min-w-[120px] px-2 md:px-4">
+            <div class="flex items-center justify-between text-xs md:text-sm">Tags</div>
+          </th>
+          <th class="min-w-[120px] px-2 md:px-4">
+            <div class="flex items-center justify-between text-xs md:text-sm">Sources</div>
+          </th>
+          <th class="min-w-[120px] px-2 md:px-4">
+            <div class="flex items-center justify-between text-xs md:text-sm whitespace-nowrap">Created Date</div>
+          </th>
+          <!-- <th class="">
+              <div class="flex items-center justify-between">Stage</div>
+            </th> -->
+        </tr>
+      </thead>
+      <tbody class="text-sm bg-white divide-y divide-gray-200 ">
+        <tr *ngFor="let staff of filteredStaffs; trackBy: identify; let i = index">
+          <td class="px-2 md:px-4" [class.selected-td]="staff.selected">
+            <div class="relative grid place-items-center">
+              <label nz-checkbox [(ngModel)]="staff.selected" class="absolute top-[-11px]"></label>
+            </div>
+          </td>
+
+          <td class="px-2 md:px-4" [class.selected-td]="staff.selected">
+            <div class="flex items-center space-x-2 md:space-x-3">
+              <img profile-photo [photo]="staff.profilePhoto" [letter]="staff.firstName[0]" class="w-6 h-6 md:w-7 md:h-7 bg-gray-100 rounded-full flex-shrink-0" />
+              <div class="flex flex-col min-w-0">
+                <span class="text-xs font-medium text-gray-700 cursor-pointer break-words" (click)="onEdit(staff._id)"> {{ staff.firstName }} {{ staff.lastName }} </span>
+                <span class="text-[10px] md:text-[11px] font-normal text-gray-400 break-all">
+                  <ng-container *ngFor="let emailAddress of staff.emailAddresses"> {{ emailAddress }} </ng-container>
+                </span>
+              </div>
+            <!-- <a class="flex items-center text-gray-500" nz-dropdown nzTrigger="hover" [nzDropdownMenu]="manageEmployee">
+              <i class="text-2xl ph-dots-three ph-bold"></i>
+            </a>
+            <nz-dropdown-menu #manageEmployee="nzDropdownMenu">
+              <ul nz-menu>
+                <li class="flex items-center space-x-2 text-sm" nz-menu-item>
+                  <i class="text-base ph-chalkboard-teacher ph-duotone"></i>
+                  <span>Enroll To A Class</span>
+                </li>
+                <li nz-menu-divider></li>
+                <li class="flex items-center space-x-2 text-sm" nz-menu-item (click)="onEdit(student._id)">
+                  <i class="text-base ph-pencil ph-duotone"></i>
+                  <span>Manage</span>
+                </li>
+                <li class="flex items-center space-x-2 text-sm" nz-menu-item>
+                    <i class="text-base ph-push-pin-slash ph-duotone"></i>
+                    <span>Mark As Inactive</span>
+                  </li>
+                  <li class="flex items-center space-x-2 text-sm" nz-menu-item nzDanger>
+                    <i class="text-base ph-trash ph-duotone"></i>
+                    <span>Delete</span>
+                  </li>
+              </ul>
+            </nz-dropdown-menu> -->
+          </div>
+        </td>
+
+          <td class="font-normal text-gray-500 px-2 md:px-4" [class.selected-td]="staff.selected">
+            <div class="flex gap-1.5 md:gap-2 flex-wrap">
+              <div class="px-1 md:px-1.5 text-[10px] md:text-xs grid place-items-center border border-success-400 text-success-500 bg-success-50 rounded-md whitespace-nowrap" *ngIf="staff.active">Active</div>
+              <div class="px-1 md:px-1.5 text-[10px] md:text-xs grid place-items-center border border-error-400 text-error-500 bg-error-50 rounded-md whitespace-nowrap" *ngIf="!staff.active">Inactive</div>
+            </div>
+          </td>
+
+          <!-- <td class="font-normal text-xs text-gray-500" [class.selected-td]="staff.selected">
+            <ng-container *ngFor="let emailAddress of staff.emailAddresses"> {{ emailAddress }} </ng-container>
+          </td> -->
+
+          <td class="font-normal text-xs text-gray-500 px-2 md:px-4" [class.selected-td]="staff.selected">
+            <ng-container *ngFor="let number of staff.contactNumbers">
+              <span class="whitespace-nowrap">{{ number.countryCallingCode }}{{ number.number }}</span>
+            </ng-container>
+          </td>
+
+          <td class="font-normal text-xs text-gray-500 px-2 md:px-4" [class.selected-td]="staff.selected">
+            <div class="flex flex-wrap gap-1">
+              <nz-tag [nzColor]="'green'" class="text-[10px] md:text-xs" *ngFor="let tag of staff.tags | slice: 0 : 5">{{ tag }}</nz-tag>
+            </div>
+          </td>
+
+          <td class="font-normal text-xs text-gray-500 px-2 md:px-4" [class.selected-td]="staff.selected">
+            <div class="flex flex-wrap gap-1">
+              <nz-tag [nzColor]="'geekblue'" class="text-[10px] md:text-xs" *ngFor="let source of staff.sources | slice: 0 : 5">{{ source }}</nz-tag>
+            </div>
+          </td>
+
+          <td class="font-normal text-xs text-gray-500 px-2 md:px-4" [class.selected-td]="staff.selected">
+            <span class="whitespace-nowrap">{{ staff.createdAt | date: "MM/d/YY • hh:mm a" }}</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!--
+<isms-import-student-from-csv-drawer #importStudentFromCSVDrawer></isms-import-student-from-csv-drawer>
+
+<isms-student-info-drawer #studentInfoDrawer (on-saved)="loadData()"></isms-student-info-drawer> -->
+
+<isms-add-staff-manually-modal #addStaffManuallyModal (on-submitted)="onSubmitted($event)"></isms-add-staff-manually-modal>
+<isms-staff-info-drawer #staffInfoDrawer (on-saved)="loadData()"></isms-staff-info-drawer>

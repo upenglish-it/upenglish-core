@@ -1,0 +1,19 @@
+<ng-container *ngIf="options">
+  <div class="flex flex-row flex-wrap lg:flex-nowrap gap-1.5 p-0.5 border border-gray-300/60 rounded-md bg-white select-none">
+    <ng-container *ngFor="let data of options; let i = index">
+      <div
+        *ngIf="!data.disable"
+        class="flex-1 px-3 space-x-2 py-[5px] cursor-pointer hover:bg-isms-100 hover:text-isms-500 transition-all flex items-center justify-center rounded-md w-full lg:w-fit"
+        [ngClass]="{
+          'bg-isms-500 text-white ': i === currentIndex,
+          'text-gray-500': i !== currentIndex,
+        }"
+        (click)="onChanged.emit(i)">
+        <ng-container *ngIf="data.icon">
+          <em [class.active]="i === currentIndex" [class]="data.icon" class="text-base"></em>
+        </ng-container>
+        <span class="font-normal text-xs whitespace-nowrap"> {{ data.label }} </span>
+      </div>
+    </ng-container>
+  </div>
+</ng-container>

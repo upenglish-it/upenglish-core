@@ -1,0 +1,197 @@
+<!-- Accounts => Sub Account -->
+<nz-modal
+  [(nzVisible)]="showDrawer"
+  nzCentered
+  [nzWidth]="'500px'"
+  nzTitle="Member Information"
+  [nzOkText]="null"
+  [nzCancelText]="null"
+  (nzOnOk)="(1)"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzFooter]="formGroup.value._id ? null : footerTemplate">
+  <ng-container *nzModalContent>
+    <div class="h-[400px]">
+      <form class="flex-col space-y-3 flex" [formGroup]="formGroup">
+        <!-- <div class="flex-1 flex items-center justify-between pb-3">
+          <div class="flex items-center space-x-3">
+            <button nz-button nzType="default" nzShape="circle" (click)="toggle()">X</button>
+            <span class="font-medium text-lg text-gray-700">Member Information</span>
+          </div>
+          <button nz-button nzType="primary" (click)="onCreate()">
+            Create now
+            <span nz-icon nzType="check-circle" nzTheme="fill"></span>
+          </button>
+        </div> -->
+
+        <div class="flex space-x-4 relative">
+          <!-- <img
+              src="https://avatars.githubusercontent.com/u/17878591?s=500&v=4"
+              alt=""
+              class="w-12 h-12 bg-gray-200 rounded-full"
+            /> -->
+
+          <div class="relative w-12 h-12">
+            <img class="w-12 h-12 rounded-full absolute" src="assets/images/default-profile-photo.svg" alt="" />
+
+            <input type="file" id="choose-profile-picture" class="hidden" />
+            <label for="choose-profile-picture">
+              <div class="w-12 h-12 group hover:bg-gray-500 opacity-50 rounded-full absolute flex justify-center items-center cursor-pointer transition duration-500">
+                <!-- <img class="hidden group-hover:block w-4" src="https://www.svgrepo.com/show/33565/upload.svg" alt="" /> -->
+                <span class="ph ph-upload-simple group-hover:visible invisible text-gray-500"></span>
+                <!-- <svg
+                  class="hidden group-hover:block w-12"
+                  width="30"
+                  height="30"
+                  viewBox="0 0 30 30"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M29.93 14.996C29.93 6.75 23.245 0.0650024 14.999 0.0650024C6.75199 0.0650024 0.0669861 6.75 0.0669861 14.996C0.0669861 23.243 6.75199 29.928 14.999 29.928C23.245 29.928 29.93 23.243 29.93 14.996Z"
+                    fill="#D9F2E3"
+                  />
+                  <path
+                    d="M21.394 26.69C20.61 26.3687 19.939 25.8217 19.4663 25.1184C18.9936 24.4152 18.7405 23.5874 18.739 22.74C18.7334 22.1286 18.8623 21.5234 19.1165 20.9674C19.3707 20.4113 19.744 19.9178 20.21 19.522C26.098 14.578 22.445 5.00402 14.846 5.15802C7.40201 5.28502 4.01499 14.681 9.79199 19.522C10.2577 19.9181 10.6308 20.4116 10.885 20.9676C11.1391 21.5236 11.2682 22.1287 11.263 22.74C11.2625 23.5875 11.0099 24.4156 10.5373 25.119C10.0646 25.8224 9.39342 26.3693 8.60901 26.69C8.14601 26.882 7.69201 27.096 7.24301 27.322C7.11801 27.386 7.00099 27.461 6.87799 27.528C9.29507 29.1017 12.1178 29.938 15.002 29.935C18.002 29.935 20.794 29.047 23.131 27.525C22.5691 27.2138 21.9898 26.935 21.396 26.69H21.394Z"
+                    fill="#329F72"
+                  />
+                </svg> -->
+              </div>
+            </label>
+          </div>
+
+          <div class="flex flex-col">
+            <h3 class="font-semibold text-gray-700 text-sm mb-0">{{ formGroup.value.firstName }} {{ formGroup.value.lastName }}</h3>
+            <!-- <span class="font-normal text-gray-500 text-xs">Fullstack Developer</span> -->
+            <!-- <label for="choose-profile-picture" class="font-normal text-gray-500 text-xs">Upload profile photo</label> -->
+          </div>
+        </div>
+
+        <div class="space-x-1.5 flex">
+          <div class="space-y-1.5">
+            <label class="font-normal text-gray-600 text-xs">First Name</label>
+            <nz-input-group [nzPrefix]="firstNamePrefixTemplate" class="space-x-1.5">
+              <input nz-input placeholder="Enter first name" formControlName="firstName" />
+            </nz-input-group>
+            <ng-template #firstNamePrefixTemplate>
+              <span class="text-base cursor-pointer text-gray-400 ph-duotone ph-user-circle"></span>
+            </ng-template>
+            <ng-container *ngIf="formGroup.get('firstName').touched">
+              <p class="isms-error-message" *ngIf="formGroup.get('firstName').hasError('required')">First name is required</p>
+              <p class="isms-error-message" *ngIf="formGroup.get('firstName').hasError('maxlength')">
+                First name should not be more than
+                {{ formGroup.get("firstName").errors?.maxlength?.requiredLength }}
+                characters
+              </p>
+              <p class="isms-error-message" *ngIf="formGroup.get('firstName').hasError('pattern')">First name is invalid format</p>
+            </ng-container>
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="font-normal text-gray-600 text-xs">Last Name</label>
+            <nz-input-group [nzPrefix]="lastNamePrefixTemplate" class="space-x-1.5">
+              <input nz-input placeholder="Enter last name" formControlName="lastName" />
+            </nz-input-group>
+            <ng-template #lastNamePrefixTemplate>
+              <span class="text-base cursor-pointer text-gray-400 ph-duotone ph-user-circle"></span>
+            </ng-template>
+            <ng-container *ngIf="formGroup.get('lastName').touched">
+              <p class="isms-error-message" *ngIf="formGroup.get('lastName').hasError('required')">Last name is required</p>
+              <p class="isms-error-message" *ngIf="formGroup.get('lastName').hasError('maxlength')">
+                Last name should not be more than
+                {{ formGroup.get("lastName").errors?.maxlength?.requiredLength }}
+                characters
+              </p>
+              <p class="isms-error-message" *ngIf="formGroup.get('lastName').hasError('pattern')">Last name is invalid format</p>
+            </ng-container>
+          </div>
+        </div>
+
+        <div class="space-y-1.5">
+          <label class="font-normal text-gray-600 text-xs">Email Address</label>
+          <nz-input-group [nzPrefix]="emailPrefixTemplate" class="space-x-1.5">
+            <input nz-input placeholder="Enter your email" formControlName="emailAddress" />
+          </nz-input-group>
+          <ng-template #emailPrefixTemplate>
+            <span class="text-base cursor-pointer text-gray-400 ph-duotone ph-envelope"></span>
+          </ng-template>
+          <ng-container *ngIf="formGroup.get('emailAddress').touched">
+            <p class="isms-error-message" *ngIf="formGroup.get('emailAddress').hasError('required')">Email address is required</p>
+            <p class="isms-error-message" *ngIf="formGroup.get('emailAddress').hasError('maxlength')">
+              Email address should not be more than
+              {{ formGroup.get("emailAddress").errors?.maxlength?.requiredLength }} characters
+            </p>
+            <p class="isms-error-message" *ngIf="formGroup.get('emailAddress').hasError('email') || formGroup.get('emailAddress').hasError('pattern')"
+              >Email address is invalid format</p
+            >
+          </ng-container>
+        </div>
+      </form>
+    </div>
+  </ng-container>
+</nz-modal>
+
+<ng-template #titleTemplate>
+  <div class="flex space-x-1">
+    <div class="space-x-1 flex-1 flex items-center">
+      <span class="font-medium text-lg text-gray-700">Create Information</span>
+    </div>
+  </div>
+</ng-template>
+
+<ng-template #footerTemplate>
+  <div class="space-x-1">
+    <button nz-button>Close</button>
+    <button nz-button nzType="primary" (click)="onSubmit()">
+      Submit
+      <!-- <span nz-icon nzType="check-circle" nzTheme="fill"></span> -->
+    </button>
+  </div>
+</ng-template>
+
+<!-- <nz-drawer
+  [nzVisible]="showDrawer"
+  nzCentered
+  [nzWidth]="'600px'"
+  [nzTitle]="null"
+  [nzCloseIcon]="null"
+  (nzOnOk)="(1)"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzFooter]="null"
+  nzPlacement="right"
+>
+  <ng-container *nzDrawerContent>
+    <div class="h-[780px]">
+      <form class="flex-col space-y-3 flex">
+        <div class="flex-1 flex items-center justify-between pb-3">
+          <div class="flex items-center space-x-3">
+            <button nz-button nzType="default" nzShape="circle" (click)="toggle()">X</button>
+            <span class="font-medium text-lg text-gray-700">Member Information</span>
+          </div>
+          <button nz-button nzType="primary" (click)="onCreate()">
+            Create now
+            <span nz-icon nzType="check-circle" nzTheme="fill"></span>
+          </button>
+        </div>
+
+        <div class="space-x-1.5 flex">
+          <div class="space-y-1.5 flex-1">
+            <label class="font-normal text-gray-600 text-xs">First Name</label>
+            <input nz-input placeholder="Type here" formControlName="firstName" />
+          </div>
+
+          <div class="space-y-1.5 flex-1">
+            <label class="font-normal text-gray-600 text-xs">Last Name</label>
+            <input nz-input placeholder="Type here" formControlName="lastName" />
+          </div>
+        </div>
+
+        <div class="space-y-1.5">
+          <label class="font-normal text-gray-600 text-xs">Email Address</label>
+          <input nz-input placeholder="Type here" formControlName="emailAddress" />
+        </div>
+      </form>
+    </div>
+  </ng-container>
+</nz-drawer> -->

@@ -1,0 +1,92 @@
+<div class=" bg-white justify-between flex flex-col md:flex-row border-b items-center px-4 py-2 gap-2 md:gap-0">
+  <div class="flex items-center flex-1 space-x-4" [formGroup]="filterFormGroup">
+    <!-- <div class="max-w-sm w-full">
+      <nz-input-group [nzPrefix]="searchPrefixTemplate" [nzSuffix]="searchSuffixTemplate" class="space-x-1.5">
+        <input nz-input placeholder="Search for: Name" nzShape="round" formControlName="searchQuery" />
+      </nz-input-group>
+      <ng-template #searchPrefixTemplate>
+        <span class="text-base cursor-pointer text-gray-400 ph ph-magnifying-glass"></span>
+      </ng-template>
+      <ng-template #searchSuffixTemplate>
+        <span nz-icon class="ant-input-clear-icon" nzTheme="fill" nzType="close-circle"></span>
+      </ng-template>
+    </div> -->
+    <nz-select nzAllowClear nzPlaceHolder="Filter By Receivers" formControlName="staffs" nzMode="multiple" nzShowSearch [nzDropdownMatchSelectWidth]="false" class="min-w-[200px]">
+      <!-- <nz-option nzValue="jack" nzLabel="Jack Robert" [nzHide]="!isNotSelectedReceiverFilter(option)"></nz-option> -->
+      <nz-option *ngFor="let receiver of receivers" [nzValue]="receiver._id" [nzLabel]="receiver.firstName + ' ' + receiver.lastName"></nz-option>
+    </nz-select>
+    <nz-range-picker formControlName="startEndDate" [nzAllowClear]="false"></nz-range-picker>
+  </div>
+  <div class="space-x-6 flex w-full lg:w-fit">
+    <div class="space-x-2 flex items-center w-full lg:w-fit">
+      <button class="w-full lg:w-fit" nz-button nzType="primary" (click)="manageExpenseModal.toggle()">
+        Add Expense
+        <span nz-icon nzType="down" nzTheme="outline"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="overflow-y-auto bg-white mini-scroll-bar flex-1 h-[calc(100vh-210px)] lg:h-[calc(100vh-110px)]" reach-scroll-to-bottom (on-reach)="loadData()">
+  <div class="overflow-x-auto">
+    <table role="table" class="min-w-full divide-y divide-gray-200 isms-table">
+      <thead class="bg-gray-50 sticky top-0 z-10">
+        <tr class="font-bold text-gray-700">
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[150px]">
+            <div>Transaction #</div>
+          </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[150px]">
+            <div class="flex items-center justify-between">Notes</div>
+          </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[120px]">
+            <div class="flex items-center justify-between">Amount</div>
+          </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[100px]">
+            <div class="flex items-center justify-between">M.O.P</div>
+          </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[160px]">
+            <div class="flex items-center justify-between">Transaction Date</div>
+          </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[150px]">
+            <div class="flex items-center justify-between">Received By</div>
+          </th>
+        </tr>
+      </thead>
+      <tbody class="text-sm bg-white divide-y divide-gray-200">
+        <tr *ngFor="let cashflow of filteredCashflows; trackBy: identify; let i = index">
+          <td class="px-2 md:px-4 py-2 md:py-3">
+            <div class="text-xs">
+              <a [href]="'/pop/expense-receipt?urlCode=' + cashflow.transactionId" target="_blank" class="text-blue-600 hover:text-blue-800 break-all">{{ cashflow.transactionId }}</a>
+            </div>
+          </td>
+
+          <td class="px-2 md:px-4 py-2 md:py-3">
+            <div class="flex items-center space-x-2 md:space-x-3">
+              <!-- <span class="text-xs font-normal text-gray-700 cursor-pointer"> {{ cashflow.payedBy.firstName }} {{ cashflow.payedBy.lastName }} </span> -->
+              <span class="text-xs font-normal text-gray-700 cursor-pointer truncate"> {{ cashflow.notes }} </span>
+            </div>
+          </td>
+
+          <td class="px-2 md:px-4 py-2 md:py-3 font-normal text-xs text-gray-500">
+            <nz-tag [nzColor]="'blue'" class="text-[10px] md:text-xs">{{ cashflow.amount | formattedCurrency }}</nz-tag>
+          </td>
+
+          <td class="px-2 md:px-4 py-2 md:py-3 font-normal text-xs text-gray-500 whitespace-nowrap">
+            {{ cashflow.mode === "cash" ? "Cash" : "Banking" }}
+          </td>
+
+          <td class="px-2 md:px-4 py-2 md:py-3 font-normal text-xs text-gray-500 whitespace-nowrap">{{ cashflow.createdAt | date: "MM/d/YY • hh:mm a" }}</td>
+
+          <td class="px-2 md:px-4 py-2 md:py-3">
+            <div class="flex items-center space-x-2 md:space-x-3">
+              <img profile-photo [photo]="cashflow.receivedBy.profilePhoto" [letter]="cashflow.receivedBy.firstName[0]" class="w-6 h-6 md:w-7 md:h-7 bg-gray-100 rounded-full flex-shrink-0" />
+              <span class="text-xs font-normal text-gray-700 cursor-pointer truncate"> {{ cashflow.receivedBy.firstName }} {{ cashflow.receivedBy.lastName }} </span>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<isms-manage-expense-modal #manageExpenseModal (on-submitted)="loadData()"></isms-manage-expense-modal>

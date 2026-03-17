@@ -1,0 +1,22 @@
+<div class="h-screen flex flex-col">
+  <div class="bg-white justify-between flex flex-col lg:flex-row border-b border-b-gray-200 p-4 gap-4 relative">
+    <div class="w-full">
+      <h6 class="text-base mb-0 font-medium text-gray-700 cursor-pointer">{{ segmentOptions[segmentIndex].label }}</h6>
+      <span>{{ segmentOptions[segmentIndex].description }}</span>
+    </div>
+
+    <div class="flex items-center justify-center z-0 w-full">
+      <isms-segmented-selector class="w-full" [options]="segmentOptions" [current-index]="segmentIndex" (on-changed)="onChangeSegmentSelector($event)"> </isms-segmented-selector>
+    </div>
+
+    <div class="hidden lg:flex lg:w-full"></div>
+  </div>
+
+  <ng-container *ngIf="segmentIndex === 0">
+    <isms-pipeline-listing></isms-pipeline-listing>
+  </ng-container>
+
+  <ng-container *ngIf="segmentIndex === 1">
+    <isms-lead-listing></isms-lead-listing>
+  </ng-container>
+</div>

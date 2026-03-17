@@ -1,0 +1,12 @@
+<div class="max-w-7xl w-full mx-auto flex flex-col gap-10">
+  <div class="flex flex-col gap-6 pt-14">
+    <div>
+      <a class="inline-flex gap-2 items-center" routerLink="/t/dashboard">
+        <span class="ph ph-arrow-bend-up-left"></span>
+        <span>Back to dashboard</span>
+      </a>
+    </div>
+    <h2 class="font-bold text-2xl mb-0">Assigned Classes</h2>
+  </div>
+  <slms-class-list redirection-path="/t/classes-detail" [classes]="assignedClasses"></slms-class-list>
+</div>

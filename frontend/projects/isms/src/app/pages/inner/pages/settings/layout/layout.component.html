@@ -1,0 +1,92 @@
+<div class="h-screen flex shadow relative">
+  <!-- Sub navigation container -->
+  <div class="bg-[#f3f5f9] flex flex-col w-60 border-l space-y-1 border-l-gray-200">
+    <!-- header -->
+    <div class="h-[55px] flex items-center px-4 border-b border-b-gray-100">
+      <span class="font-semibold text-sm text-gray-900">Settings</span>
+    </div>
+
+    <!-- navigations -->
+    <div class="px-4 overflow-auto flex-1 space-y-8 invisible-scroll-bar">
+      <div class="space-y-2">
+        <span class="text-gray-700 font-medium">
+          My Account
+          <!-- <p>{{ "settings.myAccount.title" | transloco }}</p> -->
+        </span>
+        <ul>
+          <ng-container *ngFor="let navigation of accountNavigation; let i = index">
+            <ng-container *ngIf="navigation.separator">
+              <div class="h-[1px] bg-gray-200 my-3"></div>
+            </ng-container>
+
+            <ng-container *ngIf="!navigation.separator">
+              <li
+                class="cursor-pointer font-normal ml-2 py-2 text-gray-500 rounded-md hover:text-isms-500 flex"
+                [routerLink]="navigation.route"
+                routerLinkActive="isms-active-child-navigation"
+                [routerLinkActiveOptions]="{ exact: true }">
+                <div class="space-x-2 flex flex-1 items-center">
+                  <span class="ph-duotone text-base ph-{{ navigation.icon }}"></span>
+                  <span class="font-medium capitalize"> {{ navigation.name }}</span>
+                </div>
+              </li>
+            </ng-container>
+          </ng-container>
+        </ul>
+      </div>
+
+      <div class="space-y-2" *ngIf="selectedBranchInfo">
+        <span class="text-gray-700 font-medium">"{{ selectedBranchInfo.name }}" branch</span>
+        <ul>
+          <ng-container *ngFor="let navigation of workspaceNavigation; let i = index">
+            <ng-container *ngIf="navigation.separator">
+              <div class="h-[1px] bg-gray-200 my-3"></div>
+            </ng-container>
+
+            <ng-container *ngIf="!navigation.separator">
+              <li
+                class="cursor-pointer font-normal ml-2 py-2 text-gray-500 rounded-md hover:text-isms-500 flex"
+                [routerLink]="navigation.route"
+                routerLinkActive="isms-active-child-navigation"
+                [routerLinkActiveOptions]="{ exact: false }">
+                <div class="space-x-2 flex flex-1 items-center">
+                  <span class="ph-duotone text-base ph-{{ navigation.icon }}"></span>
+                  <span class="font-medium capitalize"> {{ navigation.name }}</span>
+                </div>
+              </li>
+            </ng-container>
+          </ng-container>
+        </ul>
+      </div>
+
+      <div class="space-y-2">
+        <span class="text-gray-700 font-medium">General</span>
+        <ul>
+          <ng-container *ngFor="let navigation of systemSettingsNavigation; let i = index">
+            <ng-container *ngIf="navigation.separator">
+              <div class="h-[1px] bg-gray-200 my-3"></div>
+            </ng-container>
+
+            <ng-container *ngIf="!navigation.separator">
+              <li
+                class="cursor-pointer font-normal ml-2 py-2 text-gray-500 rounded-md hover:text-isms-500 flex"
+                [routerLink]="navigation.route"
+                routerLinkActive="isms-active-child-navigation"
+                [routerLinkActiveOptions]="{ exact: false }">
+                <div class="space-x-2 flex flex-1 items-center">
+                  <span class="ph-duotone text-base ph-{{ navigation.icon }}"></span>
+                  <span class="font-medium"> {{ navigation.name }}</span>
+                </div>
+              </li>
+            </ng-container>
+          </ng-container>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="flex-1 m-auto h-screen relative border-l border-l-gray-200">
+    <router-outlet></router-outlet>
+  </div>
+</div>

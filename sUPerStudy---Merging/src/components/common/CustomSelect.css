@@ -1,0 +1,161 @@
+/* ── Custom Select ─────────────────────────────── */
+.cs-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.cs-disabled {
+    opacity: 0.55;
+    pointer-events: none;
+}
+
+/* label icon */
+.cs-label-icon {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 5px;
+    vertical-align: middle;
+}
+
+/* ── Trigger button ────────────────────────────── */
+.cs-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 38px;
+    padding: 6px 12px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+    font-size: 0.88rem;
+    color: #1e293b;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    text-align: left;
+    gap: 8px;
+}
+
+.cs-trigger:hover {
+    border-color: #94a3b8;
+}
+
+.cs-trigger.cs-open {
+    border-color: var(--color-primary, #6366f1);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.cs-value {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cs-placeholder {
+    color: #94a3b8;
+}
+
+.cs-chevron {
+    flex-shrink: 0;
+    color: #94a3b8;
+    transition: transform 0.25s cubic-bezier(.4, 0, .2, 1);
+}
+
+.cs-chevron-up {
+    transform: rotate(180deg);
+}
+
+/* ── Dropdown menu ─────────────────────────────── */
+.cs-menu {
+    /* max-height is now set dynamically via JS */
+    overflow-y: auto;
+    margin: 0;
+    padding: 6px;
+    list-style: none;
+    background: #fff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.08);
+    /* Stronger shadow for floating feeling */
+    animation: cs-slide-in 0.18s cubic-bezier(.4, 0, .2, 1);
+}
+
+@keyframes cs-slide-in {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* scrollbar */
+.cs-menu::-webkit-scrollbar {
+    width: 6px;
+}
+
+.cs-menu::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    /* Visible track to hint at scrollability */
+    border-radius: 99px;
+    margin: 6px 0;
+    /* padding for the track */
+}
+
+.cs-menu::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    /* Darker thumb for contrast */
+    border-radius: 99px;
+}
+
+.cs-menu::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+}
+
+/* ── Option ────────────────────────────────────── */
+.cs-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    color: #334155;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.cs-option:hover {
+    background: #f1f5f9;
+}
+
+.cs-option.cs-selected {
+    background: var(--color-primary-light, #eef2ff);
+    color: var(--color-primary, #6366f1);
+    font-weight: 600;
+}
+
+.cs-option-label {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cs-item-icon {
+    flex-shrink: 0;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.cs-check {
+    flex-shrink: 0;
+    color: var(--color-primary, #6366f1);
+}

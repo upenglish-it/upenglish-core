@@ -1,0 +1,43 @@
+<!-- Accounts => Sub Account -->
+<nz-modal
+  [(nzVisible)]="showModal"
+  nzCentered
+  nzTitle="Transfer {{ formGroup.value.removePipelineStageLeads }} Lead(s)"
+  nzWidth="600px"
+  nzOkText="Submit"
+  [nzOkDisabled]="!formGroup.get('agree').value"
+  [nzCancelText]="'Cancel'"
+  (nzOnOk)="onRemoveStage()"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="showModal = false">
+  <ng-container *nzModalContent>
+    <div class="flex flex-col space-y-6" [formGroup]="formGroup">
+      <nz-alert
+        nzType="warning"
+        nzMessage="If you delete the pipeline stage that has lead(s), please choose where to move the lead(s). This action cannot be undone."
+        nzShowIcon></nz-alert>
+      <div class="space-x-4 flex items-end">
+        <div class="space-y-1.5 flex-1">
+          <label class="hc-label">Current stage</label>
+          <div class="h-8 flex items-center">
+            <span class="font-medium px-2 py-1 rounded-md bg-isms-100 border border-isms-500 text-isms-500">
+              {{ formGroup.value.removePipelineStageTitle }}
+            </span>
+          </div>
+        </div>
+        <div class="w-8 h-8 rounded-full text-xl grid place-items-center">
+          <span class="ph-duotone ph-arrow-fat-lines-right text-gray-400"></span>
+        </div>
+        <div class="space-y-1.5 flex-1">
+          <label class="hc-label">New stage</label>
+          <nz-select nzShowSearch nzPlaceHolder="Choose stage" class="w-full" formControlName="receiverPipelineStageId">
+            <nz-option *ngFor="let stage of stages" [nzLabel]="stage.title" [nzValue]="stage.id"></nz-option>
+          </nz-select>
+        </div>
+      </div>
+      <div class="select-none py-3 px-2 bg-gray-100 border rounded-md">
+        <label nz-checkbox formControlName="agree" class="checkbox-center-top">I understand that modifying pipelines may affect the outcome.</label>
+      </div>
+    </div>
+  </ng-container>
+</nz-modal>

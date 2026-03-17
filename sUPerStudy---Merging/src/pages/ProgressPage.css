@@ -1,0 +1,561 @@
+/* ============================================
+   PROGRESS MODAL (Bottom Sheet)
+   ============================================ */
+
+/* Backdrop */
+.progress-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 100;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    animation: fadeIn var(--transition-fast) ease;
+}
+
+/* Bottom Sheet */
+.progress-modal {
+    width: 100%;
+    max-width: 500px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    padding: var(--space-xl) var(--space-lg);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 140px);
+    box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.4);
+    max-height: 88vh;
+    overflow-y: auto;
+    animation: slideUpSheet 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideUpSheet {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+.progress-modal-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border-color);
+    background: var(--bg-input);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    float: right;
+}
+
+.progress-modal-close:hover {
+    background: var(--color-error);
+    border-color: var(--color-error);
+    color: white;
+}
+
+.progress-modal-title {
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin: 0 0 20px 0;
+}
+
+/* ---------- Group Tabs ---------- */
+.progress-group-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 20px;
+    padding: 4px;
+    background: var(--bg-input);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+
+.progress-group-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.progress-group-tab {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 14px;
+    border: none;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: normal;
+    word-break: break-word;
+    text-align: center;
+    line-height: 1.3;
+}
+
+.progress-group-tab:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.progress-group-tab--active {
+    background: var(--color-primary);
+    color: white;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.progress-group-tab--active:hover {
+    background: var(--color-primary);
+    color: white;
+}
+
+/* Light theme group tab overrides moved to src/themes/theme-light.css */
+
+
+/* ---------- Overview Stats Grid ---------- */
+.progress-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.progress-stat-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(10px);
+    animation: progressFadeUp 0.5s ease both;
+}
+
+.progress-stat-card:nth-child(1) { animation-delay: 0s; }
+.progress-stat-card:nth-child(2) { animation-delay: 0.05s; }
+.progress-stat-card:nth-child(3) { animation-delay: 0.1s; }
+.progress-stat-card:nth-child(4) { animation-delay: 0.15s; }
+
+@keyframes progressFadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.progress-stat-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 1.2rem;
+}
+
+.progress-stat-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.progress-stat-value {
+    font-family: var(--font-heading);
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1;
+    margin-bottom: 2px;
+}
+
+.progress-stat-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---------- Section ---------- */
+.progress-section {
+    margin-top: 24px;
+    animation: progressFadeUp 0.5s ease both;
+}
+
+.progress-section:nth-of-type(2) { animation-delay: 0.2s; }
+.progress-section:nth-of-type(3) { animation-delay: 0.3s; }
+.progress-section:nth-of-type(4) { animation-delay: 0.4s; }
+
+.progress-section-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ---------- Mastery Bar ---------- */
+.mastery-card {
+    padding: 20px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(10px);
+}
+
+.mastery-bar-container {
+    height: 24px;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    background: var(--bg-input);
+    margin-bottom: 16px;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.mastery-bar-segment {
+    height: 100%;
+    transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    min-width: 0;
+}
+
+.mastery-bar-segment:first-child {
+    border-radius: 12px 0 0 12px;
+}
+
+.mastery-bar-segment:last-child {
+    border-radius: 0 12px 12px 0;
+}
+
+.mastery-bar-segment:only-child {
+    border-radius: 12px;
+}
+
+.mastery-legend {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.mastery-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.mastery-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.mastery-legend-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.mastery-legend-label {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.mastery-legend-count {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* ---------- Grammar Card ---------- */
+.grammar-stats-card {
+    padding: 20px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.grammar-accuracy-ring {
+    position: relative;
+    width: 90px;
+    height: 90px;
+    flex-shrink: 0;
+}
+
+.grammar-accuracy-ring svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.grammar-accuracy-ring .ring-bg {
+    fill: none;
+    stroke: var(--bg-input);
+    stroke-width: 8;
+}
+
+.grammar-accuracy-ring .ring-fill {
+    fill: none;
+    stroke-width: 8;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.grammar-accuracy-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.grammar-accuracy-value {
+    font-family: var(--font-heading);
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.grammar-accuracy-label {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-top: 2px;
+}
+
+.grammar-detail-stats {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.grammar-detail-item {
+    text-align: center;
+    padding: 10px 6px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.grammar-detail-value {
+    font-family: var(--font-heading);
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    display: block;
+}
+
+.grammar-detail-label {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+/* ---------- Exam History ---------- */
+.exam-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.exam-history-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(10px);
+    cursor: pointer;
+    transition: all 0.25s;
+}
+
+.exam-history-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
+}
+
+.exam-history-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+.exam-history-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.exam-history-name {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.exam-history-meta {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.exam-history-score {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    flex-shrink: 0;
+}
+
+.exam-history-score-value {
+    font-family: var(--font-heading);
+    font-size: 1rem;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 3px;
+}
+
+.exam-history-grade {
+    font-size: 0.6rem;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+/* ---------- Empty State ---------- */
+.progress-empty {
+    text-align: center;
+    padding: 28px 20px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px dashed var(--border-color);
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+/* ---------- Loading ---------- */
+.progress-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 40vh;
+    gap: 16px;
+    color: var(--text-muted);
+}
+
+.progress-loading-spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid var(--border-color);
+    border-top: 3px solid var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Light theme overrides moved to src/themes/theme-light.css */
+
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+@media (max-width: 768px) {
+    .mastery-legend {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .grammar-stats-card {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .grammar-accuracy-ring {
+        margin: 0 auto;
+    }
+
+    .grammar-detail-stats {
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .progress-stat-card {
+        padding: 12px 10px;
+        gap: 8px;
+    }
+
+    .progress-stat-icon {
+        width: 36px;
+        height: 36px;
+        font-size: 1rem;
+    }
+
+    .progress-stat-value {
+        font-size: 1.15rem;
+    }
+
+    .progress-stat-label {
+        font-size: 0.7rem;
+    }
+
+    .mastery-card,
+    .grammar-stats-card {
+        padding: 16px;
+    }
+
+    .mastery-legend {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+    }
+
+    .grammar-accuracy-ring {
+        width: 80px;
+        height: 80px;
+    }
+
+    .grammar-accuracy-value {
+        font-size: 1.1rem;
+    }
+}

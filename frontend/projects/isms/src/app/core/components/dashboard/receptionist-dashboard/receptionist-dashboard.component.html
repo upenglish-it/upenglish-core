@@ -1,0 +1,85 @@
+<div class="grid grid-cols-3 gap-4">
+  <div class="bg-white border border-gray-200 rounded-md">
+    <div class="border-b border-gray-200 font-medium px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <!-- <div class="rounded-full h-5 w-5 grid place-items-center bg-isms-100 text-isms-500"> -->
+        <span class="text-base ph-duotone ph-gender-intersex text-gray-500"></span>
+        <!-- </div> -->
+        <h6 class="text-xs font-medium text-gray-500 uppercase mb-0 p-0">Gender</h6>
+      </div>
+      <!-- <a href="/tasks" target="_blank">View All</a> -->
+    </div>
+    <ul class="mb-0 h-[280px] overflow-auto mini-scroll-bar">
+      <apx-chart dir="ltr" [series]="genderChart.series" [chart]="genderChart.chart" [labels]="genderChart.labels" [legend]="genderChart.legend" [colors]="genderChart.colors">
+      </apx-chart>
+    </ul>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-md">
+    <div class="border-b border-gray-200 font-medium px-4 py-3">
+      <div class="flex items-center space-x-2">
+        <span class="text-base ph-duotone ph-megaphone-simple text-gray-500"></span>
+        <h6 class="text-xs font-medium text-gray-500 uppercase mb-0 p-0">Reception Activity</h6>
+      </div>
+    </div>
+    <ul class="mb-0 h-[280px] overflow-auto mini-scroll-bar">
+      <ng-container *ngFor="let activity of receptionActivityLogs">
+        <li class="flex px-4 space-x-3 py-2 last:border-b-0 border-b hover:bg-gray-50 text-gray-500 cursor-pointer">
+          <img
+            profile-photo
+            [photo]="activity.createdBy.profilePhoto"
+            [letter]="activity.createdBy.firstName[0] + '' + activity.createdBy.lastName[0]"
+            class="w-8 h-8 bg-gray-200 rounded-full" />
+          <div class="flex-1">
+            <ng-container *ngIf="activity.action === 'receive-payment-from-material'">
+              <b class="font-bold">{{ activity.createdBy.firstName }} {{ activity.createdBy.lastName }}</b> received a payment from <b class="text-info"> {{ "Item" }} </b>. 💰
+            </ng-container>
+            <ng-container *ngIf="activity.action === 'expense'">
+              <b class="font-bold">{{ activity.createdBy.firstName }} {{ activity.createdBy.lastName }}</b>
+              released a budget for expense 💸
+            </ng-container>
+            <b class="text-gray-500">{{ activity.createdAt | date: "MMM dd, yyyy hh:mm a" }}</b>
+          </div>
+        </li>
+      </ng-container>
+      <div class="p-12" *ngIf="receptionActivityLogs.length === 0">
+        <nz-empty nzNotFoundContent="No data available"></nz-empty>
+      </div>
+    </ul>
+  </div>
+  <div class="bg-white border border-gray-200 rounded-md">
+    <div class="border-b border-gray-200 font-medium px-4 py-3">
+      <div class="flex items-center space-x-2">
+        <span class="text-base ph-duotone ph-megaphone-simple text-gray-500"></span>
+        <h6 class="text-xs font-medium text-gray-500 uppercase mb-0 p-0">Reception Activity with Students</h6>
+      </div>
+    </div>
+    <ul class="mb-0 h-[280px] overflow-auto mini-scroll-bar">
+      <ng-container *ngFor="let activity of studentActivityLogs">
+        <li class="flex px-4 space-x-3 py-2 last:border-b-0 border-b hover:bg-gray-50 text-gray-500 cursor-pointer" (click)="(1)">
+          <img
+            profile-photo
+            [photo]="activity.createdBy.profilePhoto"
+            [letter]="activity.createdBy.firstName[0] + '' + activity.createdBy.lastName[0]"
+            class="w-8 h-8 bg-gray-200 rounded-full" />
+          <div class="flex-1">
+            <ng-container *ngIf="activity.action === 'receive-payment-from-tuition'">
+              <b class="font-bold">{{ activity.createdBy.firstName }} {{ activity.createdBy.lastName }}</b> received a tuition payment from student
+              <b>{{ activity.student.firstName }} {{ activity.student.lastName }}</b
+              >. 💰
+            </ng-container>
+            <ng-container *ngIf="activity.action === 'student-stop-learning'">
+              Student <b class="font-bold">{{ activity.student.firstName }} {{ activity.student.lastName }}</b> stopped learning. Assisted by
+              <b class="font-bold">{{ activity.createdBy.firstName }} {{ activity.createdBy.lastName }}</b
+              >. 😔
+            </ng-container>
+            <span class="text-xs text-gray-500 flex-1">{{ activity.createdAt | date: "MMM dd, yyyy hh:mm a" }}</span>
+          </div>
+        </li>
+      </ng-container>
+      <div class="p-12" *ngIf="studentActivityLogs.length === 0">
+        <nz-empty nzNotFoundContent="No data available"></nz-empty>
+      </div>
+    </ul>
+  </div>
+</div>

@@ -1,0 +1,329 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper functions ───
+
+    // Check if user is authenticated
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // Get the user's role from Firestore
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isAuth() && getUserRole() == 'admin';
+    }
+
+    function isStaff() {
+      return isAuth() && getUserRole() == 'staff';
+    }
+
+    function isTeacher() {
+      return isAuth() && getUserRole() == 'teacher';
+    }
+
+    function isAdminOrStaff() {
+      return isAuth() && getUserRole() in ['admin', 'staff'];
+    }
+
+    function isAdminOrTeacher() {
+      return isAuth() && getUserRole() in ['admin', 'teacher', 'staff'];
+    }
+
+    function isOwner(userId) {
+      return isAuth() && request.auth.uid == userId;
+    }
+
+    // ─── Users collection ───
+    match /users/{userId} {
+      // Any authenticated user can read user profiles (needed for groups, assignments, etc.)
+      allow read: if isAuth();
+      // Users can update their own profile; admins/staff can update any profile
+      allow update: if isOwner(userId) || isAdminOrStaff();
+      // Only admins/staff can create or delete user documents
+      allow create: if isAuth(); // New users need to create their profile on first login
+      allow delete: if isAdminOrStaff();
+
+      // User subcollections — only the owner or admin can access
+      match /word_progress/{wordId} {
+        allow read: if isAuth();
+        allow write: if isOwner(userId) || isAdmin();
+      }
+
+      match /saved_words/{wordId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+
+      match /custom_lists/{listId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+
+      match /recent_words/{wordId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+
+      match /grammar_progress/{progressId} {
+        allow read: if isAuth();
+        allow write: if isOwner(userId) || isAdmin();
+      }
+
+      match /stats/{statsId} {
+        allow read: if isAuth();
+        allow write: if isOwner(userId) || isAdmin();
+      }
+
+      match /settings/{settingId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    // ─── Collection Group queries (for admin dashboard aggregations) ───
+    match /{path=**}/word_progress/{wordId} {
+      allow read: if isAdminOrStaff();
+    }
+
+    match /{path=**}/grammar_progress/{progressId} {
+      allow read: if isAdminOrStaff();
+    }
+
+    // ─── User Groups ───
+    match /user_groups/{groupId} {
+      allow read: if isAuth();
+      allow create, delete: if isAdminOrStaff();
+      allow update: if isAdminOrStaff() || isTeacher();
+    }
+
+    // ─── Topics (system/admin vocabulary topics) ───
+    match /topics/{topicId} {
+      allow read: if isAuth();
+      allow write: if isAdminOrStaff();
+
+      match /words/{wordId} {
+        allow read: if isAuth();
+        allow write: if isAdminOrStaff();
+      }
+    }
+
+    // ─── Topic Folders (system) ───
+    match /topic_folders/{folderId} {
+      allow read: if isAuth();
+      allow write: if isAdminOrStaff();
+    }
+
+    // ─── Teacher Topics ───
+    match /teacher_topics/{topicId} {
+      // Any authenticated user can read (students need to access assigned topics)
+      allow read: if isAuth();
+      // Teachers can create/update/delete their own topics; admins can do anything
+      allow create: if isAdminOrTeacher();
+      allow update: if isAdminOrStaff()
+                    || (isAuth() && resource.data.teacherId == request.auth.uid)
+                    || (isAuth() && request.auth.uid in resource.data.collaborators);
+      allow delete: if isAdminOrStaff()
+                    || (isAuth() && resource.data.teacherId == request.auth.uid);
+
+      match /words/{wordId} {
+        allow read: if isAuth();
+        allow create: if isAdminOrTeacher();
+        allow update, delete: if isAdminOrStaff()
+                              || (isAuth() && get(/databases/$(database)/documents/teacher_topics/$(topicId)).data.teacherId == request.auth.uid)
+                              || (isAuth() && request.auth.uid in get(/databases/$(database)/documents/teacher_topics/$(topicId)).data.collaborators);
+      }
+    }
+
+    // ─── Teacher Topic Folders ───
+    match /teacher_topic_folders/{folderId} {
+      allow read: if isAuth();
+      allow create: if isAdminOrTeacher();
+      allow update, delete: if isAdminOrStaff()
+                            || (isAuth() && resource.data.teacherId == request.auth.uid);
+    }
+
+    // ─── Grammar Exercises ───
+    match /grammar_exercises/{exerciseId} {
+      allow read: if isAuth();
+      allow create: if isAdminOrTeacher();
+      allow update, delete: if isAdminOrStaff()
+                            || (isAuth() && resource.data.teacherId == request.auth.uid)
+                            || (isAuth() && request.auth.uid in resource.data.collaborators);
+    }
+
+    // ─── Grammar Questions ───
+    match /grammar_questions/{questionId} {
+      allow read: if isAuth();
+      allow write: if isAdminOrTeacher();
+    }
+
+    // ─── Grammar Folders ───
+    match /grammar_folders/{folderId} {
+      allow read: if isAuth();
+      allow write: if isAdminOrTeacher();
+    }
+
+    // ─── Grammar Submissions ───
+    match /grammar_submissions/{submissionId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update: if isAdminOrTeacher()
+                    || (isAuth() && resource.data.studentId == request.auth.uid);
+      allow delete: if isAdminOrStaff();
+    }
+
+    // ─── Grammar Assignments ───
+    match /grammar_assignments/{assignmentId} {
+      allow read: if isAuth();
+      allow create: if isAdminOrTeacher();
+      allow update, delete: if isAdminOrTeacher();
+    }
+
+    // ─── Teacher Grammar Folders ───
+    match /teacher_grammar_folders/{folderId} {
+      allow read: if isAuth();
+      allow create: if isAdminOrTeacher();
+      allow update, delete: if isAdminOrStaff()
+                            || (isAuth() && resource.data.teacherId == request.auth.uid);
+    }
+
+    // ─── Teacher Exam Folders ───
+    match /teacher_exam_folders/{folderId} {
+      allow read: if isAuth();
+      allow create: if isAdminOrTeacher();
+      allow update, delete: if isAdminOrStaff()
+                            || (isAuth() && resource.data.teacherId == request.auth.uid);
+    }
+
+    // ─── Assignments ───
+    match /assignments/{assignmentId} {
+      allow read: if isAuth();
+      allow create: if isAdminOrTeacher();
+      allow update, delete: if isAdminOrTeacher();
+    }
+
+    // ─── Exams ───
+    match /exams/{examId} {
+      allow read: if isAuth();
+      allow create: if isAdminOrTeacher();
+      allow update, delete: if isAdminOrStaff()
+                            || (isAuth() && resource.data.createdBy == request.auth.uid);
+    }
+
+    // ─── Exam Questions ───
+    match /exam_questions/{questionId} {
+      allow read: if isAuth();
+      allow write: if isAdminOrTeacher();
+    }
+
+    // ─── Exam Assignments ───
+    match /exam_assignments/{assignmentId} {
+      allow read: if isAuth();
+      allow create: if isAdminOrTeacher();
+      allow update, delete: if isAdminOrTeacher();
+    }
+
+    // ─── Exam Submissions ───
+    match /exam_submissions/{submissionId} {
+      allow read: if isAuth();
+      // Students create submissions; teachers/admins can update (grading)
+      allow create: if isAuth();
+      allow update: if isAdminOrTeacher()
+                    || (isAuth() && resource.data.studentId == request.auth.uid);
+      allow delete: if isAdminOrStaff()
+                    || isTeacher();
+    }
+
+    // ─── Exam Folders ───
+    match /exam_folders/{folderId} {
+      allow read: if isAuth();
+      allow write: if isAdminOrTeacher();
+    }
+
+    // ─── Notifications ───
+    match /notifications/{notifId} {
+      allow read: if isAdmin()
+                  || (isAuth() && resource.data.userId == request.auth.uid)
+                  || (isAuth() && resource.data.targetRole != null);
+      allow create: if isAuth();
+      allow update: if isAdmin()
+                    || (isAuth() && resource.data.userId == request.auth.uid);
+      allow delete: if isAdminOrStaff()
+                    || (isAuth() && resource.data.userId == request.auth.uid);
+    }
+
+    // ─── Skill Reports ───
+    match /skill_reports/{reportId} {
+      allow read: if isAdminOrTeacher()
+                  || (isAuth() && resource.data.studentId == request.auth.uid);
+      allow create: if isAdminOrTeacher();
+      allow update, delete: if isAdminOrTeacher();
+    }
+
+    // ─── Report Periods ───
+    match /report_periods/{periodId} {
+      allow read: if isAuth();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ─── Email Whitelist ───
+    match /email_whitelist/{emailId} {
+      allow read: if isAuth();
+      allow create, update: if isAdminOrStaff();
+      // Allow admins/staff to delete, and also allow the user themselves
+      // to clean up their own whitelist entry after registration
+      allow delete: if isAdminOrStaff()
+                    || (isAuth() && emailId == request.auth.token.email);
+    }
+
+    // ─── Content Proposals ───
+    match /content_proposals/{proposalId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update: if isAdminOrTeacher();
+      allow delete: if isAdminOrStaff();
+    }
+
+    // ─── App Settings ───
+    match /settings/{settingId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // ─── Teacher Prompts (AI grading prompts) ───
+    match /teacher_prompts/{promptId} {
+      allow read: if isAdminOrStaff()
+                  || (isAuth() && resource.data.createdBy == request.auth.uid);
+      allow create: if isAdminOrTeacher();
+      allow update, delete: if isAdminOrStaff()
+                            || (isAuth() && resource.data.createdBy == request.auth.uid);
+    }
+
+    // ─── App Config (AI Models, etc.) ───
+    match /app_config/{configId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // ─── Red Flags (student violation warnings) ───
+    match /red_flags/{flagId} {
+      allow read: if isAdminOrTeacher()
+                  || (isAuth() && resource.data.studentId == request.auth.uid);
+      allow create, update: if isAdminOrTeacher();
+      allow delete: if isAdmin();
+    }
+
+    // ─── Mail Queue (for Cloud Functions email sender) ───
+    match /mail_queue/{mailId} {
+      // Any authenticated user can create mail queue items (system-controlled)
+      allow create: if isAuth();
+      // Only Cloud Functions (admin SDK) can read/update/delete
+      allow read, update, delete: if false;
+    }
+
+    // ─── Default: deny everything else ───
+    // (Firestore denies by default if no match, but this is explicit)
+  }
+}

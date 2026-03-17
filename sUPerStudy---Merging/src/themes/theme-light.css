@@ -1,0 +1,720 @@
+/* ============================================
+   THEME: LIGHT — Self-contained light theme
+   ============================================ */
+
+/* ---------- CSS Variables ---------- */
+html[data-theme="light"] {
+    --bg-primary: #F5F3FF;
+    --bg-secondary: #FFFFFF;
+    --bg-tertiary: #EEF2FF;
+    --bg-card: rgba(108, 92, 231, 0.05);
+    --bg-card-hover: rgba(108, 92, 231, 0.10);
+    --bg-glass: rgba(255, 255, 255, 0.85);
+    --bg-input: rgba(108, 92, 231, 0.06);
+    --bg-surface: rgba(255, 255, 255, 0.92);
+    --bg-surface-hover: rgba(245, 243, 255, 0.95);
+
+    --text-primary: #0a0826;
+    --text-secondary: #1a1550;
+    --text-muted: #4a4380;
+    --text-inverse: #FFFFFF;
+
+    --color-primary-light: #5B50D6;
+
+    --border-color: rgba(108, 92, 231, 0.20);
+    --border-color-active: rgba(108, 92, 231, 0.5);
+
+    --shadow-sm: 0 2px 8px rgba(108, 92, 231, 0.10), 0 1px 3px rgba(0, 0, 0, 0.06);
+    --shadow-md: 0 6px 20px rgba(108, 92, 231, 0.14), 0 2px 6px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 12px 36px rgba(108, 92, 231, 0.18), 0 4px 12px rgba(0, 0, 0, 0.08);
+    --shadow-glow-primary: 0 4px 24px rgba(108, 92, 231, 0.25);
+    --shadow-glow-success: 0 4px 24px rgba(0, 184, 148, 0.25);
+    --shadow-glow-error: 0 4px 24px rgba(255, 107, 107, 0.25);
+
+    --color-surface: rgba(255, 255, 255, 0.92);
+    --color-surface-hover: rgba(238, 242, 255, 0.95);
+
+    font-weight: 500;
+}
+
+/* ============================================
+   index.css COMPONENT OVERRIDES
+   ============================================ */
+
+[data-theme="light"] .dashboard-header {
+    background: rgba(255, 255, 255, 0.9);
+    border-bottom-color: rgba(108, 92, 231, 0.08);
+    box-shadow: 0 1px 12px rgba(108, 92, 231, 0.06);
+}
+
+[data-theme="light"] .modal-backdrop {
+    background: rgba(30, 27, 75, 0.25);
+}
+
+[data-theme="light"] .modal {
+    background: var(--bg-secondary);
+    box-shadow: 0 24px 48px rgba(108, 92, 231, 0.15);
+}
+
+[data-theme="light"] .input-field:focus {
+    background: rgba(108, 92, 231, 0.03);
+}
+
+[data-theme="light"] .glass-card {
+    background: rgba(255, 255, 255, 0.92);
+    border: 2px solid rgba(108, 92, 231, 0.20);
+    box-shadow: 0 6px 24px rgba(108, 92, 231, 0.14), 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .glass-card:hover {
+    background: rgba(255, 255, 255, 0.98);
+    border-color: rgba(108, 92, 231, 0.30);
+    box-shadow: 0 12px 36px rgba(108, 92, 231, 0.20), 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .glass-card--static {
+    background: rgba(255, 255, 255, 0.92);
+    border: 2px solid rgba(108, 92, 231, 0.20);
+    box-shadow: 0 6px 24px rgba(108, 92, 231, 0.14), 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .step-progress__dot {
+    background: var(--bg-tertiary);
+}
+
+[data-theme="light"] ::selection {
+    background: rgba(108, 92, 231, 0.2);
+}
+
+[data-theme="light"] .btn-secondary {
+    background: rgba(108, 92, 231, 0.06);
+    border-color: rgba(108, 92, 231, 0.12);
+}
+
+[data-theme="light"] .btn-secondary:hover {
+    background: rgba(108, 92, 231, 0.1);
+    border-color: var(--color-primary);
+}
+
+[data-theme="light"] .btn-icon {
+    background: rgba(108, 92, 231, 0.06);
+    border-color: rgba(108, 92, 231, 0.1);
+}
+
+[data-theme="light"] .btn-ghost:hover {
+    background: rgba(108, 92, 231, 0.06);
+}
+
+[data-theme="light"] .chip {
+    background: rgba(108, 92, 231, 0.08);
+    border-color: rgba(108, 92, 231, 0.15);
+}
+
+/* ============================================
+   DashboardPage.css OVERRIDES
+   ============================================ */
+
+[data-theme="light"] .dashboard-welcome-tag {
+    background: rgba(108, 92, 231, 0.06);
+    border-color: rgba(108, 92, 231, 0.15);
+    color: var(--text-secondary);
+}
+
+[data-theme="light"] .dashboard-group-chip {
+    color: #4f46e5;
+    background: rgba(79, 70, 229, 0.08);
+    border-color: rgba(79, 70, 229, 0.18);
+}
+
+[data-theme="light"] .dashboard-group-filter-btn.active {
+    background: rgba(79, 70, 229, 0.1);
+    border-color: rgba(79, 70, 229, 0.3);
+    color: #4f46e5;
+}
+
+[data-theme="light"] .dashboard-welcome-name {
+    background: linear-gradient(135deg, #6C5CE7 0%, #A29BFE 60%, #00CEC9 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+[data-theme="light"] .dashboard-progress-card {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+[data-theme="light"] .dashboard-progress-divider {
+    background: rgba(108, 92, 231, 0.15);
+}
+
+[data-theme="light"] .dashboard-progress-cta {
+    border-top-color: rgba(108, 92, 231, 0.1);
+}
+
+[data-theme="light"] .dashboard-avatar {
+    box-shadow: 0 8px 24px rgba(108, 92, 231, 0.12);
+    border-color: rgba(108, 92, 231, 0.15);
+}
+
+[data-theme="light"] .recent-list-card {
+    background: rgba(255, 255, 255, 0.95);
+    border: 2px solid rgba(108, 92, 231, 0.22);
+    box-shadow: 0 6px 24px rgba(108, 92, 231, 0.14), 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .recent-list-card:hover {
+    background: rgba(255, 255, 255, 1);
+    border-color: rgba(108, 92, 231, 0.28);
+    box-shadow: 0 12px 36px rgba(108, 92, 231, 0.18), 0 4px 12px rgba(108, 92, 231, 0.08);
+}
+
+[data-theme="light"] .dashboard-action-card {
+    background: linear-gradient(145deg, rgba(45,38,104,0.75) 0%, rgba(58,49,128,0.70) 50%, rgba(68,59,150,0.65) 100%);
+    border: 1.5px solid rgba(108, 92, 231, 0.35);
+    box-shadow: 0 8px 32px rgba(30, 27, 75, 0.25), 0 2px 8px rgba(0,0,0,0.10);
+    color: #F0EEFF;
+}
+
+[data-theme="light"] .dashboard-action-card * {
+    color: #F0EEFF;
+}
+
+[data-theme="light"] .dashboard-action-card .dashboard-action-info p {
+    color: rgba(240,238,255,0.65);
+}
+
+[data-theme="light"] .dashboard-action-card:hover {
+    background: linear-gradient(145deg, #3A3180 0%, #443B96 50%, #5045AA 100%);
+    border-color: rgba(108, 92, 231, 0.50);
+    box-shadow: 0 16px 48px rgba(30, 27, 75, 0.30), 0 4px 16px rgba(108, 92, 231, 0.15);
+}
+
+[data-theme="light"] .settings-modal-backdrop {
+    background: rgba(30, 27, 75, 0.25);
+}
+
+[data-theme="light"] .settings-modal {
+    background: linear-gradient(180deg, #FFFFFF 0%, #F5F3FF 100%);
+    border-color: rgba(108, 92, 231, 0.1);
+    box-shadow: 0 -12px 48px rgba(108, 92, 231, 0.12);
+}
+
+[data-theme="light"] .settings-level-pill {
+    background: rgba(108, 92, 231, 0.05);
+    border: 2px solid rgba(108, 92, 231, 0.18);
+}
+
+[data-theme="light"] .settings-level-pill:hover {
+    background: rgba(108, 92, 231, 0.08);
+    border-color: rgba(108, 92, 231, 0.2);
+}
+
+[data-theme="light"] .settings-level-pill--active {
+    background: linear-gradient(135deg, rgba(108, 92, 231, 0.15), rgba(0, 206, 209, 0.1));
+    border-color: rgba(108, 92, 231, 0.35);
+    box-shadow: 0 0 16px rgba(108, 92, 231, 0.15);
+}
+
+[data-theme="light"] .settings-modal-close {
+    background: rgba(108, 92, 231, 0.06);
+    border-color: rgba(108, 92, 231, 0.1);
+}
+
+[data-theme="light"] .dashboard-fab.is-open {
+    background: var(--bg-tertiary);
+    box-shadow: 0 4px 16px rgba(108, 92, 231, 0.12);
+}
+
+[data-theme="light"] .dashboard-fab-overlay {
+    background: rgba(30, 27, 75, 0.15);
+}
+
+[data-theme="light"] .dashboard-fab-menu-item {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(108, 92, 231, 0.1);
+    box-shadow: 0 4px 16px rgba(108, 92, 231, 0.08);
+}
+
+[data-theme="light"] .dashboard-fab-menu-item:hover {
+    background: rgba(238, 242, 255, 0.9);
+    border-color: rgba(108, 92, 231, 0.2);
+}
+
+[data-theme="light"] .review-card {
+    background: linear-gradient(135deg, rgba(88, 101, 242, 0.10), rgba(88, 101, 242, 0.04));
+    border: 2px solid rgba(88, 101, 242, 0.22);
+    box-shadow: 0 4px 16px rgba(88, 101, 242, 0.1);
+}
+
+[data-theme="light"] .dashboard-nav-pill {
+    background: rgba(255, 255, 255, 0.7);
+    border-color: rgba(108, 92, 231, 0.2);
+}
+
+/* ============================================
+   LearnPage.css OVERRIDES
+   ============================================ */
+
+[data-theme="light"] .learn-meaning-hero-img {
+    border-color: rgba(108, 92, 231, 0.30);
+    box-shadow:
+        0 8px 32px rgba(108, 92, 231, 0.15),
+        0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .learn-topbar {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(108, 92, 231, 0.15);
+    box-shadow: 0 4px 20px rgba(108, 92, 231, 0.1), 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .learn-step-header {
+    background: rgba(255, 255, 255, 0.95);
+    border: 2px solid rgba(108, 92, 231, 0.25);
+    box-shadow: 0 4px 16px rgba(108, 92, 231, 0.12), 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .learn-batch-indicator {
+    /* no background needed, words themselves are styled */
+}
+
+[data-theme="light"] .learn-batch-word {
+    background: rgba(255, 255, 255, 0.98);
+    border: 2px solid rgba(108, 92, 231, 0.25);
+    color: var(--text-primary);
+    font-weight: 600;
+    box-shadow: 0 3px 12px rgba(108, 92, 231, 0.12), 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .learn-batch-word--active {
+    background: linear-gradient(135deg, #4A3DC7 0%, #6C5CE7 100%);
+    border-color: #4A3DC7;
+    color: #ffffff !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 20px rgba(74, 61, 199, 0.4), 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="light"] .learn-batch-word--done {
+    background: rgba(0, 184, 148, 0.12);
+    border: 2px solid rgba(0, 184, 148, 0.40);
+    color: #0a6b52;
+    font-weight: 700;
+    opacity: 1;
+}
+
+[data-theme="light"] .learn-batch-word--active.learn-batch-word--done {
+    color: #000000 !important;
+    font-weight: 800;
+    text-shadow: none;
+}
+
+[data-theme="light"] .learn-mastery-dot {
+    background: rgba(108, 92, 231, 0.25);
+    border: 1px solid rgba(108, 92, 231, 0.30);
+}
+
+[data-theme="light"] .learn-mastery-dot--filled {
+    background: #00b894;
+    border-color: #00b894;
+    box-shadow: 0 0 4px rgba(0, 184, 148, 0.4);
+}
+
+[data-theme="light"] .learn-mastery-dot--error {
+    background: #ff6b6b;
+    border-color: #ff6b6b;
+    box-shadow: 0 0 4px rgba(255, 107, 107, 0.4);
+}
+
+[data-theme="light"] .learn-play-btn {
+    background: rgba(245, 243, 255, 0.98);
+    border: 2px solid rgba(108, 92, 231, 0.28);
+    box-shadow: 0 4px 16px rgba(108, 92, 231, 0.14), 0 1px 4px rgba(0, 0, 0, 0.06);
+    color: var(--color-primary);
+    font-weight: 600;
+}
+
+[data-theme="light"] .learn-play-btn:hover {
+    background: #ffffff;
+    border-color: var(--color-primary);
+    box-shadow: 0 6px 24px rgba(108, 92, 231, 0.22), 0 2px 6px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
+}
+
+[data-theme="light"] .learn-mic-pulse {
+    background: rgba(255, 107, 107, 0.12);
+    border: 2px solid rgba(255, 107, 107, 0.35);
+}
+
+[data-theme="light"] .learn-option {
+    background: rgba(255, 255, 255, 0.98);
+    border: 2px solid rgba(108, 92, 231, 0.25);
+    box-shadow: 0 3px 12px rgba(108, 92, 231, 0.10), 0 1px 3px rgba(0, 0, 0, 0.05);
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+[data-theme="light"] .learn-option:hover:not(:disabled) {
+    background: rgba(245, 243, 255, 0.98);
+    border-color: var(--color-primary);
+    box-shadow: 0 6px 24px rgba(108, 92, 231, 0.20), 0 2px 6px rgba(0, 0, 0, 0.06);
+    transform: translateY(-1px);
+}
+
+[data-theme="light"] .learn-mistake-card {
+    background: rgba(255, 255, 255, 0.98);
+    border: 2px solid rgba(108, 92, 231, 0.25);
+    box-shadow: 0 3px 12px rgba(108, 92, 231, 0.10), 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .learn-mistake-card:hover:not(:disabled) {
+    background: rgba(245, 243, 255, 0.98);
+    border-color: var(--color-primary);
+    box-shadow: 0 6px 24px rgba(108, 92, 231, 0.20);
+}
+
+[data-theme="light"] .learn-explanation {
+    background: rgba(108, 92, 231, 0.06);
+    border: 2px solid rgba(108, 92, 231, 0.15);
+}
+
+[data-theme="light"] .learn-collocations {
+    background: rgba(255, 255, 255, 0.95);
+    border: 2px solid rgba(108, 92, 231, 0.20);
+    box-shadow: 0 3px 12px rgba(108, 92, 231, 0.08);
+}
+
+[data-theme="light"] .learn-colloc-item {
+    border-bottom-color: rgba(108, 92, 231, 0.12);
+}
+
+[data-theme="light"] .learn-example {
+    background: rgba(255, 255, 255, 0.95);
+    border: 2px solid rgba(108, 92, 231, 0.20);
+    box-shadow: 0 3px 12px rgba(108, 92, 231, 0.08);
+}
+
+[data-theme="light"] .learn-bottom-bar-inner {
+    border: 2px solid rgba(108, 92, 231, 0.15);
+    box-shadow: 0 -8px 40px rgba(108, 92, 231, 0.14), 0 -2px 8px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .learn-bottom-bar--correct .learn-bottom-bar-inner {
+    background: rgba(236, 253, 245, 0.98);
+    border-color: var(--color-success);
+    box-shadow: 0 -8px 40px rgba(0, 184, 148, 0.16), 0 -2px 8px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .learn-bottom-bar--wrong .learn-bottom-bar-inner {
+    background: rgba(254, 242, 242, 0.98);
+    border-color: var(--color-error);
+    box-shadow: 0 -8px 40px rgba(255, 107, 107, 0.16), 0 -2px 8px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .learn-bottom-bar .btn-secondary {
+    background: rgba(108, 92, 231, 0.08);
+    border: 2px solid rgba(108, 92, 231, 0.20);
+    font-weight: 600;
+}
+
+[data-theme="light"] .learn-bottom-bar .btn-secondary:hover {
+    background: rgba(108, 92, 231, 0.14);
+    border-color: var(--color-primary);
+}
+
+[data-theme="light"] .learn-step-review-badge {
+    background: rgba(108, 92, 231, 0.10);
+    border: 2px solid rgba(108, 92, 231, 0.20);
+    font-weight: 600;
+}
+
+[data-theme="light"] .learn-complete-word {
+    background: rgba(255, 255, 255, 0.85);
+    border: 1.5px solid rgba(108, 92, 231, 0.12);
+    box-shadow: 0 2px 8px rgba(108, 92, 231, 0.05);
+}
+
+[data-theme="light"] .pron-detail-box {
+    background: rgba(108, 92, 231, 0.06);
+    border: 1.5px solid rgba(108, 92, 231, 0.12);
+}
+
+[data-theme="light"] .pron-progress-track {
+    background: rgba(108, 92, 231, 0.12);
+}
+
+[data-theme="light"] .learn-spelling-input {
+    background: rgba(255, 255, 255, 0.95);
+    border: 2px solid rgba(108, 92, 231, 0.2);
+    box-shadow: 0 2px 8px rgba(108, 92, 231, 0.06);
+    color: var(--text-primary);
+}
+
+[data-theme="light"] .learn-spelling-input:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.12);
+}
+
+/* ============================================
+   TopicSelectPage.css OVERRIDES
+   ============================================ */
+
+[data-theme="light"] .topic-modal-backdrop {
+    background: rgba(30, 27, 75, 0.25);
+}
+
+[data-theme="light"] .folder-modal-panel,
+[data-theme="light"] .topic-wordlist-panel {
+    background: linear-gradient(180deg, #FFFFFF 0%, #F5F3FF 100%);
+    border: 2px solid rgba(108, 92, 231, 0.18);
+    box-shadow: 0 24px 48px rgba(108, 92, 231, 0.18), 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .folder-card:hover {
+    background: rgba(108, 92, 231, 0.06);
+    border-color: rgba(108, 92, 231, 0.2);
+}
+
+[data-theme="light"] .wordlist-item:hover {
+    background: rgba(108, 92, 231, 0.04);
+}
+
+[data-theme="light"] .wordlist-footer {
+    background: var(--bg-secondary);
+}
+
+[data-theme="light"] .wordlist-progress-dot {
+    background: rgba(108, 92, 231, 0.08);
+    border-color: rgba(108, 92, 231, 0.05);
+}
+
+/* ============================================
+   SavedListsPage.css OVERRIDES
+   ============================================ */
+
+[data-theme="light"] .custom-list-card {
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.95) 0%, rgba(238, 242, 255, 0.8) 100%);
+    border: 2px solid rgba(108, 92, 231, 0.20);
+    box-shadow: 0 6px 24px rgba(108, 92, 231, 0.14), 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .custom-list-card:hover {
+    background: linear-gradient(145deg, rgba(255, 255, 255, 1) 0%, rgba(238, 242, 255, 0.9) 100%);
+    box-shadow: 0 12px 28px rgba(108, 92, 231, 0.12);
+}
+
+[data-theme="light"] .modal-overlay {
+    background: rgba(30, 27, 75, 0.25);
+}
+
+[data-theme="light"] .modal-content {
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.98) 0%, rgba(245, 243, 255, 0.99) 100%);
+    border: 2px solid rgba(108, 92, 231, 0.18);
+    box-shadow: 0 24px 48px rgba(108, 92, 231, 0.18), 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+/* ============================================
+   GenerateListPage.css OVERRIDES
+   ============================================ */
+
+[data-theme="light"] .generate-input-wrapper .input-field {
+    background: rgba(108, 92, 231, 0.04);
+}
+
+[data-theme="light"] .generate-input-wrapper .input-field:focus {
+    background: rgba(108, 92, 231, 0.03);
+}
+
+[data-theme="light"] .custom-select {
+    background: rgba(108, 92, 231, 0.04);
+}
+
+[data-theme="light"] .custom-select-menu {
+    background: linear-gradient(180deg, #FFFFFF 0%, #F5F3FF 100%);
+    border-color: rgba(108, 92, 231, 0.1);
+    box-shadow: 0 12px 32px rgba(108, 92, 231, 0.15);
+}
+
+[data-theme="light"] .custom-select-menu li:hover {
+    background: rgba(108, 92, 231, 0.06);
+}
+
+[data-theme="light"] .result-actions {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(108, 92, 231, 0.1);
+    box-shadow: 0 10px 40px rgba(108, 92, 231, 0.1);
+}
+
+[data-theme="light"] .add-word-card {
+    background: rgba(108, 92, 231, 0.03);
+}
+
+/* ============================================
+   CustomInputPage.css OVERRIDES
+   ============================================ */
+
+[data-theme="light"] .custom-input-field:focus,
+[data-theme="light"] .custom-input-textarea:focus {
+    background: rgba(108, 92, 231, 0.03);
+}
+
+[data-theme="light"] .custom-input-tag-remove {
+    background: rgba(108, 92, 231, 0.08);
+}
+
+/* ============================================
+   ProgressPage.css OVERRIDES
+   ============================================ */
+
+[data-theme="light"] .progress-group-tabs {
+    background: rgba(108, 92, 231, 0.04);
+    border-color: rgba(108, 92, 231, 0.12);
+}
+
+[data-theme="light"] .progress-group-tab:hover {
+    background: rgba(108, 92, 231, 0.08);
+}
+
+[data-theme="light"] .progress-group-tab--active,
+[data-theme="light"] .progress-group-tab--active:hover {
+    background: #4f46e5;
+    color: white;
+    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.35);
+}
+
+[data-theme="light"] .progress-modal-backdrop {
+    background: rgba(30, 27, 75, 0.25);
+}
+
+[data-theme="light"] .progress-modal {
+    background: linear-gradient(180deg, #FFFFFF 0%, #F5F3FF 100%);
+    border-color: rgba(108, 92, 231, 0.1);
+    box-shadow: 0 -12px 48px rgba(108, 92, 231, 0.12);
+}
+
+[data-theme="light"] .progress-stat-card {
+    background: rgba(255, 255, 255, 0.95);
+    border: 2px solid rgba(108, 92, 231, 0.18);
+    box-shadow: 0 4px 16px rgba(108, 92, 231, 0.08);
+}
+
+[data-theme="light"] .mastery-card,
+[data-theme="light"] .grammar-stats-card {
+    background: rgba(255, 255, 255, 0.95);
+    border: 2px solid rgba(108, 92, 231, 0.18);
+    box-shadow: 0 4px 16px rgba(108, 92, 231, 0.08);
+}
+
+[data-theme="light"] .mastery-legend-item,
+[data-theme="light"] .grammar-detail-item {
+    background: rgba(108, 92, 231, 0.04);
+    border-color: rgba(108, 92, 231, 0.1);
+}
+
+[data-theme="light"] .exam-history-item {
+    background: rgba(255, 255, 255, 0.95);
+    border: 2px solid rgba(108, 92, 231, 0.18);
+    box-shadow: 0 4px 16px rgba(108, 92, 231, 0.08);
+}
+
+[data-theme="light"] .exam-history-item:hover {
+    background: rgba(255, 255, 255, 1);
+    border-color: rgba(108, 92, 231, 0.28);
+    box-shadow: 0 8px 24px rgba(108, 92, 231, 0.12);
+}
+
+[data-theme="light"] .progress-modal-close {
+    background: rgba(108, 92, 231, 0.06);
+    border-color: rgba(108, 92, 231, 0.1);
+}
+
+/* ============================================
+   LessonWelcomeScreen.jsx INLINE OVERRIDES
+   ============================================ */
+
+[data-theme="light"] .learn-welcome-card {
+    border: 2px solid rgba(108, 92, 231, 0.18);
+    box-shadow: 0 8px 32px rgba(108, 92, 231, 0.14), 0 2px 8px rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .learn-welcome-icon-glow {
+    border: 2px solid rgba(108, 92, 231, 0.2);
+    box-shadow: 0 10px 40px -10px var(--glow-color), 0 4px 16px rgba(108, 92, 231, 0.1);
+}
+
+[data-theme="light"] .stat-icon {
+    background: rgba(108, 92, 231, 0.08);
+    border: 1px solid rgba(108, 92, 231, 0.12);
+    color: var(--color-primary);
+}
+
+[data-theme="light"] .learn-welcome-start-btn {
+    box-shadow: 0 8px 20px -5px rgba(108, 92, 231, 0.3) !important;
+}
+
+[data-theme="light"] .learn-welcome-start-btn:hover {
+    box-shadow: 0 12px 28px -5px rgba(108, 92, 231, 0.4) !important;
+}
+
+[data-theme="light"] .learn-welcome-back-btn {
+    background: rgba(0, 0, 0, 0.03);
+    border-color: rgba(0, 0, 0, 0.06);
+    color: var(--text-secondary);
+}
+
+[data-theme="light"] .learn-welcome-back-btn:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--text-primary);
+}
+
+/* ============================================
+   StepSequence.jsx INLINE OVERRIDES
+   ============================================ */
+
+[data-theme="light"] .seq-meaning-box {
+    background: rgba(108, 92, 231, 0.05);
+    border: 2px solid rgba(108, 92, 231, 0.22);
+    box-shadow: 0 3px 12px rgba(108, 92, 231, 0.08);
+}
+
+[data-theme="light"] .seq-answer-zone {
+    background: rgba(108, 92, 231, 0.04);
+    border: 2px dashed rgba(108, 92, 231, 0.30);
+}
+
+[data-theme="light"] .seq-answer-zone--correct { background: rgba(0,184,148,0.06) !important; }
+[data-theme="light"] .seq-answer-zone--wrong   { background: rgba(255,107,107,0.06) !important; }
+
+[data-theme="light"] .seq-chip--pool {
+    background: rgba(255, 255, 255, 0.98);
+    color: var(--text-primary);
+    border: 2px solid rgba(108, 92, 231, 0.25);
+    box-shadow: 0 3px 12px rgba(108, 92, 231, 0.12), 0 1px 3px rgba(0,0,0,0.05);
+    font-weight: 600;
+}
+
+[data-theme="light"] .seq-chip--pool:hover:not(:disabled) {
+    background: #ffffff;
+    border-color: var(--color-primary);
+    box-shadow: 0 6px 24px rgba(108, 92, 231, 0.22), 0 2px 6px rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .seq-chip--used {
+    background: rgba(108, 92, 231, 0.05);
+    border: 2px dashed rgba(108, 92, 231, 0.22);
+    color: transparent;
+}
+
+[data-theme="light"] .seq-chip--answer {
+    background: rgba(255, 255, 255, 0.98);
+    color: var(--text-primary);
+    border: 2px solid rgba(108, 92, 231, 0.25);
+    box-shadow: 0 3px 12px rgba(108, 92, 231, 0.12), 0 1px 3px rgba(0,0,0,0.05);
+    font-weight: 600;
+}
+
+[data-theme="light"] .seq-correct-answer {
+    background: rgba(108, 92, 231, 0.06);
+    border: 2px solid rgba(108, 92, 231, 0.15);
+}

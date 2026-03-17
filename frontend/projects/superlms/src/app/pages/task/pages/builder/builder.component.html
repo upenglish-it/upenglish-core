@@ -1,0 +1,243 @@
+<div class="flex flex-col">
+  <!-- top -->
+  <div class="px-6 shadow-sm flex items-center justify-between h-14 gap-2" [formGroup]="testFormGroup">
+    <div>
+      @if (savingState) {
+        @if (savingState === "saving") {
+          <button nz-button nzType="default" nzShape="circle" nzSize="large" [nzLoading]="true"> </button>
+        } @else if (savingState === "saved") {
+          <button nz-button nzType="primary" nzGhost nzShape="circle" nzSize="large">
+            <span class="ph-bold ph-check"></span>
+          </button>
+        }
+      } @else {
+        <button nz-button nzType="default" nzShape="circle" nzSize="large" [routerLink]="backRedirectUrl">
+          <span class="ph-bold ph-arrow-bend-up-left"></span>
+        </button>
+      }
+    </div>
+    <div class="flex-1">
+      @if (testFormGroup.value.stateSettings.action === "student-answering" || testFormGroup.value.stateSettings.action === "teacher-reviewing") {
+        <span class="p-2 text-gray-500 w-full rounded-md font-bold text-lg select-none">{{ testFormGroup.value.name }}</span>
+      } @else {
+        <div class="flex items-center gap-2">
+          <input type="text" class="hover:bg-gray-100 p-2 text-gray-500 w-full rounded-md font-bold text-lg" formControlName="name" />
+        </div>
+      }
+    </div>
+    <div class="w-36">
+      @if (testFormGroup.value.stateSettings.action === "student-answering" || testFormGroup.value.stateSettings.action === "teacher-reviewing") {
+        <span class="p-2 text-gray-500 w-full rounded-md font-bold text-lg select-none capitalize">Type: {{ testFormGroup.value.type }}</span>
+      } @else {
+        <nz-select
+          class="w-full"
+          nzShowSearch
+          nzBorderless
+          [nzCustomTemplate]="typeTemplate"
+          nzPlaceHolder="Select type"
+          [nzDropdownMatchSelectWidth]="false"
+          formControlName="type">
+          <nz-option nzValue="writing" nzLabel="Writing"></nz-option>
+          <nz-option nzValue="listening" nzLabel="Listening"></nz-option>
+          <nz-option nzValue="reading" nzLabel="Reading"></nz-option>
+          <nz-option nzValue="speaking" nzLabel="Speaking"></nz-option>
+        </nz-select>
+        <ng-template #typeTemplate let-selected>
+          {{ selected.nzLabel }}
+        </ng-template>
+      }
+    </div>
+
+    <div class="flex-1 grid place-items-center">
+      <div class="inline-flex items-center gap-0.5">
+        <span class="ph-duotone ph-clock text-gray-500 text-xl"></span>
+        @if (testFormGroup.value.stateSettings.action === "student-answering" || testFormGroup.value.stateSettings.action === "teacher-reviewing") {
+          <span class="p-2 text-gray-500 w-full rounded-md font-bold text-lg select-none capitalize">{{ this.durationCountdown }}</span>
+        } @else {
+          <input type="text" class="hover:bg-gray-50 text-left p-2 text-gray-500 rounded-md font-bold text-lg w-24" formControlName="duration" />
+        }
+      </div>
+    </div>
+
+    <div class="flex-1 flex items-center justify-between gap-2">
+      <div class="flex flex-col gap-1">
+        @if (testFormGroup.value.type === "speaking") {
+          <span>Background audio (autoplay)</span>
+          <input type="file" class="w-full" />
+        }
+      </div>
+      <div class="flex items-center gap-3">
+        @if (testFormGroup.value.stateSettings.action === "student-answering") {
+          <button nz-button nzType="primary" nzGhost (click)="studentSubmitTask(true)">Submit</button>
+          <!-- <button nz-button nzType="primary" nzGhost nzDanger (click)="studentSubmitTask(true)">Save & Exit</button> -->
+        }
+
+        @if (testFormGroup.value.stateSettings.action === "builder-editing") {
+          <div>
+            <nz-select
+              class="w-52"
+              nzShowSearch
+              nzPlaceHolder="Select variation"
+              [nzDropdownMatchSelectWidth]="false"
+              formControlName="selectedVariationIndex"
+              [nzDropdownRender]="variationTemplate">
+              @for (variationFA of variationsFormArray.controls; track variationFA.value.id; let itemIndex = $index) {
+                <nz-option [nzValue]="itemIndex" [nzLabel]="'Variation ' + (itemIndex + 1)"></nz-option>
+              }
+            </nz-select>
+            <ng-template #variationTemplate>
+              <div class="px-4 py-2">
+                <a class="" (click)="addVariation()">Add Variation</a>
+              </div>
+            </ng-template>
+          </div>
+          <button nz-button nzType="primary" nzGhost nzShape="circle" (click)="deleteVariation()"> X </button>
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- content -->
+  <div class="px-6 py-4">
+    <div class="p-4 bg-slms-50 border border-slms-200 shadow-md flex flex-col gap-2 rounded-md">
+      <span class="font-medium text-gray-500">Part {{ testFormGroup.value.selectedPartIndex + 1 }}</span>
+      <span class="font-regular text-gray-800">Read the text and answer questions.</span>
+    </div>
+
+    <as-split direction="horizontal" gutterSize="2" class="gap-2">
+      @if (showPartDescriptionPanel) {
+        <!-- Left side content (description / editor) -->
+        <as-split-area [size]="50" [minSize]="50" [maxSize]="50" class="">
+          <br />
+          @if (partFormGroup) {
+            <slms-editor [mode]="testFormGroup.value.mode" [content-form-control]="textContentFormControl" [editor-id]="partFormGroup.value.id"></slms-editor>
+          }
+        </as-split-area>
+      }
+      <!-- Right side content (questions) -->
+      <as-split-area [size]="showPartDescriptionPanel ? 50 : 100" [minSize]="showPartDescriptionPanel ? 50 : 100" [maxSize]="showPartDescriptionPanel ? 50 : 100">
+        <div class="flex flex-col gap-4 py-4" [ngClass]="{ 'px-4': testFormGroup.value.stateSettings.action !== 'student-answering' }">
+          <!-- {{ testFormGroup.value.mode }} -->
+          @if (testFormGroup.value.mode === "editing") {
+            <div class="flex justify-end gap-2">
+              <div>
+                <button nz-button nzType="primary" nzGhost nz-dropdown [nzDropdownMenu]="itemsOptionTemplate">
+                  <div class="flex items-center gap-2">
+                    <span>Question</span>
+                    <span class="ph-bold ph-caret-down"></span>
+                  </div>
+                </button>
+                <nz-dropdown-menu #itemsOptionTemplate="nzDropdownMenu">
+                  <ul nz-menu>
+                    <li nz-menu-item (click)="addItem('choice')">Choices</li>
+                    <li nz-menu-item (click)="addItem('fill-in')">Fill In</li>
+                    <li nz-menu-item (click)="addItem('drag-drop')">Drag n Drop</li>
+                    <li nz-menu-item (click)="addItem('fill-in-radio')">Box ticking</li>
+                    <li nz-menu-item (click)="addItem('box-ticking')">Box ticking (Checkbox)</li>
+                    <li nz-menu-item (click)="addItem('fill-in-input')">Fill In (Input)</li>
+                    <li nz-menu-item (click)="addItem('drag-to-fill')">Drag to Fill</li>
+                    <!-- <li nz-menu-item (click)="addItem('speaking')">Speaking</li> -->
+                    <li nz-menu-item (click)="addItem('ielts-writing')">Writing</li>
+                    <li nz-menu-item (click)="addItem('ielts-speaking')">Speaking</li>
+                  </ul>
+                </nz-dropdown-menu>
+              </div>
+              <button nz-button nzType="primary" (click)="addItem('instruction')">
+                <div class="flex items-center gap-2">
+                  <span>Instruction</span>
+                  <span class="ph-bold ph-plus"></span>
+                </div>
+              </button>
+            </div>
+          }
+
+          <div class="flex flex-col gap-6 w-full" cdkDropList (cdkDropListDropped)="dropItem($event)" [cdkDropListDisabled]="testFormGroup.value.mode !== 'editing'">
+            @if (itemsFormArray.length > 0 && itemsFormArray.length > 0) {
+              @for (ifg of itemsFormArray.controls; track ifg.value.id; let itemIndex = $index) {
+                <div cdkDrag [cdkDragDisabled]="testFormGroup.value.mode !== 'editing'">
+                  <slms-variation-item
+                    [part-form-group]="partFormGroup"
+                    [item-index]="itemIndex"
+                    [form-group]="testFormGroup"
+                    [item-form-group]="itemFormGroup(itemIndex)"></slms-variation-item>
+                  @if (testFormGroup.value.mode === "editing") {
+                    <div class="flex items-center gap-1 mt-1 text-slate-400 text-xs cursor-grab active:cursor-grabbing" cdkDragHandle>
+                      <span class="ph ph-dots-six-vertical"></span>
+                      <span>Drag to reorder</span>
+                    </div>
+                  }
+                </div>
+              }
+            }
+            <!-- <p>RIGHT</p>
+            <button (click)="insertDraggable()">Insert Draggable</button>
+            <div class="draggable-blot" draggable="true" data-label="Drag Me">Drag Me</div>
+            <img id="img1" src="img_logo.gif" draggable="true" ondragstart="dragstartHandler(event)" width="336" height="69" /> -->
+          </div>
+        </div>
+      </as-split-area>
+    </as-split>
+  </div>
+
+  <div class="px-6 py-4">
+    @if (testFormGroup.value.stateSettings.action === "student-viewing-results") {
+      @if (variationFormGroup) {
+        <div class="flex flex-col justify-center items-center gap-4 w-full shadow-md bg-slms-50 border border-slms-200 rounded-md">
+          <div class="py-4 w-1/2" [formGroup]="variationFormGroup">
+            <h4 class="font-medium">Teacher's final remarks:</h4>
+            <div [innerText]="variationFormGroup.value.reviewerAnswer"></div>
+          </div>
+
+          <div class="py-4 w-1/2" [formGroup]="variationFormGroup">
+            <h4 class="font-medium">Listen to your teacher's remarks:</h4>
+            <div class="p-2 bg-white rounded-md">
+              <slms-audio-selector [item-form-group]="variationFormGroup" form-control-name="audioRemarks" [can-record]="false"></slms-audio-selector>
+            </div>
+          </div>
+          <br />
+        </div>
+      }
+    } @else if (testFormGroup.value.stateSettings.action === "teacher-reviewing") {
+      @if (variationFormGroup) {
+        <div class="flex flex-col justify-center items-center gap-4 w-full shadow-md bg-slms-50 border border-slms-200 rounded-md">
+          <div class="py-4 w-1/2" [formGroup]="variationFormGroup">
+            <h4 class="font-medium">Final remarks:</h4>
+            <textarea nz-input formControlName="reviewerAnswer" class="resize-none" [nzAutosize]="{ minRows: 5 }" placeholder="Type here..."></textarea>
+          </div>
+
+          <div class="py-4 w-1/2" [formGroup]="variationFormGroup">
+            <h4 class="font-medium">Record a remark:</h4>
+            <div class="p-2 bg-white rounded-md">
+              <slms-audio-selector [item-form-group]="variationFormGroup" form-control-name="audioRemarks" [can-record]="true"></slms-audio-selector>
+            </div>
+          </div>
+
+          <br />
+          <div class="grid place-items-center">
+            <button nz-button nzSize="large" nzType="primary" (click)="teacherSubmitTask()">Done and Return results to the student</button>
+          </div>
+          <br />
+        </div>
+      }
+    } @else {
+      <div class="flex items-center gap-4">
+        <div>
+          <button nz-button nzType="primary" nzShape="circle" (click)="addPart()">
+            <span class="ph-bold ph-plus"></span>
+          </button>
+        </div>
+        <div class="flex items-center gap-2 px-4 py-2 rounded-md flex-1 shadow-md bg-slms-50 border border-slms-200">
+          @for (partFormGroup of partsFormArray.controls; track $index) {
+            @if ($index === testFormGroup.value.selectedPartIndex) {
+              <button nz-button nzType="primary" nzShape="circle">{{ $index + 1 }} </button>
+            } @else {
+              <button nz-button nzType="primary" nzGhost nzShape="circle" (click)="testFormGroup.get('selectedPartIndex').setValue($index)">{{ $index + 1 }}</button>
+            }
+          }
+        </div>
+      </div>
+    }
+
+    <br />
+  </div>
+</div>

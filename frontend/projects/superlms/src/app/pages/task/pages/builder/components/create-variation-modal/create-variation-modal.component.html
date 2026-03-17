@@ -1,0 +1,29 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  [nzWidth]="'500px'"
+  nzTitle="Create Variation"
+  [nzMaskClosable]="false"
+  [nzClosable]="false"
+  nzCancelText="Close"
+  (nzOnCancel)="toggle()"
+  nzOkText="Create"
+  (nzOnOk)="onCreate()"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <form class="px-4 py-3 flex-col max-h-[500px] space-y-3 flex-1 flex overflow-auto mini-scroll-bar min-h-fit" [formGroup]="testFormGroup">
+      <div class="space-y-1.5 flex-1">
+        <label class="slms-label slms-required">Name</label>
+        <nz-select formControlName="testId" nzShowSearch class="w-full" nzPlaceHolder="Select test" [nzDropdownMatchSelectWidth]="false">
+          @for (test of tests; track test._id) {
+            <nz-option [nzLabel]="test.name" [nzValue]="test._id"></nz-option>
+          }
+        </nz-select>
+      </div>
+      <div class="space-y-1.5 flex-1">
+        <a (click)="createTaskModal.toggle()">Create New Task</a>
+      </div>
+    </form>
+  </ng-container>
+</nz-modal>
+
+<slms-create-task-modal #createTaskModal></slms-create-task-modal>

@@ -1,0 +1,86 @@
+<nz-modal
+  [nzVisible]="showDrawer"
+  nzWidth="500px"
+  nzTitle="Create Group"
+  (nzOnOk)="saveGroup()"
+  [nzOkLoading]="loadingCreateGroupButton"
+  [nzOkText]="groupFormGroup.value._id ? 'Save Changes' : 'Create Group'"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()">
+  <ng-container *nzModalContent>
+    <div style="max-height: 500px; min-height: 200px" class="overflow-auto">
+      <form class="flex-col space-y-4 flex" [formGroup]="groupFormGroup">
+        <!-- {{ groupFormGroup.value | json }} -->
+        <div class="space-y-1.5 flex-1">
+          <label class="font-normal text-gray-600 text-xs">Name</label>
+          <input nz-input placeholder="Type here" formControlName="name" />
+          <ng-container *ngIf="groupFormGroup.get('name').touched">
+            <p class="isms-error-message" *ngIf="groupFormGroup.get('name').hasError('required')">This field is required</p>
+          </ng-container>
+        </div>
+        <div class="space-y-1.5" *ngIf="groupFormGroup.value._id">
+          <label class="font-normal text-gray-600 text-xs">Sub Groups</label>
+          <div class="flex flex-col space-y-2">
+            <div class="" *ngFor="let subGroupFormGroup of subGroupFormArray.controls; let subGroupIndex = index">
+              <ng-container [formGroup]="toFormGroup(subGroupFormGroup)">
+                <nz-input-group [nzSuffix]="suffixSubGroup">
+                  <input type="text" nz-input placeholder="Ex. HR Assistant" formControlName="name" />
+                </nz-input-group>
+                <ng-template #suffixSubGroup>
+                  <div class="flex space-x-1 items-center">
+                    <!-- <span
+                      
+                      nz-icon
+                      nzType="delete"
+                      nzTheme="twotone"
+                      nzTwotoneColor="#98A2B3"
+                      class="cursor-pointer"
+                      nz-popconfirm
+                      nzPopconfirmTitle="Remove this?"
+                      (nzOnConfirm)="removeSubGroup(i)"
+                      (nzOnCancel)="(1)"
+                    ></span> -->
+
+                    <a (click)="updateSubGroup(subGroupIndex)" *ngIf="subGroupFormGroup.touched && !subGroupFormGroup.pristine && subGroupFormGroup.value._id"> Save Changes </a>
+
+                    <a nz-dropdown [nzDropdownMenu]="mediaLinkMenu" nzTrigger="click" *ngIf="subGroupFormGroup.value._id">
+                      <!-- Facebook -->
+                      <!-- <img src="https://abs.twimg.com/favicons/twitter.2.ico" alt="" width="17" /> -->
+                      <div class="flex space-x-1 items-center">
+                        <!-- <img
+                          src="https://static.xx.fbcdn.net/rsrc.php/yD/r/d4ZIVX-5C-b.ico?_nc_eui2=AeHd-G1eYn7jRmBo4vbBR7TvaBWfmC2eGbdoFZ-YLZ4ZtyEflgX0yAv-iZ36okD5Gl3jZkwD878vmJmg7lnm7Ihu"
+                          alt=""
+                          width="17"
+                        /> -->
+                        <span nz-icon nzType="down" class="text-sm"></span>
+                      </div>
+                    </a>
+                    <nz-dropdown-menu #mediaLinkMenu="nzDropdownMenu">
+                      <ul nz-menu nzSelectable>
+                        <li nz-menu-item *ngFor="let item of ['Move to Other Group']">
+                          <span>{{ item }}</span>
+                        </li>
+                        <li nz-menu-item nzDanger>Delete</li>
+                      </ul>
+                    </nz-dropdown-menu>
+
+                    <a (click)="saveSubGroup(subGroupIndex)" *ngIf="!subGroupFormGroup.value._id"> Create Sub Group </a>
+                  </div>
+                </ng-template>
+                <ng-container *ngIf="subGroupFormGroup.get('name').touched">
+                  <p class="isms-error-message" *ngIf="subGroupFormGroup.get('name').hasError('required')">This field is required</p>
+                </ng-container>
+              </ng-container>
+            </div>
+          </div>
+          <div>
+            <a (click)="addSubGroup()">
+              Add new Sub Group
+              <span nz-icon nzType="plus"></span>
+            </a>
+          </div>
+        </div>
+      </form>
+    </div>
+  </ng-container>
+</nz-modal>

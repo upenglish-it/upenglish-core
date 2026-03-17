@@ -1,0 +1,15 @@
+@if (element) {
+  <!-- @if (viewMode === "editing") { 
+    <input type="text" placeholder="editing">
+
+  }
+
+  @if (viewMode === "viewing") { -->
+  <!-- <input type="text" placeholder="editing component" /> -->
+  <!-- {{ viewMode }} -->
+  <!-- [readonly]="viewMode === 'editing'" -->
+
+  <input (click)="inputElement.focus()" (keyup)="participantTypedAnswer(inputElement.value)" placeholder="Enter answer" #inputElement class="px-1 bg-gray-50 border" />
+
+  <!-- } -->
+}

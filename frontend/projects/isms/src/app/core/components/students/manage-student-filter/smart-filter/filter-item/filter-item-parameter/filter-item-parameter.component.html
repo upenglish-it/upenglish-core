@@ -1,0 +1,7 @@
+<div class="w-full">
+  <ng-container [formGroup]="filterFormGroup">
+    <nz-select nzPlaceHolder="Parameter" class="parameter" formControlName="parameter" [nzDropdownMatchSelectWidth]="false" [compareWith]="compareValue">
+      <nz-option *ngFor="let parameter of parameters" [nzValue]="parameter" [nzLabel]="parameter.name"> </nz-option>
+    </nz-select>
+  </ng-container>
+</div>

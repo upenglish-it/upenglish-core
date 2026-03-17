@@ -1,0 +1,414 @@
+<div class="min-h-[55px] bg-white justify-between flex flex-col md:flex-row border-b items-center px-4 py-2 gap-2 md:gap-0">
+  <div class="flex items-center flex-1 space-x-2 md:space-x-4 w-full md:w-auto" [formGroup]="filterFormGroup">
+    <div class="max-w-sm w-full flex-1 md:flex-none">
+      <nz-input-group [nzPrefix]="searchPrefixTemplate" [nzSuffix]="searchSuffixTemplate" class="space-x-1.5">
+        <input nz-input placeholder="Search for: First Name or Last Name" nzShape="round" formControlName="searchQuery" />
+      </nz-input-group>
+      <ng-template #searchPrefixTemplate>
+        <span class="text-base cursor-pointer text-gray-400 ph ph-magnifying-glass"></span>
+      </ng-template>
+      <ng-template #searchSuffixTemplate>
+        <span nz-icon class="ant-input-clear-icon" nzTheme="fill" nzType="close-circle"></span>
+      </ng-template>
+    </div>
+
+    <div class="w-full md:w-auto">
+      <nz-date-picker
+        class="w-full md:w-44"
+        [nzDisabledDate]="disabledPreviousDate"
+        nzPlaceHolder="Select month"
+        [nzAllowClear]="false"
+        nzMode="date"
+        nzFormat="MMM dd, yyyy"
+        formControlName="date"></nz-date-picker>
+    </div>
+  </div>
+  <!-- <div class="flex space-x-2 items-center">
+    <nz-select nzShowSearch nzPlaceHolder="Select version" [nzDropdownMatchSelectWidth]="false">
+      <nz-option *ngFor="let version of versions" nzLabel="Jack" nzValue="jack"></nz-option>
+    </nz-select>
+    <button nz-button nzType="primary" (click)="setVersion()">Revert Version</button>
+  </div> -->
+</div>
+
+<div class="overflow-auto bg-white mini-scroll-bar flex flex-col lg:flex-row flex-1 h-[calc(100vh-110px)]" reach-scroll-to-bottom (on-reach)="loadData()">
+  <div class="w-full lg:w-80 border-r border-b lg:border-b-0 overflow-y-auto max-h-[300px] lg:max-h-full lg:h-full flex-shrink-0">
+    <ng-container *ngFor="let staff of filteredStaffs; trackBy: identify; let staffIndex = index">
+      <div
+        class="flex items-center space-x-2 md:space-x-3 border-b cursor-pointer px-3 md:px-4 py-2"
+        [ngClass]="{ 'bg-gray-100': staffIndex === selectedStaffIndex }"
+        (click)="onSelectStaff(staffIndex)">
+        <img profile-photo [photo]="staff.profilePhoto" [letter]="staff.firstName[0]" class="w-6 h-6 md:w-7 md:h-7 bg-gray-100 rounded-full flex-shrink-0" />
+        <div class="flex flex-col min-w-0">
+          <span class="text-xs font-normal text-gray-700 cursor-pointer truncate">{{ staff.firstName }} {{ staff.lastName }}</span>
+          <span class="text-[10px] md:text-xs font-light text-gray-700 cursor-pointer capitalize truncate">{{ staff.role }}</span>
+        </div>
+      </div>
+    </ng-container>
+  </div>
+
+  <ng-container *ngIf="salaryByDate && !salaryByDate.alreadyReceivedSalary; else alreadyReceivedSalary">
+    <form class="p-2 md:p-4 flex-1 flex-col space-y-3 md:space-y-5 flex overflow-auto mini-scroll-bar min-h-fit border-r border-b lg:border-b-0" [formGroup]="staffSalaryFormGroup">
+      <div class="p-3 md:p-4 bg-isms-50 rounded-md border-dashed text-isms-500 border border-isms-200 text-center font-medium text-sm md:text-lg"
+        >Salary for {{ filterFormGroup.value.date | date: "MMM d, YYYY" }}</div
+      >
+
+      <isms-manage-salary-advancement
+        class="empty:hidden"
+        [form-group]="staffSalaryAdvancementFormGroup"
+        [staff-id]="filteredStaffs[selectedStaffIndex]._id"
+        view="selector"
+        (on-submitted)="(1)"
+        *ngIf="salaryByDate"></isms-manage-salary-advancement>
+
+      <!-- {{ salaryPackage | json }} -->
+      <div class="p-3 md:p-4 flex-col space-y-3 md:space-y-5 shadow bg-gray-50 border border-gray-200 rounded-md w-full" *ngIf="salaryByDate">
+        <!-- <pre>
+        {{ staffSalaryFormGroup.value | json }}
+      </pre> -->
+
+        <!-- <div class="flex space-x-2">
+        <div class="space-y-2 flex-1 flex flex-col">
+          <span>Basic Salary </span>
+          <nz-input-number formControlName="basicSalary" nzDisabled nzPlaceHolder="0" style="width: 100%" [nzMin]="1" [nzStep]="1"></nz-input-number>
+        </div>
+        <div class="space-y-2 flex-1 flex flex-col">
+          <span>Daily Rate </span>
+          <nz-input-number formControlName="dailySalary" nzDisabled nzPlaceHolder="0" style="width: 100%" [nzMin]="1" [nzStep]="1"></nz-input-number>
+        </div>
+      </div> -->
+
+        <div class="flex flex-col md:flex-row space-y-3 md:space-y-0 md:space-x-2">
+          <div class="space-y-1.5 flex-1 flex flex-col">
+            <label class="font-normal text-gray-600 text-xs">Working Date</label>
+            <nz-range-picker formControlName="workDate" [nzDisabledDate]="disabledPreviousDate" [nzPlaceHolder]="['Start date', 'End date']" class="w-full"></nz-range-picker>
+            <ng-container *ngIf="staffSalaryFormGroup.get('workDate').touched">
+              <p class="isms-error-message text-[10px] md:text-xs" *ngIf="staffSalaryFormGroup.get('workDate').hasError('required')">Insurance amount is required</p>
+            </ng-container>
+          </div>
+          <div class="space-y-1.5 flex-1 flex flex-col">
+            <label class="font-normal text-gray-600 text-xs required">Absences</label>
+            <nz-input-number formControlName="absences" nzPlaceHolder="0" style="width: 100%" [nzMin]="1" [nzStep]="1"></nz-input-number>
+            <ng-container *ngIf="staffSalaryFormGroup.get('absences').touched">
+              <p class="isms-error-message text-[10px] md:text-xs" *ngIf="staffSalaryFormGroup.get('absences').hasError('required')">Absences is required</p>
+            </ng-container>
+          </div>
+        </div>
+
+        <div class="flex flex-col md:flex-row space-y-3 md:space-y-0 md:space-x-2">
+          <div class="space-y-1.5 flex-1 flex flex-col">
+            <label class="font-normal text-gray-600 text-xs required">Consulting Commission</label>
+            <!-- <nz-input-number formControlName="consultingCommission" nzPlaceHolder="0" nzDisabled style="width: 100%" [nzMin]="1" [nzStep]="1"></nz-input-number> -->
+            <span class="font-medium text-gray-600 text-sm md:text-base break-words">
+              {{ salaryPackage.consultingCommission | formattedCurrency }}
+            </span>
+          </div>
+          <div class="space-y-1.5 flex-1 flex flex-col">
+            <label class="font-normal text-gray-600 text-xs">Quantity</label>
+            <nz-input-number formControlName="consultingCommissionQuantity" nzPlaceHolder="0" style="width: 100%" [nzMin]="1" [nzStep]="1"></nz-input-number>
+            <ng-container *ngIf="staffSalaryFormGroup.get('consultingCommissionQuantity').touched">
+              <p class="isms-error-message text-[10px] md:text-xs" *ngIf="staffSalaryFormGroup.get('consultingCommissionQuantity').hasError('required')">Quantity is required</p>
+            </ng-container>
+          </div>
+        </div>
+
+        <div class="flex flex-col md:flex-row space-y-3 md:space-y-0 md:space-x-2">
+          <div class="space-y-1.5 flex-1 flex flex-col">
+            <label class="font-normal text-gray-600 text-xs required">Hourly Teaching Rate</label>
+            <!-- <nz-input-number formControlName="hourlyTeachingRate" nzPlaceHolder="0" nzDisabled style="width: 100%" [nzMin]="1" [nzStep]="1"></nz-input-number> -->
+            <span class="font-medium text-gray-600 text-sm md:text-base break-words">
+              {{ salaryPackage.hourlyTeachingRate | formattedCurrency }}
+            </span>
+          </div>
+          <div class="space-y-1.5 flex-1 flex flex-col">
+            <label class="font-normal text-gray-600 text-xs">Quantity</label>
+            <nz-input-number formControlName="hourlyTeachingRateQuantity" nzPlaceHolder="0" style="width: 100%" [nzMin]="1" [nzStep]="1"></nz-input-number>
+            <ng-container *ngIf="staffSalaryFormGroup.get('hourlyTeachingRateQuantity').touched">
+              <p class="isms-error-message text-[10px] md:text-xs" *ngIf="staffSalaryFormGroup.get('hourlyTeachingRateQuantity').hasError('required')">Quantity is required</p>
+            </ng-container>
+          </div>
+        </div>
+
+        <div class="flex flex-col md:flex-row space-y-3 md:space-y-0 md:space-x-2">
+          <div class="space-y-1.5 flex-1 flex flex-col">
+            <label class="font-normal text-gray-600 text-xs required">Hourly Tutoring Rate</label>
+            <!-- <nz-input-number formControlName="hourlyTutoringRate" nzPlaceHolder="0" nzDisabled style="width: 100%" [nzMin]="1" [nzStep]="1"></nz-input-number> -->
+            <span class="font-medium text-gray-600 text-sm md:text-base break-words">
+              {{ salaryPackage.hourlyTutoringRate | formattedCurrency }}
+            </span>
+          </div>
+          <div class="space-y-1.5 flex-1 flex flex-col">
+            <label class="font-normal text-gray-600 text-xs">Quantity</label>
+            <nz-input-number formControlName="hourlyTutoringRateQuantity" nzPlaceHolder="0" style="width: 100%" [nzMin]="1" [nzStep]="1"></nz-input-number>
+            <ng-container *ngIf="staffSalaryFormGroup.get('hourlyTutoringRateQuantity').touched">
+              <p class="isms-error-message text-[10px] md:text-xs" *ngIf="staffSalaryFormGroup.get('hourlyTutoringRateQuantity').hasError('required')">Quantity is required</p>
+            </ng-container>
+          </div>
+        </div>
+
+        <div class="flex flex-col md:flex-row space-y-3 md:space-y-0 md:space-x-2">
+          <div class="space-y-1.5 flex-1 flex flex-col">
+            <label class="font-normal text-gray-600 text-xs required">Hourly TA/PA Rate</label>
+            <!-- <nz-input-number formControlName="hourlyTAPARate" nzPlaceHolder="0" nzDisabled style="width: 100%" [nzMin]="1" [nzStep]="1"></nz-input-number> -->
+            <span class="font-medium text-gray-600 text-sm md:text-base break-words">
+              {{ salaryPackage.hourlyTAPARate | formattedCurrency }}
+            </span>
+          </div>
+          <div class="space-y-1.5 flex-1 flex flex-col">
+            <label class="font-normal text-gray-600 text-xs">Quantity</label>
+            <nz-input-number formControlName="hourlyTAPARateQuantity" nzPlaceHolder="0" style="width: 100%" [nzMin]="1" [nzStep]="1"></nz-input-number>
+            <ng-container *ngIf="staffSalaryFormGroup.get('hourlyTAPARateQuantity').touched">
+              <p class="isms-error-message text-[10px] md:text-xs" *ngIf="staffSalaryFormGroup.get('hourlyTAPARateQuantity').hasError('required')">Quantity is required</p>
+            </ng-container>
+          </div>
+        </div>
+
+        <hr />
+
+        <div class="flex flex-col md:flex-row space-y-3 md:space-y-0 md:space-x-2">
+          <div class="space-y-1.5 flex-1 flex flex-col">
+            <label class="font-normal text-gray-600 text-xs required">Addition</label>
+            <nz-input-number formControlName="addition" nzPlaceHolder="0" style="width: 100%" [nzMin]="0" [nzStep]="1"></nz-input-number>
+          </div>
+          <div class="space-y-1.5 flex-1 flex flex-col">
+            <label class="font-normal text-gray-600 text-xs">Deduction</label>
+            <nz-input-number formControlName="subtraction" nzPlaceHolder="0" style="width: 100%" [nzMin]="0" [nzStep]="1"></nz-input-number>
+          </div>
+        </div>
+
+        <hr />
+
+        <div class="flex flex-col md:flex-row space-y-3 md:space-y-0 md:space-x-2">
+          <div class="space-y-1.5 flex-1 flex flex-col">
+            <label class="font-normal text-gray-600 text-xs">Insurance Amount</label>
+            <span class="font-medium text-gray-600 text-sm md:text-base break-words">
+              {{ salaryPackage.insuranceAmount | formattedCurrency }}
+            </span>
+            <!-- <nz-input-number-group nzPrefix="$" style="width: 100%">
+            <nz-input-number formControlName="insuranceAmount" nzPlaceHolder="0" nzDisabled [nzMin]="1" [nzStep]="1"></nz-input-number>
+          </nz-input-number-group> -->
+          </div>
+          <div class="flex-1 hidden md:block"></div>
+        </div>
+
+        <div class="flex flex-col md:flex-row space-y-3 md:space-y-0 md:space-x-2">
+          <div class="space-y-1.5 flex-1 flex flex-col">
+            <label class="font-normal text-gray-600 text-xs">Company Rate %</label>
+            <span class="font-medium text-gray-600 text-sm md:text-base">
+              {{ salaryPackage.companyPay }}
+            </span>
+            <!-- <nz-input-number-group nzPrefix="$" style="width: 100%">
+            <nz-input-number formControlName="companyPay" nzPlaceHolder="0" nzDisabled [nzMin]="1" [nzStep]="1"></nz-input-number>
+          </nz-input-number-group> -->
+          </div>
+
+          <div class="space-y-1.5 flex-1 flex flex-col">
+            <label class="font-normal text-gray-600 text-xs">Employee Rate %</label>
+            <span class="font-medium text-gray-600 text-sm md:text-base">
+              {{ salaryPackage.employeePay }}
+            </span>
+            <!-- <nz-input-number-group nzPrefix="$" style="width: 100%">
+            <nz-input-number formControlName="employeePay" nzPlaceHolder="0" nzDisabled [nzMin]="1" [nzStep]="1"></nz-input-number>
+          </nz-input-number-group> -->
+          </div>
+        </div>
+
+        <div class="flex flex-col md:flex-row space-y-3 md:space-y-0 md:space-x-2">
+          <div class="space-y-2 flex-1 flex flex-col">
+            <span class="text-xs md:text-sm">Insurance Amount In Percent </span>
+            <span class="font-medium text-gray-600 text-sm md:text-base">{{ computedInsuranceAmount | number: "1.0-0" }}</span>
+          </div>
+          <div class="space-y-2 flex-1 flex flex-col">
+            <span class="text-xs md:text-sm">Insurance Rate <sup>(company + employee)</sup> </span>
+            <span class="font-medium text-gray-600 text-sm md:text-base">{{ salaryPackage.companyPay + salaryPackage.employeePay }}%</span>
+          </div>
+        </div>
+      </div>
+    </form>
+
+    <div class="flex-1 flex flex-col p-3 md:p-4 m-2 md:m-4 bg-gray-50 rounded-md border text-gray-500 border-gray-200" *ngIf="salaryByDate">
+      <div class="flex flex-col">
+        <span class="text-sm md:text-base font-medium">Salary Details</span>
+        <span class="text-xs md:text-sm text-gray-500">Summary of salary and total amount details.</span>
+      </div>
+
+      <div class="py-3 md:py-4 space-y-2 md:space-y-3 flex-1">
+        <div class="flex items-center justify-between gap-2">
+          <span class="isms-label-left text-xs md:text-sm">Basic Salary</span>
+          <div class="mx-2 md:mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+          <span class="font-semibold text-gray-700 text-xs md:text-sm whitespace-nowrap">
+            {{ salaryByDate.staffWorkAccumulated.basicSalary | formattedCurrency }}
+          </span>
+        </div>
+
+        <div class="flex items-center justify-between gap-2">
+          <span class="isms-label-left text-xs md:text-sm">Daily Rate</span>
+          <div class="mx-2 md:mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+          <span class="font-semibold text-gray-700 text-xs md:text-sm whitespace-nowrap">
+            {{ salaryByDate.staffWorkAccumulated.dailyRate | formattedCurrency }}
+          </span>
+        </div>
+
+        <div class="flex items-center justify-between gap-2">
+          <span class="isms-label-left text-xs md:text-sm">Hourly Rate</span>
+          <div class="mx-2 md:mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+          <span class="font-semibold text-gray-700 text-xs md:text-sm whitespace-nowrap">
+            {{ salaryByDate.staffWorkAccumulated.hourlyRate | formattedCurrency }}
+          </span>
+        </div>
+
+        <div class="flex items-center justify-between gap-2 pt-3 md:pt-4">
+          <span class="isms-label-left text-xs md:text-sm">Paid Hour(s)</span>
+          <div class="mx-2 md:mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+          <span class="font-semibold text-gray-700 text-xs md:text-sm whitespace-nowrap">
+            {{ salaryByDate.staffWorkAccumulated.totalPaidHours }}
+          </span>
+        </div>
+        <div class="flex items-center justify-between gap-2">
+          <span class="isms-label-left text-xs md:text-sm">UnPaid Hour(s)</span>
+          <div class="mx-2 md:mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+          <span class="font-semibold text-gray-700 text-xs md:text-sm whitespace-nowrap">
+            {{ salaryByDate.staffWorkAccumulated.unpaidHours }}
+          </span>
+        </div>
+        <div class="flex items-center justify-between gap-2">
+          <span class="isms-label-left text-xs md:text-sm">Total Compensation</span>
+          <div class="mx-2 md:mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+          <span class="font-semibold text-gray-700 text-xs md:text-sm whitespace-nowrap">
+            {{ salaryByDate.staffWorkAccumulated.totalSalary | formattedCurrency }}
+          </span>
+        </div>
+        <!--
+        <div class="flex items-center justify-between pt-4">
+          <span class="isms-label-left">Working Date</span>
+          <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+          <span class="font-semibold text-gray-700">
+            working date
+            {{ salaryByDate.staffSalaryStartDate }} - {{ salaryByDate.staffSalaryEndDate }}
+          </span>
+        </div> -->
+
+        <div class="flex items-center justify-between gap-2 pt-3 md:pt-4">
+          <span class="isms-label-left text-xs md:text-sm">Absences</span>
+          <div class="mx-2 md:mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+          <span class="font-semibold text-gray-700 text-xs md:text-sm whitespace-nowrap">
+            {{ staffSalaryFormGroup.value.absences }}
+          </span>
+        </div>
+
+        <div class="flex items-center justify-between gap-2 pt-3 md:pt-4">
+          <span class="isms-label-left text-xs md:text-sm">Total of Consulting Commission</span>
+          <div class="mx-2 md:mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+          <span class="font-semibold text-gray-700 text-xs md:text-sm whitespace-nowrap">
+            {{ staffSalaryFormGroup.value.consultingCommissionQuantity }} x
+            {{ salaryPackage.consultingCommission * staffSalaryFormGroup.value.consultingCommissionQuantity | formattedCurrency }}
+          </span>
+        </div>
+
+        <div class="flex items-center justify-between gap-2">
+          <span class="isms-label-left text-xs md:text-sm">Hourly Teaching Rate</span>
+          <div class="mx-2 md:mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+          <span class="font-semibold text-gray-700 text-xs md:text-sm whitespace-nowrap">
+            {{ staffSalaryFormGroup.value.hourlyTeachingRateQuantity }} x
+            {{ salaryPackage.hourlyTeachingRate * staffSalaryFormGroup.value.hourlyTeachingRateQuantity | formattedCurrency }}
+          </span>
+        </div>
+
+        <div class="flex items-center justify-between gap-2">
+          <span class="isms-label-left text-xs md:text-sm">Hourly Tutoring Rate</span>
+          <div class="mx-2 md:mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+          <span class="font-semibold text-gray-700 text-xs md:text-sm whitespace-nowrap">
+            {{ staffSalaryFormGroup.value.hourlyTutoringRateQuantity }} x
+            {{ salaryPackage.hourlyTutoringRate * staffSalaryFormGroup.value.hourlyTutoringRateQuantity | formattedCurrency }}
+          </span>
+        </div>
+
+        <div class="flex items-center justify-between gap-2">
+          <span class="isms-label-left text-xs md:text-sm">Hourly TA/PA Rate</span>
+          <div class="mx-2 md:mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+          <span class="font-semibold text-gray-700 text-xs md:text-sm whitespace-nowrap">
+            {{ staffSalaryFormGroup.value.hourlyTAPARateQuantity }} x {{ salaryPackage.hourlyTAPARate * staffSalaryFormGroup.value.hourlyTAPARateQuantity | formattedCurrency }}
+          </span>
+        </div>
+
+        <!-- <div class="flex items-center justify-between pt-4" *ngIf="salaryPackage.totalOfUnpaidHours > 0">
+          <span class="isms-label-left">Total of Unpaid Hours/Amount</span>
+          <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+          <span class="font-semibold text-gray-700"> {{ salaryPackage.totalOfUnpaidHours }}hrs • {{ salaryPackage.totalAmountOfUnpaidHours | formattedCurrency }} </span>
+        </div> -->
+
+        <div class="flex items-center justify-between gap-2 pt-3 md:pt-4">
+          <span class="isms-label-left text-xs md:text-sm">Addition</span>
+          <div class="mx-2 md:mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+          <span class="font-semibold text-gray-700 text-xs md:text-sm whitespace-nowrap">
+            {{ staffSalaryFormGroup.value.addition | formattedCurrency }}
+          </span>
+        </div>
+
+        <div class="flex items-center justify-between gap-2">
+          <span class="isms-label-left text-xs md:text-sm">Subtraction</span>
+          <div class="mx-2 md:mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+          <span class="font-semibold text-gray-700 text-xs md:text-sm whitespace-nowrap">
+            {{ staffSalaryFormGroup.value.subtraction | formattedCurrency }}
+          </span>
+        </div>
+
+        <div class="flex items-center justify-between gap-2 pt-3 md:pt-4" *ngIf="staffSalaryAdvancementFormGroup.value.payNow">
+          <span class="isms-label-left text-xs md:text-sm">Salary Advancement Payment</span>
+          <div class="mx-2 md:mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+          <span class="font-semibold text-gray-700 text-xs md:text-sm whitespace-nowrap">
+            {{ staffSalaryAdvancementFormGroup.value.agreement.amount | formattedCurrency }}
+          </span>
+        </div>
+
+        <div class="flex items-center justify-between gap-2 pt-3 md:pt-4">
+          <span class="isms-label-left text-xs md:text-sm">Insurance Rate</span>
+          <div class="mx-2 md:mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+          <span class="font-semibold text-gray-700 text-xs md:text-sm whitespace-nowrap">
+            {{ computedInsuranceAmount | formattedCurrency }}
+          </span>
+        </div>
+
+        <!-- <div class="flex items-center justify-between">
+        <span class="isms-label-left">Insurance Total Deduction</span>
+        <div class="mx-3 h-[1px] border-b border-dashed flex-1 border-b-gray-300"></div>
+        <span class="font-semibold text-gray-700"> {{ salaryPackage.companyPay + salaryPackage.employeePay }}% </span>
+      </div> -->
+
+        <div class="flex items-center py-3 md:py-4 pt-4 md:pt-6 justify-between gap-2">
+          <span class="font-medium text-xs md:text-sm text-gray-900">Net Income</span>
+          <span class="text-lg md:text-xl font-bold text-gray-900 whitespace-nowrap">
+            {{ totalAmount | formattedCurrency }}
+          </span>
+        </div>
+      </div>
+
+      <button
+        nz-button
+        nzType="primary"
+        nzSize="large"
+        *ngIf="!staffSalaryFormGroup.value._id"
+        (click)="onSubmitSalary()"
+        nzBlock
+        [disabled]="staffSalaryFormGroup.invalid || totalAmount <= 0"
+        class="text-sm md:text-base">
+        <div class="flex space-x-1 items-center justify-center">
+          <span>Confirm Salary</span> <span class="font-semibold">{{ totalAmount | formattedCurrency }}</span>
+        </div>
+      </button>
+    </div>
+  </ng-container>
+
+  <ng-template #alreadyReceivedSalary>
+    <div class="flex h-96 items-center justify-center self-center w-full flex-col space-y-4 p-4">
+      <img src="assets/images/illustrations/empty-colored.svg" class="w-32 md:w-40" alt="" draggable />
+      <div class="flex flex-col space-y-2 items-center justify-center text-center">
+        <p class="text-sm md:text-base text-gray-500">Staff already receive a salary for this period</p>
+        <button nz-button nzType="primary" (click)="(1)" class="text-gray-500 flex space-x-2 items-center text-xs md:text-sm" (click)="revertVersion()">
+          <span> Revert Salary Payment </span>
+          <i class="cursor-pointer ph ph-swap"></i>
+        </button>
+      </div>
+    </div>
+  </ng-template>
+</div>

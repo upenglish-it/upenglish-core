@@ -1,0 +1,165 @@
+<div class="bg-white border-b px-3 md:px-4 py-2 flex flex-col md:flex-row md:items-center justify-between gap-2">
+  <div class="flex items-center flex-1">
+    <div class="max-w-sm w-full" [formGroup]="filterFormGroup">
+      <nz-input-group [nzPrefix]="searchPrefixTemplate" [nzSuffix]="searchSuffixTemplate" class="space-x-1.5">
+        <input nz-input placeholder="Search for: Name" nzShape="round" formControlName="searchQuery" />
+      </nz-input-group>
+      <ng-template #searchPrefixTemplate>
+        <span class="text-base cursor-pointer text-gray-400 ph ph-magnifying-glass"></span>
+      </ng-template>
+      <ng-template #searchSuffixTemplate>
+        <span nz-icon class="ant-input-clear-icon" nzTheme="fill" nzType="close-circle"></span>
+      </ng-template>
+    </div>
+  </div>
+  <div class="space-x-6 flex items-center justify-end">
+    <!-- <div class="space-x-2 flex items-center">
+      <button nz-button nzType="primary" (click)="manageTaskModal.toggle()">
+        Add New Task
+        <span nz-icon nzType="down" nzTheme="outline"></span>
+      </button>
+    </div> -->
+  </div>
+</div>
+
+<div class="bg-white flex-1 h-[calc(100vh-110px)] overflow-y-auto mini-scroll-bar" reach-scroll-to-bottom (on-reach)="loadData()">
+  <div class="overflow-x-auto min-h-0">
+    <table role="table" class="min-w-[720px] lg:min-w-full divide-y divide-gray-200 isms-table">
+      <thead class="bg-gray-50">
+        <tr class="font-semibold text-gray-700 text-xs md:text-sm">
+          <th class="w-10 px-2 md:px-3 py-2 md:py-3">
+            <div class="relative grid place-items-center">#</div>
+          </th>
+          <th class="px-2 md:px-3 py-2 md:py-3 text-left">
+            <div class="flex items-center justify-between">Title</div>
+          </th>
+          <th class="px-2 md:px-3 py-2 md:py-3 text-left whitespace-nowrap">
+            <div class="flex items-center justify-between">Type</div>
+          </th>
+          <th class="px-2 md:px-3 py-2 md:py-3 text-left whitespace-nowrap">
+            <div class="flex items-center justify-between">Submitted By</div>
+          </th>
+          <th class="px-2 md:px-3 py-2 md:py-3 text-left">
+            <div class="flex items-center justify-between">Class</div>
+          </th>
+          <!-- <th class="">
+            <div class="flex items-center justify-between">Reviewers</div>
+          </th> -->
+          <th class="px-2 md:px-3 py-2 md:py-3 text-left whitespace-nowrap">
+            <div class="flex items-center justify-between">Date Created</div>
+          </th>
+          <th class="px-2 md:px-3 py-2 md:py-3 text-right"></th>
+        </tr>
+      </thead>
+      <tbody class="bg-white divide-y divide-gray-200 text-xs md:text-sm">
+        <tr *ngFor="let submission of filteredSubmissions; trackBy: identify; let i = index">
+          <td class="px-2 md:px-3 py-2 md:py-3">
+            <div class="relative grid place-items-center">
+              <!-- <label nz-checkbox [(ngModel)]="course.selected" class="absolute top-[-11px]"></label> -->
+              {{ i + 1 }}
+            </div>
+          </td>
+
+          <td class="px-2 md:px-3 py-2 md:py-3">
+            <div class="flex items-center space-x-3 min-w-0">
+              <span class="text-xs md:text-sm font-normal text-gray-700 cursor-pointer truncate max-w-[200px] md:max-w-none">
+                {{ submission.task.generalInfo.title }}
+              </span>
+            </div>
+          </td>
+
+          <td class="px-2 md:px-3 py-2 md:py-3 font-normal text-xs md:text-sm text-gray-500 whitespace-nowrap">
+            <nz-tag [nzColor]="'green'" *ngIf="submission.status === 'reviewed'">Reviewed</nz-tag>
+            <nz-tag [nzColor]="'orange'" *ngIf="submission.status === 'pending'">Pending</nz-tag>
+            <nz-tag [nzColor]="'red'" *ngIf="submission.status === 'incomplete'">Incomplete</nz-tag>
+          </td>
+
+          <td class="px-2 md:px-3 py-2 md:py-3">
+            <div class="flex items-center space-x-2">
+              <img
+                profile-photo
+                [photo]="submission.participant.profilePhoto"
+                [letter]="submission.participant.firstName[0] + '' + submission.participant.lastName[0]"
+                class="w-6 h-6 md:w-7 md:h-7 bg-gray-100 rounded-full" />
+              <span class="text-xs md:text-sm font-medium text-gray-500 truncate max-w-[160px] md:max-w-none">
+                {{ submission.participant.firstName }} {{ submission.participant.lastName }}
+              </span>
+            </div>
+          </td>
+
+          <!-- <td>
+            <div class="flex flex-wrap -space-x-2.5 items-center relative">
+              <img
+                *ngFor="let reviewer of submission.task.assignee.reviewers"
+                class="w-6 h-6 rounded-full relative hover:z-10 hover:scale-110 transition-all bg-gray-200 cursor-pointer"
+                style="border: 2px solid white"
+                profile-photo
+                [photo]="null"
+                letter="A"
+                nz-tooltip
+                nzTooltipTitle="Reviewer name"
+                nzTooltipColor="#ff3823"
+                nzTooltipOverlayClassName="primary-tooltip-arrow"
+                nzTooltipPlacement="top"
+              />
+            </div>
+          </td> -->
+
+          <td class="px-2 md:px-3 py-2 md:py-3 font-normal text-xs md:text-sm text-gray-500 whitespace-nowrap">
+            {{ submission.class?.name || "---" }}
+          </td>
+
+          <td class="px-2 md:px-3 py-2 md:py-3 font-normal text-xs md:text-sm text-gray-500 whitespace-nowrap">
+            {{ submission.createdAt | date: "MM/d/YY • hh:mm a" }}
+          </td>
+
+          <td class="px-2 md:px-3 py-2 md:py-3 font-normal text-xs md:text-sm text-gray-500">
+            <div class="flex flex-wrap gap-2 justify-end">
+              <button
+                nz-button
+                nzType="primary"
+                nzSize="small"
+                *ngIf="submission.status !== 'reviewed'"
+                (click)="reviewTaskSubmissionModal.toggle(); reviewTaskSubmissionModal.submissionId = submission._id">
+                Review Now
+                <span nz-icon nzType="edit" nzTheme="outline"></span>
+              </button>
+              <button
+                nz-button
+                nzType="primary"
+                nzGhost
+                nzSize="small"
+                *ngIf="submission.status === 'reviewed'"
+                (click)="reviewTaskSubmissionModal.toggle(); reviewTaskSubmissionModal.submissionId = submission._id">
+                Quick View
+                <span nz-icon nzType="info-circle" nzTheme="outline"></span>
+              </button>
+              <a
+                href="tasks/report/{{ submission._id }}?taskId={{ taskId }}"
+                nz-button
+                nzType="primary"
+                nzGhost
+                nzSize="small"
+                *ngIf="submission.status === 'reviewed'">
+                All Result
+                <span nz-icon nzType="info-circle" nzTheme="outline"></span>
+              </a>
+              <button
+                nz-button
+                nzType="primary"
+                nzGhost
+                nzDanger
+                nzSize="small"
+                *ngIf="accountStore.account.role === 'admin'"
+                (click)="onDelete(submission._id)">
+                Delete
+              </button>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<isms-review-task-submission-modal #reviewTaskSubmissionModal (on-submitted)="loadData()" view-type="reviewing-modal"></isms-review-task-submission-modal>

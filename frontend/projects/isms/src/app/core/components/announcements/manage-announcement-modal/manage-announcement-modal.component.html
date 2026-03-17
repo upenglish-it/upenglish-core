@@ -1,0 +1,53 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  nzCentered
+  [nzWidth]="'400px'"
+  [nzTitle]="titleTemplate"
+  [nzFooter]="footerTemplate"
+  (nzOnOk)="onCreate()"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <form class="px-4 py-3 flex-col max-h-[500px] space-y-3 flex-1 flex overflow-auto mini-scroll-bar min-h-fit" [formGroup]="announcementFormGroup">
+      <div class="space-y-1.5 flex-1">
+        <label class="font-normal text-gray-600 text-xs">Announce to class</label>
+        <!-- <div class="flex space-x-2 items-center">
+                <span class="text-xs text-gray-700 font-semibold">English Pro</span>
+              </div> -->
+        <nz-select formControlName="classId" class="w-full" nzPlaceHolder="Select class" [nzDropdownMatchSelectWidth]="false">
+          <nz-option *ngFor="let class of classes" [nzLabel]="class.name" [nzValue]="class._id"></nz-option>
+        </nz-select>
+      </div>
+
+      <div class="space-y-1.5">
+        <label class="font-normal text-gray-600 text-xs required">Title</label>
+        <input nz-input placeholder="Type here" formControlName="title" />
+        <ng-container *ngIf="announcementFormGroup.get('title').touched">
+          <p class="isms-error-message" *ngIf="announcementFormGroup.get('title').hasError('required')">Title is required</p>
+        </ng-container>
+      </div>
+      <div class="space-y-1.5 flex flex-col">
+        <label class="font-normal text-gray-600 text-xs required">Message</label>
+        <textarea formControlName="message" nz-input rows="2" placeholder="Type here"></textarea>
+        <ng-container *ngIf="announcementFormGroup.get('message').touched">
+          <p class="isms-error-message" *ngIf="announcementFormGroup.get('message').hasError('required')">Message is required</p>
+        </ng-container>
+      </div>
+    </form>
+  </ng-container>
+  <ng-template #titleTemplate>
+    {{ announcementFormGroup.value._id ? "Manage Announcement" : "Add New Announcement" }}
+  </ng-template>
+  <ng-template #footerTemplate>
+    <div class="space-x-2 flex items-center">
+      <button nz-button nzBlock (click)="toggle()">Close</button>
+      <button nz-button nzType="primary" (click)="onCreate()" [nzLoading]="loading" nzBlock [disabled]="announcementFormGroup.invalid" *ngIf="!announcementFormGroup.value._id"
+        >Submit</button
+      >
+      <button nz-button nzType="primary" (click)="onUpdate()" [nzLoading]="loading" nzBlock [disabled]="announcementFormGroup.invalid" *ngIf="announcementFormGroup.value._id"
+        >Save Changes</button
+      >
+    </div>
+  </ng-template>
+</nz-modal>

@@ -1,0 +1,60 @@
+<nz-drawer
+  [nzVisible]="showDrawer"
+  nzCentered
+  nzWidth="650px"
+  [nzTitle]="titleTemplate"
+  (nzOnOk)="(1)"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzFooter]="footerTemplate"
+  nzPlacement="right"
+  [nzClosable]="false"
+  [nzBodyStyle]="{ 'padding-top': '4px' }">
+  <ng-container *nzDrawerContent>
+    <form class="py-4 flex-col space-y-5 flex" [formGroup]="staffScheduleFormGroup">
+      <div class="space-y-1.5 flex-1">
+        <label class="font-normal text-gray-600 text-xs required">Title</label>
+        <input nz-input placeholder="Type here" formControlName="title" />
+        <ng-container *ngIf="staffScheduleFormGroup.get('title').touched">
+          <p class="isms-error-message" *ngIf="staffScheduleFormGroup.get('title').hasError('required')">Title is required</p>
+        </ng-container>
+      </div>
+
+      <div class="space-y-1.5 flex-1">
+        <label class="font-normal text-gray-600 text-xs required">Schedule</label>
+        <isms-schedule-selector [form-group]="scheduleFormGroup"></isms-schedule-selector>
+      </div>
+      <pre>
+      {{ scheduleFormGroup.value | json }}
+    </pre
+      >
+      <div class="space-y-1.5 flex-1">
+        <label class="font-normal text-gray-600 text-xs required">Members </label>
+        <ul class="mb-0 h-96 overflow-auto mini-scroll-bar flex flex-col">
+          <li class="flex items-center space-x-3 hover:bg-gray-100 px-3 cursor-pointer py-1.5 rounded-md" *ngFor="let item of [0, 0, 0, 0, 0, 0, 0, 0, 0]">
+            <img profile-photo [letter]="'JA'" class="w-7 h-7 bg-gray-100 rounded-full" />
+            <span class="text-xs font-normal text-gray-700"> John Mark</span>
+          </li>
+        </ul>
+        <ng-container *ngIf="staffScheduleFormGroup.get('title').touched">
+          <p class="isms-error-message" *ngIf="staffScheduleFormGroup.get('title').hasError('required')">Title is required</p>
+        </ng-container>
+      </div>
+    </form>
+  </ng-container>
+
+  <ng-template #titleTemplate>
+    <div class="">
+      <!-- <span>staff Information</span> -->
+      <h3 class="text-gray-500 mb-0 text-sm font-medium">Timeframe Information</h3>
+    </div>
+  </ng-template>
+
+  <ng-template #footerTemplate>
+    <div class="flex space-x-2">
+      <button nz-button nzDanger (click)="toggle()" nzBlock>Close</button>
+      <button nz-button nzType="primary" [nzLoading]="loading" (click)="(1)" nzBlock [disabled]="true">Save Changes</button>
+      <button nz-button nzType="primary" [nzLoading]="loading" (click)="(1)" nzBlock [disabled]="true">Save Changes</button>
+    </div>
+  </ng-template>
+</nz-drawer>

@@ -1,0 +1,20 @@
+<nz-modal [nzVisible]="showModal" nzCentered nzPlacement="left" [nzTitle]="null" [nzFooter]="null" nzWidth="420px" [nzClosable]="false" (nzOnClose)="toggle()">
+  <ng-container *nzModalContent>
+    <div class="flex items-center justify-center">
+      <div class="absolute -top-6 text-lg self-center w-12 h-12 border-2 border-white rounded-full bg-isms-500 text-white grid place-items-center">
+        <span class="ph-fill ph-bell"></span>
+      </div>
+    </div>
+
+    <div class="py-2 flex flex-col justify-center">
+      <div class="flex mt-6 flex-col justify-center items-center">
+        <h3 class="text-gray-600 text-center text-lg font-medium">Enable Browser Notification</h3>
+        <p class="text-center text-gray-500 text-xs">We recommend you to enable browser notifications for a better experience. Stay updated with important information</p>
+      </div>
+      <div class="flex flex-col space-y-3 mt-4 justify-center items-center">
+        <button nz-button nzType="primary" (click)="accept(true)">Enable Notification</button>
+        <a (click)="accept(false)">Not now</a>
+      </div>
+    </div>
+  </ng-container>
+</nz-modal>

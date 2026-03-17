@@ -1,0 +1,111 @@
+<a class="w-14 relative h-14 text-lg group grid place-items-center cursor-pointer" (click)="toggle()">
+  <div class="rounded-full h-9 w-9 grid place-items-center group-hover:bg-isms-100 duration-500 transition-all">
+    <nz-badge [nzCount]="notifications.length">
+      <span class="group-hover:scale-125 text-xl text-gray-400 transition-transform ph-bell ph-duotone"></span>
+    </nz-badge>
+    <!-- <div class="absolute top-0 right-0 mr-3 mt-3 bg-error-500 p-0.5 text-xs text-white rounded-full text-center" *ngIf="notifications.length > 0">
+      {{ notifications.length }}
+    </div> -->
+  </div>
+</a>
+
+<nz-drawer
+  [nzVisible]="showDrawer"
+  nzPlacement="left"
+  [nzTitle]="notifications.length > 0 ? titleTemplate : null"
+  [nzClosable]="false"
+  [nzWidth]="'335px'"
+  (nzOnClose)="toggle()"
+  [nzBodyStyle]="{ padding: 0, maxWidth: '375px' }">
+  <ng-container *nzDrawerContent>
+    <ul class="mb-0" *ngIf="notifications.length > 0">
+      <ng-container *ngFor="let notification of notifications; let i = index">
+        <li class="flex border-b pr-4 pl-2 relative items-start border-b-gray-200 space-x-3 group cursor-pointer transition-all py-2" (click)="onSelectNotification(notification)">
+          <!-- [ngClass]="{ 
+            'hover:bg-gray-100 bg-gray-50 text-gray-400':  notification.status === 'unread',
+          }" -->
+          <!-- <img src="https://ui-avatars.com/api/?background={{ i < 3 ? 'b5e5cb' : 'EAECF0' }}&color=329f72&format=svg&length=2&name=JA" alt="" class="w-8 h-8 shadow bg-gray-300 rounded-full" /> -->
+
+          <div class="rounded-full h-9 w-9 grid place-items-center bg-isms-100 text-isms-500">
+            <span
+              class="text-xl ph-duotone"
+              [ngClass]="{
+                'ph-file-csv': notification.actionType === 'upload-bulk-student',
+                'ph-scroll': notification.actionType === 'staff-payslip',
+                'ph-receipt': notification.actionType === 'student-receipt',
+                'ph-folder-user': notification.actionType === 'lead-changes-in-pipeline',
+                'ph-exam':
+                  notification.actionType === 'assign-task-to-reviewer' ||
+                  notification.actionType === 'assign-task-to-participant' ||
+                  notification.actionType === 'participant-submit-task' ||
+                  notification.actionType === 'reviewer-reviewed-submitted-task',
+              }"></span>
+          </div>
+
+          <div class="flex flex-col flex-1 text-ellipsis overflow-hidden whitespace-nowrap w-fit">
+            <div class="flex justify-between items-center">
+              <!-- <span class="text-[10px] font-medium text-gray-500 flex-1 text-ellipsis whitespace-nowrap overflow-hidden w-full"> John Doe sent you a message </span> -->
+              <div class="space-x-2 flex items-center">
+                <span class="text-xs font-normal"> {{ notification.createdAt | timeago }}</span>
+                <!-- <span class="ph-fill ph-circle text-xs text-isms-500" *ngIf="i < 3"></span> -->
+              </div>
+            </div>
+
+            <div class="py-1 flex justify-between items-center">
+              <span class="text-xs font-medium text-gray-700 flex-1 text-ellipsis whitespace-nowrap overflow-hidden w-full">
+                {{ notification.title }}
+              </span>
+              <!-- <span class="text-xs font-medium text-gray-500"> Interview </span> -->
+            </div>
+
+            <span class="text-xs font-normal text-gray-500 flex-1 text-ellipsis whitespace-nowrap overflow-hidden">
+              {{ notification.message }}
+            </span>
+
+            <!-- <div class="flex flex-wrap">
+              <div class="px-1.5 py-0.5 flex items-center mr-2 mt-2 bg-[#e7f2fd] rounded-md space-x-2">
+                <span class="text-gray-600 cursor-pointer">avatar.png</span>
+                <span class="font-medium text-gray-600"> ({{ 123456 | formattedFileSize }}) </span>
+              </div>
+            </div> -->
+          </div>
+          <!-- <span class="ph ph-caret-right text-gray-400 group-hover:visible invisible"></span> -->
+          <!-- <div class="w-6 h-6 bg-error-100 rounded-full text-error-500 grid place-items-center" *ngIf="i===3"> -->
+          <!-- <span class="ph-duotone text-lg text-error-500 ph-info" *ngIf="i===3"></span> -->
+          <!-- </div> -->
+
+          <!-- <div class="w-6 h-6 bg-warning-100 text-warning-500 rounded-full grid place-items-center" *ngIf="i===1"> -->
+          <!-- <span class="ph-duotone text-lg ph-warning text-warning-500" *ngIf="i===1"></span> -->
+          <!-- </div> -->
+        </li>
+      </ng-container>
+    </ul>
+
+    <div class="flex flex-col h-screen items-center justify-center">
+      <ng-container *ngIf="notifications.length === 0">
+        <div class="flex h-96 items-center justify-center mb-10 flex-col space-y-4">
+          <img src="assets/images/illustrations/no-new-notifications.svg" class="w-full" alt="" draggable />
+          <div class="flex flex-col space-y-2 items-center justify-center">
+            <p class="text-gray-500">You don't have any notifications.</p>
+          </div>
+          <button nz-button routerLink="/i/settings/my-account/notification" (click)="toggle()">Notifications Settings</button>
+        </div>
+      </ng-container>
+    </div>
+  </ng-container>
+</nz-drawer>
+
+<ng-template #titleTemplate>
+  <div class="space-x-2 flex items-center justify-between">
+    <div class="space-x-2 flex items-center">
+      <span class="ph-duotone ph-bell text-xl"></span>
+      <span class="font-medium text-gray-600 text-base mb-0">
+        Notifications
+        <ng-container *ngIf="notifications.length > 0"> ({{ notifications.length }}) </ng-container>
+      </span>
+      <!-- <span class="px-2 text-xs rounded-lg border border-isms-500 text-isms-500">4 new</span> -->
+    </div>
+    <!-- <a class="text-xs">Mark All as Read</a> -->
+    <a class="text-xs" (click)="toggle()">Close</a>
+  </div>
+</ng-template>

@@ -1,0 +1,22 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  nzCentered
+  [nzWidth]="'600px'"
+  nzTitle="Manage Salary Package"
+  [nzFooter]="footerTemplate"
+  (nzOnOk)="(1)"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <form class="px-4 py-3 flex-col max-h-[800px] space-y-5 flex-1 flex overflow-auto mini-scroll-bar min-h-fit">
+      <isms-staff-salary-package-form [form-group]="salaryPackageFormGroup"></isms-staff-salary-package-form>
+    </form>
+  </ng-container>
+  <ng-template #footerTemplate>
+    <div class="space-x-2 flex justify-end items-center">
+      <button nz-button nzDanger (click)="toggle()">Close</button>
+      <button nz-button nzType="primary" (click)="onSubmit()" [nzLoading]="false" [disabled]="salaryPackageFormGroup.invalid">Submit</button>
+    </div>
+  </ng-template>
+</nz-modal>

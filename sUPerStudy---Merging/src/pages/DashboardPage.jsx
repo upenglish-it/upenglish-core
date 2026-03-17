@@ -1,0 +1,2080 @@
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { db } from '../config/firebase';
+import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
+import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { BookOpen, PenLine, FolderOpen, BarChart3, LogOut, Sparkles, Trophy, Flame, Settings, X, PlayCircle, Plus, BrainCircuit, Shield, Clock, Users, Home, ClipboardList, ChevronDown, FileCheck, Sun, Moon, AlertTriangle, Medal, Lock } from 'lucide-react';
+import Avatar from '../components/common/Avatar';
+import { getRecentLists } from '../services/recentService';
+import { getAllWordProgressMap, getReviewCounts } from '../services/spacedRepetition';
+import { getStudentGrammarProgressSummary, getUserOverallGrammarStats } from '../services/grammarSpacedRepetition';
+import { getSavedWords } from '../services/savedService';
+import { getAdminTopics, getAdminTopicWords, getUserLearningStats } from '../services/adminService';
+import { getAssignmentsForGroups, getStudentTopicProgressSummary, getSharedAndPublicTeacherTopics, getStudentsInGroup, getGroupById } from '../services/teacherService';
+import { getAndUpdateUserStreak } from '../services/userService';
+import { getCurrentMilestone, getNextMilestone } from '../config/streakMilestones';
+import wordData from '../data/wordData';
+import './DashboardPage.css';
+import BrandLogo from '../components/common/BrandLogo';
+import logo from '../assets/logo.png';
+import { getExamAssignmentsForStudent, getExamSubmissionsForStudent, getExamSubmissionsForAssignments, getExam, getExamAssignmentsForGroup } from '../services/examService';
+import { getStudentSentReports } from '../services/skillReportService';
+import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Tooltip } from 'recharts';
+import ProgressModal from './ProgressPage';
+import { getRedFlagsForStudent } from '../services/redFlagService';
+
+const LEVEL_OPTIONS = [
+    { value: 'A1', label: 'A1', desc: 'Beginner' },
+    { value: 'A2', label: 'A2', desc: 'Elementary' },
+    { value: 'B1', label: 'B1', desc: 'Intermediate' },
+    { value: 'B2', label: 'B2', desc: 'Upper-Inter' },
+    { value: 'C1', label: 'C1', desc: 'Advanced' },
+    { value: 'C2', label: 'C2', desc: 'Proficiency' },
+];
+
+// Helper: resolve effective dueDate for a student (checks per-student overrides first)
+function getEffectiveDueDate(a, uid) {
+    if (a.studentDeadlines && a.studentDeadlines[uid]) {
+        const sd = a.studentDeadlines[uid];
+        return sd.toDate ? sd.toDate() : new Date(sd);
+    }
+    return a.dueDate ? (a.dueDate.toDate ? a.dueDate.toDate() : new Date(a.dueDate)) : null;
+}
+
+export default function DashboardPage() {
+    const { user, signOut } = useAuth();
+    const navigate = useNavigate();
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [selectedLevel, setSelectedLevel] = useState(() => localStorage.getItem('userCefrLevel') || 'A2');
+    const [teacherTitle, setTeacherTitle] = useState('');
+    const [studentTitle, setStudentTitle] = useState('');
+    const [customTeacher, setCustomTeacher] = useState('');
+    const [customStudent, setCustomStudent] = useState('');
+    const [theme, setTheme] = useState(() => localStorage.getItem('appTheme') || 'light');
+    const [recentLists, setRecentLists] = useState([]);
+    const [isLoadingRecent, setIsLoadingRecent] = useState(false);
+    const [reviewStats, setReviewStats] = useState({ incompleteCount: 0, dueCount: 0, totalCount: 0 });
+    const [assignments, setAssignments] = useState([]);
+    const [assignmentsProgress, setAssignmentsProgress] = useState({});
+    const [activeAssignmentTab, setActiveAssignmentTab] = useState('pending');
+    const [showAllAssignments, setShowAllAssignments] = useState(false);
+    const [showOverdueAssignments, setShowOverdueAssignments] = useState(false);
+    const [showAllExams, setShowAllExams] = useState(false);
+    const [showOverdueExams, setShowOverdueExams] = useState(false);
+    const [activeMainTab, setActiveMainTab] = useState('learning');
+    const [grammarReviewStats, setGrammarReviewStats] = useState({ totalCount: 0 });
+    const [examAssignments, setExamAssignments] = useState([]);
+    const [examSubmissions, setExamSubmissions] = useState([]);
+    const [examDetails, setExamDetails] = useState({});
+    const [examsLoading, setExamsLoading] = useState(false);
+    const [showExamAlert, setShowExamAlert] = useState(false);
+    const [urgentExam, setUrgentExam] = useState(null);
+    const [newResult, setNewResult] = useState(null);
+    const [showAlertType, setShowAlertType] = useState(null); // 'urgent' or 'result'
+
+    // Migration tool
+    const [migrationStatus, setMigrationStatus] = useState('');
+    const [migrationResults, setMigrationResults] = useState(null);
+    const [isMigrating, setIsMigrating] = useState(false);
+    const [migrationForceMode, setMigrationForceMode] = useState(false);
+
+    // Skill Reports
+    const [skillReports, setSkillReports] = useState([]);
+    const [viewingSkillReport, setViewingSkillReport] = useState(null);
+    const [selectedGroupFilter, setSelectedGroupFilter] = useState('all'); // 'all' or groupId
+
+    // Overview Stats
+    const [wordsLearned, setWordsLearned] = useState(0);
+    const [currentStreak, setCurrentStreak] = useState(0);
+    const [celebrationMilestone, setCelebrationMilestone] = useState(null);
+
+    // Ranking & Progress Modal
+    const [classRanks, setClassRanks] = useState([]); // [{ groupId, groupName, rank, total }]
+    const [isProgressOpen, setIsProgressOpen] = useState(false);
+
+    // Red Flags (student side)
+    const [studentRedFlags, setStudentRedFlags] = useState([]); // all flags for this student
+
+    // --- Drag-to-scroll for recent slider ---
+    const sliderRef = useRef(null);
+    const [isDraggingSlider, setIsDraggingSlider] = useState(false);
+    const dragStateRef = useRef({ startX: 0, scrollLeft: 0, lastX: 0, lastTime: 0, velocity: 0, hasMoved: false });
+    const momentumRef = useRef(null);
+
+    const handleSliderMouseDown = useCallback((e) => {
+        const slider = sliderRef.current;
+        if (!slider) return;
+        // Only respond to left mouse button
+        if (e.button !== 0) return;
+
+        const ds = dragStateRef.current;
+        ds.startX = e.pageX;
+        ds.scrollLeft = slider.scrollLeft;
+        ds.lastX = e.pageX;
+        ds.lastTime = Date.now();
+        ds.velocity = 0;
+        ds.hasMoved = false;
+        slider.style.scrollBehavior = 'auto';
+
+        // Cancel any ongoing momentum
+        if (momentumRef.current) {
+            cancelAnimationFrame(momentumRef.current);
+            momentumRef.current = null;
+        }
+
+        const handleMouseMove = (e) => {
+            e.preventDefault();
+            const ds = dragStateRef.current;
+            const dx = e.pageX - ds.startX;
+            slider.scrollLeft = ds.scrollLeft - dx * 1.5;
+
+            // Track velocity for momentum
+            const now = Date.now();
+            const dt = now - ds.lastTime;
+            if (dt > 0) {
+                ds.velocity = (e.pageX - ds.lastX) / dt;
+            }
+            ds.lastX = e.pageX;
+            ds.lastTime = now;
+
+            if (!ds.hasMoved && Math.abs(dx) > 5) {
+                ds.hasMoved = true;
+                setIsDraggingSlider(true);
+            }
+        };
+
+        const handleMouseUp = () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+            slider.style.scrollBehavior = '';
+
+            const ds = dragStateRef.current;
+
+            // Apply momentum / inertia
+            let vel = ds.velocity * 1.5;
+            const decel = 0.95;
+
+            const applyMomentum = () => {
+                if (Math.abs(vel) < 0.05) {
+                    momentumRef.current = null;
+                    setIsDraggingSlider(false);
+                    return;
+                }
+                slider.scrollLeft -= vel * 16;
+                vel *= decel;
+                momentumRef.current = requestAnimationFrame(applyMomentum);
+            };
+
+            if (Math.abs(vel) > 0.1) {
+                momentumRef.current = requestAnimationFrame(applyMomentum);
+            } else {
+                setIsDraggingSlider(false);
+            }
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+    }, []);
+
+    // Build groupId → groupName map (from AuthContext, properly aligned even with hidden groups)
+    const groupIdToName = useMemo(() => {
+        return user?.groupIdToNameMap || {};
+    }, [user?.groupIdToNameMap]);
+
+
+    // Apply theme to document
+    useEffect(() => {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('appTheme', theme);
+    }, [theme]);
+
+    // Load level from Firestore on mount
+    useEffect(() => {
+        if (!user?.uid) return;
+        const prefsRef = doc(db, `users/${user.uid}/settings`, 'preferences');
+        getDoc(prefsRef).then(snap => {
+            if (snap.exists() && snap.data().cefrLevel) {
+                const lvl = snap.data().cefrLevel;
+                setSelectedLevel(lvl);
+                localStorage.setItem('userCefrLevel', lvl);
+            }
+        }).catch(err => console.warn('Could not load settings:', err));
+
+        // Load honorific settings from primary user record
+        const userRef = doc(db, `users/${user.uid}`);
+        getDoc(userRef).then(snap => {
+            if (snap.exists()) {
+                const data = snap.data();
+                if (data.teacherTitle) setTeacherTitle(data.teacherTitle);
+                if (data.studentTitle) setStudentTitle(data.studentTitle);
+            }
+        }).catch(err => console.warn('Could not load user settings:', err));
+    }, [user?.uid]);
+
+
+    useEffect(() => {
+        if (!user?.uid) return;
+        getRecentLists(user.uid).then(async (lists) => {
+            // Filter out lists that no longer exist
+            const validated = await Promise.all(
+                lists.map(async (list) => {
+                    // Grammar exercises are always valid (stored in Firestore)
+                    if (list.isGrammar) {
+                        try {
+                            const snap = await getDoc(doc(db, 'grammar_exercises', list.id));
+                            return snap.exists() ? { ...list, ...snap.data() } : null;
+                        } catch {
+                            return null;
+                        }
+                    }
+                    // Teacher-created topics are always valid (stored in Firestore)
+                    if (list.isTeacherTopic) {
+                        try {
+                            const snap = await getDoc(doc(db, 'teacher_topics', list.id));
+                            return snap.exists() ? { ...list, ...snap.data() } : null;
+                        } catch {
+                            return null;
+                        }
+                    }
+
+                    if (list.type === 'ai' || list.type === 'custom') {
+                        // Check Firestore for AI/custom lists
+                        try {
+                            const snap = await getDoc(doc(db, `users/${user.uid}/custom_lists`, list.id));
+                            return snap.exists() ? list : null;
+                        } catch {
+                            return null;
+                        }
+                    }
+                    if (list.type === 'topic') {
+                        // Only valid if the ID matches a real built-in topic
+                        try {
+                            const snap = await getDoc(doc(db, 'topics', list.id));
+                            return snap.exists() ? { ...list, ...snap.data() } : null;
+                        } catch {
+                            return null;
+                        }
+                    }
+                    return list; // 'saved' always exists
+                })
+            );
+            const filtered = validated.filter(Boolean).slice(0, 8);
+            setRecentLists(filtered);
+        }).catch(err => console.warn(err));
+
+        getReviewCounts(user.uid).then(setReviewStats).catch(console.warn);
+
+        // Fetch grammar review count
+        import('../services/grammarSpacedRepetition').then(module => {
+            module.getDueGrammarReviewIds(user.uid).then(ids => {
+                setGrammarReviewStats({ totalCount: ids.length });
+            }).catch(console.warn);
+        });
+
+        import('../services/grammarService').then(grammarModule => {
+            if (user.groupIds && user.groupIds.length > 0) {
+                const topicAccess = user?.mergedTopicAccess || user?.topicAccess || [];
+
+                Promise.all([
+                    getAssignmentsForGroups(user.groupIds, user.uid),
+                    getAdminTopics(),
+                    getSharedAndPublicTeacherTopics(topicAccess),
+                    grammarModule.getGrammarExercises() // Fetch grammar exercises as well
+                ])
+                    .then(async ([asgns, adminTopics, teacherTopics, grammarExercises]) => {
+                        // Create a map of lively fetched topics
+                        const allItems = [...adminTopics, ...teacherTopics, ...grammarExercises];
+                        const itemMap = {};
+                        allItems.forEach(t => {
+                            itemMap[t.id] = {
+                                name: t.name,
+                                icon: t.icon,
+                                color: t.color
+                            };
+                        });
+
+                        // Map updated names and icons into assignments and filter orphans
+                        const updatedAsgns = asgns.map(a => ({
+                            ...a,
+                            topicName: itemMap[a.topicId]?.name || a.topicName,
+                            topicIcon: itemMap[a.topicId]?.icon,
+                            topicColor: itemMap[a.topicId]?.color
+                        })).filter(a => itemMap[a.topicId] !== undefined);
+
+                        setAssignments(updatedAsgns);
+
+                        const topicIds = updatedAsgns.map(a => a.topicId);
+                        if (topicIds.length > 0) {
+                            try {
+                                const vocabTopicIds = updatedAsgns.filter(a => !a.isGrammar).map(a => a.topicId);
+                                const grammarTopicIds = updatedAsgns.filter(a => a.isGrammar).map(a => a.topicId);
+
+                                const [vocabProgress, grammarProgress] = await Promise.all([
+                                    vocabTopicIds.length > 0 ? getStudentTopicProgressSummary(user.uid, vocabTopicIds) : Promise.resolve({}),
+                                    grammarTopicIds.length > 0 ? getStudentGrammarProgressSummary(user.uid, grammarTopicIds) : Promise.resolve({})
+                                ]);
+
+                                setAssignmentsProgress({ ...vocabProgress, ...grammarProgress });
+                            } catch (err) {
+                                console.warn('Could not load assignment progress', err);
+                            }
+                        }
+                    })
+                    .catch(console.warn);
+            }
+
+            // Fetch Overview Stats
+            getAndUpdateUserStreak(user.uid)
+                .then(streak => {
+                    setCurrentStreak(streak);
+                    localStorage.setItem('userStreak', String(streak));
+                    // Force light theme if student doesn't meet streak requirement
+                    const isStudent = !(user?.role === 'admin' || user?.role === 'teacher' || user?.role === 'staff');
+                    if (isStudent && streak < 5) {
+                        setTheme('light');
+                    } else if (isStudent && streak < 15 && localStorage.getItem('appTheme') === 'silver') {
+                        setTheme('light');
+                    } else if (isStudent && streak < 25 && localStorage.getItem('appTheme') === 'gold') {
+                        setTheme('light');
+                    } else if (isStudent && streak < 35 && localStorage.getItem('appTheme') === 'diamond') {
+                        setTheme('light');
+                    } else if (isStudent && streak < 50 && localStorage.getItem('appTheme') === 'ruby') {
+                        setTheme('light');
+                    }
+                    // Check for new milestone celebration
+                    const currentMs = getCurrentMilestone(streak);
+                    if (currentMs) {
+                        const lastShown = parseInt(localStorage.getItem('lastMilestoneShown') || '0', 10);
+                        if (currentMs.threshold > lastShown) {
+                            setCelebrationMilestone(currentMs);
+                            localStorage.setItem('lastMilestoneShown', String(currentMs.threshold));
+                        }
+                    }
+                })
+                .catch(console.warn);
+
+            getAllWordProgressMap(user.uid).then(progressMap => {
+                // Count words where stepsCompleted is 6
+                let learnedCount = 0;
+                for (const key in progressMap) {
+                    if (progressMap[key].stepsCompleted && progressMap[key].stepsCompleted >= 6) {
+                        learnedCount++;
+                    }
+                }
+                setWordsLearned(learnedCount);
+            }).catch(console.warn);
+        });
+
+        // Fetch Exam Data for Badge & Popup
+        const fetchExamsSummary = async () => {
+            if (!user?.uid) return;
+            setExamsLoading(true);
+            try {
+                const [assigns, subs] = await Promise.all([
+                    getExamAssignmentsForStudent(user.uid, user.groupIds || []),
+                    getExamSubmissionsForStudent(user.uid)
+                ]);
+                setExamAssignments(assigns);
+                setExamSubmissions(subs);
+
+                const subsMap = {};
+                subs.forEach(s => {
+                    const existing = subsMap[s.assignmentId];
+                    if (!existing) {
+                        subsMap[s.assignmentId] = s;
+                    } else {
+                        const isExistingDone = existing.status === 'submitted' || existing.status === 'grading' || existing.status === 'graded';
+                        const isNewDone = s.status === 'submitted' || s.status === 'grading' || s.status === 'graded';
+                        if (!isExistingDone && isNewDone) {
+                            subsMap[s.assignmentId] = s;
+                        } else if ((isExistingDone && isNewDone) || (!isExistingDone && !isNewDone)) {
+                            // Keep newest
+                            const existingTime = existing.submittedAt || existing.startedAt || existing.createdAt;
+                            const newTime = s.submittedAt || s.startedAt || s.createdAt;
+                            if (newTime > existingTime) subsMap[s.assignmentId] = s;
+                        }
+                    }
+                });
+
+                const now = new Date();
+                const pending = assigns.filter(a => {
+                    const sub = subsMap[a.id];
+                    const hasSubmitted = sub && (sub.status === 'submitted' || sub.status === 'graded' || sub.status === 'grading');
+                    const due = getEffectiveDueDate(a, user.uid);
+                    const isOverdue = due && due < now;
+                    return !hasSubmitted && !isOverdue;
+                });
+
+                // Check for alert
+                const hasAlerted = sessionStorage.getItem(`exam_alert_shown_${user.uid}`);
+                if (!hasAlerted) {
+                    // Scenario 1: Urgent unfinished exam
+                    if (pending.length > 0) {
+                        const firstExam = pending[0];
+                        const details = await getExam(firstExam.examId);
+                        setUrgentExam({ ...firstExam, ...details });
+                        setShowAlertType('urgent');
+                        setShowExamAlert(true);
+                        sessionStorage.setItem(`exam_alert_shown_${user.uid}`, 'true');
+                    }
+                    // Scenario 2: New graded results
+                    else {
+                        const unviewedResults = subs.filter(s => s.status === 'graded' && s.resultsReleased && !s.viewedByStudent);
+                        if (unviewedResults.length > 0) {
+                            const firstSub = unviewedResults[0];
+                            const assignment = assigns.find(a => a.id === firstSub.assignmentId);
+                            const details = await getExam(firstSub.examId);
+                            setNewResult({ ...firstSub, examName: details?.name, examIcon: details?.icon, examColor: details?.color });
+                            setShowAlertType('result');
+                            setShowExamAlert(true);
+                            sessionStorage.setItem(`exam_alert_shown_${user.uid}`, 'true');
+                        }
+                    }
+                }
+
+                // Fetch all details for the list (lazy load others later? No, let's keep it simple for now)
+                const uniqueExamIds = [...new Set(assigns.map(a => a.examId))];
+                const details = {};
+                await Promise.all(uniqueExamIds.map(async (eid) => {
+                    try {
+                        details[eid] = await getExam(eid);
+                    } catch (e) { console.error(e); }
+                }));
+                setExamDetails(details);
+            } catch (err) {
+                console.warn('Could not load exams summary:', err);
+            }
+            setExamsLoading(false);
+        };
+        fetchExamsSummary();
+
+        // Fetch skill reports
+        getStudentSentReports(user.uid).then(setSkillReports).catch(console.warn);
+
+        // Fetch red flags for this student
+        getRedFlagsForStudent(user.uid).then(setStudentRedFlags).catch(console.warn);
+    }, [user?.uid, user?.groupIds]);
+
+    // Compute class ranking per group (cached for 6 hours to minimize Firestore reads)
+    useEffect(() => {
+        const rankGroupIds = user?.visibleGroupIds || user?.groupIds || [];
+        if (!user?.uid || rankGroupIds.length === 0) return;
+        if (user?.role === 'admin' || user?.role === 'teacher' || user?.role === 'staff') return;
+
+        const RANK_CACHE_KEY = `class_ranks_${user.uid}`;
+        const RANK_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
+
+        // Try to load from cache first
+        try {
+            const cached = JSON.parse(localStorage.getItem(RANK_CACHE_KEY));
+            if (cached && cached.groupIds?.join(',') === rankGroupIds.join(',') && Date.now() - cached.ts < RANK_CACHE_TTL) {
+                setClassRanks(cached.ranks);
+                return;
+            }
+        } catch { /* cache miss, recompute */ }
+
+        computeAllRanks();
+
+        async function computeRankForGroup(groupId) {
+            try {
+                const students = await getStudentsInGroup(groupId);
+                if (!students || students.length === 0) return null;
+
+                const groupAssignments = await getAssignmentsForGroups([groupId], user.uid).catch(() => []);
+                const vocabTopicIds = groupAssignments.filter(a => !a.isGrammar).map(a => a.topicId);
+
+                const examAssigns = await getExamAssignmentsForGroup(groupId).catch(() => []);
+                let examSubs = [];
+                if (examAssigns.length > 0) {
+                    examSubs = await getExamSubmissionsForAssignments(examAssigns.map(a => a.id)).catch(() => []);
+                }
+
+                const scores = await Promise.all(students.map(async (student) => {
+                    let total = 0;
+                    let count = 0;
+
+                    if (vocabTopicIds.length > 0) {
+                        try {
+                            const summary = await getStudentTopicProgressSummary(student.uid, vocabTopicIds);
+                            let tc = 0, tw = 0;
+                            Object.values(summary).forEach(p => { tc += p.totalCorrect || 0; tw += p.totalWrong || 0; });
+                            if (tc + tw > 0) { total += (tc / (tc + tw)) * 100; count++; }
+                        } catch { /* ignore */ }
+                    }
+
+                    try {
+                        const gStats = await getUserOverallGrammarStats(student.uid);
+                        const gAtt = (gStats.totalCorrect || 0) + (gStats.totalWrong || 0);
+                        if (gAtt > 0) { total += ((gStats.totalCorrect || 0) / gAtt) * 100; count++; }
+                    } catch { /* ignore */ }
+
+                    const studentSubs = examSubs.filter(s => s.studentId === student.uid && s.status === 'graded');
+                    let ets = 0, emts = 0;
+                    studentSubs.forEach(s => { ets += s.totalScore || 0; emts += s.maxTotalScore || 0; });
+                    if (emts > 0) { total += (ets / emts) * 100; count++; }
+
+                    return { uid: student.uid, score: count > 0 ? total / count : 0 };
+                }));
+
+                scores.sort((a, b) => b.score - a.score);
+                const myIndex = scores.findIndex(s => s.uid === user.uid);
+                if (myIndex >= 0) {
+                    return { groupId, groupName: groupIdToName[groupId] || groupId, rank: myIndex + 1, total: scores.length };
+                }
+            } catch (err) {
+                console.warn(`Could not compute rank for group ${groupId}:`, err);
+            }
+            return null;
+        }
+
+        async function computeAllRanks() {
+            const results = await Promise.all(rankGroupIds.map(gid => computeRankForGroup(gid)));
+            const ranks = results.filter(Boolean);
+            setClassRanks(ranks);
+            try {
+                localStorage.setItem(RANK_CACHE_KEY, JSON.stringify({ ranks, groupIds: rankGroupIds, ts: Date.now() }));
+            } catch { /* localStorage full, ignore */ }
+        }
+    }, [user?.uid, user?.visibleGroupIds, user?.groupIds, groupIdToName]);
+
+    const handleLevelSelect = async (level) => {
+        setSelectedLevel(level);
+        localStorage.setItem('userCefrLevel', level);
+        // Persist to Firestore
+        if (user?.uid) {
+            try {
+                const prefsRef = doc(db, `users/${user.uid}/settings`, 'preferences');
+                await setDoc(prefsRef, { cefrLevel: level }, { merge: true });
+            } catch (err) {
+                console.warn('Could not save level to Firestore:', err);
+            }
+        }
+    };
+
+    const saveHonorific = async (field, value) => {
+        if (field === 'teacherTitle') setTeacherTitle(value);
+        else setStudentTitle(value);
+        if (user?.uid) {
+            try {
+                const userRef = doc(db, `users/${user.uid}`);
+                await setDoc(userRef, { [field]: value }, { merge: true });
+            } catch (err) {
+                console.warn('Could not save honorific to Firestore:', err);
+            }
+        }
+    };
+
+    const actions = [
+        { id: 'topics', icon: BookOpen, title: 'Bài học từ vựng', description: 'Học từ vựng theo chủ đề', color: 'var(--color-primary)', path: '/topics' },
+        { id: 'grammar', icon: PenLine, title: 'Bài học kỹ năng', description: 'Luyện tập các bài kỹ năng', color: '#d97706', path: '/grammar-topics' },
+        { id: 'saved', icon: FolderOpen, title: 'Danh sách cá nhân', description: 'Tiếp tục học danh sách cá nhân', color: 'var(--color-warning)', path: '/saved-lists' },
+    ];
+
+    const createActions = [
+        { id: 'ai-gen', icon: Sparkles, title: 'Tạo danh sách từ', description: 'Dùng AI tạo bộ từ theo chủ đề', color: 'var(--color-primary-light)', path: '/generate-list', isAI: true },
+        { id: 'custom', icon: PenLine, title: 'Tự tạo bài học', description: 'Tự nhập từ muốn học', color: 'var(--color-secondary)', path: '/custom-input' },
+    ];
+
+    const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
+
+    const handleContinueLearning = async (listInfo) => {
+        if (!user?.uid || isLoadingRecent) return;
+
+        if (listInfo.forceTopicSelect) {
+            navigate('/topics', { state: { folderId: listInfo.id } });
+            return;
+        }
+
+        if (listInfo.forceGrammarSelect) {
+            navigate('/grammar-topics', { state: { folderId: listInfo.id } });
+            return;
+        }
+
+        if (listInfo.isGrammar) {
+            navigate('/grammar-learn', {
+                state: {
+                    exerciseId: listInfo.id,
+                    exerciseName: listInfo.name,
+                    icon: listInfo.icon || '✍️',
+                    color: listInfo.color || '#d97706'
+                }
+            });
+            return;
+        }
+
+        try {
+            setIsLoadingRecent(true);
+            let words = [];
+            if (listInfo.type === 'topic') {
+                if (listInfo.isTeacherTopic) {
+                    // Teacher-created topic: fetch words from Firestore
+                    const wordsSnap = await getDocs(collection(db, `teacher_topics/${listInfo.id}/words`));
+                    wordsSnap.forEach(docSnap => {
+                        words.push(docSnap.data());
+                    });
+                } else {
+                    words = await getAdminTopicWords(listInfo.id);
+                }
+            } else if (listInfo.type === 'saved') {
+                words = await getSavedWords(user.uid);
+            } else {
+                const snap = await getDoc(doc(db, `users/${user.uid}/custom_lists`, listInfo.id));
+                if (snap.exists()) {
+                    words = snap.data().words || [];
+                }
+            }
+
+            if (!words || words.length === 0) {
+                alert('Danh sách này hiện không có từ vựng nào.');
+                setIsLoadingRecent(false);
+                return;
+            }
+
+            const pMap = await getAllWordProgressMap(user.uid);
+            const wordsToLearn = words.map(w => ({
+                ...w,
+                stepsCompleted: pMap[w.word]?.stepsCompleted ?? 0,
+                stepMastery: pMap[w.word]?.stepMastery ?? null
+            }));
+
+            navigate('/learn', {
+                state: {
+                    words: wordsToLearn,
+                    topicId: listInfo.id,
+                    topicName: listInfo.name,
+                    listType: listInfo.type,
+                    icon: listInfo.icon,
+                    color: listInfo.color,
+                    isTeacherTopic: listInfo.isTeacherTopic || false
+                }
+            });
+        } catch (err) {
+            console.error('Failed to load recent list', err);
+            setIsLoadingRecent(false);
+        }
+    };
+
+    // --- Process Pending Deep Link ---
+    useEffect(() => {
+        if (!user?.uid) {
+            return;
+        }
+
+        if (isLoadingRecent) {
+            return;
+        }
+
+        const processDeepLink = async () => {
+            const pendingLinkStr = sessionStorage.getItem('pendingDeepLink');
+            if (pendingLinkStr) {
+                sessionStorage.removeItem('pendingDeepLink'); // Immediately remove to prevent loop
+                try {
+                    const { shareId, shareType } = JSON.parse(pendingLinkStr);
+
+                    let listInfo = null;
+
+                    if (shareType === 'teacher_topic') {
+                        const snap = await getDoc(doc(db, 'teacher_topics', shareId));
+                        if (snap.exists()) {
+                            const data = snap.data();
+                            listInfo = { id: shareId, type: 'topic', name: data.name, isTeacherTopic: true, isGrammar: false, icon: data.icon, color: data.color };
+                        }
+                    } else if (shareType === 'admin_topic') {
+                        const snap = await getDoc(doc(db, 'topics', shareId));
+                        if (snap.exists()) {
+                            const data = snap.data();
+                            listInfo = { id: shareId, type: 'topic', name: data.name, isTeacherTopic: false, isGrammar: false, icon: data.icon, color: data.color };
+                        }
+                    } else if (shareType === 'teacher_grammar') {
+                        const snap = await getDoc(doc(db, 'teacher_grammar', shareId));
+                        if (snap.exists()) {
+                            const data = snap.data();
+                            listInfo = { id: shareId, type: 'topic', name: data.name, isTeacherTopic: true, isGrammar: true, icon: data.icon, color: data.color };
+                        }
+                    } else if (shareType === 'admin_grammar') {
+                        const snap = await getDoc(doc(db, 'grammar_exercises', shareId));
+                        if (snap.exists()) {
+                            const data = snap.data();
+                            listInfo = { id: shareId, type: 'topic', name: data.name, isTeacherTopic: false, isGrammar: true, icon: data.icon, color: data.color };
+                        }
+                    } else if (shareType === 'admin_folder') {
+                        const snap = await getDoc(doc(db, 'folders', shareId));
+                        if (snap.exists()) {
+                            const data = snap.data();
+                            listInfo = { id: shareId, type: 'topic', name: data.name, isTeacherTopic: false, isGrammar: false, icon: '📁', color: '#6366f1', forceTopicSelect: true };
+                        }
+                    } else if (shareType === 'admin_grammar_folder' || shareType === 'grammar_folder') {
+                        const snap = await getDoc(doc(db, 'grammar_folders', shareId));
+                        if (snap.exists()) {
+                            const data = snap.data();
+                            listInfo = { id: shareId, type: 'topic', name: data.name, isTeacherTopic: false, isGrammar: true, icon: '📁', color: '#f59e0b', forceGrammarSelect: true };
+                        }
+                    }
+
+                    if (listInfo) {
+                        handleContinueLearning(listInfo);
+                    }
+                } catch (e) {
+                    console.error("DashboardPage: Error processing pending deep link:", e);
+                }
+            }
+        };
+
+        processDeepLink();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user?.uid, isLoadingRecent]);
+
+    return (
+        <div className="dashboard-page">
+            <header className="dashboard-header">
+                <div className="container flex-between" style={{ position: 'relative' }}>
+                    {/* Left Side: Settings */}
+                    <div style={{ zIndex: 10 }}>
+                        <div className="app-header-actions-group">
+                            <button className="app-header-action-btn" onClick={() => setIsSettingsOpen(true)} title="Cài đặt">
+                                <Settings size={18} />
+                                <span className="hidden-mobile">Cài đặt</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Center: Logo */}
+                    <div className="dashboard-brand" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
+                        <BrandLogo size="1.2rem" />
+                    </div>
+
+                    {/* Right Side: Panel Navigation & Logout */}
+                    <div style={{ display: 'flex', gap: '8px', zIndex: 10 }}>
+                        <div className="app-header-actions-group">
+                            {(user?.role === 'admin' || user?.role === 'teacher' || user?.role === 'staff') && (
+                                <>
+                                    {(user?.role === 'admin' || user?.role === 'staff') && (
+                                        <button className="app-header-action-btn" onClick={() => { sessionStorage.removeItem('viewMode'); navigate('/admin'); }} title="Chuyển tới Admin Panel">
+                                            <Shield size={16} />
+                                            <span className="hidden-mobile">Quản trị</span>
+                                        </button>
+                                    )}
+                                    {user?.role === 'teacher' && (
+                                        <button className="app-header-action-btn" onClick={() => { sessionStorage.removeItem('viewMode'); navigate('/teacher/groups'); }} title="Chuyển tới Teacher Panel">
+                                            <Users size={16} />
+                                            <span className="hidden-mobile">Giáo viên</span>
+                                        </button>
+                                    )}
+                                    <div className="app-header-divider"></div>
+                                </>
+                            )}
+                            <button className="app-header-action-btn text-danger" onClick={signOut} title="Đăng xuất">
+                                <LogOut size={18} />
+                                <span className="hidden-mobile">Đăng xuất</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            {/* Settings Bottom Sheet Modal */}
+            {isSettingsOpen && (
+                <div className="settings-modal-backdrop" onClick={() => setIsSettingsOpen(false)}>
+                    <div className="settings-modal animate-slide-up" onClick={(e) => e.stopPropagation()}>
+                        <button className="settings-modal-close" onClick={() => setIsSettingsOpen(false)}>
+                            <X size={20} />
+                        </button>
+                        <div className="settings-modal-header">
+                            <h3>⚙️ Thiết lập</h3>
+                        </div>
+                        <div className="settings-section">
+                            <label className="settings-section-label">Trình độ hiện tại (CEFR)</label>
+                            <p className="settings-section-desc">AI sẽ tạo ví dụ phù hợp với level bạn đang học</p>
+                            <div className="settings-level-grid">
+                                {LEVEL_OPTIONS.map(opt => (
+                                    <button
+                                        key={opt.value}
+                                        className={`settings-level-pill ${selectedLevel === opt.value ? 'settings-level-pill--active' : ''}`}
+                                        onClick={() => handleLevelSelect(opt.value)}
+                                    >
+                                        <span className="settings-level-pill-value">{opt.label}</span>
+                                        <span className="settings-level-pill-desc">{opt.desc}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {(user?.role === 'admin' || user?.role === 'teacher') && (
+                            <div className="settings-section" style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--border-color)' }}>
+                                <label className="settings-section-label">Thiết lập xưng hô (Dành cho AI)</label>
+                                <p className="settings-section-desc">Chọn cách xưng hô để AI chấm bài và nhận xét đúng phong cách của bạn</p>
+                                <div style={{ marginBottom: '16px' }}>
+                                    <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px', display: 'block' }}>Tự xưng {teacherTitle && <span style={{ color: '#4f46e5' }}>({teacherTitle})</span>}</label>
+                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                        {['thầy', 'cô', 'anh', 'chị'].map(t => (
+                                            <button key={t} className={`settings-level-pill ${teacherTitle === t ? 'settings-level-pill--active' : ''}`} onClick={() => { saveHonorific('teacherTitle', t); setCustomTeacher(''); }} style={{ flex: 1, padding: '12px', fontSize: '0.95rem', fontWeight: 600 }}>
+                                                {t}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px', alignItems: 'center' }}>
+                                        <input type="text" placeholder="Hoặc nhập khác..." value={customTeacher} onChange={e => setCustomTeacher(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && customTeacher.trim()) saveHonorific('teacherTitle', customTeacher.trim()); }} style={{ flex: 1, padding: '10px 14px', border: '1.5px solid var(--border-color)', borderRadius: '12px', fontSize: '0.9rem', outline: 'none', background: 'var(--bg-primary)', color: 'var(--text-primary)' }} />
+                                        {customTeacher.trim() && <button className="settings-level-pill settings-level-pill--active" style={{ padding: '10px 16px' }} onClick={() => saveHonorific('teacherTitle', customTeacher.trim())}>Lưu</button>}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px', display: 'block' }}>Gọi học sinh {studentTitle && <span style={{ color: '#4f46e5' }}>({studentTitle})</span>}</label>
+                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                        {['em', 'con', 'bạn'].map(t => (
+                                            <button key={t} className={`settings-level-pill ${studentTitle === t ? 'settings-level-pill--active' : ''}`} onClick={() => { saveHonorific('studentTitle', t); setCustomStudent(''); }} style={{ flex: 1, padding: '12px', fontSize: '0.95rem', fontWeight: 600 }}>
+                                                {t}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px', alignItems: 'center' }}>
+                                        <input type="text" placeholder="Hoặc nhập khác..." value={customStudent} onChange={e => setCustomStudent(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && customStudent.trim()) saveHonorific('studentTitle', customStudent.trim()); }} style={{ flex: 1, padding: '10px 14px', border: '1.5px solid var(--border-color)', borderRadius: '12px', fontSize: '0.9rem', outline: 'none', background: 'var(--bg-primary)', color: 'var(--text-primary)' }} />
+                                        {customStudent.trim() && <button className="settings-level-pill settings-level-pill--active" style={{ padding: '10px 16px' }} onClick={() => saveHonorific('studentTitle', customStudent.trim())}>Lưu</button>}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {(() => {
+                            const isStudent = !(user?.role === 'admin' || user?.role === 'teacher' || user?.role === 'staff');
+                            const darkUnlocked = !isStudent || currentStreak >= 5;
+                            const silverUnlocked = !isStudent || currentStreak >= 15;
+                            const goldUnlocked = !isStudent || currentStreak >= 25;
+                            const diamondUnlocked = !isStudent || currentStreak >= 35;
+                            const rubyUnlocked = !isStudent || currentStreak >= 50;
+                            const nextUnlock = !darkUnlocked
+                                ? `Đạt streak 5 ngày để mở khoá giao diện tối (hiện tại: ${currentStreak} ngày)`
+                                : !silverUnlocked
+                                    ? `Đạt streak 15 ngày để mở khoá Nút Bạc (hiện tại: ${currentStreak} ngày)`
+                                    : !goldUnlocked
+                                        ? `Đạt streak 25 ngày để mở khoá Nút Vàng (hiện tại: ${currentStreak} ngày)`
+                                        : !diamondUnlocked
+                                            ? `Đạt streak 35 ngày để mở khoá Kim Cương (hiện tại: ${currentStreak} ngày)`
+                                            : !rubyUnlocked
+                                                ? `Đạt streak 50 ngày để mở khoá Nút Ruby (hiện tại: ${currentStreak} ngày)`
+                                                : 'Chọn giao diện yêu thích';
+                            return (
+                                <div className="settings-section" style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--border-color)' }}>
+                                    <label className="settings-section-label">Giao diện</label>
+                                    <p className="settings-section-desc">{nextUnlock}</p>
+                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                        {/* Ruby Button */}
+                                        {rubyUnlocked ? (
+                                            <button
+                                                className={`settings-level-pill ${theme === 'ruby' ? 'settings-level-pill--active' : ''}`}
+                                                onClick={() => setTheme('ruby')}
+                                                style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px', minWidth: '90px' }}
+                                            >
+                                                <span style={{ fontSize: '1.1rem' }}>🔴</span>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Nút Ruby</span>
+                                            </button>
+                                        ) : (
+                                            <button
+                                                className="settings-level-pill"
+                                                disabled
+                                                style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px', opacity: 0.45, cursor: 'not-allowed', minWidth: '90px' }}
+                                            >
+                                                <Lock size={14} />
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Nút Ruby</span>
+                                            </button>
+                                        )}
+                                        {/* Diamond Button */}
+                                        {diamondUnlocked ? (
+                                            <button
+                                                className={`settings-level-pill ${theme === 'diamond' ? 'settings-level-pill--active' : ''}`}
+                                                onClick={() => setTheme('diamond')}
+                                                style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px', minWidth: '90px' }}
+                                            >
+                                                <span style={{ fontSize: '1.1rem' }}>💎</span>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Kim Cương</span>
+                                            </button>
+                                        ) : (
+                                            <button
+                                                className="settings-level-pill"
+                                                disabled
+                                                style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px', opacity: 0.45, cursor: 'not-allowed', minWidth: '90px' }}
+                                            >
+                                                <Lock size={14} />
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Kim Cương</span>
+                                            </button>
+                                        )}
+                                        {/* Gold Button */}
+                                        {goldUnlocked ? (
+                                            <button
+                                                className={`settings-level-pill ${theme === 'gold' ? 'settings-level-pill--active' : ''}`}
+                                                onClick={() => setTheme('gold')}
+                                                style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px', minWidth: '90px' }}
+                                            >
+                                                <span style={{ fontSize: '1.1rem' }}>🥇</span>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Nút Vàng</span>
+                                            </button>
+                                        ) : (
+                                            <button
+                                                className="settings-level-pill"
+                                                disabled
+                                                style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px', opacity: 0.45, cursor: 'not-allowed', minWidth: '90px' }}
+                                            >
+                                                <Lock size={14} />
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Nút Vàng</span>
+                                            </button>
+                                        )}
+                                        {/* Silver Button */}
+                                        {silverUnlocked ? (
+                                            <button
+                                                className={`settings-level-pill ${theme === 'silver' ? 'settings-level-pill--active' : ''}`}
+                                                onClick={() => setTheme('silver')}
+                                                style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px', minWidth: '90px' }}
+                                            >
+                                                <span style={{ fontSize: '1.1rem' }}>🥈</span>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Nút Bạc</span>
+                                            </button>
+                                        ) : (
+                                            <button
+                                                className="settings-level-pill"
+                                                disabled
+                                                style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px', opacity: 0.45, cursor: 'not-allowed', minWidth: '90px' }}
+                                            >
+                                                <Lock size={14} />
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Nút Bạc</span>
+                                            </button>
+                                        )}
+                                        {/* Dark */}
+                                        {darkUnlocked ? (
+                                            <button
+                                                className={`settings-level-pill ${theme === 'dark' ? 'settings-level-pill--active' : ''}`}
+                                                onClick={() => setTheme('dark')}
+                                                style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px' }}
+                                            >
+                                                <Moon size={18} />
+                                                <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>Tối</span>
+                                            </button>
+                                        ) : (
+                                            <button
+                                                className="settings-level-pill"
+                                                disabled
+                                                style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px', opacity: 0.45, cursor: 'not-allowed' }}
+                                            >
+                                                <Lock size={16} />
+                                                <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>Tối</span>
+                                            </button>
+                                        )}
+                                        {/* Light */}
+                                        <button
+                                            className={`settings-level-pill ${theme === 'light' ? 'settings-level-pill--active' : ''}`}
+                                            onClick={() => setTheme('light')}
+                                            style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px' }}
+                                        >
+                                            <Sun size={18} />
+                                            <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>Sáng</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
+                        {/* Admin migration tools */}
+                        {(user?.role === 'admin') && (
+                            <div className="settings-section" style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--border-color)' }}>
+                                <label className="settings-section-label">🔧 Công cụ quản trị</label>
+                                <p className="settings-section-desc">Phân loại lại errorCategory cho câu hỏi bằng AI</p>
+                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                    <button
+                                        className="settings-level-pill"
+                                        disabled={isMigrating}
+                                        onClick={async () => {
+                                            setIsMigrating(true); setMigrationResults(null); setMigrationForceMode(false);
+                                            const { migrateErrorCategories } = await import('../services/migrateErrorCategories');
+                                            const res = await migrateErrorCategories(msg => setMigrationStatus(msg), true, false);
+                                            setMigrationResults(res); setIsMigrating(false);
+                                        }}
+                                        style={{ flex: 1, padding: '12px', fontWeight: 600 }}>
+                                        {isMigrating ? '⏳ Đang quét...' : '🔍 Quét câu thiếu/sai'}
+                                    </button>
+                                    <button
+                                        className="settings-level-pill"
+                                        disabled={isMigrating}
+                                        onClick={async () => {
+                                            setIsMigrating(true); setMigrationResults(null); setMigrationForceMode(true);
+                                            const { migrateErrorCategories } = await import('../services/migrateErrorCategories');
+                                            const res = await migrateErrorCategories(msg => setMigrationStatus(msg), true, true);
+                                            setMigrationResults(res); setIsMigrating(false);
+                                        }}
+                                        style={{ flex: 1, padding: '12px', fontWeight: 600, color: '#f59e0b', border: '1.5px solid #f59e0b' }}>
+                                        {isMigrating ? '⏳ Đang quét...' : '🔄 Quét lại TẤT CẢ'}
+                                    </button>
+                                    {migrationResults && migrationResults.details?.length > 0 && (
+                                        <button
+                                            className="settings-level-pill settings-level-pill--active"
+                                            disabled={isMigrating}
+                                            onClick={async () => {
+                                                setIsMigrating(true);
+                                                const { applyMigrationResults } = await import('../services/migrateErrorCategories');
+                                                await applyMigrationResults(migrationResults.details, msg => setMigrationStatus(msg));
+                                                setMigrationResults(null); setIsMigrating(false);
+                                            }}
+                                            style={{ flex: 1, padding: '12px', fontWeight: 600 }}>
+                                            ✅ Áp dụng ({migrationResults.details.length} câu)
+                                        </button>
+                                    )}
+                                </div>
+                                {migrationStatus && (
+                                    <div style={{ marginTop: '10px', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: '10px', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                                        {migrationStatus}
+                                    </div>
+                                )}
+                                {migrationResults && migrationResults.details?.length > 0 && (
+                                    <div style={{ marginTop: '10px', maxHeight: '200px', overflowY: 'auto', fontSize: '0.75rem' }}>
+                                        <div style={{ fontWeight: 700, marginBottom: '6px', color: 'var(--text-primary)' }}>
+                                            Grammar: {migrationResults.grammarQuestions.needsUpdate}/{migrationResults.grammarQuestions.total} | Exams: {migrationResults.examQuestions.needsUpdate}/{migrationResults.examQuestions.total}
+                                        </div>
+                                        {migrationResults.details.slice(0, 30).map((d, i) => (
+                                            <div key={i} style={{ display: 'flex', gap: '6px', padding: '3px 0', borderBottom: '1px solid var(--border-color)', alignItems: 'center' }}>
+                                                <span style={{ color: '#94a3b8', minWidth: '40px' }}>{d.coll === 'grammar_questions' ? '📝' : '📄'}</span>
+                                                <span style={{ flex: 1, color: 'var(--text-secondary)' }}>{d.purpose || d.id}</span>
+                                                <span style={{ color: '#ef4444', textDecoration: 'line-through', minWidth: '80px' }}>{d.oldCategory}</span>
+                                                <span style={{ color: '#22c55e', fontWeight: 700, minWidth: '80px' }}>{d.newCategory}</span>
+                                                <span>{d.aiClassified ? '🤖' : '⚠️'}</span>
+                                            </div>
+                                        ))}
+                                        {migrationResults.details.length > 30 && (
+                                            <div style={{ padding: '6px', color: '#94a3b8', textAlign: 'center' }}>...và {migrationResults.details.length - 30} câu khác</div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* The account/logout section has been moved to the header */}
+                    </div>
+                </div>
+            )}
+
+            <main className="dashboard-main container">
+                <section className="dashboard-welcome animate-slide-up">
+                    <div className="dashboard-welcome-main">
+                        <Avatar src={user?.photoURL} alt={user?.displayName} size={80} className="dashboard-avatar" />
+                        <div className="dashboard-welcome-content">
+                            <h1 className="dashboard-welcome-name">
+                                {user?.displayName || user?.email?.split('@')[0] || 'Học Viên'}
+                            </h1>
+                            {/* Milestone title badge */}
+                            {(() => {
+                                const isStudent = !(user?.role === 'admin' || user?.role === 'teacher' || user?.role === 'staff');
+                                if (!isStudent) return null;
+                                const milestone = getCurrentMilestone(currentStreak);
+                                const nextMs = getNextMilestone(currentStreak);
+                                if (milestone) {
+                                    return (
+                                        <div className="dashboard-milestone-row">
+                                            <div className="dashboard-milestone-info">
+                                                <span className="dashboard-milestone-title" style={{ color: milestone.color }}>{milestone.title}</span>
+                                                <span className="dashboard-milestone-subtitle">{milestone.subtitle}</span>
+                                            </div>
+                                            <span className="dashboard-milestone-emoji">{milestone.emoji}</span>
+                                        </div>
+                                    );
+                                } else if (nextMs) {
+                                    return (
+                                        <div className="dashboard-milestone-row dashboard-milestone-locked">
+                                            <div className="dashboard-milestone-info">
+                                                <span className="dashboard-milestone-subtitle">Đạt {nextMs.threshold} ngày để nhận danh hiệu!</span>
+                                            </div>
+                                            <span className="dashboard-milestone-emoji">🎯</span>
+                                        </div>
+                                    );
+                                }
+                                return null;
+                            })()}
+                            <div className="dashboard-welcome-tags">
+                                {user?.groupNames && user.groupNames.length > 0 && user.groupNames.map((name, i) => (
+                                    <span key={i} className="dashboard-welcome-tag">
+                                        <Users size={13} />
+                                        {name}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="dashboard-progress-card" onClick={() => setIsProgressOpen(true)}>
+                        {(() => { const hasFlags = studentRedFlags.filter(f => !f.removed).length > 0; return (
+                        <div className={`dashboard-progress-stats${hasFlags ? ' has-flags' : ''}`}>
+                            {classRanks.length > 0 ? (
+                                <div className={`dashboard-progress-item${!hasFlags ? ' dashboard-rank-no-flags' : ''}`}>
+                                    <div className="dashboard-stat-icon-wrapper warning">
+                                        <Medal size={22} />
+                                    </div>
+                                    <div className="dashboard-stat-info">
+                                        {classRanks.length === 1 ? (
+                                            <>
+                                                <span className="dashboard-stat-value">#{classRanks[0].rank}</span>
+                                                <span className="dashboard-stat-label">Top {classRanks[0].total}</span>
+                                            </>
+                                        ) : (
+                                            <div className="dashboard-multi-rank">
+                                                {classRanks.map(r => (
+                                                    <div key={r.groupId} className="dashboard-rank-row">
+                                                        <span className="dashboard-rank-value">#{r.rank}</span>
+                                                        <span className="dashboard-rank-group">{r.groupName}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className={`dashboard-progress-item${!hasFlags ? ' dashboard-rank-no-flags' : ''}`}>
+                                    <div className="dashboard-stat-icon-wrapper warning">
+                                        <Medal size={22} />
+                                    </div>
+                                    <div className="dashboard-stat-info">
+                                        <span className="dashboard-stat-value">—</span>
+                                        <span className="dashboard-stat-label">Xếp hạng</span>
+                                    </div>
+                                </div>
+                            )}
+                            {/* Red flag subtle indicator */}
+                            {(() => {
+                                const activeFlags = studentRedFlags.filter(f => !f.removed);
+                                if (activeFlags.length === 0) return null;
+                                const maxPerGroup = {};
+                                activeFlags.forEach(f => {
+                                    maxPerGroup[f.groupId] = (maxPerGroup[f.groupId] || 0) + 1;
+                                });
+                                const maxCount = Math.max(...Object.values(maxPerGroup));
+                                const isTerminated = maxCount >= 3;
+                                return (
+                                    <>
+                                        <div className="dashboard-progress-divider dashboard-divider-flags" />
+                                        <div className="dashboard-progress-item dashboard-flags-item">
+                                            <div className="dashboard-stat-icon-wrapper" style={{
+                                                background: isTerminated ? 'rgba(220,38,38,0.12)' : maxCount === 2 ? 'rgba(234,88,12,0.12)' : 'rgba(202,138,4,0.12)'
+                                            }}>
+                                                <span style={{ fontSize: '18px' }}>🚩</span>
+                                            </div>
+                                            <div className="dashboard-stat-info">
+                                                <span className="dashboard-stat-value" style={{
+                                                    color: isTerminated ? '#dc2626' : maxCount === 2 ? '#ea580c' : '#ca8a04'
+                                                }}>{maxCount}/3</span>
+                                                <span className="dashboard-stat-label">Cờ đỏ</span>
+                                            </div>
+                                        </div>
+                                    </>
+                                );
+                            })()}
+                            <div className="dashboard-progress-divider dashboard-divider-streak" />
+                            <div className="dashboard-progress-item dashboard-streak-item">
+                                <div className="dashboard-stat-icon-wrapper error">
+                                    <Flame size={22} />
+                                </div>
+                                <div className="dashboard-stat-info">
+                                    <span className="dashboard-stat-value">{currentStreak}</span>
+                                    <span className="dashboard-stat-label">Ngày streak</span>
+                                </div>
+                            </div>
+
+                        </div>
+                        ); })()}
+                        <div className="dashboard-progress-cta">
+                            <span>Xem tiến trình</span>
+                            <span className="dashboard-progress-arrow">›</span>
+                        </div>
+                    </div>
+                </section>
+
+                {/* MAIN TABS */}
+                {(() => {
+                    if (user?.role === 'admin' || user?.role === 'teacher' || user?.role === 'staff') return null;
+
+                    const newAssignmentsCount = assignments.filter(a => {
+                        const prog = assignmentsProgress[a.topicId];
+                        const isStarted = prog && (prog.learned > 0 || (prog.learning ?? 0) > 0 || (prog.completedSteps ?? 0) > 0);
+                        if (isStarted) return false;
+                        const isDone = prog && prog.total > 0 && prog.learned === prog.total;
+                        if (isDone) return false;
+                        const due = getEffectiveDueDate(a, user.uid);
+                        const isOverdue = due && due < new Date();
+                        if (isOverdue) return false;
+                        const msA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+                        const isRecentlyAssigned = Date.now() - msA < 3 * 24 * 60 * 60 * 1000;
+                        return isRecentlyAssigned;
+                    }).length;
+
+                    return (
+                        <div className="dashboard-nav-pill">
+                            <button
+                                onClick={() => setActiveMainTab('learning')}
+                                className={`dashboard-nav-item ${activeMainTab === 'learning' ? 'active' : ''}`}
+                            >
+                                <Home size={18} />
+                                Học
+                            </button>
+                            <button
+                                onClick={() => setActiveMainTab('assignments')}
+                                className={`dashboard-nav-item ${activeMainTab === 'assignments' ? 'active' : ''}`}
+                            >
+                                <ClipboardList size={18} />
+                                Bài luyện
+                                {newAssignmentsCount > 0 && (
+                                    <span className="dashboard-nav-badge-round">
+                                        {newAssignmentsCount}
+                                    </span>
+                                )}
+                            </button>
+                            <button
+                                onClick={() => setActiveMainTab('exams')}
+                                className={`dashboard-nav-item ${activeMainTab === 'exams' ? 'active' : ''}`}
+                            >
+                                <FileCheck size={18} />
+                                Bài tập & KT
+                                {(examAssignments.length > 0) && (() => {
+                                    const subsMap = {};
+                                    examSubmissions.forEach(s => {
+                                        const existing = subsMap[s.assignmentId];
+                                        if (!existing) {
+                                            subsMap[s.assignmentId] = s;
+                                        } else {
+                                            const isExistingDone = existing.status === 'submitted' || existing.status === 'grading' || existing.status === 'graded';
+                                            const isNewDone = s.status === 'submitted' || s.status === 'grading' || s.status === 'graded';
+                                            if (!isExistingDone && isNewDone) subsMap[s.assignmentId] = s;
+                                        }
+                                    });
+                                    const now = new Date();
+                                    const pendingCount = examAssignments.filter(a => {
+                                        const sub = subsMap[a.id];
+                                        const hasSubmitted = sub && (sub.status === 'submitted' || sub.status === 'graded' || sub.status === 'grading');
+                                        const due = getEffectiveDueDate(a, user.uid);
+                                        const isOverdue = due && due < now;
+                                        return !hasSubmitted && !isOverdue;
+                                    }).length;
+
+                                    if (pendingCount === 0) return null;
+                                    return (
+                                        <span className="dashboard-nav-badge-round">
+                                            {pendingCount}
+                                        </span>
+                                    );
+                                })()}
+                            </button>
+                        </div>
+
+                    );
+                })()}
+
+                {/* Exam Alert Modal */}
+                {showExamAlert && (
+                    <div className="settings-modal-backdrop" style={{ zIndex: 3000, alignItems: 'center' }}>
+                        <div className="settings-modal animate-slide-up" style={{ padding: '32px', borderRadius: '32px', maxWidth: '450px', paddingBottom: '32px' }}>
+                            {showAlertType === 'urgent' && urgentExam && (
+                                <>
+                                    <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                                        <div style={{ width: '80px', height: '80px', background: 'var(--bg-input)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: 'var(--color-error)', border: '1px solid var(--border-color)' }}>
+                                            <AlertTriangle size={40} />
+                                        </div>
+                                        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-error)', margin: '0 0 8px' }}>Thông báo khẩn!</h2>
+                                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.5 }}>
+                                            Bạn có {urgentExam.examType === 'test' ? 'bài kiểm tra' : 'bài tập'} <strong>{urgentExam.name}</strong> chưa hoàn thành. Hãy làm ngay trước khi hết hạn!
+                                        </p>
+                                    </div>
+
+                                    <div style={{ background: 'var(--bg-input)', padding: '16px', borderRadius: '20px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', border: '1px solid var(--border-color)' }}>
+                                        <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: `${urgentExam.color || '#6366f1'}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>
+                                            {urgentExam.icon || '📋'}
+                                        </div>
+                                        <div style={{ flex: 1, textAlign: 'left' }}>
+                                            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>{urgentExam.name}</div>
+                                            <div style={{ fontSize: '0.8rem', color: 'var(--color-error)', fontWeight: 600 }}>
+                                                ⏱ Hạn: {urgentExam.dueDate ? (urgentExam.dueDate.toDate ? urgentExam.dueDate.toDate() : new Date(urgentExam.dueDate)).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : 'N/A'}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                        <button
+                                            className="btn btn-primary"
+                                            style={{ padding: '16px', borderRadius: '16px', fontWeight: 800, fontSize: '1rem', background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', boxShadow: '0 8px 16px rgba(239, 68, 68, 0.3)' }}
+                                            onClick={() => {
+                                                setShowExamAlert(false);
+                                                navigate(`/exam?examId=${urgentExam.examId}&assignmentId=${urgentExam.id}&seed=${urgentExam.variationSeed || 0}`);
+                                            }}
+                                        >
+                                            Làm bài ngay
+                                        </button>
+                                        <button
+                                            className="btn"
+                                            style={{ padding: '14px', borderRadius: '16px', fontWeight: 700, color: 'var(--text-secondary)', background: 'transparent' }}
+                                            onClick={() => setShowExamAlert(false)}
+                                        >
+                                            Để sau
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+
+                            {showAlertType === 'result' && newResult && (
+                                <>
+                                    <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                                        <div style={{ width: '80px', height: '80px', background: 'var(--bg-input)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: 'var(--color-success)', border: '1px solid var(--border-color)' }}>
+                                            <Trophy size={40} />
+                                        </div>
+                                        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>Đã có điểm!</h2>
+                                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.5 }}>
+                                            Giáo viên đã chấm xong {newResult.examType === 'test' ? 'bài kiểm tra' : 'bài tập'} <strong>{newResult.examName}</strong>. Hãy xem kết quả của bạn nhé!
+                                        </p>
+                                    </div>
+
+                                    <div style={{ background: 'var(--bg-input)', padding: '16px', borderRadius: '20px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', border: '1px solid var(--border-color)' }}>
+                                        <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: `${newResult.examColor || '#10b981'}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>
+                                            {newResult.examIcon || '🎉'}
+                                        </div>
+                                        <div style={{ flex: 1, textAlign: 'left' }}>
+                                            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>{newResult.examName}</div>
+                                            <div style={{ fontSize: '0.8rem', color: 'var(--color-success)', fontWeight: 600 }}>
+                                                ✨ Đã chấm xong
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                        <button
+                                            className="btn btn-primary"
+                                            style={{ padding: '16px', borderRadius: '16px', fontWeight: 800, fontSize: '1rem', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', boxShadow: '0 8px 16px rgba(16, 185, 129, 0.3)' }}
+                                            onClick={() => {
+                                                setShowExamAlert(false);
+                                                navigate(`/exam-result?assignmentId=${newResult.assignmentId}&studentId=${user?.uid}`);
+                                            }}
+                                        >
+                                            Xem kết quả
+                                        </button>
+                                        <button
+                                            className="btn"
+                                            style={{ padding: '14px', borderRadius: '16px', fontWeight: 700, color: 'var(--text-secondary)', background: 'transparent' }}
+                                            onClick={() => setShowExamAlert(false)}
+                                        >
+                                            Đóng
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {activeMainTab === 'learning' && (reviewStats.totalCount > 0 || grammarReviewStats.totalCount > 0) && (
+                    <section className="dashboard-reviews-container animate-slide-up" style={{
+                        animationDelay: '0.05s',
+                        marginBottom: 'var(--space-xl)',
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                        gap: 'var(--space-md)',
+                        maxWidth: '980px',
+                        margin: '0 auto var(--space-xl)'
+                    }}>
+                        {reviewStats.totalCount > 0 && (
+                            <div className="review-card glass-card">
+                                <div className="review-card-icon">
+                                    <BrainCircuit size={28} />
+                                </div>
+                                <div className="review-card-content">
+                                    <h3>Từ vựng</h3>
+                                    <p><strong>{reviewStats.totalCount}</strong> từ cần ôn</p>
+                                </div>
+                                <button
+                                    className="btn btn-primary review-card-btn"
+                                    onClick={() => navigate('/review')}
+                                >
+                                    Ôn ngay
+                                </button>
+                            </div>
+                        )}
+
+                        {grammarReviewStats.totalCount > 0 && (
+                            <div className="review-card glass-card">
+                                <div className="review-card-icon" style={{ background: 'rgba(245, 158, 11, 0.2)', color: '#d97706' }}>
+                                    <PenLine size={28} />
+                                </div>
+                                <div className="review-card-content">
+                                    <h3>Kỹ năng</h3>
+                                    <p><strong>{grammarReviewStats.totalCount}</strong> câu cần làm</p>
+                                </div>
+                                <button
+                                    className="btn btn-primary review-card-btn"
+                                    style={{ background: 'var(--color-warning)', color: '#fff', boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)' }}
+                                    onClick={() => navigate('/grammar-review')}
+                                >
+                                    Ôn ngay
+                                </button>
+                            </div>
+                        )}
+                    </section>
+                )}
+
+                {activeMainTab === 'assignments' && assignments.length > 0 && (() => {
+                    const mappedAssignments = assignments.map(a => {
+                        const due = getEffectiveDueDate(a, user.uid);
+                        const isOverdue = due && due < new Date();
+                        const timeDiff = due ? due.getTime() - new Date().getTime() : Infinity;
+                        const isDueSoon = timeDiff > 0 && timeDiff <= 48 * 60 * 60 * 1000; // < 48 hours
+
+                        const prog = assignmentsProgress[a.topicId];
+                        const isDone = prog && prog.total > 0 && prog.learned === prog.total;
+
+                        let percent = 0;
+                        if (prog && prog.total > 0) {
+                            if (isDone) {
+                                percent = 100;
+                            } else {
+                                const isGrammar = a.isGrammar;
+                                const totalSteps = isGrammar ? prog.total : prog.total * 6; // Grammar exercises use 1 step per question or simply learned vs total
+                                const completedSteps = isGrammar ? (prog.learned + (prog.learning > 0 ? prog.learning * 0.5 : 0)) : (prog.completedSteps || 0); // Grammar progress logic approximation
+
+                                percent = Math.round((completedSteps / totalSteps) * 100);
+                                // Cap at 99% if not fully mastered yet to clearly indicate it's pending
+                                if (percent >= 100) percent = 99;
+                            }
+                        }
+
+                        const hasZeroProgress = !prog || (prog.learned === 0 && (prog.learning ?? 0) === 0 && (prog.completedSteps ?? 0) === 0);
+                        const msA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+                        const isRecentlyAssigned = Date.now() - msA < 3 * 24 * 60 * 60 * 1000;
+                        const isNew = hasZeroProgress && isRecentlyAssigned;
+
+                        return { ...a, due, isOverdue, isDueSoon, prog, percent, isNew, isDone };
+                    });
+
+                    const pendingAssignments = mappedAssignments
+                        .filter(a => !a.isDone && !a.isOverdue)
+                        .sort((a, b) => {
+                            if (a.due && !b.due) return -1;
+                            if (!a.due && b.due) return 1;
+                            if (a.due && b.due) {
+                                return a.due.getTime() - b.due.getTime();
+                            }
+                            const msA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+                            const msB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+                            return msB - msA;
+                        });
+
+                    const overdueAssignments = mappedAssignments
+                        .filter(a => !a.isDone && a.isOverdue)
+                        .sort((a, b) => {
+                            const dA = a.due ? a.due.getTime() : 0;
+                            const dB = b.due ? b.due.getTime() : 0;
+                            return dB - dA; // most recently expired first
+                        });
+
+                    const completedAssignments = mappedAssignments
+                        .filter(a => a.isDone)
+                        .sort((a, b) => {
+                            const msA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+                            const msB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+                            return msB - msA;
+                        });
+
+                    const AssignmentCard = ({ a, isCompleted }) => (
+                        <div key={a.id} className="glass-card" onClick={() => { if (!(a.isOverdue && !a.isDone)) handleContinueLearning({ id: a.topicId, type: 'topic', name: a.topicName, isTeacherTopic: a.isTeacherTopic, isGrammar: a.isGrammar }); }} style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '20px', borderRadius: '20px', position: 'relative', overflow: 'hidden', opacity: isCompleted ? 0.7 : (a.isOverdue && !a.isDone) ? 0.6 : 1, filter: (a.isOverdue && !a.isDone) ? 'grayscale(0.5)' : 'none', cursor: (a.isOverdue && !a.isDone) ? 'not-allowed' : 'pointer' }}>
+                            {groupIdToName[a.groupId] && Object.keys(groupIdToName).length > 1 && (
+                                <div style={{ marginBottom: '4px' }}>
+                                    <span className="dashboard-group-chip">
+                                        <Users size={11} />
+                                        {groupIdToName[a.groupId]}
+                                    </span>
+                                </div>
+                            )}
+                            {!a.isDone && a.isNew && (
+                                <span style={{ position: 'absolute', top: '12px', right: '12px', background: '#ef4444', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '3px 8px', borderRadius: '10px', textTransform: 'uppercase', letterSpacing: '0.5px', boxShadow: '0 0 8px rgba(239, 68, 68, 0.4)', zIndex: 2 }}>
+                                    Mới
+                                </span>
+                            )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                {a.isGrammar ? (
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', fontWeight: 800, color: '#d97706', background: 'rgba(245, 158, 11, 0.15)', padding: '4px 8px', borderRadius: '12px' }}>
+                                        {a.topicIcon ? <span style={{ fontSize: '1rem' }}>{a.topicIcon}</span> : <PenLine size={12} />}
+                                        Kỹ năng
+                                    </span>
+                                ) : (
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', fontWeight: 800, color: '#3b82f6', background: 'rgba(59, 130, 246, 0.15)', padding: '4px 8px', borderRadius: '12px' }}>
+                                        {a.topicIcon ? <span style={{ fontSize: '1rem' }}>{a.topicIcon}</span> : <BookOpen size={12} />}
+                                        Từ vựng
+                                    </span>
+                                )}
+                                <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--text-primary)', fontWeight: 700 }}>{a.topicName}</h3>
+                            </div>
+                            <p style={{ margin: 0, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px', color: (a.isOverdue && !a.isDone) ? '#ef4444' : a.isDueSoon ? '#ef4444' : 'var(--text-secondary)', fontWeight: (a.isOverdue || a.isDueSoon) ? 600 : 400 }}>
+                                <Clock size={14} />
+                                <span>
+                                    {(() => {
+                                        if (!a.due) return 'Không có hạn';
+                                        if (a.isOverdue) return 'Đã hết hạn';
+                                        const diff = a.due.getTime() - Date.now();
+                                        const hours = Math.floor(diff / (1000 * 60 * 60));
+                                        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                                        if (hours < 1) return `Còn ${minutes} phút`;
+                                        if (hours < 48) return `Còn ${hours} giờ ${minutes > 0 ? minutes + ' phút' : ''}`;
+                                        const days = Math.floor(hours / 24);
+                                        return `Còn ${days} ngày`;
+                                    })()}
+                                </span>
+                            </p>
+                            {/* Progress Bar */}
+                            {a.prog && a.prog.total > 0 && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '8px', zIndex: 1 }}>
+                                    <div style={{ flex: 1, height: '8px', background: 'var(--bg-glass)', borderRadius: '4px', overflow: 'hidden', display: 'flex', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.2)' }}>
+                                        <div style={{ width: `${a.percent}%`, background: '#10b981', transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)' }} title={`Tiến độ: ${a.percent}%`} />
+                                    </div>
+                                    <div style={{ fontSize: '0.9rem', fontWeight: 800, color: a.isDone ? '#10b981' : 'var(--text-primary)', minWidth: '40px', textAlign: 'right' }}>
+                                        {a.percent}%
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    );
+
+                    const filteredPending = selectedGroupFilter === 'all' ? pendingAssignments : pendingAssignments.filter(a => a.groupId === selectedGroupFilter);
+                    const filteredOverdue = selectedGroupFilter === 'all' ? overdueAssignments : overdueAssignments.filter(a => a.groupId === selectedGroupFilter);
+                    const filteredCompleted = selectedGroupFilter === 'all' ? completedAssignments : completedAssignments.filter(a => a.groupId === selectedGroupFilter);
+
+                    return (
+                        <section className="dashboard-assignments animate-slide-up" style={{ animationDelay: '0.08s', marginBottom: 'var(--space-xl)' }}>
+                            {Object.keys(groupIdToName).length > 1 && (
+                                <div className="dashboard-group-filter">
+                                    <button
+                                        className={`dashboard-group-filter-btn${selectedGroupFilter === 'all' ? ' active' : ''}`}
+                                        onClick={() => setSelectedGroupFilter('all')}
+                                    >
+                                        Tất cả
+                                    </button>
+                                    {Object.entries(groupIdToName).map(([gid, gname]) => (
+                                        <button
+                                            key={gid}
+                                            className={`dashboard-group-filter-btn${selectedGroupFilter === gid ? ' active' : ''}`}
+                                            onClick={() => setSelectedGroupFilter(gid)}
+                                        >
+                                            {gname}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                            <div className="dashboard-recent-header flex-between" style={{ marginBottom: '16px' }}>
+                                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0' }}>📋 Cần làm ({filteredPending.length})</h3>
+                            </div>
+                            <div style={{ marginBottom: '32px' }}>
+                                {filteredPending.length === 0 ? (
+                                    <div style={{ textAlign: 'center', padding: '32px 24px', background: 'var(--bg-glass-card)', borderRadius: '20px', color: 'var(--text-muted)', border: '1px dashed var(--border-color)', fontSize: '0.95rem' }}>
+                                        🎉 Tuyệt vời! Bạn không có bài luyện nào đang chờ.
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'grid', gap: '12px' }}>
+                                        {filteredPending.map(a => <AssignmentCard key={a.id} a={a} isCompleted={false} />)}
+                                    </div>
+                                )}
+                            </div>
+
+                            {filteredOverdue.length > 0 && (
+                                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px', marginBottom: '16px' }}>
+                                    <div
+                                        className="dashboard-recent-header flex-between"
+                                        style={{ cursor: 'pointer', marginBottom: showOverdueAssignments ? '16px' : '0' }}
+                                        onClick={() => setShowOverdueAssignments(!showOverdueAssignments)}
+                                    >
+                                        <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-secondary)', margin: 0 }}>⏰ Không hoàn thành ({filteredOverdue.length})</h3>
+                                        <ChevronDown size={20} style={{ transform: showOverdueAssignments ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s', color: 'var(--text-secondary)' }} />
+                                    </div>
+
+                                    {showOverdueAssignments && (
+                                        <div style={{ display: 'grid', gap: '12px', animation: 'fadeIn 0.3s ease' }}>
+                                            {filteredOverdue.map(a => <AssignmentCard key={a.id} a={a} isCompleted={false} />)}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {filteredCompleted.length > 0 && (
+                                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+                                    <div
+                                        className="dashboard-recent-header flex-between"
+                                        style={{ cursor: 'pointer', marginBottom: showAllAssignments ? '16px' : '0' }}
+                                        onClick={() => setShowAllAssignments(!showAllAssignments)}
+                                    >
+                                        <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-secondary)', margin: 0 }}>✅ Đã hoàn thành ({filteredCompleted.length})</h3>
+                                        <ChevronDown size={20} style={{ transform: showAllAssignments ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s', color: 'var(--text-secondary)' }} />
+                                    </div>
+
+                                    {showAllAssignments && (
+                                        <div style={{ display: 'grid', gap: '12px', animation: 'fadeIn 0.3s ease' }}>
+                                            {filteredCompleted.map(a => <AssignmentCard key={a.id} a={a} isCompleted={true} />)}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </section>
+                    );
+                })()}
+
+                {activeMainTab === 'assignments' && assignments.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '40px 24px', background: 'var(--bg-glass-card)', borderRadius: '20px', color: 'var(--text-muted)', border: '1px dashed var(--border-color)', fontSize: '1rem' }}>
+                        🎉 Bạn chưa có bài luyện nào được giao!
+                    </div>
+                )}
+
+                {activeMainTab === 'exams' && (() => {
+                    const now = new Date();
+                    const subsMap = {};
+                    examSubmissions.forEach(s => {
+                        const existing = subsMap[s.assignmentId];
+                        if (!existing) {
+                            subsMap[s.assignmentId] = s;
+                        } else {
+                            const isExistingDone = existing.status === 'submitted' || existing.status === 'grading' || existing.status === 'graded';
+                            const isNewDone = s.status === 'submitted' || s.status === 'grading' || s.status === 'graded';
+                            if (!isExistingDone && isNewDone) subsMap[s.assignmentId] = s;
+                        }
+                    });
+
+                    const active = [];
+                    const overdue = [];
+                    const completed = [];
+
+                    examAssignments.forEach(a => {
+                        const sub = subsMap[a.id];
+                        const isDone = sub && (sub.status === 'submitted' || sub.status === 'grading' || sub.status === 'graded');
+                        const due = getEffectiveDueDate(a, user.uid);
+                        const isOverdue = due && due < now;
+
+                        if (isDone) {
+                            completed.push({ ...a, sub });
+                        } else if (isOverdue) {
+                            overdue.push({ ...a, sub });
+                        } else {
+                            active.push({ ...a, sub });
+                        }
+                    });
+
+                    const renderExamCard = (a, type) => {
+                        const examInfo = examDetails[a.examId];
+                        const sub = a.sub;
+                        const isOverdue = type === 'overdue';
+                        const isDone = type === 'completed';
+                        const isGraded = sub?.status === 'graded' && sub?.resultsReleased;
+                        const percent = sub?.maxTotalScore ? Math.round((sub.totalScore / sub.maxTotalScore) * 100) : null;
+                        const due = getEffectiveDueDate(a, user.uid);
+
+                        const timeDiff = due ? due.getTime() - new Date().getTime() : Infinity;
+                        const isDueSoon = timeDiff > 0 && timeDiff <= 48 * 60 * 60 * 1000;
+
+                        const hasZeroProgress = !sub;
+                        const msA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+                        const isRecentlyAssigned = Date.now() - msA < 3 * 24 * 60 * 60 * 1000;
+                        const isNew = hasZeroProgress && isRecentlyAssigned;
+
+                        return (
+                            <div key={a.id} className="glass-card" onClick={() => { if (isOverdue && !isDone) return; if (isDone) navigate(`/exam-result?assignmentId=${a.id}&studentId=${user?.uid}`); else navigate(`/exam?examId=${a.examId}&assignmentId=${a.id}&seed=${a.variationSeed || 0}`); }} style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '20px', borderRadius: '20px', position: 'relative', overflow: 'hidden', opacity: (isOverdue && !isDone) ? 0.6 : 1, filter: (isOverdue && !isDone) ? 'grayscale(0.5)' : 'none', marginBottom: '12px', cursor: (isOverdue && !isDone) ? 'not-allowed' : 'pointer' }}>
+                                {/* Floating badges */}
+                                {!isDone && isNew && (
+                                    <span style={{ position: 'absolute', top: '12px', right: '12px', background: '#ef4444', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '3px 8px', borderRadius: '10px', textTransform: 'uppercase', letterSpacing: '0.5px', boxShadow: '0 0 8px rgba(239, 68, 68, 0.4)', zIndex: 2 }}>
+                                        Mới
+                                    </span>
+                                )}
+                                {isDone && isGraded && !sub?.viewedByStudent && (
+                                    <span style={{ position: 'absolute', top: '12px', right: '12px', background: '#ef4444', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '3px 8px', borderRadius: '10px', textTransform: 'uppercase', letterSpacing: '0.5px', boxShadow: '0 0 8px rgba(239, 68, 68, 0.4)', zIndex: 2 }}>
+                                        Mới có điểm
+                                    </span>
+                                )}
+                                {/* Group chip */}
+                                {a.targetType === 'group' && groupIdToName[a.targetId] && Object.keys(groupIdToName).length > 1 && (
+                                    <div style={{ marginBottom: '4px' }}>
+                                        <span className="dashboard-group-chip">
+                                            <Users size={11} />
+                                            {groupIdToName[a.targetId]}
+                                        </span>
+                                    </div>
+                                )}
+                                {/* Type tag + Score on same row */}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', fontWeight: 800, color: examInfo?.examType === 'test' ? '#dc2626' : '#6366f1', background: examInfo?.examType === 'test' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(99, 102, 241, 0.15)', padding: '4px 8px', borderRadius: '12px', flexShrink: 0 }}>
+                                        {examInfo?.icon ? <span style={{ fontSize: '1rem' }}>{examInfo.icon}</span> : <FileCheck size={12} />}
+                                        {examInfo?.examType === 'test' ? 'Kiểm tra' : 'Bài tập'}
+                                    </span>
+                                    {isDone ? (
+                                        <>
+                                            {isGraded ? (
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800, color: percent >= 80 ? '#10b981' : percent >= 50 ? '#f59e0b' : '#ef4444', background: percent >= 80 ? 'rgba(16, 185, 129, 0.12)' : percent >= 50 ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)', padding: '6px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
+                                                    ✅ {Math.round(sub.totalScore * 10) / 10}/{sub.maxTotalScore}
+                                                </span>
+                                            ) : (
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.12)', padding: '6px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
+                                                    ⏳ Đang chấm
+                                                </span>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800, color: (isOverdue && !isDone) ? '#ef4444' : isDueSoon ? '#ef4444' : 'var(--text-secondary)', background: (isOverdue && !isDone) ? 'rgba(239, 68, 68, 0.12)' : isDueSoon ? 'rgba(239, 68, 68, 0.12)' : 'rgba(128, 128, 128, 0.1)', padding: '6px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
+                                            <Clock size={14} />
+                                            {(() => {
+                                                if (!due) return 'Không có hạn';
+                                                if (isOverdue) return 'Đã hết hạn';
+                                                const diff = due.getTime() - Date.now();
+                                                const hours = Math.floor(diff / (1000 * 60 * 60));
+                                                const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                                                if (hours < 1) return `Còn ${minutes} phút`;
+                                                if (hours < 48) return `Còn ${hours}g ${minutes > 0 ? minutes + 'p' : ''}`;
+                                                const days = Math.floor(hours / 24);
+                                                return `Còn ${days} ngày`;
+                                            })()}
+                                        </span>
+                                    )}
+                                </div>
+                                {/* Exam name */}
+                                <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--text-primary)', fontWeight: 700 }}>{examInfo?.name || 'Bài tập và Kiểm tra'}</h3>
+                            </div>
+                        );
+                    };
+
+                    return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            {Object.keys(groupIdToName).length > 1 && (
+                                <div className="dashboard-group-filter">
+                                    <button
+                                        className={`dashboard-group-filter-btn${selectedGroupFilter === 'all' ? ' active' : ''}`}
+                                        onClick={() => setSelectedGroupFilter('all')}
+                                    >
+                                        Tất cả
+                                    </button>
+                                    {Object.entries(groupIdToName).map(([gid, gname]) => (
+                                        <button
+                                            key={gid}
+                                            className={`dashboard-group-filter-btn${selectedGroupFilter === gid ? ' active' : ''}`}
+                                            onClick={() => setSelectedGroupFilter(gid)}
+                                        >
+                                            {gname}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                            {(() => {
+                                const fActive = selectedGroupFilter === 'all' ? active : active.filter(a => a.targetType === 'group' && a.targetId === selectedGroupFilter);
+                                const fOverdue = selectedGroupFilter === 'all' ? overdue : overdue.filter(a => a.targetType === 'group' && a.targetId === selectedGroupFilter);
+                                const fCompleted = selectedGroupFilter === 'all' ? completed : completed.filter(a => a.targetType === 'group' && a.targetId === selectedGroupFilter);
+                                return (
+                                    <>
+                                        {fActive.length > 0 && (
+                                            <section>
+                                                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '12px' }}>📋 Cần làm ({fActive.length})</h3>
+                                                {fActive.map(a => renderExamCard(a, 'active'))}
+                                            </section>
+                                        )}
+                                        {fOverdue.length > 0 && (
+                                            <section style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+                                                <div
+                                                    className="dashboard-recent-header flex-between"
+                                                    style={{ cursor: 'pointer', marginBottom: showOverdueExams ? '12px' : '0' }}
+                                                    onClick={() => setShowOverdueExams(!showOverdueExams)}
+                                                >
+                                                    <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-secondary)', margin: 0 }}>⏰ Không hoàn thành ({fOverdue.length})</h3>
+                                                    <ChevronDown size={20} style={{ transform: showOverdueExams ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s', color: 'var(--text-secondary)' }} />
+                                                </div>
+                                                {showOverdueExams && fOverdue.map(a => renderExamCard(a, 'overdue'))}
+                                            </section>
+                                        )}
+                                        {(() => {
+                                            const newlyGraded = fCompleted.filter(a => a.sub?.status === 'graded' && a.sub?.resultsReleased && !a.sub?.viewedByStudent);
+                                            const restCompleted = fCompleted.filter(a => !(a.sub?.status === 'graded' && a.sub?.resultsReleased && !a.sub?.viewedByStudent));
+
+                                            return (
+                                                <>
+                                                    {newlyGraded.length > 0 && (
+                                                        <section style={{ marginBottom: '16px' }}>
+                                                            <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#10b981', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                🎉 Mới có điểm ({newlyGraded.length})
+                                                            </h3>
+                                                            {newlyGraded.map(a => renderExamCard(a, 'completed'))}
+                                                        </section>
+                                                    )}
+                                                    {restCompleted.length > 0 && (
+                                                        <section>
+                                                            <div
+                                                                className="dashboard-recent-header flex-between"
+                                                                style={{ cursor: 'pointer', marginBottom: showAllExams ? '12px' : '0' }}
+                                                                onClick={() => setShowAllExams(!showAllExams)}
+                                                            >
+                                                                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-secondary)', margin: 0 }}>✅ Đã hoàn thành ({restCompleted.length})</h3>
+                                                                <ChevronDown size={20} style={{ transform: showAllExams ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s', color: 'var(--text-secondary)' }} />
+                                                            </div>
+                                                            {showAllExams && restCompleted.map(a => renderExamCard(a, 'completed'))}
+                                                        </section>
+                                                    )}
+                                                </>
+                                            );
+                                        })()}
+                                        {fActive.length === 0 && fOverdue.length === 0 && fCompleted.length === 0 && (
+                                            <div style={{ textAlign: 'center', padding: '40px 24px', background: 'var(--bg-glass-card)', borderRadius: '20px', color: 'var(--text-muted)', border: '1px dashed var(--border-color)', fontSize: '1rem' }}>
+                                                📋 Bạn chưa có bài tập và kiểm tra nào!
+                                            </div>
+                                        )}
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    );
+                })()}
+
+                {activeMainTab === 'learning' && recentLists.length > 0 && (
+                    <section className="dashboard-recent animate-slide-up" style={{ animationDelay: '0.1s' }}>
+                        <div className="dashboard-recent-header flex-between">
+                            <h2 className="text-md font-semibold text-secondary">Học gần đây</h2>
+                        </div>
+                        <div className={`dashboard-recent-slider${isDraggingSlider ? ' is-dragging' : ''}`}
+                            ref={sliderRef}
+                            onMouseDown={handleSliderMouseDown}
+                        >
+                            {recentLists.map(list => (
+                                <div key={list.id} className="recent-list-card" onClick={() => handleContinueLearning(list)}>
+                                    <div className="recent-list-icon" style={{ background: `${list.color || 'var(--color-primary)'}20` }}>
+                                        <span className="recent-list-emoji">{list.icon}</span>
+                                    </div>
+                                    <div className="recent-list-info">
+                                        <h4>{list.name}</h4>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                            {list.isGrammar ? (
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '0.6rem', fontWeight: 800, color: '#d97706', background: 'rgba(245, 158, 11, 0.15)', padding: '2px 6px', borderRadius: '6px', lineHeight: 1 }}>
+                                                    <PenLine size={9} /> Kỹ năng
+                                                </span>
+                                            ) : (
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '0.6rem', fontWeight: 800, color: '#3b82f6', background: 'rgba(59, 130, 246, 0.15)', padding: '2px 6px', borderRadius: '6px', lineHeight: 1 }}>
+                                                    <BookOpen size={9} /> Từ vựng
+                                                </span>
+                                            )}
+                                            <p style={{ margin: 0 }}>{list.wordCount} {list.isGrammar ? 'câu' : 'từ'}</p>
+                                        </div>
+                                    </div>
+                                    <button className="recent-list-play">
+                                        <PlayCircle size={20} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+                )}
+
+                {activeMainTab === 'learning' && (
+                    <section className="dashboard-actions-section">
+                        <div className="dashboard-recent-header flex-between" style={{ marginBottom: 'var(--space-md)' }}>
+                            <h2 className="text-md font-semibold text-secondary">Khám phá</h2>
+                        </div>
+                        <div className="dashboard-actions">
+                            {actions.map((action, index) => (
+                                <button key={action.id} className="dashboard-action-card glass-card"
+                                    onClick={() => action.onClick ? action.onClick() : navigate(action.path)} style={{ animationDelay: `${index * 0.1}s`, '--item-color': action.color }}>
+                                    <div className="dashboard-action-icon" style={{ background: `${action.color}20`, color: action.color }}>
+                                        <action.icon size={28} />
+                                    </div>
+                                    <div className="dashboard-action-info">
+                                        <h3>{action.title}</h3>
+                                        <p>{action.description}</p>
+                                    </div>
+                                    <span className="dashboard-action-arrow">→</span>
+                                </button>
+                            ))}
+                        </div>
+                    </section>
+                )}
+
+                {/* SKILL REPORT CARDS */}
+                {skillReports.length > 0 && activeMainTab === 'learning' && (() => {
+                    const filteredSkillReports = selectedGroupFilter === 'all'
+                        ? skillReports
+                        : skillReports.filter(r => r.groupId === selectedGroupFilter);
+                    return (
+                        <section className="dashboard-actions-section">
+                            <div className="dashboard-recent-header flex-between" style={{ marginBottom: 'var(--space-md)' }}>
+                                <h2 className="text-md font-semibold text-secondary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    📊 Báo cáo kỹ năng
+                                </h2>
+                            </div>
+                            {Object.keys(groupIdToName).length > 1 && (
+                                <div className="dashboard-group-filter" style={{ marginBottom: '12px' }}>
+                                    <button
+                                        className={`dashboard-group-filter-btn${selectedGroupFilter === 'all' ? ' active' : ''}`}
+                                        onClick={() => setSelectedGroupFilter('all')}
+                                    >
+                                        Tất cả
+                                    </button>
+                                    {Object.entries(groupIdToName).map(([gid, gname]) => (
+                                        <button
+                                            key={gid}
+                                            className={`dashboard-group-filter-btn${selectedGroupFilter === gid ? ' active' : ''}`}
+                                            onClick={() => setSelectedGroupFilter(gid)}
+                                        >
+                                            {gname}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                            {filteredSkillReports.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '32px 24px', background: 'var(--bg-glass-card)', borderRadius: '20px', color: 'var(--text-muted)', border: '1px dashed var(--border-color)', fontSize: '0.95rem' }}>
+                                    Không có báo cáo kỹ năng cho lớp này.
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                    {filteredSkillReports.slice(0, 3).map(report => {
+                                        const dateLabel = report.startDate && report.endDate
+                                            ? `${report.startDate} → ${report.endDate}`
+                                            : (report.sentAt?.toDate ? report.sentAt.toDate().toLocaleDateString('vi-VN') : 'Gần đây');
+                                        const reportGroupName = groupIdToName[report.groupId];
+                                        const reportTitle = report.periodLabel || 'Đánh giá kỹ năng';
+                                        return (
+                                            <div
+                                                key={report.id}
+                                                className="glass-card"
+                                                style={{ cursor: 'pointer', animationDelay: '0s', '--item-color': '#8b5cf6', display: 'flex', alignItems: 'center', gap: 'var(--space-md)', overflow: 'hidden', animation: 'slideUp var(--transition-slow) ease both' }}
+                                                onClick={() => setViewingSkillReport(viewingSkillReport?.id === report.id ? null : report)}
+                                            >
+                                                <div className="dashboard-action-icon" style={{ background: '#f5f3ff', color: '#8b5cf6' }}>
+                                                    <Sparkles size={28} />
+                                                </div>
+                                                <div className="dashboard-action-info">
+                                                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                        {reportGroupName && Object.keys(groupIdToName).length > 1 && (
+                                                            <span className="dashboard-group-chip">
+                                                                <Users size={11} />
+                                                                {reportGroupName}
+                                                            </span>
+                                                        )}
+                                                        {reportTitle}
+                                                    </h3>
+                                                    <p>{dateLabel}</p>
+                                                </div>
+                                                <span className="dashboard-action-arrow">→</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </section>
+                    );
+                })()}
+
+                {/* Skill Report Viewer Modal */}
+                {viewingSkillReport && (
+                    <div className="settings-modal-backdrop" onClick={() => setViewingSkillReport(null)}>
+                        <div className="settings-modal animate-slide-up" onClick={e => e.stopPropagation()} style={{ maxWidth: '680px', maxHeight: '80vh', overflow: 'auto' }}>
+                            <button className="settings-modal-close" onClick={() => setViewingSkillReport(null)}>
+                                <X size={20} />
+                            </button>
+                            <div className="settings-modal-header">
+                                <h3>📊 Báo cáo kỹ năng</h3>
+                            </div>
+
+                            {viewingSkillReport.skillData && (() => {
+                                const SKILL_LABELS = { listening: 'Listening', speaking: 'Speaking', reading: 'Reading', writing: 'Writing', grammar: 'Grammar', vocabulary: 'Vocabulary' };
+                                const radarData = Object.entries(viewingSkillReport.skillData.skills).map(([key, val]) => ({
+                                    skill: SKILL_LABELS[key] || key,
+                                    score: val.score ?? 0,
+                                    fullMark: 100,
+                                }));
+                                return (
+                                    <div style={{ marginBottom: '16px' }}>
+                                        <ResponsiveContainer width="100%" height={250}>
+                                            <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="70%">
+                                                <PolarGrid stroke="#e2e8f0" />
+                                                <PolarAngleAxis dataKey="skill" tick={{ fontSize: 10, fontWeight: 700, fill: '#475569' }} />
+                                                <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 9, fill: '#94a3b8' }} />
+                                                <Radar name="Kỹ năng" dataKey="score" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.2} strokeWidth={2} dot={{ r: 3, fill: '#8b5cf6' }} />
+                                                <Tooltip formatter={(val) => [`${val}/100`, 'Điểm']} />
+                                            </RadarChart>
+                                        </ResponsiveContainer>
+
+                                        {/* Skill score summary */}
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', marginTop: '8px' }}>
+                                            {Object.entries(viewingSkillReport.skillData.skills).map(([key, val]) => {
+                                                const EMOJIS = { listening: '🎧', speaking: '🗣️', reading: '📖', writing: '✍️', grammar: '📝', vocabulary: '📚' };
+                                                const color = val.score === null ? '#cbd5e1' : val.score >= 70 ? '#16a34a' : val.score >= 50 ? '#ca8a04' : '#ef4444';
+                                                return (
+                                                    <div key={key} style={{ textAlign: 'center', padding: '8px 4px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #f1f5f9' }}>
+                                                        <span style={{ fontSize: '1rem' }}>{EMOJIS[key]}</span>
+                                                        <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>{SKILL_LABELS[key]}</div>
+                                                        <div style={{ fontSize: '1rem', fontWeight: 900, color }}>{val.score ?? '—'}</div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
+                            {/* Red flags in report */}
+                            {viewingSkillReport.redFlagsSummary?.length > 0 && (
+                                <div style={{
+                                    padding: '10px 14px', borderRadius: '12px', marginBottom: '12px',
+                                    background: 'linear-gradient(135deg, #fef2f2 0%, #fff7ed 100%)',
+                                    border: '1.5px solid #fecaca',
+                                    display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap'
+                                }}>
+                                    <span style={{ fontSize: '1rem' }}>🚩</span>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#dc2626', marginBottom: '4px' }}>
+                                            Cờ đỏ ({viewingSkillReport.redFlagsSummary.length})
+                                        </div>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                            {viewingSkillReport.redFlagsSummary.map((f, i) => (
+                                                <span key={i} style={{
+                                                    padding: '2px 8px', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 600,
+                                                    background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca'
+                                                }}>
+                                                    {f.violationLabel || f.violationType}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {viewingSkillReport.aiReport?.overallLevel && (
+                                <div style={{ padding: '8px 12px', background: '#eef2ff', borderRadius: '10px', marginBottom: '12px', fontSize: '0.85rem', fontWeight: 700, color: '#4f46e5' }}>
+                                    Trình độ ước tính: {viewingSkillReport.aiReport.overallLevel}
+                                </div>
+                            )}
+
+                            <div className="sp-report-html" style={{ fontSize: '0.88rem', color: '#334155', lineHeight: 1.6, background: '#f8fafc', padding: '14px', borderRadius: '12px' }}
+                                dangerouslySetInnerHTML={{ __html: (viewingSkillReport.finalReport || viewingSkillReport.aiReport?.detailedReport || 'Không có nội dung.').replace(/&nbsp;/g, ' ') }}
+                            />
+                        </div>
+                    </div>
+                )}
+
+            </main >
+
+            {/* Progress Modal */}
+            <ProgressModal isOpen={isProgressOpen} onClose={() => setIsProgressOpen(false)} redFlags={studentRedFlags.filter(f => !f.removed)} groupIdToName={groupIdToName} />
+
+            {/* Streak Milestone Celebration Popup */}
+            {celebrationMilestone && (
+                <div className="milestone-celebration-backdrop" onClick={() => setCelebrationMilestone(null)}>
+                    <div className="milestone-celebration-modal" onClick={e => e.stopPropagation()}>
+                        {/* Confetti particles */}
+                        <div className="milestone-confetti">
+                            {Array.from({ length: 20 }).map((_, i) => (
+                                <div key={i} className="milestone-confetti-piece" style={{
+                                    '--delay': `${Math.random() * 2}s`,
+                                    '--x': `${Math.random() * 100}%`,
+                                    '--rotation': `${Math.random() * 360}deg`,
+                                    '--color': ['#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#22c55e', '#ec4899'][i % 6]
+                                }} />
+                            ))}
+                        </div>
+                        <div className="milestone-celebration-emoji">{celebrationMilestone.emoji}</div>
+                        <h2 className="milestone-celebration-title" style={{ color: celebrationMilestone.color }}>
+                            {celebrationMilestone.title}
+                        </h2>
+                        <p className="milestone-celebration-subtitle">"{celebrationMilestone.subtitle}"</p>
+                        <p className="milestone-celebration-streak">
+                            🔥 {currentStreak} ngày streak liên tục!
+                        </p>
+                        <button className="milestone-celebration-btn" onClick={() => setCelebrationMilestone(null)}
+                            style={{ background: `linear-gradient(135deg, ${celebrationMilestone.color}, ${celebrationMilestone.color}dd)` }}>
+                            Tuyệt vời! 🎉
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div >
+    );
+}

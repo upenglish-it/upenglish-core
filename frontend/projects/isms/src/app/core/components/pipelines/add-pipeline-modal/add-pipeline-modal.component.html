@@ -1,0 +1,39 @@
+<!-- Accounts => Sub Account -->
+<nz-modal
+  [(nzVisible)]="showModal"
+  nzCentered
+  nzTitle="Add New Pipeline"
+  nzWidth="400px"
+  nzOkText="Submit"
+  [nzCancelText]="'Cancel'"
+  (nzOnOk)="onSubmit()"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()">
+  <ng-container *nzModalContent>
+    <form class="flex flex-col space-y-4 overflow-auto" [formGroup]="formGroup">
+      <div class="space-y-1.5">
+        <label class="hc-label">Title</label>
+        <nz-input-group [nzPrefix]="prefixPosition" class="space-x-1.5">
+          <input nz-input placeholder="Ex. Advance English Prospecting" formControlName="title" />
+        </nz-input-group>
+        <ng-template #prefixPosition>
+          <span class="text-base text-gray-400 ph-duotone ph-briefcase"></span>
+        </ng-template>
+        <ng-container *ngIf="formGroup.get('title').touched">
+          <p class="hc-error-message" *ngIf="formGroup.get('title').hasError('required')">Title is required</p>
+        </ng-container>
+      </div>
+
+      <div class="space-y-1.5">
+        <label class="hc-label">Type</label>
+        <nz-select formControlName="type" nzPlaceHolder="Select type">
+          <nz-option nzValue="leads" nzLabel="Leads"></nz-option>
+          <nz-option nzValue="task" nzLabel="Task"></nz-option>
+        </nz-select>
+        <ng-container *ngIf="formGroup.get('type').touched">
+          <p class="hc-error-message" *ngIf="formGroup.get('type').hasError('required')">Type is required</p>
+        </ng-container>
+      </div>
+    </form>
+  </ng-container>
+</nz-modal>

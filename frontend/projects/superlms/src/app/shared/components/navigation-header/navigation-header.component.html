@@ -1,0 +1,47 @@
+<div class="w-full border-b bg-white shadow-sm sticky top-0 z-40">
+  <div class="max-w-7xl mx-auto px-4 md:px-0 h-16 flex items-center justify-between gap-4">
+    <div class="flex items-center gap-3 min-w-0">
+      <img src="assets/images/logo-nav.png" alt="SuperLMS" class="h-8 w-auto" />
+      <span class="text-xs font-semibold tracking-wide text-slms-500 uppercase hidden sm:inline-flex">
+        {{ accountService.account.role }}
+      </span>
+    </div>
+
+    <nav class="hidden md:flex items-center gap-8 h-full flex-1 justify-end">
+      @for (nav of navigations; track nav.id) {
+        <a
+          [routerLink]="nav.link"
+          routerLinkActive="slms-navigation-active"
+          [routerLinkActiveOptions]="{ exact: false }"
+          class="slms-navigation font-medium flex items-center gap-2 relative">
+          <span>{{ nav.name }}</span>
+          <nz-badge *ngIf="nav.notifCount && nav.notifCount > 0" [nzCount]="nav.notifCount" [nzOverflowCount]="99" class=""> </nz-badge>
+        </a>
+      }
+    </nav>
+
+    <button
+      type="button"
+      class="md:hidden inline-flex items-center justify-center rounded-full border border-slate-200 p-2 text-slate-600"
+      (click)="toggleMenu()"
+      aria-label="Toggle navigation menu">
+      <span class="ph" [ngClass]="{ 'ph-x': isMenuOpen, 'ph-list': !isMenuOpen }"></span>
+    </button>
+  </div>
+
+  <div class="md:hidden border-t border-slate-100 bg-white" *ngIf="isMenuOpen">
+    <nav class="flex flex-row px-4 py-3 gap-6">
+      @for (nav of navigations; track nav.id) {
+        <a
+          [routerLink]="nav.link"
+          routerLinkActive="slms-navigation-active"
+          [routerLinkActiveOptions]="{ exact: false }"
+          class="slms-navigation font-medium flex items-center gap-2 relative"
+          (click)="closeMenu()">
+          <span>{{ nav.name }}</span>
+          <nz-badge *ngIf="nav.notifCount && nav.notifCount > 0" [nzCount]="nav.notifCount" [nzOverflowCount]="99"> </nz-badge>
+        </a>
+      }
+    </nav>
+  </div>
+</div>

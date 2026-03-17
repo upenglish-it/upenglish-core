@@ -1,0 +1,62 @@
+<div class="h-screen flex flex-col justify-center items-center relative">
+  <!-- Steps -->
+  <div class="max-w-[540px] absolute top-0">header</div>
+
+  <!-- Form -->
+  <div class="border border-gray-100 max-w-[850px] flex rounded-md" style="box-shadow: 0 1px 8px 0 rgb(0 0 0/8%)">
+    <div class="flex flex-col rounded-tl-md rounded-bl-md items-center justify-center px-4 py-8 space-y-5 bg-yellow-500">
+      <img src="https://lh3.googleusercontent.com/a/AAcHTterQQKwiaLFHytwT4KLETaAAvvm_iT6fBiiMNMTdg=s192-c-mo" alt="" class="rounded-full w-20 border-4 border-white" />
+      <h1 class="mb-0 text-lg font-normal text-white">Meet with John Mark Alicante</h1>
+      <div class="flex items-center space-x-3">
+        <div
+          class="w-6 h-6 rounded-full hover:bg-white hover:text-[orange] border border-white transition-all grid place-items-center cursor-pointer text-white"
+          (click)="manageCalendarMonth('back')">
+          <span nz-icon nzType="left" nzTheme="outline"></span>
+        </div>
+        <span class="text-white w-28 text-center">{{ calendarDate | date }}</span>
+        <div
+          class="w-6 h-6 rounded-full hover:bg-white hover:text-[orange] border border-white transition-all grid place-items-center cursor-pointer text-white"
+          (click)="manageCalendarMonth('next')">
+          <span nz-icon nzType="right" nzTheme="outline"></span>
+        </div>
+      </div>
+      <div class="pt-0 book-calendar">
+        <nz-calendar [nzFullscreen]="false" [(ngModel)]="calendarDate"></nz-calendar>
+      </div>
+    </div>
+    <div class="rounded-tr-md rounded-br-md p-8">
+      <form class="w-[380px] flex flex-col space-y-4" autocomplete="on">
+        <div class="space-y-1.5">
+          <label for="" class="font-normal text-gray-700 text-sm">How long do you need?</label>
+          <!-- <nz-select class="w-full" [nzDropdownMatchSelectWidth]="false">
+            <nz-option nzValue="15 minutes" nzLabel="15 minutes"></nz-option>
+            <nz-option nzValue="30 minutes" nzLabel="30 minutes"></nz-option>
+            <nz-option nzValue="1 hour" nzLabel="1 hour"></nz-option>
+          </nz-select> -->
+          <nz-radio-group nzButtonStyle="solid" class="w-full">
+            <label nz-radio-button nzValue="large">15 minutes</label>
+            <label nz-radio-button nzValue="default">30 minutes</label>
+            <label nz-radio-button nzValue="small">1 hour</label>
+          </nz-radio-group>
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="" class="font-normal text-gray-700 text-sm">What time works best?</label>
+          <nz-select class="w-full" [nzDropdownMatchSelectWidth]="false">
+            <nz-option nzValue="jack" nzLabel="Asia/Manila"></nz-option>
+            <nz-option nzValue="lucy" nzLabel="Asia/Singapore"></nz-option>
+            <nz-option nzValue="disabled" nzLabel="UTC"></nz-option>
+          </nz-select>
+        </div>
+
+        <div class="flex flex-col space-y-2 overflow-y-scroll max-h-96 mini-scroll-bar">
+          <ng-container *ngFor="let item of [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 00, 0, 0, 0, 0]">
+            <button nz-button nzType="default" (click)="manageCalendarMonth('next')">
+              <span>10:30 pm</span>
+            </button>
+          </ng-container>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

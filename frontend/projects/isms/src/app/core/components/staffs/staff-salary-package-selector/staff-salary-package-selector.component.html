@@ -1,0 +1,147 @@
+<div class="space-y-5">
+  <div class="flex space-x-2" [formGroup]="employmentInformationFormGroup">
+    <div class="space-y-1.5 flex-1">
+      <label class="isms-label">Date Hired</label>
+      <nz-date-picker [nzAllowClear]="false" formControlName="dateHired" nzFormat="yyyy/MM/dd" class="w-full"></nz-date-picker>
+    </div>
+    <div class="space-y-1.5 flex-1"></div>
+  </div>
+
+  <!-- <fieldset class="border relative border-solid border-gray-200 p-3 rounded-md" [formGroup]="toFormGroup(employmentInformationFormGroup.get('salaryIncrease'))">
+    <legend class="isms-label w-fit px-0.5">Frequency of salary increase</legend>
+    <div class="space-y-5 flex flex-col flex-1">
+      <div class="space-y-1.5 flex-1">
+        <label class="isms-label">Salary increase every</label>
+        <div class="flex space-x-2">
+          <nz-select formControlName="count" class="w-full" nzPlaceHolder="Select class" [nzDropdownMatchSelectWidth]="false">
+            <nz-option *ngFor="let count of salaryCounts" [nzValue]="count" [nzLabel]="count"></nz-option>
+          </nz-select>
+          <nz-select formControlName="type" class="w-full" nzPlaceHolder="Select class" [nzDropdownMatchSelectWidth]="false">
+            <nz-option nzValue="years" nzLabel="Year(s)"></nz-option>
+            <nz-option nzValue="months" nzLabel="Month(s)"></nz-option>
+            <nz-option nzValue="days" nzLabel="Days(s)"></nz-option>
+          </nz-select>
+        </div>
+      </div>
+
+      <div class="flex justify-end">
+        <button
+          nz-button
+          nzGhost
+          nzType="primary"
+          nzSize="small"
+          (click)="updateSalaryIncrease()"
+          [disabled]="!employmentInformationFormGroup.value.dateHired || !(employmentInformationFormGroup.value.salaryIncrease.count && employmentInformationFormGroup.value.salaryIncrease.type)"
+        >
+          Save Changes
+          <span nz-icon nzType="check-circle" nzTheme="outline"></span>
+        </button>
+      </div>
+    </div>
+  </fieldset> -->
+
+  <fieldset class="border relative border-solid border-gray-200 p-3 rounded-md">
+    <legend class="isms-label w-fit px-0.5">Salary Package</legend>
+    <div class="space-y-5 flex flex-col flex-1">
+      <div class="flex flex-col space-y-1 space-x-2 items-center">
+        <span class="text-gray-400" *ngIf="!assignedSalaryPackage">No Package Assign</span>
+        <ng-container *ngIf="assignedSalaryPackage">
+          <span class="text-gray-400">Assigned Package:</span>
+          <div class="px-2 py-1.5 bg-isms-50 rounded-md border border-isms-200 text-isms-500 text-center font-medium text-xs">
+            {{ assignedSalaryPackage.name }} - {{ assignedSalaryPackage.basicSalary | formattedCurrency }}
+          </div>
+        </ng-container>
+      </div>
+
+      <div class="flex space-x-2" [formGroup]="employmentInformationFormGroup">
+        <div class="space-y-1.5 flex-1">
+          <label class="isms-label">Package Choices</label>
+          <nz-select
+            [nzDropdownRender]="renderTemplate"
+            formControlName="salaryPackageId"
+            nzShowSearch
+            class="w-full"
+            nzPlaceHolder="Select salary package"
+            [nzDropdownMatchSelectWidth]="false">
+            <nz-option *ngFor="let package of salaryPackages" [nzLabel]="package.name + ' - ' + (package.basicSalary | formattedCurrency)" [nzValue]="package._id"></nz-option>
+          </nz-select>
+          <ng-template #renderTemplate>
+            <div class="p-3 border-t">
+              <a (click)="manageStaffSalaryPackageModal.toggle()">
+                <span nz-icon nzType="plus"></span>
+                Create New Package
+              </a>
+            </div>
+          </ng-template>
+        </div>
+        <div class="space-y-1.5 flex-1"></div>
+      </div>
+
+      <!-- {{ salaryPackageFormGroup.value | json }} -->
+      <div class="p-2 bg-gray-50 border border-gray-200 rounded-md" *ngIf="employmentInformationFormGroup.value.salaryPackageId">
+        <isms-staff-salary-package-form [form-group]="salaryPackageFormGroup"></isms-staff-salary-package-form>
+      </div>
+
+      <!-- {{ employmentInformation | json }} -->
+
+      <div class="flex justify-between" *ngIf="employmentInformationFormGroup.value.salaryPackageId">
+        <button
+          nz-button
+          nzSize="small"
+          (click)="manageStaffSalaryPackageModal.manage(employmentInformationFormGroup.value.salaryPackageId)"
+          [disabled]="employmentInformation?.salaryPackageId === employmentInformationFormGroup.value.salaryPackageId">
+          Modify the selected package
+          <span nz-icon nzType="edit" nzTheme="outline"></span>
+        </button>
+        <button
+          *ngIf="employmentInformation || (!employmentInformation && employmentInformationFormGroup.value.salaryPackageId)"
+          nz-button
+          nzGhost
+          nzType="primary"
+          nzSize="small"
+          (click)="assignSalaryPackage()"
+          [disabled]="employmentInformation?.salaryPackageId === employmentInformationFormGroup.value.salaryPackageId">
+          Assign the selected package
+          <span nz-icon nzType="check-circle" nzTheme="outline"></span>
+        </button>
+      </div>
+
+      <fieldset class="border relative border-solid border-gray-200 p-3 rounded-md" [formGroup]="toFormGroup(employmentInformationFormGroup.get('salaryIncrease'))">
+        <legend class="isms-label w-fit px-0.5">Frequency of salary increase</legend>
+        <div class="space-y-5 flex flex-col flex-1">
+          <div class="space-y-1.5 flex-1">
+            <label class="isms-label">Salary increase every</label>
+            <div class="flex space-x-2">
+              <nz-select formControlName="count" class="w-full" nzPlaceHolder="Select class" [nzDropdownMatchSelectWidth]="false">
+                <nz-option *ngFor="let count of salaryCounts" [nzValue]="count" [nzLabel]="count"></nz-option>
+              </nz-select>
+              <nz-select formControlName="type" class="w-full" nzPlaceHolder="Select class" [nzDropdownMatchSelectWidth]="false">
+                <nz-option nzValue="years" nzLabel="Year(s)"></nz-option>
+                <nz-option nzValue="months" nzLabel="Month(s)"></nz-option>
+                <nz-option nzValue="days" nzLabel="Days(s)"></nz-option>
+              </nz-select>
+            </div>
+          </div>
+
+          <div class="flex justify-end">
+            <button
+              nz-button
+              nzGhost
+              nzType="primary"
+              nzSize="small"
+              (click)="updateSalaryIncrease()"
+              [disabled]="
+                !employmentInformationFormGroup.value.dateHired ||
+                !(employmentInformationFormGroup.value.salaryIncrease.count && employmentInformationFormGroup.value.salaryIncrease.type)
+              ">
+              Save Changes
+              <span nz-icon nzType="check-circle" nzTheme="outline"></span>
+            </button>
+          </div>
+        </div>
+      </fieldset>
+    </div>
+  </fieldset>
+</div>
+
+<isms-manage-staff-salary-package-modal #manageStaffSalaryPackageModal [staff-id]="staffId" (on-submitted)="loadData()"></isms-manage-staff-salary-package-modal>

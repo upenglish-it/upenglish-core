@@ -1,0 +1,240 @@
+<div class="time-sch-wrapper" [style.height]="maxHeight">
+  <div class="flex items-center justify-between h-16">
+    <div class="flex space-x-2" *ngIf="showActionButtons">
+      <!-- <button class="btn" *ngIf="showGoto" (click)="showGotoModal = !showGotoModal">{{ text.GotoButton }}</button> -->
+      <nz-date-picker [nzAllowClear]="false" class="w-44"></nz-date-picker>
+      <!-- <div class="goto-modal" *ngIf="showGotoModal">
+        <label>
+          <input type="date" (change)="gotoDate($event.target)" />
+          <nz-date-picker *ngIf="showGoto"></nz-date-picker>
+        </label>
+      </div> -->
+
+      <!-- <button class="btn" *ngIf="showToday" (click)="gotoToday()">{{ text.TodayButton }}</button>
+      <button class="btn" (click)="previousPeriod()">{{ text.PrevButton }}</button>
+      <button class="btn" (click)="nextPeriod()">{{ text.NextButton }}</button> -->
+
+      <button nz-button *ngIf="showToday" (click)="gotoToday()">{{ text.TodayButton }}</button>
+      <nz-button-group>
+        <button nz-button (click)="previousPeriod()">{{ text.PrevButton }}</button>
+        <button nz-button (click)="nextPeriod()">{{ text.NextButton }}</button>
+      </nz-button-group>
+    </div>
+
+    <h3 class="text-center m-0 font-medium text-base text-gray-600" *ngIf="showHeaderTitle">
+      {{ text.HeaderTitle ?? start.locale(locale).format(headerFormat) + " - " + end.locale(locale).format(headerFormat) }}
+    </h3>
+
+    <div class="" *ngIf="showActionButtons">
+      <button class="btn" *ngFor="let period of periods" [ngClass]="period.classes" (click)="changePeriod(period)" [title]="period.tooltip ? period.tooltip : ''">
+        {{ period.name }}
+      </button>
+    </div>
+  </div>
+
+  <div class="time-sch-table-wrapper">
+    <table class="time-sch-table">
+      <tr *ngFor="let timeFrameHeader of header; let i = index; trackBy: trackByFn">
+        <td class="time-sch-section relative text-center" *ngIf="i === 0" [rowSpan]="periods.length">
+          <span class="font-semibold text-gray-600 text-sm">
+            <!-- {{ text.SectionTitle }} -->
+            Time slots of class in a day
+          </span>
+          <!-- <div class="absolute top-2 right-1">
+            <button
+              nz-button
+              nzShape="circle"
+              nzSize="small"
+              nz-tooltip
+              nzTooltipTitle="Add new time slot"
+              nzTooltipColor="#ff3823"
+              nzTooltipOverlayClassName="primary-tooltip-arrow"
+              nzTooltipPlacement="top"
+            >
+              <span nz-icon nzType="plus" nzTheme="outline"></span>
+            </button>
+          </div> -->
+        </td>
+        <td
+          class="py-3 text-center font-semibold text-gray-500"
+          *ngFor="let dateTime of timeFrameHeader.headerDetails; trackBy: trackByFn"
+          [colSpan]="dateTime.colspan"
+          [title]="dateTime.tooltip ? dateTime.tooltip : ''">
+          {{ dateTime.name }}
+        </td>
+      </tr>
+    </table>
+
+    <div class="time-sch-content-wrap">
+      <table class="time-sch-table">
+        <!-- <tr>
+          <td class="time-sch-section relative text-center">Class</td>
+          <td class="time-sch-section relative text-center">Room</td>
+          <td class="time-sch-section relative text-center">Care Taker</td>
+        </tr> -->
+        <tr *ngFor="let sectionItem of sectionItems; trackBy: trackByFn" [style.height]="sectionItem.minRowHeight + 'px'">
+          <td
+            class="time-sch-section text-center"
+            #sectionTd
+            (click)="events.SectionClickEvent ? events.SectionClickEvent(sectionItem.section) : false"
+            (contextmenu)="events.SectionContextMenuEvent ? events.SectionContextMenuEvent(sectionItem.section, $event) : false"
+            [style.cursor]="events.SectionClickEvent ? 'pointer' : ''"
+            [title]="sectionItem.section.tooltip ? sectionItem.section.tooltip : ''">
+            <!-- <div class="flex flex-col flex-1 py-2">
+              <span class="font-semibold"> {{ sectionItem.section.title }}</span>
+              <span class="font-normal text-xs text-gray-500" *ngIf="sectionItem.section?.description">{{ sectionItem.section.description }}</span>
+            </div> -->
+
+            <div class="flex flex-col flex-1 py-2">
+              <span class="font-semibold"> {{ sectionItem.section.title }}</span>
+              <span class="font-normal text-xs text-gray-500" *ngIf="sectionItem.section?.description">{{ sectionItem.section.description }}</span>
+            </div>
+          </td>
+
+          <td *ngFor="let td of header[header.length - 1].headerDetails; trackBy: trackByFn"></td>
+        </tr>
+      </table>
+
+      <div class="time-sch-section-wrapper" [style.left]="SectionLeftMeasure" cdkDropListGroup>
+        <div
+          class="time-sch-section-container"
+          cdkDropList
+          cdkDropListSortingDisabled
+          [cdkDropListData]="sectionItem.section"
+          (cdkDropListDropped)="drop($event)"
+          *ngFor="let sectionItem of sectionItems; trackBy: trackByFn"
+          [style.height]="sectionItem.minRowHeight + 'px'">
+          <div
+            class="time-sch-item"
+            cdkDrag
+            cdkDragLockAxis="y"
+            cdkDragBoundary=".time-sch-section-wrapper"
+            [cdkDragData]="itemMeta.item"
+            [cdkDragDisabled]="!allowDragging"
+            *ngFor="let itemMeta of sectionItem.itemMetas"
+            [ngClass]="itemMeta.item.classes"
+            (click)="events.ItemClicked ? events.ItemClicked(itemMeta.item) : false"
+            (contextmenu)="events.ItemContextMenu ? events.ItemContextMenu(itemMeta.item, $event) : false"
+            [style.height]="minRowHeight + 'px'"
+            [style.top]="itemMeta.cssTop + 'px'"
+            [style.left]="itemMeta.cssLeft + '%'"
+            [style.width]="itemMeta.cssWidth + '%'">
+            <div
+              class="item-drag-placeholder"
+              *cdkDragPlaceholder
+              [style.height]="minRowHeight - 6 + 'px'"
+              [style.left]="itemMeta.cssLeft + '%'"
+              [style.width]="'calc(' + itemMeta.cssWidth + '% - 6px)'"></div>
+            <!-- <div class="time-sch-item-start" *ngIf="itemMeta.isStart"></div> -->
+            <div
+              class="time-sch-item-content"
+              (click)="manageStaffScheduleDrawer.toggle()"
+              nz-tooltip
+              [nzTooltipTitle]="scheduleTooltipTemplate"
+              nzTooltipPlacement="bottomLeft"
+              nzTooltipOverlayClassName="white-tooltip-arrow no-padding-tooltip-arrow "
+              nzTooltipColor="#FFFFFF">
+              <div class="flex flex-col">
+                <!-- <span class="font-semibold text-[10px] lowercase"> {{ itemMeta.item.start.toDate() | date : "hh:mma" }} to {{ itemMeta.item.end.toDate() | date : "hh:mma" }} </span> -->
+                <span class="font-semibold text-[10px] lowercase">2hrs</span>
+              </div>
+              <div class="flex -space-x-2.5 items-center relative">
+                <img
+                  class="w-6 h-6 border-2 border-white rounded-full relative hover:z-10 hover:scale-110 transition-all"
+                  style="border: 2px solid white"
+                  src="https://daisyui.com/images/stock/photo-1534528741775-53994a69daeb.jpg"
+                  alt=""
+                  nz-tooltip
+                  nzTooltipTitle="Johnny Bravo - Care Taker"
+                  nzTooltipColor="#ff3823"
+                  nzTooltipOverlayClassName="primary-tooltip-arrow"
+                  nzTooltipPlacement="top" />
+                <img
+                  class="w-6 h-6 rounded-full relative hover:z-10 hover:scale-110 transition-all"
+                  style="border: 2px solid white"
+                  src="https://flowbite.com/docs/images/people/profile-picture-2.jpg"
+                  alt=""
+                  nz-tooltip
+                  nzTooltipTitle="Johnny Bravo - Teacher"
+                  nzTooltipColor="#ff3823"
+                  nzTooltipOverlayClassName="primary-tooltip-arrow"
+                  nzTooltipPlacement="top" />
+                <!--  <img
+                  class="w-6 h-6 rounded-full relative hover:z-10 hover:scale-110 transition-all"
+                  style="border: 2px solid white"
+                  src="https://flowbite.com/docs/images/people/profile-picture-5.jpg"
+                  alt=""
+                  nz-tooltip
+                  nzTooltipTitle="Johnny Bravo"
+                  nzTooltipColor="#ff3823"
+                  nzTooltipOverlayClassName="primary-tooltip-arrow"
+                  nzTooltipPlacement="top"
+                />
+              <img
+                  class="w-6 h-6 rounded-full relative hover:z-10 hover:scale-110 transition-all"
+                  style="border: 2px solid white"
+                  src="https://flowbite.com/docs/images/people/profile-picture-2.jpg"
+                  alt=""
+                  nz-tooltip
+                  nzTooltipTitle="Johnny Bravo"
+                  nzTooltipColor="#ff3823"
+                  nzTooltipOverlayClassName="primary-tooltip-arrow"
+                  nzTooltipPlacement="top"
+                />
+                <span
+                  class="px-1 h-6 grid place-items-center text-[10px] font-medium text-isms-500 bg-isms-200 rounded-full relative"
+                  style="border: 2px solid white"
+                  nz-tooltip
+                  nzTooltipTitle="and 13 more"
+                  nzTooltipColor="#ff3823"
+                  nzTooltipOverlayClassName="primary-tooltip-arrow"
+                  nzTooltipPlacement="top"
+                  >+2</span
+                > -->
+              </div>
+
+              <!-- <nz-avatar-group>
+                <nz-avatar nzSize="small" nzIcon="user" nzSrc="//zos.alipayobjects.com/rmsportal/ODTLcjxAfvqbxHnVXCYX.png"></nz-avatar>
+                <nz-avatar nzSize="small" style="background-color: #f56a00" nzText="U"></nz-avatar>
+                <nz-avatar nzSize="small" style="background-color: #87d068" nz-tooltip nzTooltipTitle="NG-ZORRO User" nzIcon="user"></nz-avatar>
+                <nz-avatar nzSize="small" style="background-color: #1890ff" nzText="NG"></nz-avatar>
+              </nz-avatar-group> -->
+
+              <ng-template #scheduleTooltipTemplate>
+                <div class="flex">
+                  <div class="w-72 flex flex-col border-r">
+                    <h3 class="text-gray-500 mb-0 text-sm font-medium border-b px-3 py-2.5">Members in this schedule</h3>
+                    <ul class="mb-0 h-64 overflow-auto mini-scroll-bar flex flex-col">
+                      <li class="flex items-center space-x-3 hover:bg-gray-100 px-3 cursor-pointer py-1.5" *ngFor="let item of [0, 0, 0, 0, 0, 0, 0, 0, 0]">
+                        <img profile-photo [letter]="'JA'" class="w-7 h-7 bg-gray-100 rounded-full" />
+                        <span class="text-xs font-normal text-gray-700"> John Mark</span>
+                      </li>
+                    </ul>
+                  </div>
+                  <div class="w-72 flex flex-col">
+                    <h3 class="text-gray-500 mb-0 text-sm font-medium border-b px-3 py-2.5">Notes for Sep 2, 2023</h3>
+                    <div class="mb-0 h-64 overflow-auto mini-scroll-bar text-gray-600 text-sm px-3 py-2">
+                      <p>
+                        Lorem ipsum dolor, sit amet consectetur adipisicing elit. Architecto voluptatibus animi ad et, quisquam obcaecati rerum quaerat numquam officia eius! Nisi,
+                        similique illo unde accusamus aliquam minus inventore molestias tempora! Lorem ipsum dolor, sit amet consectetur adipisicing elit. Architecto voluptatibus
+                        animi ad et, quisquam obcaecati rerum quaerat numquam officia eius! Nisi, similique illo unde accusamus aliquam minus inventore molestias tempora! Lorem
+                        ipsum dolor, sit amet consectetur adipisicing elit. Architecto voluptatibus animi ad et, quisquam obcaecati rerum quaerat numquam officia eius! Nisi,
+                        similique illo unde accusamus aliquam minus inventore molestias tempora! Lorem ipsum dolor, sit amet consectetur adipisicing elit. Architecto voluptatibus
+                        animi ad et, quisquam obcaecati rerum quaerat numquam officia eius! Nisi, similique illo unde accusamus aliquam minus inventore molestias tempora!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </ng-template>
+            </div>
+            <!-- <div class="time-sch-item-end" *ngIf="itemMeta.isEnd"></div> -->
+          </div>
+        </div>
+
+        <!-- <div class="time-sch-current-time" *ngIf="showCurrentTime" [title]="currentTimeTitle" [style.visibility]="currentTimeVisibility" [style.left]="currentTimeIndicatorPosition"></div> -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<isms-manage-staff-schedule-drawer #manageStaffScheduleDrawer></isms-manage-staff-schedule-drawer>

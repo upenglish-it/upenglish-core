@@ -1,0 +1,60 @@
+<div class="max-w-7xl w-full mx-auto flex flex-col gap-10 pt-14 px-4 md:px-0">
+  <section class="flex flex-col gap-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div>
+        <h3 class="text-xl font-semibold text-slate-900 mb-1">Prompt library</h3>
+        <p class="text-sm text-slate-500 mb-0">Reusable instructions for teachers, admins, and AI flows.</p>
+      </div>
+      <button nz-button nzType="default" class="flex items-center gap-2" (click)="createPromptsModal.toggle(null)">
+        <span class="ph ph-plus"></span>
+        New prompt
+      </button>
+    </div>
+
+    @if (prompts.length > 0) {
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        @for (prompt of prompts; track prompt._id) {
+          <article class="rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-900/5 p-6 flex flex-col gap-4">
+            <header class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+              <div class="flex flex-col gap-1">
+                <h4 class="text-lg font-semibold text-slate-900 mb-0">{{ prompt.name }}</h4>
+                <p class="text-sm text-slate-500 mb-0">Provider: {{ prompt.provider }} · Model: {{ prompt.model }}</p>
+              </div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <nz-tag nzColor="success" class="uppercase tracking-wide">{{ prompt.provider }}</nz-tag>
+                <nz-tag nzColor="default">{{ prompt.model }}</nz-tag>
+              </div>
+            </header>
+
+            <div class="rounded-2xl bg-slate-50 text-slate-600 text-sm p-4 border border-slate-100">
+              <p class="mb-0 line-clamp-3">{{ prompt.message }}</p>
+            </div>
+
+            <footer class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span class="text-xs text-slate-500 break-all">Prompt ID: {{ prompt._id }}</span>
+              <div class="flex items-center gap-2 flex-wrap">
+                <button nz-button nzType="default" class="flex items-center gap-2 text-xs sm:text-sm" (click)="createPromptsModal.toggle(prompt)">
+                  <span class="ph ph-pencil-simple"></span>
+                  Edit
+                </button>
+                <button nz-button nzType="default" nzGhost nzDanger class="flex items-center gap-2 text-xs sm:text-sm" (click)="deletePrompt(prompt._id)">
+                  <span class="ph ph-trash"></span>
+                  Delete
+                </button>
+              </div>
+            </footer>
+          </article>
+        }
+      </div>
+    } @else {
+      <div class="rounded-3xl border border-dashed border-slate-300 bg-white px-10 py-16 text-center">
+        <span class="ph ph-magic-wand text-4xl text-slate-300 block mb-4"></span>
+        <h4 class="text-xl font-semibold text-slate-900 mb-2">No prompts yet</h4>
+        <p class="text-sm text-slate-500 mb-6">Kickstart your AI library with a reusable tone, persona, or review routine.</p>
+        <button type="button" nz-button nzType="primary" (click)="createPromptsModal.toggle(null)">Create your first prompt</button>
+      </div>
+    }
+  </section>
+</div>
+
+<slms-create-prompts-modal #createPromptsModal (submitted)="ngOnInit()"></slms-create-prompts-modal>

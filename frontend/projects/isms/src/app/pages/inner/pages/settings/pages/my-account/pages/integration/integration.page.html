@@ -1,0 +1,10 @@
+<form class="w-[380px] flex flex-col space-y-4" [formGroup]="languageFormGroup" autocomplete="on" (ngSubmit)="onSubmit()">
+  <div class="flex space-y-2 flex-col mb-2">
+    <h1 class="mt-0 mb-0 text-xl text-gray-800 font-semibold">Integration</h1>
+    <p class="mt-0 mb-0 text-sm text-gray-500 font-regular">Integrate google contacts</p>
+  </div>
+
+  <div class="pt-2">
+    <button type="submit" nz-button nzType="primary">Connect Google Contacts</button>
+  </div>
+</form>

@@ -1,0 +1,45 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  nzCentered
+  [nzWidth]="'400px'"
+  [nzTitle]="titleTemplate"
+  [nzFooter]="footerTemplate"
+  (nzOnOk)="onCreate()"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <form class="px-4 py-3 flex-col max-h-[500px] space-y-3 flex-1 flex overflow-auto mini-scroll-bar min-h-fit" [formGroup]="classDayFormGroup">
+      <div class="space-y-1.5">
+        <label class="font-normal text-gray-600 text-xs required">Name</label>
+        <input nz-input placeholder="Type here" formControlName="name" />
+        <ng-container *ngIf="classDayFormGroup.get('name').touched">
+          <p class="isms-error-message" *ngIf="classDayFormGroup.get('name').hasError('required')">Name is required</p>
+        </ng-container>
+      </div>
+      <div class="space-y-1.5 flex-1">
+        <label class="font-normal text-gray-600 text-xs"> Days </label>
+        <nz-select formControlName="days" nzShowSearch nzMode="multiple" class="w-full" nzPlaceHolder="Select days" [nzDropdownMatchSelectWidth]="false">
+          <nz-option *ngFor="let day of days" [nzLabel]="day.name" [nzValue]="day.value"></nz-option>
+        </nz-select>
+        <ng-container *ngIf="classDayFormGroup.get('days').touched">
+          <p class="isms-error-message" *ngIf="classDayFormGroup.get('days').hasError('required')">Days is required</p>
+        </ng-container>
+      </div>
+    </form>
+  </ng-container>
+  <ng-template #titleTemplate>
+    {{ classDayFormGroup.value._id ? "Manage Day" : "Add New Day" }}
+  </ng-template>
+  <ng-template #footerTemplate>
+    <div class="space-x-2 flex items-center">
+      <button nz-button nzBlock (click)="toggle()">Close</button>
+      <button nz-button nzType="primary" (click)="onCreate()" [nzLoading]="loading" nzBlock [disabled]="classDayFormGroup.invalid" *ngIf="!classDayFormGroup.value._id"
+        >Submit</button
+      >
+      <button nz-button nzType="primary" (click)="onUpdate()" [nzLoading]="loading" nzBlock [disabled]="classDayFormGroup.invalid" *ngIf="classDayFormGroup.value._id"
+        >Save Changes</button
+      >
+    </div>
+  </ng-template>
+</nz-modal>

@@ -1,0 +1,71 @@
+<fieldset
+  class="border border-solid border-gray-200 p-3 rounded-md"
+  *ngIf="view === 'selector' && staffSalaryAdvancementFormGroup && staffSalaryAdvancementFormGroup.value.payNow"
+  [formGroup]="staffSalaryAdvancementFormGroup">
+  <legend class="isms-label w-fit px-0.5">Your Salary Advancement</legend>
+  <div class="space-y-5 flex flex-col flex-1">
+    <div class="flex space-x-2">
+      <div class="space-y-1.5 flex flex-col flex-1">
+        <div class="flex items-center justify-between">
+          <label class="isms-label">Amount Loaned</label>
+        </div>
+        <nz-input-number formControlName="loanedAmount" nzPlaceHolder="Type here" nzDisabled style="width: 100%"></nz-input-number>
+      </div>
+      <div class="space-y-1.5 flex flex-col flex-1">
+        <label class="isms-label">Total Amount Paid</label>
+        <nz-input-number formControlName="paidAmount" nzPlaceHolder="Type here" nzDisabled style="width: 100%"></nz-input-number>
+      </div>
+      <div class="space-y-1.5 flex flex-col flex-1">
+        <label class="isms-label">Remaining Balance</label>
+        <nz-input-number formControlName="remainingBalance" nzPlaceHolder="Type here" nzDisabled style="width: 100%"></nz-input-number>
+      </div>
+    </div>
+    <div class="flex space-x-2" formGroupName="agreement">
+      <div class="space-y-1.5 flex flex-col flex-1">
+        <label class="isms-label">Amount To Pay</label>
+        <nz-input-number formControlName="amount" style="width: 100%" nzPlaceHolder="Type here"></nz-input-number>
+      </div>
+      <!-- <div class="space-y-1.5 flex flex-col flex-1">
+      <label class="isms-label">Agreement to Pay Every Payouts</label>
+      <nz-input-number formControlName="every" style="width: 100%" nzPlaceHolder="Type here"></nz-input-number>
+    </div> -->
+    </div>
+  </div>
+</fieldset>
+
+<fieldset class="border border-solid border-gray-200 p-3 rounded-md" *ngIf="view === 'form'" [formGroup]="staffSalaryAdvancementFormGroup">
+  <legend class="isms-label w-fit px-0.5">Salary Advancement</legend>
+  <div class="space-y-5 flex flex-col flex-1">
+    <div class="flex space-x-2">
+      <div class="space-y-1.5 flex flex-col flex-1">
+        <div class="flex items-center justify-between">
+          <label class="isms-label">Amount Loaned</label>
+        </div>
+        <nz-input-number formControlName="loanedAmount" nzPlaceHolder="Type here" style="width: 100%"></nz-input-number>
+      </div>
+      <div class="space-y-1.5 flex flex-col flex-1">
+        <label class="isms-label">Total Amount Paid</label>
+        <nz-input-number formControlName="paidAmount" nzPlaceHolder="Type here" nzDisabled style="width: 100%"></nz-input-number>
+      </div>
+      <div class="space-y-1.5 flex flex-col flex-1">
+        <label class="isms-label">Remaining Balance</label>
+        <nz-input-number formControlName="remainingBalance" nzPlaceHolder="Type here" nzDisabled style="width: 100%"></nz-input-number>
+      </div>
+    </div>
+    <div class="flex space-x-2" formGroupName="agreement">
+      <div class="space-y-1.5 flex flex-col flex-1">
+        <label class="isms-label">Amount To Pay</label>
+        <nz-input-number formControlName="amount" style="width: 100%" nzPlaceHolder="Type here"></nz-input-number>
+      </div>
+      <div class="space-y-1.5 flex flex-col flex-1">
+        <label class="isms-label">Agreement to Pay Every Payouts</label>
+        <nz-input-number formControlName="every" style="width: 100%" nzPlaceHolder="Type here"></nz-input-number>
+      </div>
+    </div>
+    <div class="flex justify-end">
+      <button nz-button nzType="primary" nzGhost nzSize="small" [nzLoading]="loading" (click)="onSetSalaryAdvancement()" [disabled]="staffSalaryAdvancementFormGroup.invalid"
+        >Save Changes</button
+      >
+    </div>
+  </div>
+</fieldset>

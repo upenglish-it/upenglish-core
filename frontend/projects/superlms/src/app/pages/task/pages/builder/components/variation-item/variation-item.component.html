@@ -1,0 +1,41 @@
+<div class="relative border border-gray-300 p-3 rounded-md shadow-lg">
+  @if (itemFormGroup.value.type === "instruction") {
+    <!-- done -->
+    <slms-instruction [form-group]="formGroup" [item-form-group]="itemFormGroup"></slms-instruction>
+  } @else if (itemFormGroup.value.type === "choice") {
+    <!-- done -->
+    <slms-choice [item-index]="itemIndex" [form-group]="formGroup" [item-form-group]="itemFormGroup"></slms-choice>
+  } @else if (itemFormGroup.value.type === "fill-in") {
+    <!-- inprogress - image is left -->
+    <slms-fill-in [item-index]="itemIndex" [form-group]="formGroup" [part-form-group]="partFormGroup" [item-form-group]="itemFormGroup"></slms-fill-in>
+  } @else if (itemFormGroup.value.type === "drag-drop") {
+    <!-- done -->
+    <slms-drag-n-drop [item-index]="itemIndex" [form-group]="formGroup" [part-form-group]="partFormGroup" [item-form-group]="itemFormGroup"></slms-drag-n-drop>
+  } @else if (itemFormGroup.value.type === "fill-in-radio") {
+    <slms-fill-in [item-index]="itemIndex" [form-group]="formGroup" [part-form-group]="partFormGroup" [item-form-group]="itemFormGroup"></slms-fill-in>
+  } @else if (itemFormGroup.value.type === "box-ticking") {
+    <slms-box-ticking [item-index]="itemIndex" [form-group]="formGroup" [part-form-group]="partFormGroup" [item-form-group]="itemFormGroup"></slms-box-ticking>
+  } @else if (itemFormGroup.value.type === "fill-in-input") {
+    <!-- <slms-box-ticking [item-index]="itemIndex" [form-group]="formGroup" [part-form-group]="partFormGroup" [item-form-group]="itemFormGroup"></slms-box-ticking> -->
+    <slms-fill-in [item-index]="itemIndex" [form-group]="formGroup" [part-form-group]="partFormGroup" [item-form-group]="itemFormGroup"></slms-fill-in>
+  } @else if (itemFormGroup.value.type === "drag-to-fill") {
+    <slms-drag-to-fill [item-index]="itemIndex" [form-group]="formGroup" [part-form-group]="partFormGroup" [item-form-group]="itemFormGroup"></slms-drag-to-fill>
+  } @else if (itemFormGroup.value.type === "speaking") {
+    <slms-speaking [item-index]="itemIndex" [form-group]="formGroup" [part-form-group]="partFormGroup" [item-form-group]="itemFormGroup"></slms-speaking>
+  } @else if (itemFormGroup.value.type === "ielts-writing") {
+    <!-- todo -->
+    <slms-ielts-writing [item-index]="itemIndex" [form-group]="formGroup" [part-form-group]="partFormGroup" [item-form-group]="itemFormGroup"></slms-ielts-writing>
+  } @else if (itemFormGroup.value.type === "ielts-speaking") {
+    <!-- todo -->
+    <slms-ielts-speaking [item-index]="itemIndex" [form-group]="formGroup" [part-form-group]="partFormGroup" [item-form-group]="itemFormGroup"></slms-ielts-speaking>
+  }
+
+  @if (formGroup.value.mode === "editing") {
+    <!-- Remove item -->
+    <div class="absolute -right-3 -top-3 z-10 flex gap-2">
+      <button nz-button nzType="primary" nzDanger nzShape="circle" nzSize="small" (click)="itemsFormArray.removeAt(itemIndex)">
+        <span class="ph-bold ph-x"></span>
+      </button>
+    </div>
+  }
+</div>

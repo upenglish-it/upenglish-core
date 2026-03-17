@@ -1,0 +1,95 @@
+// .image-upload-selector {
+//   .single-file {
+//   }
+
+//   .multiple-file {
+//     .file-wrapper {
+//       display: flex;
+//       flex-direction: row;
+//       flex-wrap: wrap;
+//       grid-template-columns: repeat(4, 1fr);
+//       .file-item,
+//       .file-opener {
+//         position: relative;
+//         width: 168px;
+//         height: 168px;
+//         margin-right: 5px;
+//         margin-bottom: 5px;
+
+//         &:last-child {
+//           margin-right: 0;
+//         }
+//         &:nth-child(4) {
+//           margin-right: 0;
+//         }
+//         &:nth-child(8) {
+//           margin-right: 0;
+//         }
+//       }
+
+//       .file-item {
+//         &:hover {
+//           .options-holder {
+//             display: block;
+//           }
+//         }
+//         .image-holder {
+//           position: relative;
+//           width: 100%;
+//           height: 100%;
+//           background-image: url(https://images.deliveryhero.io/image/fd-ph/Products/11182305.jpg);
+//           background-position: center;
+//           background-size: cover;
+//           background-repeat: no-repeat;
+//           border-radius: 4px;
+//         }
+//         .options-holder {
+//           display: none;
+//           position: absolute;
+//           width: 100%;
+//           height: 100%;
+//           top: 0;
+//           background: rgba(0, 0, 0, 0.3);
+//           border-radius: 4px;
+
+//           .option-buttons {
+//             display: flex;
+//             justify-content: flex-end;
+//             margin: 5px;
+//             .delete-uploaded {
+//               margin-left: 10px;
+//             }
+//           }
+//         }
+//       }
+
+//       .file-opener {
+//         background-color: #fafafa;
+//         border: 1px dashed #d9d9d9;
+//         border-radius: 4px;
+//         cursor: pointer;
+//         transition: border-color 0.3s;
+//         display: flex;
+//         justify-content: center;
+//         label {
+//           display: flex;
+//           justify-content: center;
+//           flex-direction: column;
+//           align-items: center;
+//           flex: 1;
+//           cursor: pointer;
+//           i {
+//             font-size: 20px;
+//           }
+//         }
+//         .input-file-selector {
+//           display: none;
+//         }
+//       }
+//     }
+//   }
+// }
+
+.ngx-ic-source-image {
+  @apply inline-block;
+}

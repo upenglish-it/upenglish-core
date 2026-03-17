@@ -1,0 +1,24 @@
+<div class="p-4 rounded-md border border-slms-200 flex-nowrap bg-slms-100 flex flex-col gap-2" [formGroup]="itemFormGroup">
+  @let mode = formGroup.value.mode;
+  @if (mode === "viewing") {
+    @if (itemFormGroup.value.title) {
+      <span class="font-medium text-sm">{{ itemFormGroup.value.title }}</span>
+    }
+    @if (itemFormGroup.value.description) {
+      <p-editor class="quill-viewing-description" placeholder="Write here..." [readonly]="true" formControlName="description"> </p-editor>
+    }
+  } @else if (mode === "editing") {
+    <input nz-input type="text" formControlName="title" placeholder="Enter title here" />
+    <p-editor placeholder="Write here..." formControlName="description">
+      <ng-template #header>
+        <span class="ql-formats">
+          <button type="button" class="ql-bold" aria-label="Bold"></button>
+          <button type="button" class="ql-italic" aria-label="Italic"></button>
+          <button type="button" class="ql-underline" aria-label="Underline"></button>
+        </span>
+      </ng-template>
+    </p-editor>
+  } @else {
+    not listed
+  }
+</div>

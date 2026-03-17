@@ -1,0 +1,78 @@
+<nz-modal
+  [(nzVisible)]="showModal"
+  [nzWidth]="'600px'"
+  [nzTitle]="titleTemplate"
+  [nzFooter]="footerTemplate"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="toggle()"
+  [nzBodyStyle]="{ padding: '0px' }">
+  <ng-container *nzModalContent>
+    <form class="px-4 py-3 flex-col max-h-[700px] space-y-3 flex-1 flex overflow-auto mini-scroll-bar min-h-fit" [formGroup]="eventFormGroup">
+      <div class="space-y-1.5 flex-1">
+        <label class="font-normal text-gray-600 text-xs required">Title</label>
+        <input nz-input placeholder="Ex. Teacher's meeting" formControlName="title" />
+        <ng-container *ngIf="eventFormGroup.get('title').touched">
+          <p class="isms-error-message" *ngIf="eventFormGroup.get('title').hasError('required')">Title is required</p>
+        </ng-container>
+      </div>
+
+      <div class="space-y-1.5 flex flex-col">
+        <label class="font-normal text-gray-600 text-xs required">Attendees</label>
+        <isms-members-selector></isms-members-selector>
+      </div>
+
+      <!-- <div class="flex space-x-2">
+        <div class="space-y-1.5 flex-1 flex flex-col">
+          <label class="font-normal text-gray-600 text-xs required">Amount</label>
+          <nz-input-number formControlName="amount" [nzDisabled]="cashflowExpenseFormGroup.value.from === 'material'" nzPlaceHolder="0" style="width: 100%" [nzMin]="1" [nzStep]="1"></nz-input-number>
+          <ng-container *ngIf="cashflowExpenseFormGroup.get('amount').touched">
+            <p class="isms-error-message" *ngIf="cashflowExpenseFormGroup.get('amount').hasError('required')">Amount is required</p>
+          </ng-container>
+        </div>
+        <div class="flex-1"></div>
+      </div> -->
+
+      <!-- <div class="space-y-1.5">
+        <label class="font-normal text-gray-600 text-xs"> Mode Of Payment </label>
+        <nz-select formControlName="mode" nzShowSearch class="w-full" nzPlaceHolder="Select mode of payment" [nzDropdownMatchSelectWidth]="false">
+          <nz-option *ngFor="let mop of modeOfPayment" [nzLabel]="mop.name" [nzValue]="mop.value"></nz-option>
+        </nz-select>
+      </div>
+
+      <div class="space-y-1.5 flex flex-col">
+        <label class="font-normal text-gray-600 text-xs required">Notes</label>
+        <textarea formControlName="notes" nz-input rows="2" placeholder="Type here"></textarea>
+      </div> -->
+
+      <div class="space-y-1.5 flex flex-col">
+        <label class="font-normal text-gray-600 text-xs required">Schedule</label>
+        <isms-schedule-selector [form-group]="scheduleFormGroup"></isms-schedule-selector>
+      </div>
+
+      <div class="space-y-1.5 flex-1">
+        <label class="font-normal text-gray-600 text-xs required">Location</label>
+        <!-- <input nz-input placeholder="Type here" formControlName="location" /> -->
+        <div class="w-full">
+          <nz-input-group [nzPrefix]="searchPrefixTemplate" class="space-x-1.5">
+            <input nz-input placeholder="Add location" nzShape="round" formControlName="location" />
+          </nz-input-group>
+          <ng-template #searchPrefixTemplate>
+            <span class="text-base cursor-pointer text-gray-400 ph-duotone ph-map-pin"></span>
+          </ng-template>
+        </div>
+      </div>
+
+      <div class="space-y-1.5 flex flex-col">
+        <label class="font-normal text-gray-600 text-xs required">Description</label>
+        <textarea formControlName="description" nz-input rows="5" placeholder="Add description"></textarea>
+      </div>
+    </form>
+  </ng-container>
+  <ng-template #titleTemplate> Expense </ng-template>
+  <ng-template #footerTemplate>
+    <div class="space-x-2 flex items-center justify-end">
+      <button nz-button (click)="toggle()">Close</button>
+      <button nz-button nzType="primary" (click)="(1)" [nzLoading]="false">Save</button>
+    </div>
+  </ng-template>
+</nz-modal>

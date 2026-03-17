@@ -1,0 +1,398 @@
+@if (testDetails) {
+  <div class="max-w-7xl w-full mx-auto flex flex-col gap-10">
+    <div class="pt-14">
+      <a class="flex gap-2 items-center w-fit" (click)="goBack()">
+        <span class="ph ph-arrow-bend-up-left"></span>
+        <span>Go back</span>
+      </a>
+    </div>
+
+    <div class="rounded-lg bg-white px-4 py-6 border shadow-md flex flex-col gap-10">
+      <div class="flex items-start gap-6">
+        @if (testDetails?.student?.profilePhoto) {
+          <img
+            profile-photo
+            [photo]="testDetails?.student?.profilePhoto || ''"
+            [letter]="testDetails.student.firstName[0]"
+            class="bg-gray-300 rounded-full h-28 w-28 object-cover" />
+        } @else {
+          <div class="bg-gray-300 rounded-full h-28 w-28 object-cover"></div>
+        }
+
+        <div class="flex flex-col gap-4 flex-1">
+          <div class="flex items-center gap-2">
+            <h2 class="font-bold text-2xl mb-0">{{ studentDetail[0].firstName }} {{ studentDetail[0].lastName }}</h2>
+            <nz-badge nzStandalone [nzCount]="reviewedCount" [nzStyle]="{ backgroundColor: '#52c41a' }"></nz-badge>
+          </div>
+          <div class="text-gray-500 flex items-center gap-2">
+            <span class="w-40">Course:</span>
+            <span> {{ testDetails.course.name }}</span>
+          </div>
+          <div class="text-gray-500 flex items-center gap-2">
+            <span class="w-40">Class:</span>
+            <span>{{ testDetails.class.name }}</span>
+          </div>
+          <div class="text-gray-500 flex items-center gap-2">
+            <span class="w-40">Red flags:</span>
+            <div class="flex items-center gap-2">
+              @for (redflag of redflags; track redflag._id) {
+                <button nz-button nzType="primary" nzShape="circle" nzDanger nz-tooltip [nzTooltipTitle]="redflag.message">
+                  <span class="ph-bold ph-flag"></span>
+                </button>
+              }
+              <button nz-button nzType="default" nzShape="circle" nzDanger nzGhost nz-tooltip nzTooltipTitle="Click to add a red flag" (click)="addRedFlagModal.toggle()">
+                <span class="ph-bold ph-flag"></span>
+              </button>
+            </div>
+          </div>
+
+          @if (testDetails) {
+            <span class="text-gray-500 flex items-center gap-2">
+              <span class="w-40">Announcements:</span>
+              <div class="flex items-center gap-2">
+                <button nz-button nzType="default" nzShape="circle" nzDanger nzGhost nz-tooltip nzTooltipTitle="Click to add a red flag" (click)="addAnnouncementModal.toggle()">
+                  <span class="ph-bold ph-megaphone"></span>
+                </button>
+              </div>
+            </span>
+
+            <slms-announcement-modal
+              [class-id]="classId"
+              [student-id]="studentId"
+              [test-of-class-id]="testDetails?.test._id"
+              (submitted)="loadAnnouncement()"
+              #addAnnouncementModal></slms-announcement-modal>
+          }
+
+          <!-- <div>
+        <nz-tag nzColor="#87d068">Paid</nz-tag>
+      </div> -->
+        </div>
+      </div>
+
+      <div class="rounded-lg border border-gray-200 bg-gray-50/80 p-4">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <span class="text-sm font-medium text-gray-700">Attendance</span>
+          <div class="flex items-center gap-2">
+            <nz-select class="w-[120px]" nzSize="small" [(ngModel)]="selectedAttendanceMonth" (ngModelChange)="onAttendanceMonthYearChange()" nzPlaceHolder="Month">
+              @for (opt of monthOptions; track opt.value) {
+                <nz-option [nzValue]="opt.value" [nzLabel]="opt.label"></nz-option>
+              }
+            </nz-select>
+            <nz-select class="w-[90px]" nzSize="small" [(ngModel)]="selectedAttendanceYear" (ngModelChange)="onAttendanceMonthYearChange()" nzPlaceHolder="Year">
+              @for (y of yearOptions; track y) {
+                <nz-option [nzValue]="y" [nzLabel]="y.toString()"></nz-option>
+              }
+            </nz-select>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-1.5">
+          @for (item of currentMonthAttendanceDays; track item.day) {
+            <span
+              class="inline-flex items-center justify-center w-7 h-7 shrink-0 rounded-full border text-xs font-medium transition-colors"
+              [class.border-green-600]="item.attended"
+              [class.bg-green-500]="item.attended"
+              [class.text-white]="item.attended"
+              [class.border-gray-300]="!item.attended"
+              [class.bg-white]="!item.attended"
+              [class.text-gray-600]="!item.attended"
+              [attr.title]="item.attended ? 'Day ' + item.day + ' – attended' : 'Day ' + item.day">
+              {{ item.day }}
+            </span>
+          }
+        </div>
+        <!-- HIDE FOR NOW -->
+        <!-- <div class="mt-2 flex items-center gap-4 text-xs text-gray-500">
+          <span><span class="inline-block w-3 h-3 rounded-full bg-green-500 mr-1 align-middle"></span> Attended</span>
+          <span><span class="inline-block w-3 h-3 rounded-full border border-gray-300 bg-white mr-1 align-middle"></span> Absent</span>
+        </div> -->
+      </div>
+
+      <!-- <div class="grid grid-cols-2 md:grid-cols-2 gap-4">
+      <div class="flex items-center gap-2">
+        <span class="font-bold w-32">Student's note:</span>
+        <span>Study well and effectively. / Good and effective learning.</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="font-bold w-32">Teacher's note:</span>
+        <span>Study well and effectively. / Good and effective learning.</span>
+      </div>
+      <div class="flex items-center gap-6">
+        <div class="flex items-center gap-2">
+          <span class="font-bold">Session:</span>
+          <span>3</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="font-bold">Online class link:</span>
+          <span>https://teams.microsoft.com/l/meetup...</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="font-bold w-32">Target::</span>
+        <span>IELTS 7.5</span>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <span class="font-bold w-32">Teacher:</span>
+      <span> .</span>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <span class="font-bold w-32">Attendance:</span>
+      <span>Study well and effectively. / Good and effective learning.</span>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <span class="font-bold w-32">Red flags:</span>
+      <span>
+        <span class="ph ph-flag"></span>
+      </span>
+    </div> -->
+
+      <div class="m-auto">
+        <nz-segmented [(ngModel)]="selectedSection">
+          @for (section of sections; track section.value) {
+            <label nz-segmented-item [nzValue]="section.value">
+              <div class="flex items-center gap-1">
+                <div>{{ section.label }}</div>
+              </div>
+            </label>
+          }
+        </nz-segmented>
+      </div>
+
+      @if (announcements.length > 0) {
+        <div class="flex flex-col gap-3">
+          @for (announcement of announcements; track announcement._id) {
+            <nz-alert
+              nzType="warning"
+              [nzCloseable]="announcement.createdBy._id === accountService.account._id"
+              [nzMessage]="announcement.title + ' from ' + announcement.createdBy.firstName + ' ' + announcement.createdBy.lastName"
+              (nzOnClose)="deleteAnnouncementById(announcement._id)"
+              [nzDescription]="announcement.message"
+              nzShowIcon />
+          }
+        </div>
+      }
+
+      @if (selectedSection === "assignments-and-tests") {
+        @if (testDetails) {
+          <nz-collapse nzExpandIconPosition="end">
+            @for (period of testDetails.test.periods; track period._id) {
+              <nz-collapse-panel [nzHeader]="periodHeader" [nzActive]="true" [nzShowArrow]="false" [nzExtra]="header1extraTpl">
+                <ng-template #periodHeader>
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold py-1 text-slms-500">{{ period.name }}</span>
+                  </div>
+                </ng-template>
+                <div>
+                  @if (period.sections.length) {
+                    <nz-collapse nzExpandIconPosition="end">
+                      @for (section of period.sections; track section._id) {
+                        <nz-collapse-panel
+                          [nzHeader]="sectionHeader"
+                          [nzActive]="true"
+                          [nzShowArrow]="false"
+                          [nzExtra]="sectionHeaderTemplate"
+                          [style.background-color]="section.type === 'assignment' ? '#c6e1fc' : '#fcc6c6'">
+                          <ng-template #sectionHeader>
+                            <div class="flex items-center gap-2">
+                              <span class="font-bold py-1 text-slms-500">{{ section.name }}</span>
+                              <span class="text-gray-500 text-xs capitalize">{{ section.type }}</span>
+                            </div>
+                          </ng-template>
+                          <div>
+                            @if (section.tests.length) {
+                              <nz-list nzBordered>
+                                @for (test of section.tests; track test._id) {
+                                  <nz-list-item>
+                                    <div class="flex items-center">
+                                      <div class="text-slms-500 w-36 capitalize">
+                                        {{ test.test.type }}
+                                      </div>
+                                      <div class="flex flex-col gap-2 font-medium w-96">
+                                        <span class="text-gray-600">{{ test.test.name }}</span>
+                                        <span class="text-xs text-gray-400">{{ test.test.totalQuestions || 0 }} question(s) • {{ test.test.totalPoints || 0 }} pt(s)</span>
+                                        <!-- @if (accountService.account.role !== "admin" && accountService.account._id === test.createdBy) {
+                                          <sup class="text-slms-500 font-regular text-xs">You created</sup>
+                                        } -->
+                                        <!-- <div class="flex items-center gap-2 text-xs">
+                                    <span class="font-light">10 questions</span>
+                                    •
+                                    <span class="font-light">10 pts</span>
+                                  </div> -->
+                                      </div>
+                                    </div>
+                                    <div class="flex-1">
+                                      <span class="text-gray-500 text-xs">{{ test.test.duration }} secs</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                      @if (accountService.account.role === "admin" || accountService.account.role === "teacher") {
+                                        @if (test.test.submittedDate) {
+                                          @if (test.test?.totalNeedToReviewItems > 0) {
+                                            <p-tag severity="danger" [value]="test.test?.totalNeedToReviewItems + ' question(s) need review'"></p-tag>
+                                            <a
+                                              nz-button
+                                              nzType="primary"
+                                              [routerLink]="['/task', test._id, 'builder']"
+                                              [queryParams]="{
+                                                backRedirectUrl:
+                                                  accountService.account.role === 'admin'
+                                                    ? '/a/student-test-detail/' + testDetails.class._id + '/' + testDetails.student._id
+                                                    : '/t/student-test-detail/' + testDetails.class._id + '/' + testDetails.student._id,
+                                                taskId: test.test._id,
+                                                type: 'test',
+                                                mode: 'viewing',
+                                                action: 'teacher-reviewing',
+                                              }">
+                                              Review Now
+                                            </a>
+                                          } @else {
+                                            <p-tag severity="success" value="All Done"></p-tag>
+                                          }
+                                        } @else {
+                                          <p-tag severity="contrast" value="Student not yet started"></p-tag>
+                                        }
+                                      }
+
+                                      @if (accountService.account.role === "student") {
+                                        @if (test.test?.totalNeedToReviewItems === 0 && test.test.submittedDate) {
+                                          <p-tag severity="success" value="Completed"></p-tag>
+                                          <a
+                                            nz-button
+                                            nzType="dashed"
+                                            [routerLink]="['/task', test._id, 'builder']"
+                                            [queryParams]="{
+                                              backRedirectUrl: '/s/classes/' + testDetails.class._id,
+                                              taskId: test.test._id,
+                                              type: 'test',
+                                              mode: 'viewing',
+                                              action: 'student-viewing-results',
+                                            }">
+                                            View Results
+                                          </a>
+                                        } @else if (test.test?.totalNeedToReviewItems > 0 && test.test.submittedDate) {
+                                          <p-tag severity="contrast" value="Waiting for the reviewer"></p-tag>
+                                        }
+                                      }
+
+                                      @if (accountService.account.role === "student" && !test.test.submittedDate) {
+                                        <a
+                                          nz-button
+                                          nzType="primary"
+                                          nzGhost
+                                          [routerLink]="['/task', test._id, 'taking-task']"
+                                          [queryParams]="{
+                                            backRedirectUrl: '/s/classes/' + testDetails.class._id,
+                                            taskId: test.test._id,
+                                            type: 'test',
+                                            mode: 'viewing',
+                                            action: 'student-answering',
+                                          }">
+                                          Start Test
+                                        </a>
+                                      }
+                                      <!-- <a nz-button nzType="primary">The results have returned</a> -->
+                                    </div>
+                                  </nz-list-item>
+                                }
+                              </nz-list>
+                            } @else {
+                              No test available
+                            }
+                          </div>
+                        </nz-collapse-panel>
+                        <ng-template #sectionHeaderTemplate>
+                          @if (section.tests.length > 0 && accountService.account.role === "teacher") {
+                            <div class="ml-4">
+                              <button nz-button nzType="default" (click)="resetTestSection(period._id, section._id)">
+                                <span class="ph-bold ph-clock-clockwise"></span>
+                              </button>
+                            </div>
+                          }
+                        </ng-template>
+                      }
+                    </nz-collapse>
+                  } @else {
+                    No sections available
+                  }
+                </div>
+              </nz-collapse-panel>
+              <ng-template #header1extraTpl></ng-template>
+            }
+          </nz-collapse>
+        }
+      }
+
+      @if (selectedSection === "timeline") {
+        <div class="bg-white p-4 flex flex-col gap-4 border rounded-md">
+          <div class="m-auto">
+            <nz-segmented [(ngModel)]="selectedTimelineSection">
+              @for (section of timelineSections; track section.value) {
+                <label nz-segmented-item [nzValue]="section.value">
+                  <div class="flex items-center gap-1">
+                    <div>{{ section.label }}</div>
+                  </div>
+                </label>
+              }
+            </nz-segmented>
+          </div>
+
+          @if (timelines.length > 0) {
+            <nz-timeline nzMode="left">
+              <!--
+          <nz-timeline-item nzColor="green">Create a services site 2015-09-01</nz-timeline-item>
+          <nz-timeline-item nzColor="green">Solve initial network problems 2015-09-01</nz-timeline-item>
+          <nz-timeline-item nzColor="red">
+            <p>Solve initial network problems 1</p>
+            <p>Solve initial network problems 2</p>
+            <p>Solve initial network problems 3 2015-09-01</p>
+          </nz-timeline-item>
+          <nz-timeline-item>
+            <p>Technical testing 1</p>
+            <p>Technical testing 2</p>
+            <p>Technical testing 3 2015-09-01</p>
+          </nz-timeline-item>
+          <nz-timeline-item nzColor="gray">
+            <p>Technical testing 1</p>
+            <p>Technical testing 2</p>
+            <p>Technical testing 3 2015-09-01</p>
+          </nz-timeline-item>
+          <nz-timeline-item nzColor="gray">
+            <p>Technical testing 1</p>
+            <p>Technical testing 2</p>
+            <p>Technical testing 3 2015-09-01</p>
+          </nz-timeline-item>
+   -->
+              @for (timeline of timelines; track $index) {
+                @if (timeline.type === "notes") {
+                  <nz-timeline-item nzColor="green">Create a services site 2015-09-01</nz-timeline-item>
+                }
+
+                @if (timeline.type === "task") {
+                  <nz-timeline-item nzColor="green" [nzLabel]="timeline.createdAt | date: 'MMM dd, yyyy hh:mm a'">
+                    <slms-timeline-test-result [tests]="timeline.tests" [periods-section]="timeline.periodsSection"></slms-timeline-test-result>
+                  </nz-timeline-item>
+                }
+              }
+            </nz-timeline>
+            @if (timelines.length > 0 && hasMoreTimeline) {
+              <div class="flex justify-center pt-4">
+                <button nz-button nzType="default" nzSize="large" [nzLoading]="timelineLoading" [disabled]="timelineLoading" (click)="loadMoreTimeline()"> Load more </button>
+              </div>
+            }
+          } @else {
+            <nz-empty></nz-empty>
+          }
+        </div>
+      }
+    </div>
+  </div>
+} @else {
+  Loading please wait...
+}
+
+<div class="h-44"></div>
+
+<slms-add-red-flag-modal [class-id]="classId" [student-id]="studentId" (submitted)="loadRedFlags()" #addRedFlagModal></slms-add-red-flag-modal>

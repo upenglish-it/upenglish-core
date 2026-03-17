@@ -1,0 +1,123 @@
+<div class="flex flex-col space-y-2">
+  <div class="w-1/2" nz-dropdown [nzDropdownMenu]="searchAttendeesDropdownTemplate" [nzClickHide]="false" [(nzVisible)]="searchAttendeesDropdown">
+    <nz-input-group [nzPrefix]="searchPrefixTemplate" class="space-x-1.5">
+      <input nz-input placeholder="Invite attendees" nzShape="round" />
+    </nz-input-group>
+    <ng-template #searchPrefixTemplate>
+      <span class="text-base cursor-pointer text-gray-400 ph ph-magnifying-glass"></span>
+    </ng-template>
+  </div>
+  <nz-dropdown-menu #searchAttendeesDropdownTemplate="nzDropdownMenu">
+    <div class="bg-white shadow-md border rounded-md">
+      <ul class="mb-0 max-h-[224px] h-full overflow-auto mini-scroll-bar flex flex-col">
+        <ng-container *ngFor="let staff of filteredStaffs">
+          <!-- <ng-container *ngIf="!staff.hide"> -->
+          <li class="flex items-center space-x-2 px-2 cursor-pointer hover:bg-gray-100 py-1.5" (click)="onSelectStaff(staff)">
+            <img profile-photo [letter]="staff.firstName[0].toLowerCase() + '' + staff.lastName[0].toLowerCase()" class="w-6 h-6 bg-gray-100 rounded-full" />
+            <div class="flex flex-col flex-1">
+              <span class="text-xs font-medium text-gray-700">{{ staff.firstName }} {{ staff.lastName }}</span>
+              <span class="text-xs font-normal text-gray-500">{{ staff.emailAddresses[0] }}</span>
+            </div>
+          </li>
+          <!-- </ng-container> -->
+        </ng-container>
+      </ul>
+      <div class="space-x-2 items-center justify-center border-t flex p-3">
+        <!-- <span nz-icon nzType="loading" class="loading-icon"></span> -->
+        <span class="text-gray-600">{{ filteredStaffs.length }} results</span>
+      </div>
+    </div>
+  </nz-dropdown-menu>
+
+  <!-- <ng-template #titleTemplate>
+    <ul class="mb-0 flex flex-col bg-white">
+      <li class="flex items-center space-x-2 hover:bg-gray-100 pr-3 group py-1.5 rounded-md" *ngFor="let item of [0, 0, 0, 0]">
+        <img profile-photo [letter]="'JA'" class="w-4 h-4 bg-gray-100 rounded-full" />
+        <div class="flex flex-col flex-1">
+          <span class="text-xs font-medium text-gray-700"> John Mark</span>
+          <span class="text-[11px] font-normal text-gray-500">alicantemae09@gmail.com</span>
+        </div>
+      </li>
+    </ul>
+  </ng-template> -->
+
+  <!-- h-56 overflow-auto mini-scroll-bar -->
+  <ul class="mb-0 flex flex-col" *ngIf="attendeesFormArray.controls.length > 0">
+    <li
+      class="flex items-center space-x-2 hover:bg-gray-100 pr-3 group py-1.5 rounded-md"
+      *ngFor="let attendeesFormGroup of attendeesFormArray.controls; let attendeeIndex = index">
+      <img profile-photo [letter]="attendeesFormGroup.value.profilePhoto" class="w-6 h-6 bg-gray-100 rounded-full" />
+      <div class="flex flex-col flex-1">
+        <div class="flex items-center space-x-1">
+          <span class="text-xs font-medium text-gray-700">{{ attendeesFormGroup.value.name }}</span>
+          <span
+            class="ph-check-circle cursor-pointer text-blue-500"
+            [ngClass]="{ ph: !attendeesFormGroup.value.required, 'ph-fill': attendeesFormGroup.value.required }"
+            nz-tooltip
+            [nzTooltipTitle]="attendeesFormGroup.value.required ? 'This attendee is required' : 'This attendee is optional'"
+            nzTooltipColor="#ff3823"
+            nzTooltipOverlayClassName="primary-tooltip-arrow"
+            nzTooltipPlacement="top"></span>
+        </div>
+        <!-- <span class="text-[11px] font-normal text-gray-500">Required</span> -->
+        <span class="text-[11px] font-normal text-gray-500">{{ attendeesFormGroup.value.emailAddress }}</span>
+      </div>
+      <!-- <button nz-button nzType="primary" nzSize="small" nzDanger nzShape="circle">
+      <span nz-icon nzType="close" nzTheme="outline"></span>
+    </button> -->
+      <div class="flex space-x-3 items-center">
+        <!-- <span class="ph-fill ph-check-circle cursor-pointer text-lg text-gray-500 invisible group-hover:visible"
+         nz-tooltip
+                  nzTooltipTitle="Make as required"
+                  nzTooltipColor="#ff3823"
+                  nzTooltipOverlayClassName="primary-tooltip-arrow"
+                  nzTooltipPlacement="top"></span> -->
+        <span
+          class="ph-check-circle cursor-pointer text-lg text-blue-500 invisible group-hover:visible"
+          [ngClass]="{ ph: !attendeesFormGroup.value.required, 'ph-fill': attendeesFormGroup.value.required }"
+          (click)="attendeesFormGroup.get('required').setValue(!attendeesFormGroup.value.required)"
+          nz-tooltip
+          [nzTooltipTitle]="attendeesFormGroup.value.required ? 'Make it optional' : 'Make it required'"
+          nzTooltipColor="#ff3823"
+          nzTooltipOverlayClassName="primary-tooltip-arrow"
+          nzTooltipPlacement="top"></span>
+        <span
+          class="ph-fill ph-x-circle cursor-pointer text-lg text-error-500 invisible group-hover:visible"
+          nz-popconfirm
+          nzPopconfirmTitle="Are you sure remove this attendee?"
+          (nzOnConfirm)="attendeesFormArray.removeAt(attendeeIndex); manageStaffs()"
+          (nzOnCancel)="(1)"
+          nz-tooltip
+          nzTooltipTitle="Remove this attendee"
+          nzTooltipColor="#ff3823"
+          nzTooltipOverlayClassName="primary-tooltip-arrow"
+          nzTooltipPlacement="top"></span>
+      </div>
+    </li>
+  </ul>
+
+  <!-- <nz-select nzAllowClear nzPlaceHolder="Select attendees" nzMode="multiple" class="w-full" [nzNotFoundContent]="notFoundTemplate" [nzCustomTemplate]="multipleTemplate">
+  <nz-option nzLabel="Windows" nzValue="windows"></nz-option>
+  <nz-option nzLabel="Apple" nzValue="apple"></nz-option>
+  <nz-option nzLabel="Android1" nzValue="android1"></nz-option>
+  <nz-option nzLabel="Android2" nzValue="android2"></nz-option>
+  <nz-option nzLabel="Android3" nzValue="android3"></nz-option>
+  <nz-option nzLabel="Android4" nzValue="android4"></nz-option>
+  <nz-option nzLabel="Android5" nzValue="android5"></nz-option>
+  <nz-option nzLabel="Android6" nzValue="android6"></nz-option>
+</nz-select>
+<ng-template #multipleTemplate let-selected>
+  <div class="flex space-x-1 items-center mr-1">
+    <img src="https://daisyui.com/images/stock/photo-1534528741775-53994a69daeb.jpg" class="w-3 h-3 object-cover rounded-full" alt="" />
+    <span nz-icon [nzType]="selected.nzValue"></span>
+    <span>{{ selected.nzLabel }}</span>
+  </div>
+</ng-template>
+
+<ng-template #notFoundTemplate>
+  <div class="space-x-2 items-center justify-center flex p-3">
+    <span nz-icon nzType="loading" class="loading-icon"></span>
+    <span class="text-gray-600">Searching for "a"</span>
+  </div>
+</ng-template> -->
+</div>

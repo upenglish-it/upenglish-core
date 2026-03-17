@@ -1,0 +1,50 @@
+<!-- <div class="h-screen flex flex-col">
+  <div class="h-[55px] bg-white justify-between flex border-b border-b-gray-200 items-center px-4 space-x-4 relative">
+    <div>
+      <h6 class="text-base mb-0 font-medium text-gray-700 cursor-pointer">{{segmentOptions[segmentIndex].label}}</h6>
+      <span>{{segmentOptions[segmentIndex].description}}</span>
+    </div>
+    <div class="flex items-center flex-1 box-content justify-center self-center z-0 absolute top-0 right-0 bottom-0 left-0 m-auto">
+      <isms-segmented-selector [options]="segmentOptions" [current-index]="segmentIndex" (on-changed)="onChangeSegmentSelector($event)"> </isms-segmented-selector>
+    </div>
+  </div>
+
+  <ng-container *ngIf="segmentIndex===0"> 0 </ng-container>
+
+  <ng-container *ngIf="segmentIndex===1"> 1 </ng-container>
+
+  <ng-container *ngIf="segmentIndex===2"> 2 </ng-container>
+</div> -->
+
+<div class="h-screen flex">
+  <div class="flex bg-white w-96 flex-col border-r">
+    <div class="h-16 px-4 w-full flex items-center justify-between">
+      <h6 class="text-base mb-0 font-medium text-gray-700 cursor-pointer">Schedule</h6>
+      <!-- <a class="text-isms-500">Add New Schedule</a> -->
+      <button nz-button nzType="primary" nzGhost>Add New Schedule</button>
+    </div>
+    <div class="border-t">
+      <ul class="mb-0">
+        <li class="flex px-4 py-2 cursor-pointer hover:bg-gray-100" *ngFor="let item of [0, 0, 0, 0]">
+          <label nz-checkbox></label>
+          <div class="flex flex-col space-y-1 flex-1 px-2">
+            <span class="font-semibold">Morning shift</span>
+            <span class="font-normal text-xs text-gray-500">9am to 5pm</span>
+          </div>
+          <div class="flex items-center">
+            <span class="px-1 text-xs grid place-items-center border border-success-400 text-success-500 bg-success-50 rounded-md">1hr 30mins</span>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </div>
+  <div class="flex flex-col flex-1">
+    <div class="flex space-x-2 h-16 items-center px-4">
+      <nz-date-picker [nzAllowClear]="false" [(ngModel)]="selectedData" (ngModelChange)="tuiCalendar.setDate($event)"></nz-date-picker>
+      <button nz-button (click)="tuiCalendar.prev()">Back</button>
+      <button nz-button (click)="tuiCalendar.today()">Today</button>
+      <button nz-button (click)="tuiCalendar.next()">Next</button>
+    </div>
+    <div #calendar class="h-full flex-1"></div>
+  </div>
+</div>

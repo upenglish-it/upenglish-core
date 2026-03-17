@@ -1,0 +1,158 @@
+<div class=" bg-white justify-between flex flex-col lg:flex-row border-b border-b-gray-200 p-4 gap-4 relative">
+  <div class="flex items-center flex-1 space-x-4">
+    <div class="max-w-sm w-full" [formGroup]="filterFormGroup">
+      <nz-input-group [nzPrefix]="searchPrefixTemplate" [nzSuffix]="searchSuffixTemplate" class="space-x-1.5">
+        <input nz-input placeholder="Search for: Name" nzShape="round" formControlName="searchQuery" />
+      </nz-input-group>
+      <ng-template #searchPrefixTemplate>
+        <span class="text-base cursor-pointer text-gray-400 ph ph-magnifying-glass"></span>
+      </ng-template>
+      <ng-template #searchSuffixTemplate>
+        <span nz-icon class="ant-input-clear-icon" nzTheme="fill" nzType="close-circle"></span>
+      </ng-template>
+    </div>
+  </div>
+  <div class="flex items-center">
+    <div class="flex flex-wrap gap-3 items-center">
+      <button nz-button nzType="primary" nzGhost (click)="goToSuperLMS()">
+        Use SuperLMS
+        <!-- <span nz-icon nzType="plus" nzTheme="outline"></span> -->
+      </button>
+      <button nz-button nzType="primary" (click)="manageTaskModal.toggle()">
+        Add New Task
+        <!-- <span nz-icon nzType="plus" nzTheme="outline"></span> -->
+      </button>
+      <button nz-button nzType="primary" (click)="uploadTaskModal.toggle()">
+        Upload Task
+        <!-- <span nz-icon nzType="upload" nzTheme="outline"></span> -->
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="overflow-y-auto bg-white mini-scroll-bar flex flex-1 h-[calc(100vh-270px)] lg:h-[calc(100vh-110px)] w-full" reach-scroll-to-bottom (on-reach)="loadData()">
+  <div class="overflow-x-auto w-full">
+    <table role="table" class="w-full divide-y divide-gray-200 isms-table">
+      <thead class="bg-gray-50 sticky top-0 z-10">
+        <tr class="font-bold text-gray-700">
+          <th class="w-10 px-2 md:px-4 py-2 md:py-3">
+            <div class="relative grid place-items-center">#</div>
+          </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[200px]">
+            <div class="flex items-center justify-between">Title</div>
+          </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[120px]">
+            <div class="flex items-center justify-between">Type</div>
+          </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[100px]">
+            <div class="flex items-center justify-between">Total Points</div>
+          </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[150px]">
+            <div class="flex items-center justify-between">Created By</div>
+          </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[160px]">
+            <div class="flex items-center justify-between">Created Date</div>
+          </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[160px]">
+            <div class="flex items-center justify-between">Updated Date</div>
+          </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[120px]">
+            <div class="flex items-center justify-between">Status</div>
+          </th>
+          <th class="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm min-w-[100px]"></th>
+        </tr>
+      </thead>
+      <tbody class="text-sm bg-white divide-y divide-gray-200">
+        <tr *ngFor="let task of filteredTasks; trackBy: identify; let i = index">
+          <td class="px-2 md:px-4 py-2 md:py-3">
+            <div class="relative grid place-items-center">
+              <!-- <label nz-checkbox [(ngModel)]="course.selected" class="absolute top-[-11px]"></label> -->
+              {{ i + 1 }}
+            </div>
+          </td>
+
+          <td class="px-2 md:px-4 py-2 md:py-3">
+            <div class="flex items-center space-x-2 md:space-x-3">
+              <span class="text-xs font-normal text-gray-700 cursor-pointer truncate" (click)="onEdit(task)">
+                {{ task.generalInfo.title }}
+              </span>
+            </div>
+          </td>
+
+          <td class="px-2 md:px-4 py-2 md:py-3 font-normal text-xs text-gray-500">
+            <nz-tag [nzColor]="'blue'" class="text-[10px] md:text-xs" *ngIf="task.generalInfo.type === 'challenge'">Challenge</nz-tag>
+            <nz-tag [nzColor]="'orange'" class="text-[10px] md:text-xs" *ngIf="task.generalInfo.type === 'homework'">Homework</nz-tag>
+          </td>
+          <!--
+          <td>
+<div class="flex flex-wrap -space-x-2.5 items-center relative">
+              <img
+                *ngFor="let item of [0, 0, 0, 0, 0]"
+                class="w-6 h-6 rounded-full relative hover:z-10 hover:scale-110 transition-all bg-gray-200 cursor-pointer"
+                style="border: 2px solid white"
+                profile-photo
+                [photo]="null"
+                letter="A"
+                nz-tooltip
+                nzTooltipTitle="Reviewer name"
+                nzTooltipColor="#ff3823"
+                nzTooltipOverlayClassName="primary-tooltip-arrow"
+                nzTooltipPlacement="top"
+              />
+            </div>
+          </td> -->
+
+          <td class="px-2 md:px-4 py-2 md:py-3">
+            <div class="flex items-center space-x-2">
+              <span class="text-xs font-medium text-gray-500 whitespace-nowrap">{{ totalPoints(task.categories) }}</span>
+            </div>
+          </td>
+
+          <td class="px-2 md:px-4 py-2 md:py-3">
+            <div class="flex items-center space-x-2 md:space-x-2">
+              <img
+                profile-photo
+                [photo]="task.createdBy.profilePhoto"
+                [letter]="task.createdBy.firstName[0] + '' + task.createdBy.lastName[0]"
+                class="w-6 h-6 md:w-7 md:h-7 bg-gray-100 rounded-full flex-shrink-0" />
+              <span class="text-xs font-medium text-gray-500 truncate">{{ task.createdBy.firstName }} {{ task.createdBy.lastName }}</span>
+            </div>
+          </td>
+
+          <td class="px-2 md:px-4 py-2 md:py-3 font-normal text-xs text-gray-500 whitespace-nowrap">{{ task.createdAt | date: "MM/d/YY • hh:mm a" }}</td>
+          <td class="px-2 md:px-4 py-2 md:py-3 font-normal text-xs text-gray-500 whitespace-nowrap">{{ task.updatedAt | date: "MM/d/YY • hh:mm a" }}</td>
+
+          <td class="px-2 md:px-4 py-2 md:py-3 font-normal text-xs text-gray-500">
+            <nz-tag [nzColor]="'green'" class="text-[10px] md:text-xs whitespace-nowrap" *ngIf="task.status === 'published'">Published</nz-tag>
+            <nz-tag [nzColor]="'orange'" class="text-[10px] md:text-xs whitespace-nowrap" *ngIf="task.status === 'unpublished'">Unpublished</nz-tag>
+          </td>
+
+          <td class="px-2 md:px-4 py-2 md:py-3 font-normal text-xs text-gray-500">
+            <!-- <button nz-button nzType="link" nzSize="small" nz-popconfirm nzPopconfirmTitle="Delete this?" nzPopconfirmPlacement="bottom" (nzOnConfirm)="onDelete(task._id)" (nzOnCancel)="(1)">
+              Delete
+            </button> -->
+            <a nz-dropdown [nzDropdownMenu]="menu" class="text-[10px] md:text-xs">More</a>
+            <nz-dropdown-menu #menu="nzDropdownMenu">
+              <ul nz-menu>
+                <li nz-submenu nzTitle="Copy to branch">
+                  <ul>
+                    <ng-container *ngFor="let branch of branches">
+                      <li nz-menu-item (click)="copyToBranch(branch._id, task._id)">{{ branch.name }}</li>
+                    </ng-container>
+                  </ul>
+                </li>
+                <li nz-menu-divider></li>
+                <li nz-menu-item nzDanger nz-popconfirm nzPopconfirmTitle="Delete this?" nzPopconfirmPlacement="bottom" (nzOnConfirm)="onDelete(task._id)" (nzOnCancel)="(1)"
+                  >Delete</li
+                >
+              </ul>
+            </nz-dropdown-menu>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<isms-manage-task-modal #manageTaskModal (on-submitted)="loadData()"></isms-manage-task-modal>
+<isms-upload-task-modal #uploadTaskModal (on-submitted)="loadData()"></isms-upload-task-modal>

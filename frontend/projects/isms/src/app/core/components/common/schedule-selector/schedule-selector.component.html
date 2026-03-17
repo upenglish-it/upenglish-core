@@ -1,0 +1,157 @@
+<!-- Refer to google calendar schedule time -->
+<form class="flex-col space-y-5 flex border p-4 rounded-md" [formGroup]="formGroup">
+  <div class="flex space-x-4 items-center">
+    <div class="space-y-1.5 flex-1">
+      <label class="isms-label-left isms-required">From Date</label>
+      <div class="flex space-x-2 flex-1 items-center">
+        <nz-date-picker class="flex-1" [nzAllowClear]="false" nzFormat="MMM dd, yyyy" formControlName="fromDate"></nz-date-picker>
+        <nz-time-picker *ngIf="!formGroup.value.allDay" class="flex-1" nzFormat="hh:mm a" nzUse12Hours formControlName="fromTime"></nz-time-picker>
+      </div>
+    </div>
+
+    <ng-container *ngIf="endsFormGroup.value.type !== 'never'">
+      <span class="font-semibold text-gray-500 pt-5">to</span>
+      <div class="space-y-1.5 flex-1">
+        <label class="isms-label-left isms-required">End Date</label>
+        <div class="flex space-x-2 flex-1 items-center">
+          <nz-date-picker class="flex-1" [nzAllowClear]="false" nzFormat="MMM dd, yyyy" formControlName="toDate"></nz-date-picker>
+          <nz-time-picker *ngIf="!formGroup.value.allDay" class="flex-1" nzFormat="hh:mm a" nzUse12Hours formControlName="toTime"></nz-time-picker>
+        </div>
+      </div>
+    </ng-container>
+  </div>
+
+  <div class="space-y-1.5">
+    <label class="isms-label-left isms-required">Recurrence</label>
+    <div class="flex space-x-2 flex-1 items-center">
+      <div class="flex space-x-2 items-center" *ngIf="!disableAllDay">
+        <nz-switch nzSize="small" formControlName="allDay"></nz-switch>
+        <span>All day</span>
+      </div>
+
+      <!-- <ng-container [formGroup]="recurrenceFormGroup">
+        <nz-select class="w-1/2" nzPlaceHolder="Select recurrence" [nzDropdownMatchSelectWidth]="false" formControlName="value">
+          <nz-option *ngFor="let recurrence of recurrences" [nzLabel]="recurrence.name" [nzValue]="recurrence.value"></nz-option>
+        </nz-select>
+      </ng-container> -->
+      <a nz-button nz-dropdown nzTrigger="click" [nzDropdownMenu]="menu">
+        {{ recurrenceName }}
+        <span nz-icon nzType="caret-down"></span>
+      </a>
+      <nz-dropdown-menu #menu="nzDropdownMenu">
+        <ul nz-menu>
+          <ng-container *ngFor="let recurrence of recurrences">
+            <li nz-menu-divider *ngIf="recurrence.value === 'custom'"></li>
+            <li nz-menu-item (click)="onSelectFrequency(recurrence.value)">{{ recurrence.name }}</li>
+          </ng-container>
+          <!-- <li nz-menu-item (click)="onSelectFrequency('RRULE:FREQ=DAILY;INTERVAL=1')">Daily</li>
+          <li nz-menu-item (click)="onSelectFrequency('RRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,FR')">Every weekday (Monday and Friday)</li>
+          <li nz-menu-item (click)="onSelectFrequency('RRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,TU,WE,TH,FR')">Every weekday (Monday to Friday)</li>
+          <li nz-menu-item (click)="onSelectFrequency('RRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY=SA,SU')">Every weekend (Saturday and Sunday)</li> -->
+          <!-- <li nz-menu-item (click)="onSelectFrequency('custom')">Custom</li> -->
+        </ul>
+      </nz-dropdown-menu>
+    </div>
+
+    <!-- <div *ngIf="!formGroup.value.allDay">
+      <a>Use timezone</a>
+    </div> -->
+  </div>
+
+  <div class="flex-col space-y-4 flex-1 flex bg-gray-50 p-4 border rounded-md" [formGroup]="recurrenceFormGroup" *ngIf="recurrenceFormGroup.value.value === 'custom'">
+    <div class="space-y-1.5 flex-1">
+      <label class="font-normal text-gray-600 text-xs">Repeat every</label>
+      <div class="flex space-x-2 items-center">
+        <nz-input-number [nzMin]="1" [nzStep]="1" nzPlaceHolder="Select" formControlName="interval"></nz-input-number>
+        <nz-select nzShowSearch class="w-52" nzPlaceHolder="Select frequency" [nzDropdownMatchSelectWidth]="false" formControlName="freq">
+          <nz-option *ngFor="let frequency of frequencies" [nzLabel]="frequency.name" [nzValue]="frequency.value"></nz-option>
+        </nz-select>
+      </div>
+    </div>
+
+    <!-- Week days -->
+    <div class="space-y-1.5 flex-1" *ngIf="recurrenceFormGroup.value.freq === 2">
+      <label class="font-normal text-gray-600 text-xs">Repeat on</label>
+      <nz-select formControlName="byweekday" nzShowSearch nzMode="multiple" class="w-full" nzPlaceHolder="Select days" [nzDropdownMatchSelectWidth]="false">
+        <nz-option *ngFor="let day of days" [nzLabel]="day.name" [nzValue]="day.value"></nz-option>
+      </nz-select>
+      <!-- <ng-container *ngIf="classDayFormGroup.get('days').touched">
+          <p class="isms-error-message" *ngIf="classDayFormGroup.get('days').hasError('required')">Days is required</p>
+        </ng-container> -->
+    </div>
+
+    <div class="space-y-1.5 flex-1 flex-col flex" [formGroup]="endsFormGroup">
+      <label class="font-normal text-gray-600 text-xs">Ends</label>
+      <div class="flex flex-col space-y-3">
+        <nz-radio-group formControlName="type">
+          <label nz-radio nzValue="never">Never</label>
+          <label nz-radio nzValue="on">On</label>
+          <label nz-radio nzValue="after">After</label>
+        </nz-radio-group>
+        <div *ngIf="endsFormGroup.value.type === 'on'">
+          <nz-date-picker [nzAllowClear]="false" nzFormat="MMM dd, yyyy" formControlName="endDate"></nz-date-picker>
+        </div>
+        <div *ngIf="endsFormGroup.value.type === 'after'" class="flex space-x-2 items-center">
+          <nz-input-number [nzStep]="1" [nzMin]="1" formControlName="count"></nz-input-number>
+          <span>Occurrences</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- <div class="py-2 bg-isms-50 rounded-md text-isms-500 text-center font-medium text-sm">
+    {{ recurrence.nonApproximate.toText() }}
+  </div> -->
+  <!-- 
+  <div class="p-4 bg-isms-50 rounded-md text-isms-500 text-center font-medium text-sm">
+    {{ recurrence.approximate.toString() }}
+  </div>
+
+  <div class="p-4 bg-isms-50 rounded-md text-isms-500 text-center font-medium text-sm">
+    <pre>
+    {{ recurrence.approximate.origOptions | json }}
+    </pre>
+  </div> -->
+</form>
+
+<!-- recurrence modal -->
+<!-- <nz-modal
+  [(nzVisible)]="showRecurrenceModal"
+  nzCentered
+  [nzZIndex]="9999"
+  [nzWidth]="'450px'"
+  nzTitle="Set custom recurrence"
+  [nzFooter]="footerTemplate"
+  (nzOnOk)="(1)"
+  [nzMaskClosable]="false"
+  (nzOnCancel)="(1)"
+  [nzBodyStyle]="{ padding: '0px' }"
+>
+  <ng-container *nzModalContent>
+    <form class="px-4 py-3 flex-col max-h-[500px] space-y-3 flex-1 flex overflow-auto mini-scroll-bar min-h-fit">
+      <div class="space-y-1.5 flex-1">
+        <label class="font-normal text-gray-600 text-xs"> Repeat every </label>
+
+        <div class="flex space-x-2 items-center">
+          <nz-input-number [nzMin]="1" [nzStep]="1" nzPlaceHolder="Select" class="flex-1"></nz-input-number>
+          <nz-select formControlName="branches" nzShowSearch nzMode="multiple" class="flex-1" nzPlaceHolder="Select frequency" [nzDropdownMatchSelectWidth]="false">
+            <nz-option *ngFor="let frequency of frequencies" [nzLabel]="frequency.name" [nzValue]="frequency.value"></nz-option>
+          </nz-select>
+        </div>
+      </div>
+
+      <div class="space-y-1.5 flex-1">
+        <label class="font-normal text-gray-600 text-xs">
+          Add to multiple branches
+          <span class="cursor-pointer ml-1" nz-icon nzType="info-circle" nzTheme="twotone" nz-tooltip nzTooltipTitle="The current branch will assign automatically"></span>
+        </label> 
+      </div>
+    </form>
+  </ng-container>
+  <ng-template #footerTemplate>
+    <div class="space-x-2 flex items-center">
+      <button nz-button nzBlock (click)="(1)">Cancel</button>
+      <button nz-button nzBlock nzType="primary" (click)="(1)">Done</button>
+    </div>
+  </ng-template>
+</nz-modal> -->

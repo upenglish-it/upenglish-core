@@ -1,0 +1,161 @@
+<div class="h-[55px] bg-white justify-between flex border-b items-center px-4">
+  <div class="flex items-center flex-1 space-x-4">
+    <div class="max-w-sm w-full" [formGroup]="filterFormGroup">
+      <nz-input-group [nzPrefix]="searchPrefixTemplate" [nzSuffix]="searchSuffixTemplate" class="space-x-1.5">
+        <input nz-input placeholder="Search for: Title" nzShape="round" formControlName="searchQuery" />
+      </nz-input-group>
+      <ng-template #searchPrefixTemplate>
+        <span class="text-base cursor-pointer text-gray-400 ph ph-magnifying-glass"></span>
+      </ng-template>
+      <ng-template #searchSuffixTemplate>
+        <span nz-icon class="ant-input-clear-icon" nzTheme="fill" nzType="close-circle"></span>
+      </ng-template>
+    </div>
+  </div>
+  <div class="space-x-6 flex items-center">
+    <div class="space-x-2 flex items-center">
+      <button nz-button nzType="primary" (click)="addPipelineModal.toggle()">
+        Add Pipeline
+        <span nz-icon nzType="plus" nzTheme="outline"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="overflow-auto bg-white mini-scroll-bar flex-1 h-[calc(100vh-110px)]" reach-scroll-to-bottom (on-reach)="loadData()">
+  <table role="table" class="min-w-full divide-y divide-gray-200 isms-table">
+    <thead>
+      <tr class="font-bold text-gray-700">
+        <th class="w-10">
+          <div class="relative grid place-items-center">
+            <label nz-checkbox (ngModel)="(true)" [nzIndeterminate]="false" class="absolute top-[-11px]"></label>
+          </div>
+        </th>
+        <th class="">
+          <div class="flex items-center justify-between">Title</div>
+        </th>
+        <th class="">
+          <div class="flex items-center justify-between">Status</div>
+        </th>
+        <th class="">
+          <div class="flex items-center justify-between">Total Items</div>
+        </th>
+        <th class="">
+          <div class="flex items-center justify-between">Type</div>
+        </th>
+        <th class="">
+          <div class="flex items-center justify-between">Created Date</div>
+        </th>
+      </tr>
+    </thead>
+    <tbody class="text-sm bg-white divide-y divide-gray-200">
+      <tr *ngFor="let pipeline of filteredPipelines; let pipelineIndex = index" [class.selected-tr]="pipeline.selected">
+        <td class="">
+          <div class="relative grid place-items-center">
+            <label nz-checkbox [(ngModel)]="pipeline.selected" class="absolute top-[-11px]"></label>
+          </div>
+        </td>
+
+        <td>
+          <div class="flex items-center space-x-3">
+            <span class="text-xs font-medium text-gray-700 cursor-pointer" (click)="navigateTo(pipeline)"> {{ pipeline.details.title }} </span>
+            <a class="flex items-center text-gray-500" nz-dropdown nzTrigger="hover" [nzDropdownMenu]="manageEmployee">
+              <i class="text-2xl ph-dots-three ph-bold"></i>
+            </a>
+            <nz-dropdown-menu #manageEmployee="nzDropdownMenu">
+              <ul nz-menu>
+                <li nz-menu-item [routerLink]="'/i/pipelines/designer/pipeline/' + pipeline._id + '/' + (pipeline.type || 'leads')">
+                  <div class="flex items-center space-x-2 text-xs">
+                    <i class="text-base ph-list-dashes ph-duotone"></i>
+                    <span>Pipeline</span>
+                  </div>
+                </li>
+                <li nz-menu-divider></li>
+                <li nz-menu-item [routerLink]="'/i/pipelines/designer/settings/' + pipeline._id + '/' + (pipeline.type || 'leads')">
+                  <div class="flex items-center space-x-2 text-xs">
+                    <i class="text-base ph-pencil ph-duotone"></i>
+                    <span>Edit</span>
+                  </div>
+                </li>
+                <li nz-menu-item (click)="clonePipelineModal.formGroup.setValue({ pipelineId: pipeline._id, title: pipeline.details.title }); clonePipelineModal.toggle()">
+                  <div class="flex items-center space-x-2 text-xs">
+                    <i class="text-base ph-copy-simple ph-duotone"></i>
+                    <span>Clone</span>
+                  </div>
+                </li>
+                <li nz-menu-divider></li>
+                <li nz-menu-item nzDanger (click)="onDelete(pipeline._id, pipelineIndex)">
+                  <div class="flex items-center space-x-2 text-xs">
+                    <i class="text-base ph-trash ph-duotone"></i>
+                    <span>Delete</span>
+                  </div>
+                </li>
+              </ul>
+            </nz-dropdown-menu>
+          </div>
+        </td>
+
+        <td class="flex items-center space-x-3">
+          <nz-select
+            nzBorderless
+            [(ngModel)]="pipeline.status"
+            (ngModelChange)="updateStatus($event, pipeline._id)"
+            [nzShowArrow]="false"
+            [nzCustomTemplate]="defaultTemplate"
+            [nzDropdownMatchSelectWidth]="false"
+            class="w-32 no-px"
+            nzSize="small">
+            <nz-option nzValue="active" nzLabel="Active"></nz-option>
+            <nz-option nzValue="inactive" nzLabel="Inactive"></nz-option>
+          </nz-select>
+          <ng-template #defaultTemplate let-selected>
+            <div class="flex space-x-2 items-center">
+              <div
+                class="w-2 h-2 rounded-full"
+                [ngClass]="{
+                  'bg-green-500': selected.nzValue === 'active',
+                  'bg-gray-500': selected.nzValue === 'inactive',
+                }"></div>
+              <div class="flex space-x-1 items-center">
+                <span
+                  class="text-xs"
+                  [ngClass]="{
+                    'text-green-500': selected.nzValue === 'active',
+                    'text-gray-500': selected.nzValue === 'inactive',
+                  }">
+                  <ng-container *ngIf="selected.nzValue === 'active'">Active</ng-container>
+                  <ng-container *ngIf="selected.nzValue === 'inactive'">Inactive</ng-container>
+                </span>
+                <span class="ph-bold text-gray-300 text-xs ph-caret-down"></span>
+              </div>
+            </div>
+            <!-- <div class="inline-block">
+                  <div class="flex space-x-2">
+                    <div class="px-1.5 text-isms-500 text-xs bg-isms-50 grid place-items-center border border-isms-200 rounded-md" *ngIf="selected.nzValue ==='published' ">Published</div>
+                    <div class="px-1.5 text-blue-500 text-xs bg-blue-50 grid place-items-center border border-blue-200 rounded-md" *ngIf="selected.nzValue ==='draft' ">Draft</div>
+                    <div class="px-1.5 text-yellow-500 text-xs bg-yellow-50 grid place-items-center border border-yellow-200 rounded-md" *ngIf="selected.nzValue ==='paused' ">Paused</div>
+                    <div class="px-1.5 text-error-500 text-xs bg-error-50 grid place-items-center border border-error-200 rounded-md" *ngIf="selected.nzValue ==='closed' ">Closed</div>
+                  </div>
+                </div> -->
+          </ng-template>
+          <!-- <nz-switch nzSize="small" [(ngModel)]="pipeline.published" (ngModelChange)="onUpdatePipelineStatus(pipelineIndex)"></nz-switch> -->
+          <!-- <div class="flex space-x-2">
+                <div class="px-1.5 text-isms-500 text-xs bg-isms-50 grid place-items-center border border-isms-200 rounded-md" *ngIf="pipeline.status ==='published' ">Published</div>
+                <div class="px-1.5 text-blue-500 text-xs bg-blue-50 grid place-items-center border border-blue-200 rounded-md" *ngIf="pipeline.status ==='draft' ">Draft</div>
+                <div class="px-1.5 text-yellow-500 text-xs bg-yellow-50 grid place-items-center border border-yellow-200 rounded-md" *ngIf="pipeline.status ==='paused' ">Paused</div>
+                <div class="px-1.5 text-error-500 text-xs bg-error-50 grid place-items-center border border-error-200 rounded-md" *ngIf="pipeline.status ==='closed' ">Closed</div>
+              </div> -->
+        </td>
+
+        <td class="font-normal text-xs text-gray-500 cursor-pointer">{{ pipeline?.items?.length || 0 }}</td>
+
+        <td class="font-normal text-xs text-gray-500 cursor-pointer capitalize">{{ pipeline?.type }}</td>
+
+        <td class="font-normal text-xs text-gray-500 cursor-pointer">{{ pipeline.createdAt | date: "MM/d/YY • hh:mm a" }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<isms-add-pipeline-modal #addPipelineModal (on-submitted)="loadData()"></isms-add-pipeline-modal>
+<isms-clone-pipeline-modal #clonePipelineModal (on-submit)="onAddCreated($event)"></isms-clone-pipeline-modal>
