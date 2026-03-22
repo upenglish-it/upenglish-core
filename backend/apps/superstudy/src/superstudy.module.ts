@@ -4,11 +4,10 @@ import { MongoClient } from 'mongodb';
 import { APP_FILTER } from '@nestjs/core';
 import { AgendaModule } from 'agenda-nest';
 import { ConfigModule } from '@nestjs/config';
-import { FirebaseModule } from 'nestjs-firebase';
 import { Inject, Module, OnModuleInit } from '@nestjs/common';
 import { TypegooseModule, getConnectionToken } from 'nestjs-typegoose';
 // Common Imports
-import { FirebaseAdminConfig, HttpExceptionFilter } from 'apps/common';
+import { HttpExceptionFilter } from 'apps/common';
 
 const DatabaseProvider = {
   provide: 'DATABASE_CONNECTION',
@@ -30,7 +29,6 @@ const DatabaseProvider = {
       inject: ['DATABASE_CONNECTION'],
       extraProviders: [DatabaseProvider],
     }),
-    FirebaseModule.forRoot({ googleApplicationCredential: FirebaseAdminConfig }),
   ],
   providers: [
     {
