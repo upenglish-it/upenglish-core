@@ -1,0 +1,6415 @@
+{
+  "info": {
+    "name": "SuperStudy Core API",
+    "description": "Complete Postman collection for all SuperStudy endpoints.\nBase URL variable: base_url = http://localhost:3000\nGlobal prefix: /api/v1\nAuth: Bearer token in Authorization header.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "YOUR_JWT_TOKEN",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Admin Folders",
+      "item": [
+        {
+          "name": "Get Topic Folders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin-folders/topics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin-folders",
+                "topics"
+              ],
+              "query": []
+            },
+            "description": "Get all admin topic folders sorted by order"
+          },
+          "response": []
+        },
+        {
+          "name": "Save Topic Folder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin-folders/topics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin-folders",
+                "topics"
+              ],
+              "query": []
+            },
+            "description": "Create or update an admin topic folder",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Vocabulary Basics\",\n  \"order\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Topic Folder",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin-folders/topics/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin-folders",
+                "topics",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Delete an admin topic folder by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Reorder Topic Folders",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin-folders/topics/reorder",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin-folders",
+                "topics",
+                "reorder"
+              ],
+              "query": []
+            },
+            "description": "Reorder admin topic folders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folders\": [\n    {\n      \"id\": \"64a000000000000000000001\",\n      \"order\": 1\n    },\n    {\n      \"id\": \"64a000000000000000000002\",\n      \"order\": 2\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Grammar Folders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin-folders/grammar",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin-folders",
+                "grammar"
+              ],
+              "query": []
+            },
+            "description": "Get all admin grammar folders sorted by order"
+          },
+          "response": []
+        },
+        {
+          "name": "Save Grammar Folder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin-folders/grammar",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin-folders",
+                "grammar"
+              ],
+              "query": []
+            },
+            "description": "Create or update an admin grammar folder",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tenses\",\n  \"order\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Grammar Folder",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin-folders/grammar/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin-folders",
+                "grammar",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Delete an admin grammar folder by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Reorder Grammar Folders",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin-folders/grammar/reorder",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin-folders",
+                "grammar",
+                "reorder"
+              ],
+              "query": []
+            },
+            "description": "Reorder admin grammar folders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folders\": [\n    {\n      \"id\": \"64a000000000000000000001\",\n      \"order\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Exam Folders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin-folders/exams",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin-folders",
+                "exams"
+              ],
+              "query": []
+            },
+            "description": "Get all admin exam folders sorted by order"
+          },
+          "response": []
+        },
+        {
+          "name": "Save Exam Folder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin-folders/exams",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin-folders",
+                "exams"
+              ],
+              "query": []
+            },
+            "description": "Create or update an admin exam folder",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Mock Tests\",\n  \"order\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Exam Folder",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin-folders/exams/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin-folders",
+                "exams",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Delete an admin exam folder by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Reorder Exam Folders",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin-folders/exams/reorder",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin-folders",
+                "exams",
+                "reorder"
+              ],
+              "query": []
+            },
+            "description": "Reorder admin exam folders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folders\": [\n    {\n      \"id\": \"64a000000000000000000001\",\n      \"order\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Topics (Admin)",
+      "item": [
+        {
+          "name": "List All Topics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/topics?folderId=64a000000000000000000001",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "topics"
+              ],
+              "query": [
+                {
+                  "key": "folderId",
+                  "value": "64a000000000000000000001"
+                }
+              ]
+            },
+            "description": "List all topics; optional folderId filter"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Topic by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/topics/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "topics",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Get a single topic by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Topic",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/topics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "topics"
+              ],
+              "query": []
+            },
+            "description": "Create or update a topic",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Present Simple\",\n  \"folderId\": \"64a000000000000000000001\",\n  \"isPublic\": false,\n  \"teacherVisible\": false,\n  \"words\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Topic",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/topics/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "topics",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Update topic metadata",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Present Simple (v2)\",\n  \"isPublic\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Toggle Topic Public",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/topics/:id/public",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "topics",
+                ":id",
+                "public"
+              ],
+              "query": []
+            },
+            "description": "Toggle topic isPublic status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isPublic\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Toggle Teacher Visible",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/topics/:id/teacher-visible",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "topics",
+                ":id",
+                "teacher-visible"
+              ],
+              "query": []
+            },
+            "description": "Toggle topic teacherVisible status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"teacherVisible\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Soft Delete Topic",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/topics/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "topics",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Soft-delete a topic (isDeleted = true)"
+          },
+          "response": []
+        },
+        {
+          "name": "Permanently Delete Topic",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/topics/:id/permanent",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "topics",
+                ":id",
+                "permanent"
+              ],
+              "query": []
+            },
+            "description": "Permanently delete a topic"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Teacher Folders",
+      "item": [
+        {
+          "name": "Get Teacher Topic Folders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/topics?teacherId=user_abc123",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "topics"
+              ],
+              "query": [
+                {
+                  "key": "teacherId",
+                  "value": "user_abc123"
+                }
+              ]
+            },
+            "description": "Get topic folders for a teacher"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Teacher Topic Folders (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/topics/all",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "topics",
+                "all"
+              ],
+              "query": []
+            },
+            "description": "All teacher topic folders across all teachers"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Deleted Teacher Topic Folders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/topics/deleted?teacherId=user_abc123",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "topics",
+                "deleted"
+              ],
+              "query": [
+                {
+                  "key": "teacherId",
+                  "value": "user_abc123"
+                }
+              ]
+            },
+            "description": "Get soft-deleted topic folders for a teacher"
+          },
+          "response": []
+        },
+        {
+          "name": "Save Teacher Topic Folder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/topics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "topics"
+              ],
+              "query": []
+            },
+            "description": "Create or update a teacher topic folder",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Vocab Sets\",\n  \"teacherId\": \"user_abc123\",\n  \"order\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reorder Teacher Topic Folders",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/topics/reorder",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "topics",
+                "reorder"
+              ],
+              "query": []
+            },
+            "description": "Reorder teacher topic folders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folders\": [\n    {\n      \"id\": \"64a000000000000000000010\",\n      \"order\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Soft Delete Teacher Topic Folder",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/topics/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "topics",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Soft-delete a teacher topic folder"
+          },
+          "response": []
+        },
+        {
+          "name": "Restore Teacher Topic Folder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/topics/:id/restore",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "topics",
+                ":id",
+                "restore"
+              ],
+              "query": []
+            },
+            "description": "Restore a soft-deleted teacher topic folder"
+          },
+          "response": []
+        },
+        {
+          "name": "Permanently Delete Teacher Topic Folder",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/topics/:id/permanent",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "topics",
+                ":id",
+                "permanent"
+              ],
+              "query": []
+            },
+            "description": "Permanently delete a teacher topic folder"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Teacher Grammar Folders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/grammar?teacherId=user_abc123",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "grammar"
+              ],
+              "query": [
+                {
+                  "key": "teacherId",
+                  "value": "user_abc123"
+                }
+              ]
+            },
+            "description": "Get grammar folders for a teacher"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Teacher Grammar Folders (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/grammar/all",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "grammar",
+                "all"
+              ],
+              "query": []
+            },
+            "description": "All teacher grammar folders across all teachers"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Deleted Teacher Grammar Folders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/grammar/deleted?teacherId=user_abc123",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "grammar",
+                "deleted"
+              ],
+              "query": [
+                {
+                  "key": "teacherId",
+                  "value": "user_abc123"
+                }
+              ]
+            },
+            "description": "Get soft-deleted grammar folders for a teacher"
+          },
+          "response": []
+        },
+        {
+          "name": "Save Teacher Grammar Folder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/grammar",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "grammar"
+              ],
+              "query": []
+            },
+            "description": "Create or update a teacher grammar folder",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tenses Bundle\",\n  \"teacherId\": \"user_abc123\",\n  \"order\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reorder Teacher Grammar Folders",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/grammar/reorder",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "grammar",
+                "reorder"
+              ],
+              "query": []
+            },
+            "description": "Reorder teacher grammar folders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folders\": [\n    {\n      \"id\": \"64a000000000000000000010\",\n      \"order\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Soft Delete Teacher Grammar Folder",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/grammar/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "grammar",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Soft-delete a teacher grammar folder"
+          },
+          "response": []
+        },
+        {
+          "name": "Restore Teacher Grammar Folder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/grammar/:id/restore",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "grammar",
+                ":id",
+                "restore"
+              ],
+              "query": []
+            },
+            "description": "Restore a soft-deleted teacher grammar folder"
+          },
+          "response": []
+        },
+        {
+          "name": "Permanently Delete Teacher Grammar Folder",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/grammar/:id/permanent",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "grammar",
+                ":id",
+                "permanent"
+              ],
+              "query": []
+            },
+            "description": "Permanently delete a teacher grammar folder"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Teacher Exam Folders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/exams?teacherId=user_abc123",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "exams"
+              ],
+              "query": [
+                {
+                  "key": "teacherId",
+                  "value": "user_abc123"
+                }
+              ]
+            },
+            "description": "Get exam folders for a teacher"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Teacher Exam Folders (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/exams/all",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "exams",
+                "all"
+              ],
+              "query": []
+            },
+            "description": "All teacher exam folders across all teachers"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Deleted Teacher Exam Folders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/exams/deleted?teacherId=user_abc123",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "exams",
+                "deleted"
+              ],
+              "query": [
+                {
+                  "key": "teacherId",
+                  "value": "user_abc123"
+                }
+              ]
+            },
+            "description": "Get soft-deleted exam folders for a teacher"
+          },
+          "response": []
+        },
+        {
+          "name": "Save Teacher Exam Folder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/exams",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "exams"
+              ],
+              "query": []
+            },
+            "description": "Create or update a teacher exam folder",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Trial Exams\",\n  \"teacherId\": \"user_abc123\",\n  \"order\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reorder Teacher Exam Folders",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/exams/reorder",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "exams",
+                "reorder"
+              ],
+              "query": []
+            },
+            "description": "Reorder teacher exam folders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folders\": [\n    {\n      \"id\": \"64a000000000000000000010\",\n      \"order\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Soft Delete Teacher Exam Folder",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/exams/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "exams",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Soft-delete a teacher exam folder"
+          },
+          "response": []
+        },
+        {
+          "name": "Restore Teacher Exam Folder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/exams/:id/restore",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "exams",
+                ":id",
+                "restore"
+              ],
+              "query": []
+            },
+            "description": "Restore a soft-deleted teacher exam folder"
+          },
+          "response": []
+        },
+        {
+          "name": "Permanently Delete Teacher Exam Folder",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-folders/exams/:id/permanent",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-folders",
+                "exams",
+                ":id",
+                "permanent"
+              ],
+              "query": []
+            },
+            "description": "Permanently delete a teacher exam folder"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Teacher Topics",
+      "item": [
+        {
+          "name": "List Teacher Topics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-topics?teacherId=user_abc123",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-topics"
+              ],
+              "query": [
+                {
+                  "key": "teacherId",
+                  "value": "user_abc123"
+                }
+              ]
+            },
+            "description": "List teacher topics by teacherId (non-deleted)"
+          },
+          "response": []
+        },
+        {
+          "name": "List Deleted Teacher Topics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-topics/deleted?teacherId=user_abc123",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-topics",
+                "deleted"
+              ],
+              "query": [
+                {
+                  "key": "teacherId",
+                  "value": "user_abc123"
+                }
+              ]
+            },
+            "description": "List soft-deleted teacher topics"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Teacher Topic by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-topics/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-topics",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Get a single teacher topic by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Teacher Topic",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-topics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-topics"
+              ],
+              "query": []
+            },
+            "description": "Create a new teacher topic",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Business Vocab\",\n  \"teacherId\": \"user_abc123\",\n  \"folderId\": \"64a000000000000000000010\",\n  \"isPublic\": false,\n  \"collaborators\": [],\n  \"words\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Teacher Topic",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-topics/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-topics",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Update a teacher topic",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Business Vocab (Updated)\",\n  \"isPublic\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Soft Delete Teacher Topic",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-topics/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-topics",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Soft-delete a teacher topic"
+          },
+          "response": []
+        },
+        {
+          "name": "Restore Teacher Topic",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-topics/:id/restore",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-topics",
+                ":id",
+                "restore"
+              ],
+              "query": []
+            },
+            "description": "Restore a soft-deleted teacher topic"
+          },
+          "response": []
+        },
+        {
+          "name": "Permanently Delete Teacher Topic",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teacher-topics/:id/permanent",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teacher-topics",
+                ":id",
+                "permanent"
+              ],
+              "query": []
+            },
+            "description": "Permanently delete a teacher topic"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Grammar Exercises",
+      "item": [
+        {
+          "name": "List Grammar Exercises",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/grammar-exercises?createdByRole=admin",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grammar-exercises"
+              ],
+              "query": [
+                {
+                  "key": "createdByRole",
+                  "value": "admin"
+                }
+              ]
+            },
+            "description": "List grammar exercises; optional filter by createdByRole"
+          },
+          "response": []
+        },
+        {
+          "name": "List Shared Grammar Exercises",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/grammar-exercises/shared?grammarAccessIds=id1,id2",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grammar-exercises",
+                "shared"
+              ],
+              "query": [
+                {
+                  "key": "grammarAccessIds",
+                  "value": "id1,id2"
+                }
+              ]
+            },
+            "description": "List public + teacherVisible + individually shared exercises"
+          },
+          "response": []
+        },
+        {
+          "name": "List Deleted Grammar Exercises",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/grammar-exercises/deleted",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grammar-exercises",
+                "deleted"
+              ],
+              "query": []
+            },
+            "description": "List soft-deleted exercises"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Grammar Exercise by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/grammar-exercises/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grammar-exercises",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Get a single grammar exercise by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Grammar Exercise",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/grammar-exercises",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grammar-exercises"
+              ],
+              "query": []
+            },
+            "description": "Create a new grammar exercise",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Present Perfect Practice\",\n  \"createdByRole\": \"admin\",\n  \"folderId\": \"64a000000000000000000001\",\n  \"isPublic\": false,\n  \"teacherVisible\": false,\n  \"collaborators\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Grammar Exercise",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/grammar-exercises/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grammar-exercises",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Update a grammar exercise",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Present Perfect Practice (v2)\",\n  \"isPublic\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Soft Delete Grammar Exercise",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/grammar-exercises/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grammar-exercises",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Soft-delete a grammar exercise"
+          },
+          "response": []
+        },
+        {
+          "name": "Restore Grammar Exercise",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/grammar-exercises/:id/restore",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grammar-exercises",
+                ":id",
+                "restore"
+              ],
+              "query": []
+            },
+            "description": "Restore a soft-deleted grammar exercise"
+          },
+          "response": []
+        },
+        {
+          "name": "Permanently Delete Grammar Exercise",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/grammar-exercises/:id/permanent",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grammar-exercises",
+                ":id",
+                "permanent"
+              ],
+              "query": []
+            },
+            "description": "Permanently delete (cascades questions)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Grammar Questions",
+      "item": [
+        {
+          "name": "List Grammar Questions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/grammar-questions?exerciseId=64a000000000000000000020",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grammar-questions"
+              ],
+              "query": [
+                {
+                  "key": "exerciseId",
+                  "value": "64a000000000000000000020"
+                }
+              ]
+            },
+            "description": "List questions for a grammar exercise (ordered)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Grammar Question by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/grammar-questions/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grammar-questions",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Get a single grammar question by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Grammar Question",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/grammar-questions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grammar-questions"
+              ],
+              "query": []
+            },
+            "description": "Create a grammar question (auto-assigns order)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"exerciseId\": \"64a000000000000000000020\",\n  \"type\": \"multiple-choice\",\n  \"purpose\": \"grammar\",\n  \"questionText\": \"She ___ to school every day.\",\n  \"options\": [\n    \"go\",\n    \"goes\",\n    \"going\",\n    \"gone\"\n  ],\n  \"correctAnswer\": \"goes\",\n  \"explanation\": \"Third-person singular uses 'goes'.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Grammar Question",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/grammar-questions/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grammar-questions",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Update a grammar question",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionText\": \"She ___ to work every day.\",\n  \"correctAnswer\": \"goes\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Grammar Question",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/grammar-questions/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grammar-questions",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Hard delete a grammar question"
+          },
+          "response": []
+        },
+        {
+          "name": "Bulk Reorder Grammar Questions",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/grammar-questions/order/batch",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "grammar-questions",
+                "order",
+                "batch"
+              ],
+              "query": []
+            },
+            "description": "Bulk reorder grammar questions",
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"id\": \"64a000000000000000000021\",\n    \"order\": 1\n  },\n  {\n    \"id\": \"64a000000000000000000022\",\n    \"order\": 2\n  }\n]",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Exams",
+      "item": [
+        {
+          "name": "List Exams",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exams?createdByRole=admin",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exams"
+              ],
+              "query": [
+                {
+                  "key": "createdByRole",
+                  "value": "admin"
+                }
+              ]
+            },
+            "description": "List exams; optional filter by createdByRole"
+          },
+          "response": []
+        },
+        {
+          "name": "List Shared Exams",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exams/shared?examAccessIds=id1,id2",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exams",
+                "shared"
+              ],
+              "query": [
+                {
+                  "key": "examAccessIds",
+                  "value": "id1,id2"
+                }
+              ]
+            },
+            "description": "List public + teacherVisible + individually shared exams"
+          },
+          "response": []
+        },
+        {
+          "name": "List Deleted Exams",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exams/deleted",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exams",
+                "deleted"
+              ],
+              "query": []
+            },
+            "description": "List soft-deleted exams"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Exam by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exams/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exams",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Get a single exam by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Exam",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exams",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exams"
+              ],
+              "query": []
+            },
+            "description": "Create a new exam",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"IELTS Mock Test 1\",\n  \"createdByRole\": \"admin\",\n  \"folderId\": \"64a000000000000000000001\",\n  \"isPublic\": false,\n  \"teacherVisible\": false,\n  \"sections\": [\n    {\n      \"id\": \"sec1\",\n      \"name\": \"Listening\",\n      \"order\": 1\n    },\n    {\n      \"id\": \"sec2\",\n      \"name\": \"Reading\",\n      \"order\": 2\n    }\n  ],\n  \"settings\": {\n    \"timeLimit\": 60,\n    \"showResults\": true\n  },\n  \"collaborators\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Exam",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exams/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exams",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Update exam (name, sections, settings, etc.)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"IELTS Mock Test 1 (Updated)\",\n  \"isPublic\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Soft Delete Exam",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exams/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exams",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Soft-delete exam (isDeleted = true)"
+          },
+          "response": []
+        },
+        {
+          "name": "Restore Exam",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exams/:id/restore",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exams",
+                ":id",
+                "restore"
+              ],
+              "query": []
+            },
+            "description": "Restore a soft-deleted exam"
+          },
+          "response": []
+        },
+        {
+          "name": "Permanently Delete Exam",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exams/:id/permanent",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exams",
+                ":id",
+                "permanent"
+              ],
+              "query": []
+            },
+            "description": "Permanently delete exam (cascades questions + assignments + submissions)"
+          },
+          "response": []
+        },
+        {
+          "name": "Recalculate Question Cache",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exams/:id/recalc-cache",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exams",
+                ":id",
+                "recalc-cache"
+              ],
+              "query": []
+            },
+            "description": "Recalculate and cache question counts for an exam"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Exam Questions",
+      "item": [
+        {
+          "name": "List Exam Questions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-questions?examId=64a000000000000000000030&sectionId=sec1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-questions"
+              ],
+              "query": [
+                {
+                  "key": "examId",
+                  "value": "64a000000000000000000030"
+                },
+                {
+                  "key": "sectionId",
+                  "value": "sec1"
+                }
+              ]
+            },
+            "description": "List questions for an exam sorted by order; optional sectionId filter"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Exam Question by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-questions/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-questions",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Get a single exam question by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Question Counts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-questions/counts?examIds=id1,id2",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-questions",
+                "counts"
+              ],
+              "query": [
+                {
+                  "key": "examIds",
+                  "value": "id1,id2"
+                }
+              ]
+            },
+            "description": "Get question counts per exam (comma-separated examIds)"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Exam Question",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-questions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-questions"
+              ],
+              "query": []
+            },
+            "description": "Create a new exam question (auto-assigns order)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"examId\": \"64a000000000000000000030\",\n  \"sectionId\": \"sec1\",\n  \"type\": \"multiple-choice\",\n  \"purpose\": \"exam\",\n  \"questionText\": \"What is the capital of France?\",\n  \"options\": [\n    \"London\",\n    \"Paris\",\n    \"Berlin\",\n    \"Madrid\"\n  ],\n  \"correctAnswer\": \"Paris\",\n  \"points\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Exam Question",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-questions/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-questions",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Update an exam question",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionText\": \"What is the capital of France? (v2)\",\n  \"points\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Exam Question",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-questions/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-questions",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Delete a question (hard delete)"
+          },
+          "response": []
+        },
+        {
+          "name": "Bulk Reorder Exam Questions",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-questions/order/batch",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-questions",
+                "order",
+                "batch"
+              ],
+              "query": []
+            },
+            "description": "Bulk reorder exam questions",
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"id\": \"64a000000000000000000031\",\n    \"order\": 1\n  },\n  {\n    \"id\": \"64a000000000000000000032\",\n    \"order\": 2\n  }\n]",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Assignments",
+      "item": [
+        {
+          "name": "List Assignments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/assignments?groupId=64a000000000000000000040&topicId=64a000000000000000000001&isGrammar=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "assignments"
+              ],
+              "query": [
+                {
+                  "key": "groupId",
+                  "value": "64a000000000000000000040"
+                },
+                {
+                  "key": "topicId",
+                  "value": "64a000000000000000000001"
+                },
+                {
+                  "key": "isGrammar",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "List assignments for a group; optional topicId/isGrammar filter"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Assignment by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/assignments/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "assignments",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Get a single assignment by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Assignment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/assignments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "assignments"
+              ],
+              "query": []
+            },
+            "description": "Create a vocabulary/grammar topic assignment",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"groupId\": \"64a000000000000000000040\",\n  \"topicId\": \"64a000000000000000000001\",\n  \"isGrammar\": false,\n  \"dueDate\": \"2026-04-30T23:59:59.000Z\",\n  \"constraints\": {\n    \"attemptsAllowed\": 3\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Assignment",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/assignments/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "assignments",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Update assignment (dueDate, constraints, etc.)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dueDate\": \"2026-05-15T23:59:59.000Z\",\n  \"constraints\": {\n    \"attemptsAllowed\": 5\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Soft Delete Assignment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/assignments/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "assignments",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Soft-delete an assignment"
+          },
+          "response": []
+        },
+        {
+          "name": "Permanently Delete Assignment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/assignments/:id/permanent",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "assignments",
+                ":id",
+                "permanent"
+              ],
+              "query": []
+            },
+            "description": "Permanently delete an assignment"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Exam Assignments",
+      "item": [
+        {
+          "name": "List Exam Assignments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-assignments?examId=64a000000000000000000030&groupId=64a000000000000000000040",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-assignments"
+              ],
+              "query": [
+                {
+                  "key": "examId",
+                  "value": "64a000000000000000000030"
+                },
+                {
+                  "key": "groupId",
+                  "value": "64a000000000000000000040"
+                }
+              ]
+            },
+            "description": "List exam assignments; filter by examId, groupId, or studentId"
+          },
+          "response": []
+        },
+        {
+          "name": "List Deleted Exam Assignments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-assignments/deleted?groupId=64a000000000000000000040",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-assignments",
+                "deleted"
+              ],
+              "query": [
+                {
+                  "key": "groupId",
+                  "value": "64a000000000000000000040"
+                }
+              ]
+            },
+            "description": "List soft-deleted assignments for a group"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Exam Assignment by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-assignments/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-assignments",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Get a single exam assignment by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Exam Assignment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-assignments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-assignments"
+              ],
+              "query": []
+            },
+            "description": "Create a new exam assignment (notifies group/students)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"examId\": \"64a000000000000000000030\",\n  \"groupId\": \"64a000000000000000000040\",\n  \"dueDate\": \"2026-04-30T23:59:59.000Z\",\n  \"notify\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Due Date",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-assignments/:id/due-date",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-assignments",
+                ":id",
+                "due-date"
+              ],
+              "query": []
+            },
+            "description": "Update assignment due date and optionally notify",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dueDate\": \"2026-05-15T23:59:59.000Z\",\n  \"notify\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Soft Delete Exam Assignment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-assignments/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-assignments",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Soft-delete an exam assignment"
+          },
+          "response": []
+        },
+        {
+          "name": "Restore Exam Assignment",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-assignments/:id/restore",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-assignments",
+                ":id",
+                "restore"
+              ],
+              "query": []
+            },
+            "description": "Restore a soft-deleted exam assignment"
+          },
+          "response": []
+        },
+        {
+          "name": "Permanently Delete Exam Assignment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-assignments/:id/permanent",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-assignments",
+                ":id",
+                "permanent"
+              ],
+              "query": []
+            },
+            "description": "Permanently delete an assignment and all its submissions"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Exam Submissions",
+      "item": [
+        {
+          "name": "List Submissions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-submissions?assignmentId=64a000000000000000000050&studentId=user_abc123",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-submissions"
+              ],
+              "query": [
+                {
+                  "key": "assignmentId",
+                  "value": "64a000000000000000000050"
+                },
+                {
+                  "key": "studentId",
+                  "value": "user_abc123"
+                }
+              ]
+            },
+            "description": "List submissions for an assignment"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Submission by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-submissions/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-submissions",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Get a single submission by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Start Exam (Create Submission)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-submissions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-submissions"
+              ],
+              "query": []
+            },
+            "description": "Start an exam (create submission)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assignmentId\": \"64a000000000000000000050\",\n  \"studentId\": \"user_abc123\",\n  \"studentName\": \"Nguyen Van A\",\n  \"startedAt\": \"2026-04-01T08:00:00.000Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Save Progress / Submit Exam",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-submissions/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-submissions",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Save progress / submit answers / submit exam",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"64a000000000000000000031\",\n      \"answer\": \"Paris\"\n    }\n  ],\n  \"status\": \"submitted\",\n  \"submittedAt\": \"2026-04-01T09:00:00.000Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Release Exam Results",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-submissions/:id/release",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-submissions",
+                ":id",
+                "release"
+              ],
+              "query": []
+            },
+            "description": "Release exam results to student",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"releasedBy\": \"user_teacher123\",\n  \"releasedByName\": \"Teacher Minh\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Release Follow-Up Results",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-submissions/:id/release-follow-up",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-submissions",
+                ":id",
+                "release-follow-up"
+              ],
+              "query": []
+            },
+            "description": "Release follow-up results to student",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"releasedBy\": \"user_teacher123\",\n  \"releasedByName\": \"Teacher Minh\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Mark Results Viewed",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-submissions/:id/viewed",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-submissions",
+                ":id",
+                "viewed"
+              ],
+              "query": []
+            },
+            "description": "Mark results as viewed by student"
+          },
+          "response": []
+        },
+        {
+          "name": "Mark Follow-Up Results Viewed",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/exam-submissions/:id/viewed-follow-up",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "exam-submissions",
+                ":id",
+                "viewed-follow-up"
+              ],
+              "query": []
+            },
+            "description": "Mark follow-up results as viewed by student"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "User Groups",
+      "item": [
+        {
+          "name": "List User Groups",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/user-groups?includeHidden=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user-groups"
+              ],
+              "query": [
+                {
+                  "key": "includeHidden",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "List all groups (excludes hidden by default)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Group by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/user-groups/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user-groups",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Get a single group by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Students in Group",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/user-groups/:id/students",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user-groups",
+                ":id",
+                "students"
+              ],
+              "query": []
+            },
+            "description": "Get students in a group"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Group",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/user-groups",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user-groups"
+              ],
+              "query": []
+            },
+            "description": "Create a new group",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Class 10A1\",\n  \"description\": \"English class 10A1\",\n  \"isHidden\": false,\n  \"topicAccess\": [],\n  \"grammarAccess\": [],\n  \"examAccess\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Group",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/user-groups/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user-groups",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Update an existing group",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Class 10A1 (Updated)\",\n  \"description\": \"Updated description\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Group",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/user-groups/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user-groups",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Delete a group permanently"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Group Access",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/user-groups/:id/access",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "user-groups",
+                ":id",
+                "access"
+              ],
+              "query": []
+            },
+            "description": "Add/remove resource access for a group. field: topicAccess | grammarAccess | examAccess. action: add | remove",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"field\": \"topicAccess\",\n  \"resourceId\": \"64a000000000000000000001\",\n  \"action\": \"add\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users?role=student&status=active",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "role",
+                  "value": "student"
+                },
+                {
+                  "key": "status",
+                  "value": "active"
+                }
+              ]
+            },
+            "description": "List all users; optional filter by role and status"
+          },
+          "response": []
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Get user by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Update user fields (role, displayName, disabled, folderAccess, etc.)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"Nguyen Van B\",\n  \"role\": \"student\",\n  \"disabled\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Approve User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/:id/approve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                ":id",
+                "approve"
+              ],
+              "query": []
+            },
+            "description": "Approve pending user with role and optional expiry. Use durationDays OR customExpiresAt.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"student\",\n  \"durationDays\": 365\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Renew User Access",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/:id/renew",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                ":id",
+                "renew"
+              ],
+              "query": []
+            },
+            "description": "Renew user access. Use durationDays OR customExpiresAt.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"durationDays\": 180\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reject / Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Reject / permanently delete a pending user"
+          },
+          "response": []
+        },
+        {
+          "name": "Add User to Group",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/:uid/groups/:groupId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                ":uid",
+                "groups",
+                ":groupId"
+              ],
+              "query": []
+            },
+            "description": "Add user to a group (no request body)"
+          },
+          "response": []
+        },
+        {
+          "name": "Remove User from Group",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/:uid/groups/:groupId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                ":uid",
+                "groups",
+                ":groupId"
+              ],
+              "query": []
+            },
+            "description": "Remove user from a group"
+          },
+          "response": []
+        },
+        {
+          "name": "Get User Learning Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/:id/stats?startDate=2026-01-01&endDate=2026-03-31",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                ":id",
+                "stats"
+              ],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "2026-01-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2026-03-31"
+                }
+              ]
+            },
+            "description": "Get user learning stats"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "List Notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications?userId=user_abc123&unreadOnly=true",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "user_abc123"
+                },
+                {
+                  "key": "unreadOnly",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "List notifications for a user (newest first)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Unread Count",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/unread-count?userId=user_abc123",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "unread-count"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "user_abc123"
+                }
+              ]
+            },
+            "description": "Get count of unread notifications for a user"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications"
+              ],
+              "query": []
+            },
+            "description": "Create a single notification (internal use)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user_abc123\",\n  \"title\": \"New Assignment\",\n  \"body\": \"You have a new exam assignment due April 30.\",\n  \"type\": \"assignment\",\n  \"relatedId\": \"64a000000000000000000050\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Mark Notification Read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/:id/read",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                ":id",
+                "read"
+              ],
+              "query": []
+            },
+            "description": "Mark a single notification as read"
+          },
+          "response": []
+        },
+        {
+          "name": "Mark All Notifications Read",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/batch-read",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "batch-read"
+              ],
+              "query": []
+            },
+            "description": "Mark all unread notifications as read for a user",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user_abc123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Email Whitelist",
+      "item": [
+        {
+          "name": "List Whitelisted Emails",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/email-whitelist?role=student&used=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "email-whitelist"
+              ],
+              "query": [
+                {
+                  "key": "role",
+                  "value": "student"
+                },
+                {
+                  "key": "used",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "List all whitelisted emails; optional filter by role and used status"
+          },
+          "response": []
+        },
+        {
+          "name": "Check Email Whitelist",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/email-whitelist/check?email=student@example.com",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "email-whitelist",
+                "check"
+              ],
+              "query": [
+                {
+                  "key": "email",
+                  "value": "student@example.com"
+                }
+              ]
+            },
+            "description": "Check if an email is whitelisted (returns entry or null)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Whitelist Entry by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/email-whitelist/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "email-whitelist",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Get a single whitelist entry by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Add Email to Whitelist",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/email-whitelist",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "email-whitelist"
+              ],
+              "query": []
+            },
+            "description": "Add an email to the whitelist",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newstudent@example.com\",\n  \"role\": \"student\",\n  \"durationDays\": 365,\n  \"groups\": [\n    \"64a000000000000000000040\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Bulk Add Emails to Whitelist",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/email-whitelist/bulk",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "email-whitelist",
+                "bulk"
+              ],
+              "query": []
+            },
+            "description": "Bulk add multiple emails to the whitelist",
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"email\": \"student1@example.com\",\n    \"role\": \"student\",\n    \"durationDays\": 365\n  },\n  {\n    \"email\": \"student2@example.com\",\n    \"role\": \"student\",\n    \"durationDays\": 365\n  }\n]",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Whitelist Entry",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/email-whitelist/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "email-whitelist",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Update a whitelist entry (role, duration, groups, etc.)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"teacher\",\n  \"durationDays\": 730\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Mark Whitelist Entry as Used",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/email-whitelist/:id/mark-used",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "email-whitelist",
+                ":id",
+                "mark-used"
+              ],
+              "query": []
+            },
+            "description": "Mark a whitelist entry as used (called on registration)"
+          },
+          "response": []
+        },
+        {
+          "name": "Remove from Whitelist",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/email-whitelist/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "email-whitelist",
+                ":id"
+              ],
+              "query": []
+            },
+            "description": "Remove an email from the whitelist"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Word Progress",
+      "item": [
+        {
+          "name": "Get User Word Progress",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/word-progress?userId=user_abc123&topicId=64a000000000000000000001",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "word-progress"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "user_abc123"
+                },
+                {
+                  "key": "topicId",
+                  "value": "64a000000000000000000001"
+                }
+              ]
+            },
+            "description": "Get all progress records for a user; optional topicId filter"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Progress for a Word",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/word-progress/word?userId=user_abc123&topicId=64a000000000000000000001&wordId=word_xyz",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "word-progress",
+                "word"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "user_abc123"
+                },
+                {
+                  "key": "topicId",
+                  "value": "64a000000000000000000001"
+                },
+                {
+                  "key": "wordId",
+                  "value": "word_xyz"
+                }
+              ]
+            },
+            "description": "Get progress for a specific word"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Topic Mastery Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/word-progress/summary?userId=user_abc123&topicId=64a000000000000000000001",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "word-progress",
+                "summary"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "user_abc123"
+                },
+                {
+                  "key": "topicId",
+                  "value": "64a000000000000000000001"
+                }
+              ]
+            },
+            "description": "Get mastery summary for a topic (mastered vs total)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get User Streak",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/word-progress/streak/:userId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "word-progress",
+                "streak",
+                ":userId"
+              ],
+              "query": []
+            },
+            "description": "Get streak data for a user"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Bulk Streak",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/word-progress/streak/bulk",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "word-progress",
+                "streak",
+                "bulk"
+              ],
+              "query": []
+            },
+            "description": "Get streak data for multiple users (teacher dashboard)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userIds\": [\n    \"user_abc123\",\n    \"user_def456\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upsert Word Progress",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/word-progress",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "word-progress"
+              ],
+              "query": []
+            },
+            "description": "Upsert progress for a single word",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user_abc123\",\n  \"topicId\": \"64a000000000000000000001\",\n  \"wordId\": \"word_xyz\",\n  \"masteryScore\": 70,\n  \"lastStudied\": \"2026-03-25T10:00:00.000Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Record Game Result",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/word-progress/game-result",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "word-progress",
+                "game-result"
+              ],
+              "query": []
+            },
+            "description": "Record a game result for a word (updates score + masteryScore). gameType examples: flashcard, matching, spelling",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user_abc123\",\n  \"topicId\": \"64a000000000000000000001\",\n  \"wordId\": \"word_xyz\",\n  \"gameType\": \"flashcard\",\n  \"score\": 85,\n  \"isCorrect\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Pronunciation Score",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/word-progress/pronunciation",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "word-progress",
+                "pronunciation"
+              ],
+              "query": []
+            },
+            "description": "Update pronunciation score for a word (0-100)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user_abc123\",\n  \"topicId\": \"64a000000000000000000001\",\n  \"wordId\": \"word_xyz\",\n  \"pronunciationScore\": 92\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Topic Progress",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/word-progress/reset",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "word-progress",
+                "reset"
+              ],
+              "query": []
+            },
+            "description": "Reset all progress for a topic (for a user)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user_abc123\",\n  \"topicId\": \"64a000000000000000000001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Sharing",
+      "item": [
+        {
+          "name": "Find User by Email",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sharing/find-user?email=teacher@example.com&role=teacher",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sharing",
+                "find-user"
+              ],
+              "query": [
+                {
+                  "key": "email",
+                  "value": "teacher@example.com"
+                },
+                {
+                  "key": "role",
+                  "value": "teacher"
+                }
+              ]
+            },
+            "description": "Find an SST user by email (for sharing UI autocomplete)"
+          },
+          "response": []
+        },
+        {
+          "name": "Toggle Public",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sharing/public",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sharing",
+                "public"
+              ],
+              "query": []
+            },
+            "description": "Toggle isPublic. resourceType: topic | teacher_topic | grammar | exam",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resourceType\": \"topic\",\n  \"resourceId\": \"64a000000000000000000001\",\n  \"isPublic\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Toggle Teacher Visible",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sharing/teacher-visible",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sharing",
+                "teacher-visible"
+              ],
+              "query": []
+            },
+            "description": "Toggle teacherVisible (admin resources only). resourceType: topic | grammar | exam",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resourceType\": \"topic\",\n  \"resourceId\": \"64a000000000000000000001\",\n  \"teacherVisible\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Add Group Access",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sharing/group-access/add",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sharing",
+                "group-access",
+                "add"
+              ],
+              "query": []
+            },
+            "description": "Add a resource to a group access array. resourceType: topic | grammar | exam",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"groupId\": \"64a000000000000000000040\",\n  \"resourceType\": \"topic\",\n  \"resourceId\": \"64a000000000000000000001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Group Access",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sharing/group-access/remove",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sharing",
+                "group-access",
+                "remove"
+              ],
+              "query": []
+            },
+            "description": "Remove a resource from a group access array",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"groupId\": \"64a000000000000000000040\",\n  \"resourceType\": \"topic\",\n  \"resourceId\": \"64a000000000000000000001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Sync Group Access",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sharing/group-access/sync",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sharing",
+                "group-access",
+                "sync"
+              ],
+              "query": []
+            },
+            "description": "Replace entire group access list for a resource",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resourceType\": \"topic\",\n  \"resourceId\": \"64a000000000000000000001\",\n  \"groupIds\": [\n    \"64a000000000000000000040\",\n    \"64a000000000000000000041\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Add User Access",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sharing/user-access/add",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sharing",
+                "user-access",
+                "add"
+              ],
+              "query": []
+            },
+            "description": "Add resource to individual user access. Use userEmail OR userId.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userEmail\": \"student@example.com\",\n  \"resourceType\": \"topic\",\n  \"resourceId\": \"64a000000000000000000001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Remove User Access",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sharing/user-access/remove",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sharing",
+                "user-access",
+                "remove"
+              ],
+              "query": []
+            },
+            "description": "Remove resource from individual user access",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user_abc123\",\n  \"resourceType\": \"topic\",\n  \"resourceId\": \"64a000000000000000000001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get User Access",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sharing/user-access?userId=user_abc123",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sharing",
+                "user-access"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "user_abc123"
+                }
+              ]
+            },
+            "description": "Get all SST access arrays for a user (topicAccess, grammarAccess, examAccess)"
+          },
+          "response": []
+        },
+        {
+          "name": "Add Collaborator",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sharing/collaborators/add",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sharing",
+                "collaborators",
+                "add"
+              ],
+              "query": []
+            },
+            "description": "Add collaborator to teacher resource. resourceType: teacher_topic | grammar | exam. role: editor | viewer",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resourceType\": \"teacher_topic\",\n  \"resourceId\": \"64a000000000000000000010\",\n  \"collaboratorEmail\": \"colleague@example.com\",\n  \"role\": \"editor\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Collaborator",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sharing/collaborators/remove",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sharing",
+                "collaborators",
+                "remove"
+              ],
+              "query": []
+            },
+            "description": "Remove a collaborator from a teacher resource",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resourceType\": \"teacher_topic\",\n  \"resourceId\": \"64a000000000000000000010\",\n  \"collaboratorId\": \"user_def456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Collaborator Role",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sharing/collaborators/role",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sharing",
+                "collaborators",
+                "role"
+              ],
+              "query": []
+            },
+            "description": "Update collaborator role: viewer | editor",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resourceType\": \"teacher_topic\",\n  \"resourceId\": \"64a000000000000000000010\",\n  \"collaboratorId\": \"user_def456\",\n  \"role\": \"viewer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Transfer Ownership",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sharing/collaborators/transfer-ownership",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sharing",
+                "collaborators",
+                "transfer-ownership"
+              ],
+              "query": []
+            },
+            "description": "Transfer ownership of a teacher resource to another teacher",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resourceType\": \"teacher_topic\",\n  \"resourceId\": \"64a000000000000000000010\",\n  \"oldOwnerId\": \"user_abc123\",\n  \"oldOwnerName\": \"Teacher A\",\n  \"newOwnerEmail\": \"newteacher@example.com\",\n  \"newOwnerName\": \"Teacher B\",\n  \"resourceName\": \"Business Vocab\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Collaborated Resources",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sharing/collaborators/my-resources?resourceType=teacher_topic&teacherId=user_abc123",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sharing",
+                "collaborators",
+                "my-resources"
+              ],
+              "query": [
+                {
+                  "key": "resourceType",
+                  "value": "teacher_topic"
+                },
+                {
+                  "key": "teacherId",
+                  "value": "user_abc123"
+                }
+              ]
+            },
+            "description": "Get all resources where a teacher is a collaborator"
+          },
+          "response": []
+        },
+        {
+          "name": "Add Teacher Share",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sharing/teacher-share/add",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sharing",
+                "teacher-share",
+                "add"
+              ],
+              "query": []
+            },
+            "description": "Share admin resource with a teacher. Use teacherEmail OR teacherId.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resourceType\": \"topic\",\n  \"resourceId\": \"64a000000000000000000001\",\n  \"teacherEmail\": \"teacher@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Teacher Share",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sharing/teacher-share/remove",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sharing",
+                "teacher-share",
+                "remove"
+              ],
+              "query": []
+            },
+            "description": "Remove a teacher from admin resource shared list",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resourceType\": \"topic\",\n  \"resourceId\": \"64a000000000000000000001\",\n  \"teacherId\": \"user_teacher123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "AI",
+      "item": [
+        {
+          "name": "Chat Completion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/chat",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "chat"
+              ],
+              "query": []
+            },
+            "description": "Text chat completion (routes to Gemini or OpenRouter based on modelProfile)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"modelProfile\": \"gemini-flash\",\n  \"systemPrompt\": \"You are a helpful English tutor.\",\n  \"userContent\": \"Explain the present perfect tense.\",\n  \"responseFormat\": \"text\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Audio Evaluation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/audio-eval",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "audio-eval"
+              ],
+              "query": []
+            },
+            "description": "Audio evaluation — pronunciation or speaking grading",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"modelProfile\": \"gemini-flash\",\n  \"systemPrompt\": \"Grade this pronunciation.\",\n  \"userContent\": \"Evaluate the student pronunciation of the word: apple.\",\n  \"audio\": \"BASE64_AUDIO_STRING_HERE\",\n  \"mimeType\": \"audio/webm\",\n  \"responseFormat\": \"json\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Google Translate TTS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/tts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "tts"
+              ],
+              "query": []
+            },
+            "description": "Google Translate TTS proxy — returns base64 audio blob",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Hello, how are you?\",\n  \"lang\": \"en\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Gemini TTS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/tts/gemini",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "tts",
+                "gemini"
+              ],
+              "query": []
+            },
+            "description": "Google Cloud TTS — returns base64 audio blob",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"modelProfile\": \"gemini-tts\",\n  \"text\": \"Present perfect tense is used for recent actions.\",\n  \"courseConfig\": {\n    \"instructions\": \"Speak clearly and slowly.\",\n    \"speed\": 1\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Image Generation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/image-generate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "image-generate"
+              ],
+              "query": []
+            },
+            "description": "Image generation via Google Imagen",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"modelProfile\": \"imagen-3\",\n  \"prompt\": \"A friendly English classroom with students learning vocabulary.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Generate Grammar Variations",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/grammar/generate-variations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "grammar",
+                "generate-variations"
+              ],
+              "query": []
+            },
+            "description": "Generate 4 grammar question variations + improved original",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"originalQuestion\": {\n    \"questionText\": \"She ___ to school every day.\",\n    \"options\": [\n      \"go\",\n      \"goes\",\n      \"going\",\n      \"gone\"\n    ],\n    \"correctAnswer\": \"goes\"\n  },\n  \"purpose\": \"grammar\",\n  \"type\": \"multiple-choice\",\n  \"settings\": {\n    \"cefrLevel\": \"B1\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Generate Single Variation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/grammar/generate-single-variation",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "grammar",
+                "generate-single-variation"
+              ],
+              "query": []
+            },
+            "description": "Generate 1 single new grammar question variation",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"originalQuestion\": {\n    \"questionText\": \"She ___ to school every day.\",\n    \"correctAnswer\": \"goes\"\n  },\n  \"purpose\": \"grammar\",\n  \"type\": \"multiple-choice\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Grade Grammar Answer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/grammar/grade",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "grammar",
+                "grade"
+              ],
+              "query": []
+            },
+            "description": "Grade a student written/typed grammar answer with AI",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": {\n    \"questionText\": \"Describe your daily routine.\",\n    \"type\": \"writing\"\n  },\n  \"studentAnswer\": \"I wake up at 7am and go to school.\",\n  \"purpose\": \"grammar\",\n  \"type\": \"writing\",\n  \"cefrLevel\": \"B1\",\n  \"maxPoints\": 10,\n  \"useDefaultCriteria\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Grade Fill-in-Blank",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/grammar/grade-fill-in-blank",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "grammar",
+                "grade-fill-in-blank"
+              ],
+              "query": []
+            },
+            "description": "AI-grade fill-in-blank typing blanks (returns boolean[])",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"questionText\": \"She ___ (go) to school every day.\",\n  \"blanks\": [\n    {\n      \"idx\": 0,\n      \"expected\": \"goes\",\n      \"studentAnswer\": \"go\",\n      \"exactMatch\": false\n    }\n  ],\n  \"context\": \"Present simple tense\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Classify Grammar Error",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/grammar/classify-error",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "grammar",
+                "classify-error"
+              ],
+              "query": []
+            },
+            "description": "Classify error category for a grammar question",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetSkill\": \"verb conjugation\",\n  \"type\": \"multiple-choice\",\n  \"purpose\": \"grammar\",\n  \"questionText\": \"She ___ to school every day.\",\n  \"options\": [\n    \"go\",\n    \"goes\",\n    \"going\",\n    \"gone\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Grade Audio Answer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/audio-grade",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "audio-grade"
+              ],
+              "query": []
+            },
+            "description": "Grade audio answer for exam/grammar questions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"audio\": \"BASE64_AUDIO_STRING_HERE\",\n  \"mimeType\": \"audio/webm\",\n  \"questionText\": \"Describe the image below.\",\n  \"purpose\": \"speaking\",\n  \"maxPoints\": 10,\n  \"cefrLevel\": \"B2\",\n  \"useDefaultCriteria\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Evaluate Pronunciation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ai/pronunciation-eval",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "pronunciation-eval"
+              ],
+              "query": []
+            },
+            "description": "Evaluate pronunciation from audio (returns score, transcript, feedback)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"audio\": \"BASE64_AUDIO_STRING_HERE\",\n  \"mimeType\": \"audio/webm\",\n  \"targetWord\": \"beautiful\",\n  \"targetIpa\": \"/bjuːtɪfʊl/\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
