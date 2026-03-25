@@ -1,4 +1,4 @@
-const GrammarExerciseTargetLevelsC = [''] as const;
+export const GrammarExerciseTargetLevelsC = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] as const;
 
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
@@ -17,71 +17,92 @@ export class SSTGrammarExercises {
   @Prop({ type: String, required: true })
   public readonly title: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly description: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly icon: string;
 
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, default: null })
   public readonly color: number;
 
-  @Prop({ type: String, required: true })
+  /** 'admin' | 'teacher' */
+  @Prop({ type: String, default: null })
   public readonly createdByRole: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly copiedFrom: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly proposedBy: string;
 
-  @Prop({ type: Array, required: true })
+  @Prop({ type: Array, default: [] })
   public readonly proposedByName: string[];
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly name: string;
 
-  @Prop({ type: String, enum: GrammarExerciseTargetLevelsC, required: true })
+  @Prop({ type: String, enum: GrammarExerciseTargetLevelsC, default: null })
   public readonly targetLevel: GrammarExerciseTargetLevelsT;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly targetAge: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly teacherId: string;
 
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, default: 0 })
   public readonly cachedQuestionCount: number;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly owner: boolean;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly duplicatedFrom: string;
 
-  @Prop({ type: Array, required: true })
+  @Prop({ type: Array, default: [] })
   public readonly collaborators: string[];
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Array, default: [] })
+  public readonly collaboratorNames: string[];
+
+  @Prop({ type: Array, default: [] })
+  public readonly collaboratorIds: string[];
+
+  @Prop({ type: Boolean, default: false })
   public readonly admin: boolean;
 
-  @Prop({ type: String, default: null })
-  public readonly deletedAt: string;
+  @Prop({ type: Boolean, default: false })
+  public readonly isDeleted: boolean;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Date, default: null })
+  public readonly deletedAt: Date;
+
+  @Prop({ type: Boolean, default: false })
   public readonly archived: boolean;
 
   @Prop({ type: String, default: null })
   public readonly convertedFrom: string;
 
-  @Prop({ type: Boolean, required: true })
-  public readonly public: boolean;
+  @Prop({ type: Boolean, default: false })
+  public readonly isPublic: boolean;
 
-  @Prop({ type: String, required: true })
-  public readonly transferredAt: string;
+  @Prop({ type: Boolean, default: false })
+  public readonly teacherVisible: boolean;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: Date, default: null })
+  public readonly transferredAt: Date;
+
+  @Prop({ type: String, default: null })
   public readonly transferredToName: string;
+
+  /** Folder this exercise belongs to */
+  @Prop({ type: String, default: null })
+  public readonly folderId: string;
+
+  /** Teacher IDs individually shared this exercise */
+  @Prop({ type: Array, default: [] })
+  public readonly sharedWithTeacherIds: string[];
 
   @Prop({ ref: () => Accounts, type: String, required: true })
   public readonly createdBy: Accounts;
@@ -91,13 +112,6 @@ export class SSTGrammarExercises {
 
   @Prop({ ref: () => PropertiesBranches, type: String, required: true })
   public readonly propertiesBranches: PropertiesBranches;
-
-  @Prop({ type: Boolean, required: true })
-  public readonly deleted: boolean;
 }
 
-/**
- * @interface     GrammarExerciseTargetLevelsT
- * @description   Grammar Exercise Target Levels Type
- */
 export type GrammarExerciseTargetLevelsT = (typeof GrammarExerciseTargetLevelsC)[number];

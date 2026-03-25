@@ -1,4 +1,4 @@
-const ExamSubmissionStatusC = [''] as const;
+export const ExamSubmissionStatusC = ['in_progress', 'submitted', 'graded'] as const;
 
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
@@ -23,97 +23,120 @@ export class SSTExamSubmissions {
   @Prop({ type: String, required: true })
   public readonly studentId: string;
 
-  @Prop({ type: String, required: true })
-  public readonly startedAt: string;
+  @Prop({ type: Date, default: null })
+  public readonly startedAt: Date;
 
-  @Prop({ type: String, required: true })
-  public readonly examEndTime: string;
+  /** Calculated deadline for this specific session */
+  @Prop({ type: Date, default: null })
+  public readonly examEndTime: Date;
 
-  @Prop({ type: Array, required: true })
-  public readonly variationMap: string[];
+  /**
+   * Map of { [questionId]: variationIndex } — selected variations per question
+   */
+  @Prop({ type: Object, default: {} })
+  public readonly variationMap: Record<string, number>;
 
-  @Prop({ type: String, required: true })
-  public readonly questionTimers: string[];
+  /**
+   * Timer state per question: { [questionId]: remainingSeconds }
+   */
+  @Prop({ type: Object, default: {} })
+  public readonly questionTimers: Record<string, number>;
 
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, default: 0 })
   public readonly sectionExpired: number;
 
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, default: 0 })
   public readonly questionExpired: number;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly autoSubmitted: boolean;
 
-  @Prop({ type: String, required: true })
-  public readonly submittedAt: string;
+  @Prop({ type: Date, default: null })
+  public readonly submittedAt: Date;
 
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, default: 0 })
   public readonly maxTotalScore: number;
 
-  @Prop({ type: String, required: true })
-  public readonly gradedAt: string;
+  @Prop({ type: Date, default: null })
+  public readonly gradedAt: Date;
 
-  @Prop({ type: String, required: true })
-  public readonly results: string;
+  /**
+   * Grading results per question: { [questionId]: { score, feedback, ... } }
+   */
+  @Prop({ type: Object, default: {} })
+  public readonly results: Record<string, any>;
 
-  @Prop({ type: Number, required: true })
+  /**
+   * Student answers per question: { [questionId]: answer }
+   */
+  @Prop({ type: Object, default: {} })
+  public readonly answers: Record<string, any>;
+
+  @Prop({ type: Number, default: 0 })
   public readonly totalScore: number;
 
-  @Prop({ type: String, enum: ExamSubmissionStatusC, required: true })
+  @Prop({ type: String, enum: ExamSubmissionStatusC, default: 'in_progress' })
   public readonly status: ExamSubmissionStatusT;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly resultsReleased: boolean;
 
-  @Prop({ type: String, required: true })
-  public readonly releasedAt: string;
+  @Prop({ type: Date, default: null })
+  public readonly releasedAt: Date;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly releasedBy: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly releasedByName: string;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly viewedByStudent: boolean;
 
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, default: 0 })
   public readonly tabSwitchCount: number;
 
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, default: 0 })
   public readonly lastActiveSectionIdx: number;
 
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, default: 0 })
   public readonly lastActiveQuestionIdx: number;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly followUpRequested: boolean;
 
-  @Prop({ type: String, required: true })
-  public readonly timersSavedAt: string;
+  @Prop({ type: Date, default: null })
+  public readonly timersSavedAt: Date;
 
-  @Prop({ type: String, required: true })
-  public readonly followUpAnswers: string;
+  /**
+   * Student follow-up answers: { [questionId]: answer }
+   */
+  @Prop({ type: Object, default: {} })
+  public readonly followUpAnswers: Record<string, any>;
 
-  @Prop({ type: String, required: true })
-  public readonly followUpResults: string;
+  /**
+   * Follow-up grading results: { [questionId]: { score, feedback, ... } }
+   */
+  @Prop({ type: Object, default: {} })
+  public readonly followUpResults: Record<string, any>;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly followUpReleasedBy: string;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly followUpResultsReleased: boolean;
 
-  @Prop({ type: String, required: true })
-  public readonly followUpReleasedAt: string;
+  @Prop({ type: Date, default: null })
+  public readonly followUpReleasedAt: Date;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly followUpReleasedByName: string;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly followUpResultsViewedByStudent: boolean;
 
-  @Prop({ type: String, required: true })
+  /** AI-generated overall exam summary for student review */
+  @Prop({ type: String, default: null })
   public readonly examSummary: string;
 
   @Prop({ ref: () => Accounts, type: String, required: true })
@@ -126,8 +149,4 @@ export class SSTExamSubmissions {
   public readonly propertiesBranches: PropertiesBranches;
 }
 
-/**
- * @interface     ExamSubmissionStatusT
- * @description   Exam Submission Status Type
- */
 export type ExamSubmissionStatusT = (typeof ExamSubmissionStatusC)[number];

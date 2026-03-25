@@ -1,4 +1,15 @@
-const typesC = [''] as const;
+export const NotificationTypesC = [
+  'exam_assigned',
+  'exam_assignment_new',
+  'assignment_new',
+  'deadline_extended',
+  'account_approved',
+  'student_joined',
+  'resource_shared',
+  'result_released',
+  'follow_up_released',
+  'exam_graded',
+] as const;
 
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
@@ -14,8 +25,8 @@ export class SSTNotifications {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public readonly _id: string;
 
-  @Prop({ type: String, enum: typesC, required: true })
-  public readonly type: typesT;
+  @Prop({ type: String, enum: NotificationTypesC, required: true })
+  public readonly type: NotificationTypesT;
 
   @Prop({ type: String, required: true })
   public readonly title: string;
@@ -23,19 +34,16 @@ export class SSTNotifications {
   @Prop({ type: String, required: true })
   public readonly message: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly link: string;
 
   @Prop({ type: String, required: true })
   public readonly userId: string;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly isRead: boolean;
 
-  @Prop({ type: Boolean, required: true })
-  public readonly read: boolean;
-
-  @Prop({ type: Date, required: true })
+  @Prop({ type: Date, default: null })
   public readonly readAt: Date;
 
   @Prop({ ref: () => Accounts, type: String, required: true })
@@ -48,9 +56,4 @@ export class SSTNotifications {
   public readonly propertiesBranches: PropertiesBranches;
 }
 
-/**
- * @interface     typesT
- * @description   Types Type
- *
- */
-export type typesT = (typeof typesC)[number];
+export type NotificationTypesT = (typeof NotificationTypesC)[number];

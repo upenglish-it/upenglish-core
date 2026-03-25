@@ -1,5 +1,5 @@
-export const UserStatusC = [''] as const;
-export const UserRoleC = ['admin', 'teacher', 'student'] as const;
+export const UserStatusC = ['pending', 'approved', 'expired'] as const;
+export const UserRoleC = ['admin', 'teacher', 'student', 'user'] as const;
 export const UserGenderC = ['male', 'female'] as const;
 
 // Utils
@@ -8,6 +8,7 @@ import { SYSTEM_ID } from 'apps/common/src/utils';
 import { Prop, modelOptions } from '@typegoose/typegoose';
 // Schemas
 import { Accounts, Properties, PropertiesBranches } from '../../../isms';
+
 export const SSTUsersCN = 'sst-users';
 
 @modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: SSTUsersCN } })
@@ -18,64 +19,78 @@ export class SSTUsers {
   @Prop({ type: String, required: true })
   public readonly email: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly photoURL: string;
 
-  @Prop({ type: String, enum: UserRoleC, required: true })
+  @Prop({ type: String, enum: UserRoleC, default: 'user' })
   public readonly role: UserRoleT;
 
-  @Prop({ type: String, enum: UserStatusC, required: true })
+  @Prop({ type: String, enum: UserStatusC, default: 'pending' })
   public readonly status: UserStatusT;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly disabled: boolean;
 
-  @Prop({ type: String, required: true })
-  public readonly folderAccess: string;
+  /**
+   * Topic folder IDs (and individual topic IDs) this user has access to.
+   * In original Firestore this can hold both folder IDs and direct topic IDs.
+   */
+  @Prop({ type: Array, default: [] })
+  public readonly folderAccess: string[];
 
-  @Prop({ type: Array, required: true })
+  /** Direct topic IDs (not folders) this user has explicit access to */
+  @Prop({ type: Array, default: [] })
   public readonly topicAccess: string[];
 
-  @Prop({ type: Array, required: true })
+  /** Grammar exercise IDs this user has explicit access to */
+  @Prop({ type: Array, default: [] })
   public readonly grammarAccess: string[];
 
-  @Prop({ type: Array, required: true })
+  /** Exam IDs this user has explicit access to */
+  @Prop({ type: Array, default: [] })
   public readonly examAccess: string[];
 
-  @Prop({ type: Array, required: true })
+  /** Group IDs this user belongs to */
+  @Prop({ type: Array, default: [] })
   public readonly groupIds: string[];
 
-  @Prop({ type: String, required: true })
-  public readonly approvedAt: string;
+  @Prop({ type: Date, default: null })
+  public readonly approvedAt: Date;
 
-  @Prop({ type: String, required: true })
-  public readonly expiresAt: string;
+  /** Access expiry date (null = never expires) */
+  @Prop({ type: Date, default: null })
+  public readonly expiresAt: Date;
 
-  @Prop({ type: String, required: true })
-  public readonly deletedAt: string;
-
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly deleted: boolean;
 
-  @Prop({ type: String, required: true })
-  public readonly expiryNotifiedAt: string;
+  @Prop({ type: Date, default: null })
+  public readonly deletedAt: Date;
 
-  @Prop({ type: String, required: true })
+  /** Track if expiry notification has been sent */
+  @Prop({ type: Date, default: null })
+  public readonly expiryNotifiedAt: Date;
+
+  @Prop({ type: String, default: null })
   public readonly displayName: string;
 
-  @Prop({ type: String, enum: UserGenderC, required: true })
+  @Prop({ type: String, enum: UserGenderC, default: null })
   public readonly gender: UserGenderT;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly teacherTitle: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly studentTitle: string;
 
-  @Prop({ type: Object, required: true })
+  /**
+   * Email notification preferences per type:
+   * { assignment_new: true, deadline_extended: false, ... }
+   */
+  @Prop({ type: Object, default: {} })
   public readonly emailPreferences: Record<string, any>;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly adminLanguage: string;
 
   @Prop({ ref: () => Accounts, type: String, required: true })
@@ -88,20 +103,6 @@ export class SSTUsers {
   public readonly propertiesBranches: PropertiesBranches;
 }
 
-/**
- * @interface     UserStatusT
- * @description   User Status Type
- */
 export type UserStatusT = (typeof UserStatusC)[number];
-
-/**
- * @interface     UserRoleT
- * @description   User Role Type
- */
 export type UserRoleT = (typeof UserRoleC)[number];
-
-/**
- * @interface     UserGenderT
- * @description   User Gender Type
- */
 export type UserGenderT = (typeof UserGenderC)[number];

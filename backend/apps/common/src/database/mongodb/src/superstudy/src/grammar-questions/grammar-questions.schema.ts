@@ -1,8 +1,34 @@
-const GrammarQuestionErrorCategoriesC = [''] as const;
-const GrammarQuestionTargetSkillsC = [''] as const;
-const GrammarQuestionTypesC = [''] as const;
-const GrammarQuestionPurposeC = [''] as const;
-const GrammarQuestionSpecialRequirementC = [''] as const;
+export const GrammarQuestionErrorCategoriesC = [
+  'grammar',
+  'vocabulary',
+  'pronunciation',
+  'fluency',
+  'coherence',
+  'task_achievement',
+  'other',
+] as const;
+
+export const GrammarQuestionTargetSkillsC = [
+  'reading',
+  'listening',
+  'speaking',
+  'writing',
+  'grammar',
+  'vocabulary',
+] as const;
+
+export const GrammarQuestionTypesC = [
+  'multiple_choice',
+  'fill_in_blank',
+  'write',
+  'speak',
+  'fill_in_blank_paragraph',
+  'match_words',
+] as const;
+
+export const GrammarQuestionPurposeC = ['main', 'follow_up'] as const;
+
+export const GrammarQuestionSpecialRequirementC = ['', 'audio_required'] as const;
 
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
@@ -18,53 +44,59 @@ export class SSTGrammarQuestions {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public readonly _id: string;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly hasContext: boolean;
 
-  @Prop({ type: String, enum: GrammarQuestionErrorCategoriesC, required: true })
+  @Prop({ type: String, enum: GrammarQuestionErrorCategoriesC, default: null })
   public readonly errorCategory: GrammarQuestionErrorCategoriesT;
 
-  @Prop({ type: Array, required: true })
-  public readonly variations: string[];
+  @Prop({ type: Array, default: [] })
+  public readonly variations: Record<string, any>[];
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly teacherId: string;
 
-  @Prop({ type: String, enum: GrammarQuestionTargetSkillsC, required: true })
+  @Prop({ type: String, enum: GrammarQuestionTargetSkillsC, default: null })
   public readonly targetSkill: GrammarQuestionTargetSkillsT;
 
   @Prop({ type: String, required: true })
   public readonly exerciseId: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly context: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly contextAudioUrl: string;
 
-  @Prop({ type: String, enum: GrammarQuestionPurposeC, required: true })
+  @Prop({ type: String, enum: GrammarQuestionPurposeC, default: 'main' })
   public readonly purpose: GrammarQuestionPurposeT;
 
   @Prop({ type: String, enum: GrammarQuestionTypesC, required: true })
   public readonly type: GrammarQuestionTypesT;
 
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, default: 0 })
   public readonly order: number;
 
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, default: 1 })
   public readonly points: number;
 
-  @Prop({ type: String, enum: GrammarQuestionSpecialRequirementC, required: true })
+  @Prop({ type: String, enum: GrammarQuestionSpecialRequirementC, default: '' })
   public readonly specialRequirement: GrammarQuestionSpecialRequirementT;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly promptTitle: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly promptId: string;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: true })
   public readonly useDefaultGradingCriteria: boolean;
+
+  @Prop({ type: Boolean, default: false })
+  public readonly useAIGrading: boolean;
+
+  @Prop({ type: Number, default: null })
+  public readonly timeLimitSeconds: number;
 
   @Prop({ ref: () => Accounts, type: String, required: true })
   public readonly createdBy: Accounts;
@@ -76,33 +108,8 @@ export class SSTGrammarQuestions {
   public readonly propertiesBranches: PropertiesBranches;
 }
 
-/**
- * @interface     GrammarQuestionErrorCategoriesT
- * @description   Grammar Question Error Categories Type
- */
 export type GrammarQuestionErrorCategoriesT = (typeof GrammarQuestionErrorCategoriesC)[number];
-
-/**
- * @interface     GrammarQuestionTargetSkillsT
- * @description   Grammar Question Target Skills Type
- */
 export type GrammarQuestionTargetSkillsT = (typeof GrammarQuestionTargetSkillsC)[number];
-
-/**
- * @interface     GrammarQuestionTypesT
- * @description   Grammar Question Types Type
- *
- */
 export type GrammarQuestionTypesT = (typeof GrammarQuestionTypesC)[number];
-
-/**
- * @interface     GrammarQuestionPurposeT
- * @description   Grammar Question Purpose Type
- */
 export type GrammarQuestionPurposeT = (typeof GrammarQuestionPurposeC)[number];
-
-/**
- * @interface     GrammarQuestionSpecialRequirementT
- * @description   Grammar Question Special Requirement Type
- */
 export type GrammarQuestionSpecialRequirementT = (typeof GrammarQuestionSpecialRequirementC)[number];

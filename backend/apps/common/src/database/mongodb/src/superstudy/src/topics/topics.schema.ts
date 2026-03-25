@@ -14,29 +14,54 @@ export class SSTTopics {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public readonly _id: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly color: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly icon: string;
 
   @Prop({ type: String, required: true })
   public readonly name: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly description: string;
 
-  @Prop({ type: String, enum: TopicStatusC, required: true })
+  @Prop({ type: String, enum: TopicStatusC, default: 'draft' })
   public readonly status: TopicStatusT;
 
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, default: 0 })
   public readonly cachedWordCount: number;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly inPublicFolder: boolean;
 
-  @Prop({ type: Boolean, required: true })
-  public readonly public: boolean;
+  @Prop({ type: Boolean, default: false })
+  public readonly isPublic: boolean;
+
+  /** Teachers can view/assign but not students */
+  @Prop({ type: Boolean, default: false })
+  public readonly teacherVisible: boolean;
+
+  @Prop({ type: Boolean, default: false })
+  public readonly isDeleted: boolean;
+
+  @Prop({ type: Date, default: null })
+  public readonly deletedAt: Date;
+
+  /** Folder this topic belongs to */
+  @Prop({ type: String, default: null })
+  public readonly folderId: string;
+
+  /** Teacher IDs that have been individually shared this topic */
+  @Prop({ type: Array, default: [] })
+  public readonly sharedWithTeacherIds: string[];
+
+  /** 'admin' | 'teacher' */
+  @Prop({ type: String, default: 'admin' })
+  public readonly createdByRole: string;
+
+  @Prop({ type: String, default: null })
+  public readonly createdByName: string;
 
   @Prop({ ref: () => Accounts, type: String, required: true })
   public readonly createdBy: Accounts;
@@ -48,8 +73,4 @@ export class SSTTopics {
   public readonly propertiesBranches: PropertiesBranches;
 }
 
-/**
- * @interface     TopicStatusT
- * @description   Topic Status Type
- */
 export type TopicStatusT = (typeof TopicStatusC)[number];

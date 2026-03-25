@@ -15,20 +15,34 @@ export class SSTUserGroups {
   @Prop({ type: String, required: true })
   public readonly name: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly description: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly folderAccess: string;
 
-  @Prop({ type: Boolean, required: true })
+  /** Hidden groups are not displayed in teacher/student group lists */
+  @Prop({ type: Boolean, default: false })
   public readonly hidden: boolean;
 
-  @Prop({ type: Boolean, required: true })
+  /** Also stored as isHidden in original Firestore — keep both for compatibility */
+  @Prop({ type: Boolean, default: false })
+  public readonly isHidden: boolean;
+
+  @Prop({ type: Boolean, default: false })
   public readonly enableRewardPoints: boolean;
 
-  @Prop({ type: Array, required: true })
+  /** Topic IDs that students in this group have access to */
+  @Prop({ type: Array, default: [] })
   public readonly topicAccess: string[];
+
+  /** Grammar exercise IDs that students in this group have access to */
+  @Prop({ type: Array, default: [] })
+  public readonly grammarAccess: string[];
+
+  /** Exam IDs that students in this group have access to */
+  @Prop({ type: Array, default: [] })
+  public readonly examAccess: string[];
 
   @Prop({ ref: () => Accounts, type: String, required: true })
   public readonly createdBy: Accounts;

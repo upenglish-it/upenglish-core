@@ -18,38 +18,49 @@ export class SSTAssignments {
   @Prop({ type: String, required: true })
   public readonly topicId: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly topicName: string;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly isTeacherTopic: boolean;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly isGrammar: boolean;
 
-  @Prop({ type: String, required: true })
-  public readonly dueDate: string;
+  @Prop({ type: Date, default: null })
+  public readonly dueDate: Date;
 
-  @Prop({ type: String, required: true })
-  public readonly deadlineNotified: string;
+  @Prop({ type: Date, default: null })
+  public readonly deadlineNotified: Date;
 
-  @Prop({ type: String, required: true })
-  public readonly studentDeadlines: string;
+  /**
+   * Per-student individual deadline overrides: { [studentId]: Date }
+   */
+  @Prop({ type: Object, default: {} })
+  public readonly studentDeadlines: Record<string, any>;
 
-  @Prop({ type: Array, required: true })
+  /** Restrict to specific students (empty array = whole class) */
+  @Prop({ type: Array, default: [] })
   public readonly assignedStudentIds: string[];
 
-  @Prop({ type: String, required: true })
-  public readonly scheduledStart: string;
+  /** Scheduled release date (null = publish immediately) */
+  @Prop({ type: Date, default: null })
+  public readonly scheduledStart: Date;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly groupName: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly teacherId: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly teacherName: string;
+
+  @Prop({ type: Boolean, default: false })
+  public readonly isDeleted: boolean;
+
+  @Prop({ type: Date, default: null })
+  public readonly deletedAt: Date;
 
   @Prop({ ref: () => Accounts, type: String, required: true })
   public readonly createdBy: Accounts;
@@ -59,7 +70,4 @@ export class SSTAssignments {
 
   @Prop({ ref: () => PropertiesBranches, type: String, required: true })
   public readonly propertiesBranches: PropertiesBranches;
-
-  @Prop({ type: Boolean, default: false })
-  public readonly deleted: boolean;
 }

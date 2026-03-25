@@ -32,3 +32,4 @@ export * from './src/teacher-exam-folders/teacher-exam-folders.schema';
 export * from './src/teacher-topic-folders/teacher-topic-folders.schema';
 export * from './src/teacher-grammar-folders/teacher-grammar-folders.schema';
 export * from './src/teacher-rating-summaries/teacher-rating-summaries.schema';
+export * from './src/word-progress/word-progress.schema';

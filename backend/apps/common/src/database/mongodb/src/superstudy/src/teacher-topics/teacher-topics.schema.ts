@@ -15,48 +15,54 @@ export class SSTTeacherTopics {
   @Prop({ type: String, required: true })
   public readonly teacherId: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly color: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly icon: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly description: string;
-
-  // Clarify what's this ID for
-  // @Prop({ type: String, required: true })
-  // public readonly id: string;
 
   @Prop({ type: String, required: true })
   public readonly name: string;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly owner: boolean;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly admin: boolean;
 
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, default: 0 })
   public readonly cachedWordCount: number;
 
-  @Prop({ type: String, required: true })
-  public readonly deletedAt: string;
+  @Prop({ type: Boolean, default: false })
+  public readonly isDeleted: boolean;
 
-  @Prop({ type: Boolean, required: true })
-  public readonly deleted: boolean;
+  @Prop({ type: Date, default: null })
+  public readonly deletedAt: Date;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly duplicatedFrom: string;
 
-  @Prop({ type: Array, required: true })
+  @Prop({ type: Array, default: [] })
   public readonly collaborators: string[];
 
-  @Prop({ type: Array, required: true })
+  @Prop({ type: Array, default: [] })
   public readonly collaboratorNames: string[];
 
-  @Prop({ type: Array, required: true })
+  @Prop({ type: Array, default: [] })
   public readonly collaboratorIds: string[];
+
+  @Prop({ type: Array, default: [] })
+  public readonly collaboratorRoles: string[];
+
+  @Prop({ type: Boolean, default: false })
+  public readonly isPublic: boolean;
+
+  /** Folder this teacher topic belongs to */
+  @Prop({ type: String, default: null })
+  public readonly folderId: string;
 
   @Prop({ ref: () => Accounts, type: String, required: true })
   public readonly createdBy: Accounts;

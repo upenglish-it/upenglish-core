@@ -1,5 +1,3 @@
-const CollaboratorRolesC = [''] as const;
-
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
 // NestJs Imports
@@ -9,6 +7,9 @@ import { Accounts, Properties, PropertiesBranches } from '../../../isms';
 
 export const SSTTeacherExamFoldersCN = 'sst-teacher-exam-folders';
 
+export const CollaboratorRolesC = ['editor', 'viewer'] as const;
+export type CollaboratorRolesT = (typeof CollaboratorRolesC)[number];
+
 @modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: SSTTeacherExamFoldersCN } })
 export class SSTTeacherExamFolders {
   @Prop({ type: String, default: () => SYSTEM_ID() })
@@ -17,50 +18,64 @@ export class SSTTeacherExamFolders {
   @Prop({ type: String, required: true })
   public readonly name: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: '' })
   public readonly description: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: '📝' })
   public readonly icon: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: '#3b82f6' })
   public readonly color: string;
 
+  /** Owner teacher UID */
   @Prop({ type: String, required: true })
   public readonly teacherId: string;
 
-  @Prop({ type: Array, required: true })
+  /** Exam IDs in this folder */
+  @Prop({ type: Array, default: [] })
   public readonly examIds: string[];
 
-  @Prop({ type: Boolean, required: true })
+  /** Sort order */
+  @Prop({ type: Number, default: 0 })
+  public readonly order: number;
+
+  /** True if this is a system-generated folder (e.g. "Shared with me") */
+  @Prop({ type: Boolean, default: false })
   public readonly appSystemFolder: boolean;
 
-  @Prop({ type: Boolean, required: true })
+  /** True if this is a collaboration folder (shared by collab) */
+  @Prop({ type: Boolean, default: false })
   public readonly collabFolder: boolean;
 
-  @Prop({ type: Boolean, required: true })
+  /** True if this folder belongs to the requesting teacher (vs. a shared folder) */
+  @Prop({ type: Boolean, default: true })
   public readonly ownFolder: boolean;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly public: boolean;
 
-  @Prop({ type: String, required: true })
-  public readonly deletedAt: string;
+  @Prop({ type: Boolean, default: false })
+  public readonly isDeleted: boolean;
 
-  @Prop({ type: Boolean, required: true })
-  public readonly deleted: boolean;
+  @Prop({ type: Date, default: null })
+  public readonly deletedAt: Date;
 
-  @Prop({ type: Array, required: true })
-  public readonly collaboratorNames: string[];
-
-  @Prop({ type: Array, required: true })
+  /** Collaborator UIDs who have access to this folder */
+  @Prop({ type: Array, default: [] })
   public readonly collaboratorIds: string[];
 
-  @Prop({ type: String, enum: CollaboratorRolesC, required: true })
-  public readonly collaboratorRoles: CollaboratorRolesT;
+  /**
+   * Map of collaboratorId → display name.
+   * Stored as a plain Object in MongoDB.
+   */
+  @Prop({ type: Object, default: {} })
+  public readonly collaboratorNames: Record<string, string>;
 
-  @Prop({ type: Boolean, required: true })
-  public readonly collab: boolean;
+  /**
+   * Map of collaboratorId → role ('editor' | 'viewer').
+   */
+  @Prop({ type: Object, default: {} })
+  public readonly collaboratorRoles: Record<string, CollaboratorRolesT>;
 
   @Prop({ ref: () => Accounts, type: String, required: true })
   public readonly createdBy: Accounts;
@@ -71,9 +86,3 @@ export class SSTTeacherExamFolders {
   @Prop({ ref: () => PropertiesBranches, type: String, required: true })
   public readonly propertiesBranches: PropertiesBranches;
 }
-
-/**
- * @interface     CollaboratorRolesT
- * @description   Collaborator Roles Type
- */
-export type CollaboratorRolesT = (typeof CollaboratorRolesC)[number];

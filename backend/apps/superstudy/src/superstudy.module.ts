@@ -8,6 +8,25 @@ import { Inject, Module, OnModuleInit } from '@nestjs/common';
 import { TypegooseModule, getConnectionToken } from 'nestjs-typegoose';
 // Common Imports
 import { HttpExceptionFilter } from 'apps/common';
+// Feature Modules
+import { UsersModule } from './modules/users/users.module';
+import { UserGroupsModule } from './modules/user-groups/user-groups.module';
+import { ExamsModule } from './modules/exams/exams.module';
+import { ExamQuestionsModule } from './modules/exam-questions/exam-questions.module';
+import { ExamAssignmentsModule } from './modules/exam-assignments/exam-assignments.module';
+import { ExamSubmissionsModule } from './modules/exam-submissions/exam-submissions.module';
+import { GrammarExercisesModule } from './modules/grammar-exercises/grammar-exercises.module';
+import { GrammarQuestionsModule } from './modules/grammar-questions/grammar-questions.module';
+import { TopicsModule } from './modules/topics/topics.module';
+import { TeacherTopicsModule } from './modules/teacher-topics/teacher-topics.module';
+import { AssignmentsModule } from './modules/assignments/assignments.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { EmailWhitelistModule } from './modules/email-whitelist/email-whitelist.module';
+import { AiModule } from './modules/ai/ai.module';
+import { WordProgressModule } from './modules/word-progress/word-progress.module';
+import { SharingModule } from './modules/sharing/sharing.module';
+import { AdminFoldersModule } from './modules/admin-folders/admin-folders.module';
+import { TeacherFoldersModule } from './modules/teacher-folders/teacher-folders.module';
 
 const DatabaseProvider = {
   provide: 'DATABASE_CONNECTION',
@@ -29,7 +48,28 @@ const DatabaseProvider = {
       inject: ['DATABASE_CONNECTION'],
       extraProviders: [DatabaseProvider],
     }),
+    // Feature Modules
+    UsersModule,
+    UserGroupsModule,
+    ExamsModule,
+    ExamQuestionsModule,
+    ExamAssignmentsModule,
+    ExamSubmissionsModule,
+    GrammarExercisesModule,
+    GrammarQuestionsModule,
+    TopicsModule,
+    TeacherTopicsModule,
+    AssignmentsModule,
+    NotificationsModule,
+    // New modules
+    EmailWhitelistModule,
+    AiModule,
+    WordProgressModule,
+    SharingModule,
+    AdminFoldersModule,
+    TeacherFoldersModule,
   ],
+
   providers: [
     {
       provide: APP_FILTER,

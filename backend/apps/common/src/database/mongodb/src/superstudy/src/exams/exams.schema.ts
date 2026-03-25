@@ -1,5 +1,5 @@
-const ExamTypesC = [] as const;
-const TargetLevelsC = [] as const;
+export const ExamTypesC = ['test', 'homework'] as const;
+export const TargetLevelsC = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] as const;
 
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
@@ -18,113 +18,139 @@ export class SSTExams {
   @Prop({ type: String, required: true })
   public readonly name: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly description: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly icon: string;
 
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, default: null })
   public readonly color: number;
 
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, default: null })
   public readonly timeLimitMinutes: number;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly timingMode: string;
 
-  @Prop({ type: Array, required: true })
-  public readonly sections: string[];
+  @Prop({ type: Array, default: [] })
+  public readonly sections: Record<string, any>[];
 
-  @Prop({ type: Boolean, required: true })
-  public readonly public: boolean;
+  /** Whether the exam is publicly available to all students */
+  @Prop({ type: Boolean, default: false })
+  public readonly isPublic: boolean;
 
-  @Prop({ type: String, required: true })
-  public readonly cefrLevel: string;
-
-  @Prop({ type: String, enum: ExamTypesC, required: true })
-  public readonly examType: ExamTypesT;
-
-  @Prop({ type: String, required: true })
-  public readonly teacherTitle: string;
-
-  @Prop({ type: String, required: true })
-  public readonly studentTitle: string;
-
-  @Prop({ type: Number, required: true })
-  public readonly cachedQuestionTimeMissingCount: number;
-
-  @Prop({ type: Number, required: true })
-  public readonly cachedQuestionCount: number;
-
-  @Prop({ type: Number, required: true })
-  public readonly cachedQuestionTimeTotalSeconds: number;
+  /** Whether teachers can see the exam in shared library (but not students) */
+  @Prop({ type: Boolean, default: false })
+  public readonly teacherVisible: boolean;
 
   @Prop({ type: String, default: null })
-  public readonly deletedAt: string;
+  public readonly cefrLevel: string;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: String, enum: ExamTypesC, default: 'homework' })
+  public readonly examType: ExamTypesT;
+
+  @Prop({ type: String, default: null })
+  public readonly teacherTitle: string;
+
+  @Prop({ type: String, default: null })
+  public readonly studentTitle: string;
+
+  @Prop({ type: Number, default: 0 })
+  public readonly cachedQuestionTimeMissingCount: number;
+
+  @Prop({ type: Number, default: 0 })
+  public readonly cachedQuestionCount: number;
+
+  @Prop({ type: Number, default: 0 })
+  public readonly cachedQuestionTimeTotalSeconds: number;
+
+  /** Soft-delete: set to true to hide from lists */
+  @Prop({ type: Boolean, default: false })
+  public readonly isDeleted: boolean;
+
+  @Prop({ type: Date, default: null })
+  public readonly deletedAt: Date;
+
+  /** Teacher who owns this exam */
+  @Prop({ type: Boolean, default: false })
   public readonly owner: boolean;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly admin: boolean;
 
   @Prop({ type: String, default: null })
   public readonly duplicatedFrom: string;
 
-  @Prop({ type: Array, required: true })
+  @Prop({ type: Array, default: [] })
   public readonly collaborators: string[];
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: Array, default: [] })
+  public readonly collaboratorNames: string[];
+
+  @Prop({ type: Array, default: [] })
+  public readonly collaboratorIds: string[];
+
+  @Prop({ type: Array, default: [] })
+  public readonly collaboratorRoles: string[];
+
+  /** Teacher IDs who have been individually shared this exam (admin sharing) */
+  @Prop({ type: Array, default: [] })
+  public readonly sharedWithTeacherIds: string[];
+
+  @Prop({ type: String, default: null })
   public readonly title: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly copiedFrom: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly proposedBy: string;
 
-  @Prop({ type: Array, required: true })
+  @Prop({ type: Array, default: [] })
   public readonly proposedByName: string[];
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly teacherGender: string;
 
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, default: 0 })
   public readonly maxTotalScore: number;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly archived: boolean;
 
-  @Prop({ type: String, required: true })
-  public readonly transferredAt: string;
+  @Prop({ type: Date, default: null })
+  public readonly transferredAt: Date;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly transferredToName: string;
 
-  @Prop({ type: String, enum: TargetLevelsC, required: true })
+  @Prop({ type: String, enum: TargetLevelsC, default: null })
   public readonly targetLevel: TargetLevelsT;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: null })
   public readonly targetAge: string;
 
   @Prop({ type: String, default: null })
   public readonly convertedFrom: string;
 
-  @Prop({ type: String, default: null })
-  public readonly restoredAt: string;
+  @Prop({ type: Date, default: null })
+  public readonly restoredAt: Date;
 
   @Prop({ type: String, default: null })
   public readonly restoredFromTeacher: string;
 
-  @Prop({ type: Array, required: true })
-  public readonly collaboratorNames: string[];
+  /** Folder this exam belongs to */
+  @Prop({ type: String, default: null })
+  public readonly folderId: string;
 
-  @Prop({ type: Array, required: true })
-  public readonly collaboratorIds: string[];
+  /** Who created this — 'admin' | 'teacher' */
+  @Prop({ type: String, default: null })
+  public readonly createdByRole: string;
 
-  @Prop({ type: Array, required: true })
-  public readonly collaboratorRoles: string[];
+  /** Display name of the creator */
+  @Prop({ type: String, default: null })
+  public readonly createdByName: string;
 
   @Prop({ ref: () => Accounts, type: String, required: true })
   public readonly createdBy: Accounts;
@@ -134,9 +160,6 @@ export class SSTExams {
 
   @Prop({ ref: () => PropertiesBranches, type: String, required: true })
   public readonly propertiesBranches: PropertiesBranches;
-
-  @Prop({ type: Boolean, required: true })
-  public readonly deleted: boolean;
 }
 
 /**
