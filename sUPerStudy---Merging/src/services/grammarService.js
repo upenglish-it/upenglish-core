@@ -1,18 +1,17 @@
-import { db } from '../config/firebase';
-import { collection, doc, getDocs, getDoc, setDoc, deleteDoc, updateDoc, writeBatch, serverTimestamp, query, where, orderBy, getCountFromServer, deleteField } from 'firebase/firestore';
+import { grammarExercisesService, grammarQuestionsService } from '../models';
 import { deleteQuestionImages, deleteContextImages } from './examService';
 import { deleteContextAudio } from './contextAudioService';
 
-// Collection names: grammar_exercises, grammar_questions, grammar_assignments, grammar_submissions
+// --- QUESTION COUNTS ---
 
-// Fetch question counts for multiple exercises
 export async function getGrammarQuestionCounts(exerciseIds) {
+    // Use the exam-questions-style count endpoint if available, or fetch per-exercise
     const counts = {};
     await Promise.all(exerciseIds.map(async (exId) => {
         try {
-            const q = query(collection(db, 'grammar_questions'), where('exerciseId', '==', exId));
-            const snapshot = await getCountFromServer(q);
-            counts[exId] = snapshot.data().count;
+            const questions = await grammarQuestionsService.findAll(exId);
+            const list = Array.isArray(questions) ? questions : (questions?.data || []);
+            counts[exId] = list.length;
         } catch (e) {
             console.error(`Error counting questions for exercise ${exId}:`, e);
             counts[exId] = 0;
@@ -21,16 +20,10 @@ export async function getGrammarQuestionCounts(exerciseIds) {
     return counts;
 }
 
-/**
- * Recalculate and cache question count into the grammar exercise document.
- */
 export async function recalcGrammarQuestionCache(exerciseId) {
     try {
-        const q = query(collection(db, 'grammar_questions'), where('exerciseId', '==', exerciseId));
-        const snapshot = await getCountFromServer(q);
-        await updateDoc(doc(db, 'grammar_exercises', exerciseId), {
-            cachedQuestionCount: snapshot.data().count
-        });
+        // Backend should handle this — trigger via update
+        await grammarExercisesService.update(exerciseId, { _recalcQuestionCount: true });
     } catch (e) {
         console.error(`Error recalculating grammar question cache for ${exerciseId}:`, e);
     }
@@ -39,136 +32,62 @@ export async function recalcGrammarQuestionCache(exerciseId) {
 // --- EXERCISES ---
 
 export async function getGrammarExercises(teacherId = null) {
-    let q = collection(db, 'grammar_exercises');
-    if (teacherId) {
-        q = query(q, where('teacherId', '==', teacherId));
-    } else {
-        q = query(q);
-    }
-    const snapshot = await getDocs(q);
-    const exercises = [];
-    snapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        if (!data.isDeleted) exercises.push({ id: docSnap.id, ...data });
-    });
-    // Client-side sort to avoid requiring a composite index
+    const result = await grammarExercisesService.findAll({ teacherId });
+    let exercises = Array.isArray(result) ? result : (result?.data || []);
+    exercises = exercises.filter(e => !e.isDeleted);
     return exercises.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return timeB - timeA;
     });
 }
 
-import { documentId } from 'firebase/firestore';
-
 export async function getSharedAndPublicGrammarExercises(grammarAccessIds = []) {
-    const exercises = [];
-    const addedIds = new Set();
-
-    try {
-        // 1. Get all public grammar exercises
-        const publicQ = query(collection(db, 'grammar_exercises'), where('isPublic', '==', true));
-        const publicSnap = await getDocs(publicQ);
-        publicSnap.forEach(docSnap => {
-            exercises.push({ id: docSnap.id, ...docSnap.data() });
-            addedIds.add(docSnap.id);
-        });
-
-        // 2. Get explicitly shared exercises
-        if (grammarAccessIds.length > 0) {
-            // Firestore 'in' query supports up to 10 elements
-            for (let i = 0; i < grammarAccessIds.length; i += 10) {
-                const batchIds = grammarAccessIds.slice(i, i + 10);
-                const sharedQ = query(collection(db, 'grammar_exercises'), where(documentId(), 'in', batchIds));
-                const sharedSnap = await getDocs(sharedQ);
-                sharedSnap.forEach(docSnap => {
-                    if (!addedIds.has(docSnap.id)) {
-                        exercises.push({ id: docSnap.id, ...docSnap.data() });
-                        addedIds.add(docSnap.id);
-                    }
-                });
-            }
-        }
-    } catch (error) {
-        console.error("Error fetching shared grammar exercises:", error);
-    }
-
+    const result = await grammarExercisesService.findShared(grammarAccessIds);
+    let exercises = Array.isArray(result) ? result : (result?.data || []);
     return exercises.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return timeB - timeA;
     });
 }
 
 export async function getGrammarExercise(id) {
-    const docSnap = await getDoc(doc(db, 'grammar_exercises', id));
-    if (docSnap.exists()) return { id: docSnap.id, ...docSnap.data() };
-    return null;
+    const result = await grammarExercisesService.findOne(id);
+    return result || null;
 }
 
 export async function saveGrammarExercise(exerciseData) {
     const { id, ...data } = exerciseData;
-    let exerciseRef;
     if (id) {
-        exerciseRef = doc(db, 'grammar_exercises', id);
-        await updateDoc(exerciseRef, { ...data, updatedAt: serverTimestamp() });
+        await grammarExercisesService.update(id, data);
         return id;
     } else {
-        exerciseRef = doc(collection(db, 'grammar_exercises'));
-        await setDoc(exerciseRef, { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-        return exerciseRef.id;
+        const result = await grammarExercisesService.create(data);
+        return result?.id || result;
     }
 }
 
 export async function deleteGrammarExercise(id) {
-    // Soft delete: mark as deleted instead of removing
-    await updateDoc(doc(db, 'grammar_exercises', id), {
-        isDeleted: true,
-        deletedAt: serverTimestamp()
-    });
+    await grammarExercisesService.softDelete(id);
 }
 
 export async function restoreGrammarExercise(id) {
-    await updateDoc(doc(db, 'grammar_exercises', id), {
-        isDeleted: deleteField(),
-        deletedAt: deleteField()
-    });
+    await grammarExercisesService.restore(id);
 }
 
 export async function permanentlyDeleteGrammarExercise(id) {
-    // Delete questions first
-    const questions = await getGrammarQuestions(id);
-    const batch = writeBatch(db);
-
-    // Delete option images, context audio, and context images for these questions
-    await Promise.allSettled([
-        ...questions.map(q => deleteQuestionImages(q)),
-        ...questions.filter(q => q.contextAudioUrl).map(q => deleteContextAudio(q.contextAudioUrl)),
-        ...questions.filter(q => q.context).map(q => deleteContextImages(q.context))
-    ]);
-
-    questions.forEach(q => batch.delete(doc(db, 'grammar_questions', q.id)));
-
-    // Delete related assignments
-    const assignmentsQ = query(collection(db, 'assignments'), where('topicId', '==', id));
-    const asgnsSnap = await getDocs(assignmentsQ);
-    asgnsSnap.forEach(asgnDoc => {
-        batch.delete(asgnDoc.ref);
-    });
-
-    batch.delete(doc(db, 'grammar_exercises', id));
-    await batch.commit();
+    // Backend handles cascade deletion of questions, images, audio
+    await grammarExercisesService.permanentDelete(id);
 }
 
 export async function getDeletedGrammarExercises() {
     try {
-        const q = query(collection(db, 'grammar_exercises'), where('isDeleted', '==', true));
-        const snapshot = await getDocs(q);
-        const exercises = [];
-        snapshot.forEach(docSnap => exercises.push({ id: docSnap.id, ...docSnap.data() }));
+        const result = await grammarExercisesService.findDeleted();
+        let exercises = Array.isArray(result) ? result : (result?.data || []);
         return exercises.sort((a, b) => {
-            const tA = a.deletedAt?.toMillis ? a.deletedAt.toMillis() : 0;
-            const tB = b.deletedAt?.toMillis ? b.deletedAt.toMillis() : 0;
+            const tA = a.deletedAt ? new Date(a.deletedAt).getTime() : 0;
+            const tB = b.deletedAt ? new Date(b.deletedAt).getTime() : 0;
             return tB - tA;
         });
     } catch (error) {
@@ -180,53 +99,33 @@ export async function getDeletedGrammarExercises() {
 // --- QUESTIONS ---
 
 export async function getGrammarQuestions(exerciseId) {
-    const q = query(collection(db, 'grammar_questions'), where('exerciseId', '==', exerciseId));
-    const snapshot = await getDocs(q);
-    const questions = [];
-    snapshot.forEach(docSnap => questions.push({ id: docSnap.id, ...docSnap.data() }));
+    const result = await grammarQuestionsService.findAll(exerciseId);
+    let questions = Array.isArray(result) ? result : (result?.data || []);
     return questions.sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
 export async function getGrammarQuestionsByIds(questionIds = []) {
     if (!questionIds || questionIds.length === 0) return [];
-
-    const questionsMap = {};
-    const batches = [];
-    // Firestore "in" query allows max 10 items
-    for (let i = 0; i < questionIds.length; i += 10) {
-        batches.push(questionIds.slice(i, i + 10));
-    }
-
     try {
-        await Promise.all(batches.map(async (batchIds) => {
-            const q = query(collection(db, 'grammar_questions'), where(documentId(), 'in', batchIds));
-            const snapshot = await getDocs(q);
-            snapshot.forEach(docSnap => {
-                questionsMap[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
-            });
-        }));
+        // Fetch individually since there's no batch-by-IDs endpoint
+        const promises = questionIds.map(id => grammarQuestionsService.findOne(id).catch(() => null));
+        const results = await Promise.all(promises);
+        return results.filter(Boolean);
     } catch (err) {
         console.error("Error fetching grammar questions by IDs:", err);
+        return [];
     }
-
-    // Return in the original order requested (or at least provide the array)
-    // We filter just in case some IDs were deleted
-    return questionIds.map(id => questionsMap[id]).filter(Boolean);
 }
 
 export async function saveGrammarQuestion(questionData) {
     const { id, ...data } = questionData;
-    let questionRef;
+    let resultId;
     if (id) {
-        questionRef = doc(db, 'grammar_questions', id);
-        await updateDoc(questionRef, { ...data, updatedAt: serverTimestamp() });
+        await grammarQuestionsService.update(id, data);
+        resultId = id;
     } else {
-        // Find current max order for this exercise
-        const questionsSnapshot = await getDocs(query(collection(db, 'grammar_questions'), where('exerciseId', '==', data.exerciseId)));
-        const numQuestions = questionsSnapshot.size;
-
-        questionRef = doc(collection(db, 'grammar_questions'));
-        await setDoc(questionRef, { ...data, order: numQuestions, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        const result = await grammarQuestionsService.create(data);
+        resultId = result?.id || result;
     }
 
     // Fire-and-forget: auto-classify errorCategory in background
@@ -238,66 +137,66 @@ export async function saveGrammarQuestion(questionData) {
             questionText: data.variations?.[0]?.text,
             options: data.variations?.[0]?.options
         }).then(category => {
-            updateDoc(questionRef, { errorCategory: category }).catch(() => {});
+            grammarQuestionsService.update(resultId, { errorCategory: category }).catch(() => {});
         }).catch(() => {});
     }).catch(() => {});
 
     // Fire-and-forget: recalc grammar question cache
     recalcGrammarQuestionCache(data.exerciseId).catch(() => {});
 
-    return id || questionRef.id;
+    return resultId;
 }
 
 export async function deleteGrammarQuestion(id) {
-    const docRef = doc(db, 'grammar_questions', id);
-    const snap = await getDoc(docRef);
-    let exerciseId = null;
-    if (snap.exists()) {
-        const data = snap.data();
-        exerciseId = data.exerciseId;
-        await deleteQuestionImages(data);
-        if (data.contextAudioUrl) {
-            await deleteContextAudio(data.contextAudioUrl);
+    // Fetch question first to get exerciseId and clean up assets
+    try {
+        const question = await grammarQuestionsService.findOne(id);
+        if (question) {
+            await deleteQuestionImages(question);
+            if (question.contextAudioUrl) await deleteContextAudio(question.contextAudioUrl);
+            if (question.context) await deleteContextImages(question.context);
         }
-        if (data.context) {
-            await deleteContextImages(data.context);
-        }
+        await grammarQuestionsService.remove(id);
+        if (question?.exerciseId) recalcGrammarQuestionCache(question.exerciseId).catch(() => {});
+    } catch (e) {
+        // If fetch fails, still try to delete
+        await grammarQuestionsService.remove(id);
     }
-    await deleteDoc(docRef);
-
-    // Fire-and-forget: recalc grammar question cache
-    if (exerciseId) recalcGrammarQuestionCache(exerciseId).catch(() => {});
 }
 
 // --- ASSIGNMENTS ---
+// NOTE: grammar_assignments doesn't have a dedicated backend module yet.
+// These use the generic assignments service (which handles isGrammar flag).
+
+import { assignmentsService } from '../models';
 
 export async function getGrammarAssignmentsForGroup(groupId) {
-    const q = query(collection(db, 'grammar_assignments'), where('groupId', '==', groupId));
-    const snapshot = await getDocs(q);
-    const assignments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    // Client-side sort to avoid requiring a composite index
+    const result = await assignmentsService.findAll({ groupId, isGrammar: true });
+    let assignments = Array.isArray(result) ? result : (result?.data || []);
     return assignments.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return timeB - timeA;
     });
 }
 
 export async function saveGrammarAssignment(assignmentData) {
     const { id, ...data } = assignmentData;
-    let assignmentRef;
     if (id) {
-        assignmentRef = doc(db, 'grammar_assignments', id);
-        await updateDoc(assignmentRef, { ...data, updatedAt: serverTimestamp() });
+        await assignmentsService.update(id, { ...data, isGrammar: true });
         return id;
     } else {
-        assignmentRef = doc(collection(db, 'grammar_assignments'));
-        await setDoc(assignmentRef, { ...data, createdAt: serverTimestamp() });
-        return assignmentRef.id;
+        const result = await assignmentsService.create({ ...data, isGrammar: true });
+        return result?.id || result;
     }
 }
 
 // --- SUBMISSIONS ---
+// NOTE: grammar_submissions doesn't have a dedicated backend module.
+// Keep using Firestore for now until a backend module is built.
+
+import { db } from '../config/firebase';
+import { collection, doc, getDocs, getDoc, setDoc, updateDoc, query, where, serverTimestamp } from 'firebase/firestore';
 
 export async function getGrammarSubmission(assignmentId, studentId) {
     const q = query(collection(db, 'grammar_submissions'),
@@ -335,77 +234,60 @@ export async function saveGrammarSubmission(submissionData) {
 // TEACHER GRAMMAR FOLDERS
 // ==========================================
 
+import { teacherFoldersService } from '../models';
+
 export async function getTeacherGrammarFolders(teacherId) {
-    const q = query(collection(db, 'teacher_grammar_folders'), where('teacherId', '==', teacherId));
-    const snapshot = await getDocs(q);
-    const folders = [];
-    snapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        if (!data.isDeleted) folders.push({ id: docSnap.id, ...data });
-    });
+    const result = await teacherFoldersService.getGrammarFolders(teacherId);
+    let folders = Array.isArray(result) ? result : (result?.data || []);
+    folders = folders.filter(f => !f.isDeleted);
     return folders.sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
 export async function updateTeacherGrammarFoldersOrder(orderedFolders) {
-    const batch = writeBatch(db);
-    orderedFolders.forEach((folder, index) => {
-        const ref = doc(db, 'teacher_grammar_folders', folder.id);
-        batch.update(ref, { order: index, updatedAt: serverTimestamp() });
-    });
-    await batch.commit();
+    const folders = orderedFolders.map((folder, index) => ({ id: folder.id, order: index }));
+    await teacherFoldersService.reorderGrammarFolders(folders);
 }
 
 export async function getAllTeacherGrammarFolders() {
-    const snapshot = await getDocs(collection(db, 'teacher_grammar_folders'));
-    const folders = [];
-    snapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        if (!data.isDeleted) folders.push({ id: docSnap.id, ...data });
-    });
+    const result = await teacherFoldersService.getAllGrammarFolders();
+    let folders = Array.isArray(result) ? result : (result?.data || []);
+    folders = folders.filter(f => !f.isDeleted);
     return folders.sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
 export async function saveTeacherGrammarFolder(teacherId, folderData) {
     const { id, ...data } = folderData;
     if (id) {
-        const folderRef = doc(db, 'teacher_grammar_folders', id);
-        await updateDoc(folderRef, { ...data, updatedAt: serverTimestamp() });
+        // The backend uses a single save endpoint
+        await teacherFoldersService.saveGrammarFolder({ id, ...data, teacherId });
         return id;
     } else {
-        const folderRef = doc(collection(db, 'teacher_grammar_folders'));
-        await setDoc(folderRef, { ...data, teacherId, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-        return folderRef.id;
+        const result = await teacherFoldersService.saveGrammarFolder({ ...data, teacherId });
+        return result?.id || result;
     }
 }
 
 export async function deleteTeacherGrammarFolder(folderId) {
-    // Soft delete
-    await updateDoc(doc(db, 'teacher_grammar_folders', folderId), {
-        isDeleted: true,
-        deletedAt: serverTimestamp()
-    });
+    await teacherFoldersService.softDeleteGrammarFolder(folderId);
 }
 
 export async function restoreTeacherGrammarFolder(folderId) {
-    await updateDoc(doc(db, 'teacher_grammar_folders', folderId), {
-        isDeleted: deleteField(),
-        deletedAt: deleteField()
-    });
+    await teacherFoldersService.restoreGrammarFolder(folderId);
 }
 
 export async function permanentlyDeleteTeacherGrammarFolder(folderId) {
-    await deleteDoc(doc(db, 'teacher_grammar_folders', folderId));
+    await teacherFoldersService.permanentDeleteGrammarFolder(folderId);
 }
 
 export async function getDeletedTeacherGrammarFolders() {
     try {
-        const q = query(collection(db, 'teacher_grammar_folders'), where('isDeleted', '==', true));
-        const snapshot = await getDocs(q);
-        const folders = [];
-        snapshot.forEach(docSnap => folders.push({ id: docSnap.id, ...docSnap.data() }));
+        // Fetch deleted folders for a teacher — need teacherId
+        // Since this is admin use, get all deleted
+        const result = await teacherFoldersService.getDeletedGrammarFolders('');
+        let folders = Array.isArray(result) ? result : (result?.data || []);
         return folders.sort((a, b) => {
-            const tA = a.deletedAt?.toMillis ? a.deletedAt.toMillis() : 0;
-            const tB = b.deletedAt?.toMillis ? b.deletedAt.toMillis() : 0;
+            const tA = a.deletedAt ? new Date(a.deletedAt).getTime() : 0;
+            const tB = b.deletedAt ? new Date(b.deletedAt).getTime() : 0;
             return tB - tA;
         });
     } catch (error) {

@@ -8,6 +8,10 @@ export const userGroupsService = {
   findAll: (includeHidden) =>
     api.get(`${BASE}`, { includeHidden }),
 
+  /** Fetch multiple groups by their IDs */
+  findByIds: (ids) =>
+    api.get(`${BASE}`, { ids }),
+
   /** Get a single group by ID */
   findOne: (id) =>
     api.get(`${BASE}/${id}`),

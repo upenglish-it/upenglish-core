@@ -1,58 +1,43 @@
+import { notificationsService, usersService } from '../models';
+// Keep Firestore for: real-time subscriptions (onSnapshot), email queueing (mail_queue), 
+// and batch operations that don't have backend equivalents yet
 import { db } from '../config/firebase';
-import { collection, doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, query, where, orderBy, getDocs, onSnapshot, limit, Timestamp, getDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, query, where, getDocs, onSnapshot, limit, Timestamp, getDoc } from 'firebase/firestore';
 
 /**
  * Check if a user wants to receive email for a specific notification type.
- * Returns true by default (opt-out model: if field is missing, user gets all emails).
- * 
- * @param {string} userId
- * @param {string} notificationType e.g. 'deadline_expired', 'collab', 'content_proposal'
- * @returns {Promise<boolean>}
+ * Returns true by default (opt-out model).
  */
 export async function getUserEmailPreference(userId, notificationType) {
     if (!userId || !notificationType) return true;
     try {
-        const userRef = doc(db, 'users', userId);
-        const userSnap = await getDoc(userRef);
-        if (!userSnap.exists()) return true;
-        const prefs = userSnap.data().emailPreferences;
-        if (!prefs) return true; // no preferences set → send all
-        return prefs[notificationType] !== false; // only skip if explicitly false
+        const user = await usersService.findOne(userId);
+        if (!user) return true;
+        const prefs = user.emailPreferences;
+        if (!prefs) return true;
+        return prefs[notificationType] !== false;
     } catch (e) {
         console.warn('Error reading email preference:', e);
-        return true; // fail-open: send email if we can't read preference
+        return true;
     }
 }
 
 /**
  * Creates a new notification for a specific user.
- * 
- * @param {Object} data Notification data
- * @param {string} data.userId The user ID receiving this notification
- * @param {string} data.type e.g. 'exam_graded'
- * @param {string} data.title Short title
- * @param {string} data.message Detailed text
- * @param {string} data.link URL to navigate when clicked
  */
 export async function createNotification(data) {
     if (!data.userId) return null;
-
-    const notifRef = doc(collection(db, 'notifications'));
-    await setDoc(notifRef, {
+    const result = await notificationsService.create({
         ...data,
         isRead: false,
-        createdAt: serverTimestamp()
     });
-    return notifRef.id;
+    return result?.id || result;
 }
 
 /**
  * Subscribe to notifications for a user (Real-time).
- * Retrieves the latest 50 notifications.
- *
- * @param {string} userId
- * @param {function} callback Function to call with updated notifications array
- * @returns {function} Unsubscribe function
+ * NOTE: This still uses Firestore onSnapshot because REST APIs don't support real-time subscriptions.
+ * Consider migrating to WebSocket/SSE when the backend supports it.
  */
 export function subscribeToUserNotifications(userId, callback) {
     if (!userId) return () => { };
@@ -68,7 +53,6 @@ export function subscribeToUserNotifications(userId, callback) {
         snapshot.forEach((docSnap) => {
             notifications.push({ id: docSnap.id, ...docSnap.data() });
         });
-        // Sort client-side (newest first) to avoid needing a composite index
         notifications.sort((a, b) => {
             const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
             const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
@@ -83,11 +67,7 @@ export function subscribeToUserNotifications(userId, callback) {
  */
 export async function markNotificationAsRead(notificationId) {
     if (!notificationId) return;
-    const ref = doc(db, 'notifications', notificationId);
-    await updateDoc(ref, {
-        isRead: true,
-        readAt: serverTimestamp()
-    });
+    await notificationsService.markRead(notificationId);
 }
 
 /**
@@ -95,30 +75,12 @@ export async function markNotificationAsRead(notificationId) {
  */
 export async function markAllNotificationsAsRead(userId) {
     if (!userId) return;
-
-    // Fetch unread notifications
-    const q = query(
-        collection(db, 'notifications'),
-        where('userId', '==', userId),
-        where('isRead', '==', false)
-    );
-
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) return;
-
-    const batch = writeBatch(db);
-    snapshot.forEach((docSnap) => {
-        batch.update(docSnap.ref, {
-            isRead: true,
-            readAt: serverTimestamp()
-        });
-    });
-
-    await batch.commit();
+    await notificationsService.markAllRead(userId);
 }
 
 /**
  * Auto-cleanup: delete read notifications older than 7 days.
+ * NOTE: Stays on Firestore — backend should handle scheduled cleanup.
  */
 export async function cleanupOldReadNotifications(userId) {
     if (!userId) return 0;
@@ -174,7 +136,8 @@ export async function clearAllNotifications(userId) {
 
 /**
  * Creates a notification for ALL admin users.
- * @param {Object} data Common notification data (type, title, message, link, etc.)
+ * NOTE: Batch notification creation stays on Firestore for now.
+ * Backend should have a dedicated batch-create endpoint.
  */
 export async function createNotificationForAdmins(data) {
     try {
@@ -203,32 +166,23 @@ export async function createNotificationForAdmins(data) {
 
 /**
  * Creates a notification for all teachers (and admins) assigned to a specific group.
- * @param {string} groupId
- * @param {Object} data Common notification data (title, message, etc.)
  */
 export async function createNotificationForGroupTeachers(groupId, data) {
     if (!groupId) return;
 
     try {
         const usersRef = collection(db, 'users');
-        // Find users who have this groupId in their groupIds array
-        // Note: In an app with many teachers, this could be large, but normally it's few.
-        const q = query(
-            usersRef,
-            where('groupIds', 'array-contains', groupId)
-        );
+        const q = query(usersRef, where('groupIds', 'array-contains', groupId));
         const snapshot = await getDocs(q);
 
         const teacherIds = [];
         snapshot.forEach((docSnap) => {
             const userData = docSnap.data();
-            // Verify role if students also use `groupIds` array
             if (userData.role === 'teacher' || userData.role === 'admin') {
                 teacherIds.push(docSnap.id);
             }
         });
 
-        // Batch create notifications for these teachers
         if (teacherIds.length === 0) return;
 
         const batch = writeBatch(db);
@@ -250,9 +204,6 @@ export async function createNotificationForGroupTeachers(groupId, data) {
 
 /**
  * Creates an in-app notification for all STUDENTS in a specific group.
- * @param {string} groupId
- * @param {Object} data Common notification data (title, message, link, etc.)
- * @param {string} [excludeUserId] Optional user ID to exclude (e.g. the teacher who created it)
  */
 export async function createNotificationForGroupStudents(groupId, data, excludeUserId = null) {
     if (!groupId) return;
@@ -265,7 +216,6 @@ export async function createNotificationForGroupStudents(groupId, data, excludeU
         const studentIds = [];
         snapshot.forEach((docSnap) => {
             const userData = docSnap.data();
-            // Only students (role 'user')
             if (userData.role === 'user' && docSnap.id !== excludeUserId) {
                 studentIds.push(docSnap.id);
             }
@@ -292,10 +242,7 @@ export async function createNotificationForGroupStudents(groupId, data, excludeU
 
 /**
  * Queue emails for all students in a group.
- * Creates documents in `mail_queue` collection — Cloud Functions will pick them up and send.
- * @param {string} groupId
- * @param {Object} emailData { subject, html }
- * @param {string} [excludeUserId] Optional user ID to exclude
+ * NOTE: mail_queue is Firestore-specific — Cloud Functions pick these up.
  */
 export async function queueEmailForGroupStudents(groupId, emailData, excludeUserId = null) {
     if (!groupId) return;
@@ -336,18 +283,6 @@ export async function queueEmailForGroupStudents(groupId, emailData, excludeUser
 
 /**
  * Build a beautifully branded email HTML with UP logo and warm tone.
- * @param {Object} options
- * @param {string} options.emoji - Section emoji icon
- * @param {string} options.heading - Main heading text
- * @param {string} options.headingColor - CSS color for heading (default: #4f46e5)
- * @param {string} options.body - HTML body content (paragraphs, etc.)
- * @param {string} [options.highlight] - Optional highlighted box text
- * @param {string} [options.highlightBg] - Background for highlight box (default: #eef2ff)
- * @param {string} [options.highlightBorder] - Border color for highlight box (default: #4f46e5)
- * @param {string} options.ctaText - Call-to-action button text
- * @param {string} [options.ctaColor] - Gradient start color for CTA (default: #4f46e5)
- * @param {string} [options.ctaColor2] - Gradient end color for CTA (default: #3b82f6)
- * @param {string} [options.greeting] - Optional personal greeting (e.g., "Chào Minh Anh 👋")
  */
 export function buildEmailHtml({
     emoji = '📬', heading, headingColor = '#4f46e5', body,
@@ -401,8 +336,7 @@ export function buildEmailHtml({
 
 /**
  * Queue a single email for one user.
- * @param {string} email Recipient email address
- * @param {Object} emailData { subject, html }
+ * NOTE: mail_queue stays on Firestore — Cloud Functions pick these up.
  */
 export async function queueEmail(email, emailData) {
     if (!email || !emailData?.subject) return;
@@ -422,8 +356,6 @@ export async function queueEmail(email, emailData) {
 
 /**
  * Queue emails for all admin and staff users.
- * @param {Object} emailData { subject, html }
- * @param {string} [notificationType] Optional notification type key for email preference filtering
  */
 export async function queueEmailForAdmins(emailData, notificationType = null) {
     if (!emailData?.subject) return;
@@ -436,10 +368,9 @@ export async function queueEmailForAdmins(emailData, notificationType = null) {
         snapshot.forEach((docSnap) => {
             const userData = docSnap.data();
             if (userData.email) {
-                // Check email preference if notificationType is specified
                 if (notificationType) {
                     const prefs = userData.emailPreferences;
-                    if (prefs && prefs[notificationType] === false) return; // user opted out
+                    if (prefs && prefs[notificationType] === false) return;
                 }
                 admins.push(userData.email);
             }
@@ -467,9 +398,6 @@ export async function queueEmailForAdmins(emailData, notificationType = null) {
 
 /**
  * Queue emails for all teachers in a group.
- * @param {string} groupId
- * @param {Object} emailData { subject, html }
- * @param {string} [notificationType] Optional notification type key for email preference filtering
  */
 export async function queueEmailForGroupTeachers(groupId, emailData, notificationType = null) {
     if (!groupId || !emailData?.subject) return;
@@ -482,10 +410,9 @@ export async function queueEmailForGroupTeachers(groupId, emailData, notificatio
         snapshot.forEach((docSnap) => {
             const userData = docSnap.data();
             if ((userData.role === 'teacher' || userData.role === 'admin') && userData.email) {
-                // Check email preference if notificationType is specified
                 if (notificationType) {
                     const prefs = userData.emailPreferences;
-                    if (prefs && prefs[notificationType] === false) return; // user opted out
+                    if (prefs && prefs[notificationType] === false) return;
                 }
                 teachers.push(userData.email);
             }

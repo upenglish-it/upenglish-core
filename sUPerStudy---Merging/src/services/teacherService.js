@@ -2,35 +2,19 @@ import { db } from '../config/firebase';
 import { collection, query, where, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, deleteField, serverTimestamp, orderBy, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { getAllWordProgressMap } from './spacedRepetition';
 import wordData from '../data/wordData';
+import { userGroupsService, usersService, assignmentsService, teacherTopicsService, teacherFoldersService } from '../models';
 
 // Get groups managed by the teacher
 // The teacher's user document has an array `groupIds`. 
 // We will fetch the groups whose IDs are in that array.
 export async function getTeacherGroups(groupIds) {
     if (!groupIds || groupIds.length === 0) return [];
-
     try {
-        const groupsRef = collection(db, 'user_groups');
-        // Firestore 'in' query supports up to 10 items.
-        // Assuming teachers manage a small number of groups.
-        const chunks = [];
-        for (let i = 0; i < groupIds.length; i += 10) {
-            chunks.push(groupIds.slice(i, i + 10));
-        }
-
-        let allGroups = [];
-        for (const chunk of chunks) {
-            const q = query(groupsRef, where('__name__', 'in', chunk));
-            const snapshot = await getDocs(q);
-            snapshot.forEach(docSnap => {
-                allGroups.push({ id: docSnap.id, ...docSnap.data() });
-            });
-        }
-
-        // Filter out hidden groups and sort alphabetically by name
-        allGroups = allGroups.filter(g => !g.isHidden);
-        allGroups.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-        return allGroups;
+        const result = await userGroupsService.findByIds(groupIds);
+        let groups = Array.isArray(result) ? result : (result?.data || []);
+        groups = groups.filter(g => !g.isHidden);
+        groups.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        return groups;
     } catch (error) {
         console.error("Error fetching teacher groups:", error);
         throw error;
@@ -41,18 +25,8 @@ export async function getTeacherGroups(groupIds) {
 export async function getStudentsInGroup(groupId) {
     if (!groupId) return [];
     try {
-        const usersRef = collection(db, 'users');
-        const q = query(
-            usersRef,
-            where('groupIds', 'array-contains', groupId),
-            where('role', '==', 'user')
-        );
-        const snapshot = await getDocs(q);
-        const students = [];
-        snapshot.forEach(docSnap => {
-            students.push({ uid: docSnap.id, ...docSnap.data() });
-        });
-
+        const result = await usersService.findByGroup(groupId, 'user');
+        let students = Array.isArray(result) ? result : (result?.data || []);
         students.sort((a, b) => (a.email || '').localeCompare(b.email || ''));
         return students;
     } catch (error) {
@@ -64,12 +38,8 @@ export async function getStudentsInGroup(groupId) {
 export async function getGroupById(groupId) {
     if (!groupId) return null;
     try {
-        const docRef = doc(db, 'user_groups', groupId);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            return { id: docSnap.id, ...docSnap.data() };
-        }
-        return null;
+        const result = await userGroupsService.findOne(groupId);
+        return result || null;
     } catch (error) {
         console.error("Error fetching group by ID:", error);
         throw error;
@@ -80,24 +50,10 @@ export async function getGroupById(groupId) {
 
 export async function createAssignment(assignmentData) {
     try {
-        const assignmentsRef = collection(db, 'assignments');
-        const newDocRef = doc(assignmentsRef); // auto-id
-        const newAssignment = {
-            ...assignmentData,
-            createdAt: serverTimestamp()
-        };
-        await setDoc(newDocRef, newAssignment);
-
-        // Auto-share the topic with the group to ensure students have access
-        if (assignmentData.groupId && assignmentData.topicId) {
-            const groupRef = doc(db, 'user_groups', assignmentData.groupId);
-            await updateDoc(groupRef, {
-                topicAccess: arrayUnion(assignmentData.topicId)
-            });
-        }
+        const result = await assignmentsService.create(assignmentData);
+        const newId = result?.id || result;
 
         // Notify students (in-app + email) — non-blocking
-        // Skip notifications if scheduledStart is set and in the future
         const scheduledStartDate = assignmentData.scheduledStart
             ? (assignmentData.scheduledStart.toDate ? assignmentData.scheduledStart.toDate() : new Date(assignmentData.scheduledStart))
             : null;
@@ -111,16 +67,11 @@ export async function createAssignment(assignmentData) {
 
             try {
                 const { createNotificationForGroupStudents, queueEmailForGroupStudents, buildEmailHtml } = await import('./notificationService');
-
-                // In-app notification
                 await createNotificationForGroupStudents(assignmentData.groupId, {
-                    type: 'assignment_new',
-                    title: '📚 Bài luyện mới',
+                    type: 'assignment_new', title: '📚 Bài luyện mới',
                     message: `Bạn có bài luyện mới: "${topicName}".${dueDateStr ? ` Hạn: ${dueDateStr}` : ''}`,
                     link: '/dashboard?tab=assignments'
                 });
-
-                // Email
                 await queueEmailForGroupStudents(assignmentData.groupId, {
                     subject: `Bài luyện mới: ${topicName}`,
                     html: buildEmailHtml({
@@ -132,12 +83,10 @@ export async function createAssignment(assignmentData) {
                         ctaText: 'Vào làm bài ngay', ctaLink: `${appUrl}/dashboard?tab=assignments`
                     })
                 });
-            } catch (e) {
-                console.error('Error sending assignment notifications:', e);
-            }
+            } catch (e) { console.error('Error sending assignment notifications:', e); }
         }
 
-        return { id: newDocRef.id, ...newAssignment };
+        return { id: newId, ...assignmentData };
     } catch (error) {
         console.error("Error creating assignment:", error);
         throw error;
@@ -147,32 +96,17 @@ export async function createAssignment(assignmentData) {
 export async function getAssignmentsForGroup(groupId) {
     if (!groupId) return [];
     try {
-        const assignmentsRef = collection(db, 'assignments');
-        const q = query(
-            assignmentsRef,
-            where('groupId', '==', groupId)
-        );
-        const snapshot = await getDocs(q);
-        const data = [];
-        snapshot.forEach(docSnap => {
-            data.push({ id: docSnap.id, ...docSnap.data() });
-        });
-
-        // Filter out soft-deleted assignments
-        const activeData = data.filter(a => !a.isDeleted);
-
-        // Sort by dueDate descending locally (or ascending, depending on preference)
-        // Usually, sorting by dueDate strictly requires a composite index if doing it in query,
-        // so we sort locally since assignment list per group will be small.
-        activeData.sort((a, b) => {
+        const result = await assignmentsService.findAll({ groupId });
+        let assignments = Array.isArray(result) ? result : (result?.data || []);
+        assignments = assignments.filter(a => !a.isDeleted);
+        assignments.sort((a, b) => {
             if (!a.dueDate) return 1;
             if (!b.dueDate) return -1;
-            const msA = typeof a.dueDate.toMillis === 'function' ? a.dueDate.toMillis() : new Date(a.dueDate).getTime();
-            const msB = typeof b.dueDate.toMillis === 'function' ? b.dueDate.toMillis() : new Date(b.dueDate).getTime();
+            const msA = new Date(a.dueDate).getTime();
+            const msB = new Date(b.dueDate).getTime();
             return msA - msB;
         });
-
-        return activeData;
+        return assignments;
     } catch (error) {
         console.error(`Error fetching assignments for group ${groupId}: `, error);
         throw error;
@@ -182,9 +116,8 @@ export async function getAssignmentsForGroup(groupId) {
 export async function getAssignmentsForTopic(topicId) {
     if (!topicId) return [];
     try {
-        const q = query(collection(db, 'assignments'), where('topicId', '==', topicId));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        const result = await assignmentsService.findAll({ topicId });
+        return Array.isArray(result) ? result : (result?.data || []);
     } catch (error) {
         console.error('Error fetching assignments for topic:', error);
         return [];
@@ -194,41 +127,22 @@ export async function getAssignmentsForTopic(topicId) {
 export async function getAssignmentsForGroups(groupIds, userId = null) {
     if (!groupIds || groupIds.length === 0) return [];
     try {
-        const assignmentsRef = collection(db, 'assignments');
-        const chunks = [];
-        for (let i = 0; i < groupIds.length; i += 10) {
-            chunks.push(groupIds.slice(i, i + 10));
-        }
-
-        let allAssignments = [];
-        for (const chunk of chunks) {
-            const q = query(assignmentsRef, where('groupId', 'in', chunk));
-            const snapshot = await getDocs(q);
-            snapshot.forEach(docSnap => {
-                allAssignments.push({ id: docSnap.id, ...docSnap.data() });
-            });
-        }
-
-        // Filter out soft-deleted assignments
+        const result = await assignmentsService.findByGroups(groupIds);
+        let allAssignments = Array.isArray(result) ? result : (result?.data || []);
         allAssignments = allAssignments.filter(a => !a.isDeleted);
-
-        // Filter individual assignments: if assignedStudentIds exists and is non-empty,
-        // only include this assignment if the current user's uid is in the list
         if (userId) {
             allAssignments = allAssignments.filter(a => {
                 if (a.assignedStudentIds && Array.isArray(a.assignedStudentIds) && a.assignedStudentIds.length > 0) {
                     return a.assignedStudentIds.includes(userId);
                 }
-                return true; // whole-class assignment
+                return true;
             });
         }
-
         allAssignments.sort((a, b) => {
-            const msA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
-            const msB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+            const msA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const msB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
             return msB - msA;
         });
-
         return allAssignments;
     } catch (error) {
         console.error("Error fetching assignments for groups:", error);
@@ -238,54 +152,27 @@ export async function getAssignmentsForGroups(groupIds, userId = null) {
 
 export async function deleteAssignment(assignmentId) {
     if (!assignmentId) throw new Error("Missing assignment ID");
-    try {
-        await updateDoc(doc(db, 'assignments', assignmentId), {
-            isDeleted: true,
-            deletedAt: serverTimestamp()
-        });
-    } catch (error) {
-        console.error("Error soft-deleting assignment:", error);
-        throw error;
-    }
+    await assignmentsService.softDelete(assignmentId);
 }
 
 export async function restoreAssignment(assignmentId) {
     if (!assignmentId) throw new Error("Missing assignment ID");
-    try {
-        await updateDoc(doc(db, 'assignments', assignmentId), {
-            isDeleted: deleteField(),
-            deletedAt: deleteField()
-        });
-    } catch (error) {
-        console.error("Error restoring assignment:", error);
-        throw error;
-    }
+    await assignmentsService.restore(assignmentId);
 }
 
 export async function permanentlyDeleteAssignment(assignmentId) {
     if (!assignmentId) throw new Error("Missing assignment ID");
-    try {
-        await deleteDoc(doc(db, 'assignments', assignmentId));
-    } catch (error) {
-        console.error("Error permanently deleting assignment:", error);
-        throw error;
-    }
+    await assignmentsService.permanentDelete(assignmentId);
 }
 
 export async function getDeletedAssignmentsForGroup(groupId) {
     if (!groupId) return [];
     try {
-        const assignmentsRef = collection(db, 'assignments');
-        const q = query(assignmentsRef, where('groupId', '==', groupId));
-        const snapshot = await getDocs(q);
-        const data = [];
-        snapshot.forEach(docSnap => {
-            const d = { id: docSnap.id, ...docSnap.data() };
-            if (d.isDeleted) data.push(d);
-        });
+        const result = await assignmentsService.findDeleted({ groupId });
+        let data = Array.isArray(result) ? result : (result?.data || []);
         data.sort((a, b) => {
-            const tA = a.deletedAt?.toMillis ? a.deletedAt.toMillis() : 0;
-            const tB = b.deletedAt?.toMillis ? b.deletedAt.toMillis() : 0;
+            const tA = a.deletedAt ? new Date(a.deletedAt).getTime() : 0;
+            const tB = b.deletedAt ? new Date(b.deletedAt).getTime() : 0;
             return tB - tA;
         });
         return data;
@@ -298,27 +185,20 @@ export async function getDeletedAssignmentsForGroup(groupId) {
 export async function updateAssignmentDueDate(assignmentId, newDueDate) {
     if (!assignmentId || !newDueDate) throw new Error("Missing assignment ID or new due date");
     try {
-        const assignmentRef = doc(db, 'assignments', assignmentId);
-        const assignmentSnap = await getDoc(assignmentRef);
-        await updateDoc(assignmentRef, {
-            dueDate: newDueDate,
-            updatedAt: serverTimestamp()
-        });
+        const assignment = await assignmentsService.findOne(assignmentId);
+        await assignmentsService.update(assignmentId, { dueDate: newDueDate });
 
         // Email students about extended deadline
-        if (assignmentSnap.exists()) {
-            const aData = assignmentSnap.data();
-            const topicName = aData.topicName || 'bài luyện';
-            const dueDateStr = (newDueDate.toDate ? newDueDate.toDate() : new Date(newDueDate)).toLocaleString('vi-VN');
-            const groupId = aData.groupId;
+        if (assignment) {
+            const topicName = assignment.topicName || 'bài luyện';
+            const dueDateStr = new Date(newDueDate).toLocaleString('vi-VN');
+            const groupId = assignment.groupId;
             if (groupId) {
                 try {
                     const { createNotificationForGroupStudents, queueEmailForGroupStudents, buildEmailHtml } = await import('./notificationService');
                     await createNotificationForGroupStudents(groupId, {
-                        type: 'deadline_extended',
-                        title: '⏰ Gia hạn deadline',
-                        message: `Bài "${topicName}" được gia hạn đến ${dueDateStr}.`,
-                        link: '/dashboard?tab=assignments'
+                        type: 'deadline_extended', title: '⏰ Gia hạn deadline',
+                        message: `Bài "${topicName}" được gia hạn đến ${dueDateStr}.`, link: '/dashboard?tab=assignments'
                     });
                     const appUrl = 'https://upenglishvietnam.com/preview/superstudy';
                     await queueEmailForGroupStudents(groupId, {
@@ -344,25 +224,21 @@ export async function updateAssignmentDueDate(assignmentId, newDueDate) {
 export async function updateAssignmentStudentDeadline(assignmentId, studentId, newDueDate) {
     if (!assignmentId || !studentId || !newDueDate) throw new Error("Missing parameters");
     try {
-        const assignmentRef = doc(db, 'assignments', assignmentId);
-        const assignmentSnap = await getDoc(assignmentRef);
-        await updateDoc(assignmentRef, {
+        const assignment = await assignmentsService.findOne(assignmentId);
+        await assignmentsService.update(assignmentId, {
             [`studentDeadlines.${studentId}`]: newDueDate,
-            updatedAt: serverTimestamp()
         });
 
-        // Email individual student
-        if (assignmentSnap.exists()) {
-            const aData = assignmentSnap.data();
-            const topicName = aData.topicName || 'bài luyện';
-            const dueDateStr = (newDueDate.toDate ? newDueDate.toDate() : new Date(newDueDate)).toLocaleString('vi-VN');
+        if (assignment) {
+            const topicName = assignment.topicName || 'bài luyện';
+            const dueDateStr = new Date(newDueDate).toLocaleString('vi-VN');
             try {
                 const { createNotification, queueEmail, buildEmailHtml } = await import('./notificationService');
-                const studentSnap = await getDoc(doc(db, 'users', studentId));
+                const student = await usersService.findOne(studentId);
                 const appUrl = 'https://upenglishvietnam.com/preview/superstudy';
                 await createNotification({ userId: studentId, type: 'deadline_extended', title: '⏰ Gia hạn deadline', message: `Bài "${topicName}" được gia hạn cho bạn đến ${dueDateStr}.`, link: '/dashboard?tab=assignments' });
-                if (studentSnap.exists() && studentSnap.data().email) {
-                    await queueEmail(studentSnap.data().email, {
+                if (student?.email) {
+                    await queueEmail(student.email, {
                         subject: `Gia hạn: ${topicName}`,
                         html: buildEmailHtml({
                             emoji: '⏰', heading: 'Gia hạn deadline', headingColor: '#f59e0b',
@@ -384,16 +260,9 @@ export async function updateAssignmentStudentDeadline(assignmentId, studentId, n
 
 export async function removeAssignmentStudentDeadline(assignmentId, studentId) {
     if (!assignmentId || !studentId) throw new Error("Missing parameters");
-    try {
-        const assignmentRef = doc(db, 'assignments', assignmentId);
-        await updateDoc(assignmentRef, {
-            [`studentDeadlines.${studentId}`]: deleteField(),
-            updatedAt: serverTimestamp()
-        });
-    } catch (error) {
-        console.error("Error removing student deadline:", error);
-        throw error;
-    }
+    await assignmentsService.update(assignmentId, {
+        [`studentDeadlines.${studentId}`]: null,
+    });
 }
 
 // ==========================================

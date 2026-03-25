@@ -8,6 +8,14 @@ export const assignmentsService = {
   findAll: (query) =>
     api.get(`${BASE}`, query),
 
+  /** List assignments across multiple groups */
+  findByGroups: (groupIds) =>
+    api.get(`${BASE}`, { groupIds }),
+
+  /** List soft-deleted assignments (filter by groupId) */
+  findDeleted: (query) =>
+    api.get(`${BASE}/deleted`, query),
+
   /** Get a single assignment by ID */
   findOne: (id) =>
     api.get(`${BASE}/${id}`),
@@ -23,6 +31,10 @@ export const assignmentsService = {
   /** Soft-delete an assignment */
   softDelete: (id) =>
     api.delete(`${BASE}/${id}`),
+
+  /** Restore a soft-deleted assignment */
+  restore: (id) =>
+    api.patch(`${BASE}/${id}/restore`),
 
   /** Permanently delete an assignment */
   permanentDelete: (id) =>

@@ -8,6 +8,10 @@ export const usersService = {
   findAll: (query) =>
     api.get(`${BASE}`, query),
 
+  /** List users in a specific group, filtered by role */
+  findByGroup: (groupId, role) =>
+    api.get(`${BASE}`, { groupId, role }),
+
   /** Get user by ID */
   findOne: (id) =>
     api.get(`${BASE}/${id}`),

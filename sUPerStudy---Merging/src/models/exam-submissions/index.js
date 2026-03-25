@@ -8,6 +8,22 @@ export const examSubmissionsService = {
   findAll: (query) =>
     api.get(`${BASE}`, query),
 
+  /** List submissions for a single assignment */
+  findByAssignment: (assignmentId) =>
+    api.get(`${BASE}`, { assignmentId }),
+
+  /** Find submission by assignment and student */
+  findByAssignmentAndStudent: (assignmentId, studentId) =>
+    api.get(`${BASE}/lookup`, { assignmentId, studentId }),
+
+  /** List submissions for multiple assignments */
+  findByAssignments: (assignmentIds) =>
+    api.get(`${BASE}`, { assignmentIds }),
+
+  /** List submissions for a student */
+  findByStudent: (studentId) =>
+    api.get(`${BASE}`, { studentId }),
+
   /** Get a single submission by ID */
   findOne: (id) =>
     api.get(`${BASE}/${id}`),
@@ -19,6 +35,10 @@ export const examSubmissionsService = {
   /** Save progress / submit answers / submit exam */
   update: (id, body) =>
     api.patch(`${BASE}/${id}`, body),
+
+  /** Delete a submission */
+  remove: (id) =>
+    api.delete(`${BASE}/${id}`),
 
   /** Release exam results to student */
   release: (id, body) =>

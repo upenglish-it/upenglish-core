@@ -8,6 +8,10 @@ export const examQuestionsService = {
   findAll: (examId, sectionId) =>
     api.get(`${BASE}`, { examId, sectionId }),
 
+  /** List questions for a specific section */
+  findBySection: (examId, sectionId) =>
+    api.get(`${BASE}`, { examId, sectionId }),
+
   /** Get a single exam question by ID */
   findOne: (id) =>
     api.get(`${BASE}/${id}`),
@@ -29,6 +33,6 @@ export const examQuestionsService = {
     api.delete(`${BASE}/${id}`),
 
   /** Bulk reorder questions (array of { id, order }) */
-  reorder: (entries) =>
-    api.patch(`${BASE}/order/batch`, entries),
+  reorder: (examId, sectionId, entries) =>
+    api.patch(`${BASE}/order/batch`, { examId, sectionId, entries }),
 };

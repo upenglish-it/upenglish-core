@@ -8,8 +8,24 @@ export const examAssignmentsService = {
   findAll: (query) =>
     api.get(`${BASE}`, query),
 
+  /** List assignments for a specific exam */
+  findByExam: (examId) =>
+    api.get(`${BASE}`, { examId }),
+
+  /** List assignments for a specific group */
+  findByGroup: (groupId) =>
+    api.get(`${BASE}`, { targetType: 'group', targetId: groupId }),
+
+  /** List assignments for a student (individual + group-based) */
+  findForStudent: (studentId, groupIds) =>
+    api.get(`${BASE}/student`, { studentId, groupIds }),
+
   /** List soft-deleted assignments for a group */
   findDeleted: (groupId) =>
+    api.get(`${BASE}/deleted`, { groupId }),
+
+  /** List soft-deleted assignments for a group (alias) */
+  findDeletedByGroup: (groupId) =>
     api.get(`${BASE}/deleted`, { groupId }),
 
   /** Get a single exam assignment by ID */
@@ -19,6 +35,10 @@ export const examAssignmentsService = {
   /** Create a new exam assignment (notifies group/students) */
   create: (body) =>
     api.post(`${BASE}`, body),
+
+  /** Update an assignment */
+  update: (id, body) =>
+    api.patch(`${BASE}/${id}`, body),
 
   /** Update assignment due date (+ optionally notify) */
   updateDueDate: (id, body) =>
