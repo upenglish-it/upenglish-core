@@ -97,11 +97,17 @@ export async function createAssignment(assignmentData) {
         }
 
         // Notify students (in-app + email) — non-blocking
-        if (assignmentData.groupId) {
+        // Skip notifications if scheduledStart is set and in the future
+        const scheduledStartDate = assignmentData.scheduledStart
+            ? (assignmentData.scheduledStart.toDate ? assignmentData.scheduledStart.toDate() : new Date(assignmentData.scheduledStart))
+            : null;
+        const shouldNotifyNow = !scheduledStartDate || scheduledStartDate <= new Date();
+
+        if (assignmentData.groupId && shouldNotifyNow) {
             const topicName = assignmentData.topicName || 'bài luyện mới';
             const dueDate = assignmentData.dueDate;
             const dueDateStr = dueDate ? (dueDate.toDate ? dueDate.toDate() : new Date(dueDate)).toLocaleString('vi-VN') : '';
-            const appUrl = 'https://upenglishvietnam.com';
+            const appUrl = 'https://upenglishvietnam.com/preview/superstudy';
 
             try {
                 const { createNotificationForGroupStudents, queueEmailForGroupStudents, buildEmailHtml } = await import('./notificationService');
@@ -111,7 +117,7 @@ export async function createAssignment(assignmentData) {
                     type: 'assignment_new',
                     title: '📚 Bài luyện mới',
                     message: `Bạn có bài luyện mới: "${topicName}".${dueDateStr ? ` Hạn: ${dueDateStr}` : ''}`,
-                    link: '/'
+                    link: '/dashboard?tab=assignments'
                 });
 
                 // Email
@@ -123,7 +129,7 @@ export async function createAssignment(assignmentData) {
                         body: `<p>Thầy/cô vừa giao cho bạn bài luyện mới. Cố gắng hoàn thành đúng hạn nhé! 💪</p>`,
                         highlight: `<strong style="font-size:1.05rem;">${topicName}</strong>${dueDateStr ? `<br><span style="color:#ef4444;font-size:0.9rem;">⏰ Hạn: ${dueDateStr}</span>` : ''}`,
                         highlightBg: '#f8fafc', highlightBorder: '#4f46e5',
-                        ctaText: 'Vào làm bài ngay'
+                        ctaText: 'Vào làm bài ngay', ctaLink: `${appUrl}/dashboard?tab=assignments`
                     })
                 });
             } catch (e) {
@@ -312,8 +318,9 @@ export async function updateAssignmentDueDate(assignmentId, newDueDate) {
                         type: 'deadline_extended',
                         title: '⏰ Gia hạn deadline',
                         message: `Bài "${topicName}" được gia hạn đến ${dueDateStr}.`,
-                        link: '/'
+                        link: '/dashboard?tab=assignments'
                     });
+                    const appUrl = 'https://upenglishvietnam.com/preview/superstudy';
                     await queueEmailForGroupStudents(groupId, {
                         subject: `Gia hạn: ${topicName}`,
                         html: buildEmailHtml({
@@ -322,7 +329,7 @@ export async function updateAssignmentDueDate(assignmentId, newDueDate) {
                             body: `<p>Bài luyện <strong>"${topicName}"</strong> đã được thầy/cô gia hạn thêm thời gian. Tranh thủ làm bài nhé!</p>`,
                             highlight: `<strong>📅 Hạn mới: ${dueDateStr}</strong>`,
                             highlightBg: '#fffbeb', highlightBorder: '#f59e0b',
-                            ctaText: 'Vào làm bài', ctaColor: '#f59e0b', ctaColor2: '#fbbf24'
+                            ctaText: 'Vào làm bài', ctaLink: `${appUrl}/dashboard?tab=assignments`, ctaColor: '#f59e0b', ctaColor2: '#fbbf24'
                         })
                     });
                 } catch (e) { console.error('Error sending deadline extension notification:', e); }
@@ -352,7 +359,8 @@ export async function updateAssignmentStudentDeadline(assignmentId, studentId, n
             try {
                 const { createNotification, queueEmail, buildEmailHtml } = await import('./notificationService');
                 const studentSnap = await getDoc(doc(db, 'users', studentId));
-                await createNotification({ userId: studentId, type: 'deadline_extended', title: '⏰ Gia hạn deadline', message: `Bài "${topicName}" được gia hạn cho bạn đến ${dueDateStr}.`, link: '/' });
+                const appUrl = 'https://upenglishvietnam.com/preview/superstudy';
+                await createNotification({ userId: studentId, type: 'deadline_extended', title: '⏰ Gia hạn deadline', message: `Bài "${topicName}" được gia hạn cho bạn đến ${dueDateStr}.`, link: '/dashboard?tab=assignments' });
                 if (studentSnap.exists() && studentSnap.data().email) {
                     await queueEmail(studentSnap.data().email, {
                         subject: `Gia hạn: ${topicName}`,
@@ -362,7 +370,7 @@ export async function updateAssignmentStudentDeadline(assignmentId, studentId, n
                             body: `<p>Bài luyện <strong>"${topicName}"</strong> đã được thầy/cô gia hạn riêng cho bạn. Cố gắng hoàn thành nhé!</p>`,
                             highlight: `<strong>📅 Hạn mới: ${dueDateStr}</strong>`,
                             highlightBg: '#fffbeb', highlightBorder: '#f59e0b',
-                            ctaText: 'Vào làm bài', ctaColor: '#f59e0b', ctaColor2: '#fbbf24'
+                            ctaText: 'Vào làm bài', ctaLink: `${appUrl}/dashboard?tab=assignments`, ctaColor: '#f59e0b', ctaColor2: '#fbbf24'
                         })
                     });
                 }
@@ -565,7 +573,8 @@ export async function getTeacherTopics(teacherId) {
         const snapshot = await getDocs(q);
         const topics = [];
         snapshot.forEach(docSnap => {
-            topics.push({ id: docSnap.id, ...docSnap.data() });
+            const data = docSnap.data();
+            if (!data.isDeleted) topics.push({ id: docSnap.id, ...data });
         });
         return topics;
     } catch (error) {
@@ -616,7 +625,29 @@ export async function updateGrammarQuestionsOrder(exerciseId, orderedQuestions) 
 export async function deleteTeacherTopic(teacherId, topicId) {
     if (!teacherId || !topicId) throw new Error("Missing teacherId or topicId");
     try {
-        // First delete all words in this topic
+        // Soft delete: mark as deleted instead of removing
+        await updateDoc(doc(db, 'teacher_topics', topicId), {
+            isDeleted: true,
+            deletedAt: serverTimestamp()
+        });
+    } catch (error) {
+        console.error("Error soft-deleting teacher topic:", error);
+        throw error;
+    }
+}
+
+export async function restoreTeacherTopic(topicId) {
+    if (!topicId) throw new Error("Missing topicId");
+    await updateDoc(doc(db, 'teacher_topics', topicId), {
+        isDeleted: deleteField(),
+        deletedAt: deleteField()
+    });
+}
+
+export async function permanentlyDeleteTeacherTopic(topicId) {
+    if (!topicId) throw new Error("Missing topicId");
+    try {
+        // Delete all words in this topic
         const wordsRef = collection(db, `teacher_topics/${topicId}/words`);
         const wordsSnap = await getDocs(wordsRef);
         const deletePromises = [];
@@ -630,14 +661,29 @@ export async function deleteTeacherTopic(teacherId, topicId) {
         asgnsSnap.forEach(asgnDoc => {
             deletePromises.push(deleteDoc(asgnDoc.ref));
         });
-
         await Promise.all(deletePromises);
-
-        // Then delete the topic itself
+        // Delete the topic itself
         await deleteDoc(doc(db, 'teacher_topics', topicId));
     } catch (error) {
-        console.error("Error deleting teacher topic:", error);
+        console.error("Error permanently deleting teacher topic:", error);
         throw error;
+    }
+}
+
+export async function getDeletedTeacherTopics() {
+    try {
+        const q = query(collection(db, 'teacher_topics'), where('isDeleted', '==', true));
+        const snapshot = await getDocs(q);
+        const topics = [];
+        snapshot.forEach(docSnap => topics.push({ id: docSnap.id, ...docSnap.data() }));
+        return topics.sort((a, b) => {
+            const tA = a.deletedAt?.toMillis ? a.deletedAt.toMillis() : 0;
+            const tB = b.deletedAt?.toMillis ? b.deletedAt.toMillis() : 0;
+            return tB - tA;
+        });
+    } catch (error) {
+        console.error("Error fetching deleted teacher topics:", error);
+        return [];
     }
 }
 
@@ -730,14 +776,29 @@ export async function getTeacherTopicFolders(teacherId) {
     const q = query(collection(db, 'teacher_topic_folders'), where('teacherId', '==', teacherId));
     const snapshot = await getDocs(q);
     const folders = [];
-    snapshot.forEach(docSnap => folders.push({ id: docSnap.id, ...docSnap.data() }));
+    snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        if (!data.isDeleted) folders.push({ id: docSnap.id, ...data });
+    });
     return folders.sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+
+export async function updateTeacherTopicFoldersOrder(orderedFolders) {
+    const batch = writeBatch(db);
+    orderedFolders.forEach((folder, index) => {
+        const ref = doc(db, 'teacher_topic_folders', folder.id);
+        batch.update(ref, { order: index, updatedAt: serverTimestamp() });
+    });
+    await batch.commit();
 }
 
 export async function getAllTeacherTopicFolders() {
     const snapshot = await getDocs(collection(db, 'teacher_topic_folders'));
     const folders = [];
-    snapshot.forEach(docSnap => folders.push({ id: docSnap.id, ...docSnap.data() }));
+    snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        if (!data.isDeleted) folders.push({ id: docSnap.id, ...data });
+    });
     return folders.sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
@@ -755,7 +816,39 @@ export async function saveTeacherTopicFolder(teacherId, folderData) {
 }
 
 export async function deleteTeacherTopicFolder(folderId) {
+    // Soft delete
+    await updateDoc(doc(db, 'teacher_topic_folders', folderId), {
+        isDeleted: true,
+        deletedAt: serverTimestamp()
+    });
+}
+
+export async function restoreTeacherTopicFolder(folderId) {
+    await updateDoc(doc(db, 'teacher_topic_folders', folderId), {
+        isDeleted: deleteField(),
+        deletedAt: deleteField()
+    });
+}
+
+export async function permanentlyDeleteTeacherTopicFolder(folderId) {
     await deleteDoc(doc(db, 'teacher_topic_folders', folderId));
+}
+
+export async function getDeletedTeacherTopicFolders() {
+    try {
+        const q = query(collection(db, 'teacher_topic_folders'), where('isDeleted', '==', true));
+        const snapshot = await getDocs(q);
+        const folders = [];
+        snapshot.forEach(docSnap => folders.push({ id: docSnap.id, ...docSnap.data() }));
+        return folders.sort((a, b) => {
+            const tA = a.deletedAt?.toMillis ? a.deletedAt.toMillis() : 0;
+            const tB = b.deletedAt?.toMillis ? b.deletedAt.toMillis() : 0;
+            return tB - tA;
+        });
+    } catch (error) {
+        console.error("Error fetching deleted teacher topic folders:", error);
+        return [];
+    }
 }
 
 // ==========================================
@@ -767,25 +860,27 @@ export async function deleteTeacherTopicFolder(folderId) {
  * Add a collaborator to a resource (teacher_topics, grammar_exercises, exams).
  * Sends a notification to the collaborator.
  */
-export async function addCollaborator(collectionName, resourceId, collaboratorUid, collaboratorName, resourceName = '') {
+export async function addCollaborator(collectionName, resourceId, collaboratorUid, collaboratorName, resourceName = '', role = 'editor') {
     if (!collectionName || !resourceId || !collaboratorUid) throw new Error('Missing parameters');
     const ref = doc(db, collectionName, resourceId);
     await updateDoc(ref, {
         collaboratorIds: arrayUnion(collaboratorUid),
         [`collaboratorNames.${collaboratorUid}`]: collaboratorName || 'Giáo viên',
+        [`collaboratorRoles.${collaboratorUid}`]: role,
         updatedAt: serverTimestamp()
     });
 
     // Send notification + email
     try {
         const { createNotification, queueEmail, buildEmailHtml, getUserEmailPreference } = await import('./notificationService');
-        const typeLabels = { teacher_topics: 'bài từ vựng', grammar_exercises: 'bài Kỹ năng', exams: 'bài tập và kiểm tra' };
+        const typeLabels = { teacher_topics: 'bài từ vựng', grammar_exercises: 'bài Kỹ năng', exams: 'bài tập và kiểm tra', teacher_topic_folders: 'folder Từ vựng', teacher_grammar_folders: 'folder Kỹ năng', teacher_exam_folders: 'folder Đề thi' };
+        const roleLabel = role === 'viewer' ? 'xem & sử dụng' : 'cộng tác chỉnh sửa';
         await createNotification({
             userId: collaboratorUid,
             type: 'collab_invite',
             title: '🤝 Bạn được mời hợp tác',
-            message: `Bạn đã được thêm làm cộng tác viên cho ${typeLabels[collectionName] || 'bài học'} "${resourceName}".`,
-            link: '/'
+            message: `Bạn được mời ${roleLabel} ${typeLabels[collectionName] || 'bài học'} "${resourceName}".`,
+            link: '/teacher'
         });
 
         // Email to collaborator (check preference)
@@ -794,13 +889,13 @@ export async function addCollaborator(collectionName, resourceId, collaboratorUi
             const collabSnap = await getDoc(doc(db, 'users', collaboratorUid));
             if (collabSnap.exists() && collabSnap.data().email) {
                 await queueEmail(collabSnap.data().email, {
-                    subject: `Bạn được mời cộng tác: ${resourceName}`,
+                    subject: `Bạn được mời ${roleLabel}: ${resourceName}`,
                     html: buildEmailHtml({
                         emoji: '🤝', heading: 'Lời mời cộng tác', headingColor: '#6366f1',
-                        body: `<p>Bạn vừa được mời làm cộng tác viên cho ${typeLabels[collectionName] || 'bài học'} trên sUPerStudy. Cùng nhau tạo nội dung hay cho học viên nhé! 🚀</p>`,
+                        body: `<p>Bạn vừa được mời <strong>${roleLabel}</strong> ${typeLabels[collectionName] || 'bài học'} trên sUPerStudy. Cùng nhau tạo nội dung hay cho học viên nhé! 🚀</p>`,
                         highlight: `<strong>${resourceName}</strong>`,
                         highlightBg: '#eef2ff', highlightBorder: '#6366f1',
-                        ctaText: 'Mở sUPerStudy', ctaColor: '#6366f1', ctaColor2: '#818cf8'
+                        ctaText: 'Mở sUPerStudy', ctaLink: 'https://upenglishvietnam.com/preview/superstudy/teacher', ctaColor: '#6366f1', ctaColor2: '#818cf8'
                     })
                 });
             }
@@ -818,29 +913,32 @@ export async function removeCollaborator(collectionName, resourceId, collaborato
     if (!collectionName || !resourceId || !collaboratorUid) throw new Error('Missing parameters');
     const ref = doc(db, collectionName, resourceId);
 
-    // We need to remove the key from the collaboratorNames map
+    // We need to remove the key from the collaboratorNames and collaboratorRoles maps
     const docSnap = await getDoc(ref);
     if (!docSnap.exists()) throw new Error('Resource not found');
     const data = docSnap.data();
     const updatedNames = { ...(data.collaboratorNames || {}) };
     delete updatedNames[collaboratorUid];
+    const updatedRoles = { ...(data.collaboratorRoles || {}) };
+    delete updatedRoles[collaboratorUid];
 
     await updateDoc(ref, {
         collaboratorIds: arrayRemove(collaboratorUid),
         collaboratorNames: updatedNames,
+        collaboratorRoles: updatedRoles,
         updatedAt: serverTimestamp()
     });
 
     // Send notification + email
     try {
         const { createNotification, queueEmail, buildEmailHtml, getUserEmailPreference } = await import('./notificationService');
-        const typeLabels = { teacher_topics: 'bài từ vựng', grammar_exercises: 'bài Kỹ năng', exams: 'bài tập và kiểm tra' };
+        const typeLabels = { teacher_topics: 'bài từ vựng', grammar_exercises: 'bài Kỹ năng', exams: 'bài tập và kiểm tra', teacher_topic_folders: 'folder Từ vựng', teacher_grammar_folders: 'folder Kỹ năng', teacher_exam_folders: 'folder Đề thi' };
         await createNotification({
             userId: collaboratorUid,
             type: 'collab_removed',
             title: 'Đã bị gỡ khỏi danh sách cộng tác',
             message: `Bạn đã bị gỡ khỏi danh sách cộng tác viên của ${typeLabels[collectionName] || 'bài học'} "${resourceName}".`,
-            link: '/'
+            link: '/teacher'
         });
 
         // Email (check preference)
@@ -860,6 +958,19 @@ export async function removeCollaborator(collectionName, resourceId, collaborato
     } catch (e) {
         console.error('Error sending collab removed notification:', e);
     }
+}
+
+/**
+ * Update a collaborator's role (viewer or editor).
+ */
+export async function updateCollaboratorRole(collectionName, resourceId, collaboratorUid, newRole) {
+    if (!collectionName || !resourceId || !collaboratorUid) throw new Error('Missing parameters');
+    if (!['viewer', 'editor'].includes(newRole)) throw new Error('Invalid role');
+    const ref = doc(db, collectionName, resourceId);
+    await updateDoc(ref, {
+        [`collaboratorRoles.${collaboratorUid}`]: newRole,
+        updatedAt: serverTimestamp()
+    });
 }
 
 /**
@@ -892,6 +1003,10 @@ export async function transferOwnership(collectionName, resourceId, oldOwnerUid,
     delete updatedNames[newOwnerUid];
     updatedNames[oldOwnerUid] = oldOwnerName || 'Giáo viên';
 
+    const updatedRoles = { ...(data.collaboratorRoles || {}) };
+    delete updatedRoles[newOwnerUid];
+    updatedRoles[oldOwnerUid] = 'editor'; // Old owner becomes editor collaborator
+
     // Determine the owner field name
     const ownerField = collectionName === 'exams' ? 'createdBy' : 'teacherId';
 
@@ -899,6 +1014,7 @@ export async function transferOwnership(collectionName, resourceId, oldOwnerUid,
         [ownerField]: newOwnerUid,
         collaboratorIds: updatedCollaboratorIds,
         collaboratorNames: updatedNames,
+        collaboratorRoles: updatedRoles,
         updatedAt: serverTimestamp()
     });
 
@@ -911,7 +1027,7 @@ export async function transferOwnership(collectionName, resourceId, oldOwnerUid,
     // Send notifications
     try {
         const { createNotification } = await import('./notificationService');
-        const typeLabels = { teacher_topics: 'bài từ vựng', grammar_exercises: 'bài Kỹ năng', exams: 'bài tập và kiểm tra' };
+        const typeLabels = { teacher_topics: 'bài từ vựng', grammar_exercises: 'bài Kỹ năng', exams: 'bài tập và kiểm tra', teacher_topic_folders: 'folder Từ vựng', teacher_grammar_folders: 'folder Kỹ năng', teacher_exam_folders: 'folder Đề thi' };
         const label = typeLabels[collectionName] || 'bài học';
 
         await createNotification({
@@ -919,7 +1035,7 @@ export async function transferOwnership(collectionName, resourceId, oldOwnerUid,
             type: 'ownership_received',
             title: '🎉 Bạn đã được chuyển nhượng quyền sở hữu',
             message: `Bạn đã nhận quyền sở hữu ${label} "${resourceName}" từ ${oldOwnerName}.`,
-            link: '/'
+            link: '/teacher'
         });
 
         await createNotification({
@@ -927,7 +1043,7 @@ export async function transferOwnership(collectionName, resourceId, oldOwnerUid,
             type: 'ownership_transferred',
             title: 'Đã chuyển nhượng quyền sở hữu',
             message: `Bạn đã chuyển nhượng quyền sở hữu ${label} "${resourceName}" cho ${newOwnerName}. Bạn vẫn là cộng tác viên.`,
-            link: '/'
+            link: '/teacher'
         });
     } catch (e) {
         console.error('Error sending ownership transfer notifications:', e);

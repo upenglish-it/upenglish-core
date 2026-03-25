@@ -7,7 +7,7 @@ import { Mail } from 'lucide-react';
 let cachedUsers = null;
 let cachedWhitelist = null;
 
-export default function EmailAutocomplete({ value, onChange, onSubmit, disabled, placeholder }) {
+export default function EmailAutocomplete({ value, onChange, onSubmit, onSelect, disabled, placeholder, roleFilter }) {
     const [suggestions, setSuggestions] = useState([]);
     const [showDropdown, setShowDropdown] = useState(false);
     const [allEmails, setAllEmails] = useState([]);
@@ -27,11 +27,12 @@ export default function EmailAutocomplete({ value, onChange, onSubmit, disabled,
                 }
 
                 const registeredEmails = new Set(cachedUsers.map(u => (u.email || '').toLowerCase()));
-                const combined = [
+                let combined = [
                     ...cachedUsers.map(u => ({
                         email: u.email,
                         displayName: u.displayName || '',
-                        type: 'user'
+                        type: 'user',
+                        role: u.role || ''
                     })),
                     ...cachedWhitelist
                         .filter(w => !registeredEmails.has(w.email.toLowerCase()))
@@ -39,16 +40,20 @@ export default function EmailAutocomplete({ value, onChange, onSubmit, disabled,
                             email: w.email,
                             displayName: '',
                             type: 'whitelist',
-                            role: w.role
+                            role: w.role || ''
                         }))
                 ];
+                // Filter by role if roleFilter is provided
+                if (roleFilter) {
+                    combined = combined.filter(e => e.role === roleFilter);
+                }
                 setAllEmails(combined);
             } catch (err) {
                 console.error('Error loading emails for autocomplete:', err);
             }
         }
         loadEmails();
-    }, []);
+    }, [roleFilter]);
 
     useEffect(() => {
         function handleClickOutside(e) {
@@ -84,9 +89,33 @@ export default function EmailAutocomplete({ value, onChange, onSubmit, disabled,
         }, 50);
     }
 
+    const inputRef = useRef(null);
+
+    // Calculate fixed dropdown position
+    const [dropdownStyle, setDropdownStyle] = useState({});
+    useEffect(() => {
+        if (showDropdown && inputRef.current) {
+            const rect = inputRef.current.getBoundingClientRect();
+            setDropdownStyle({
+                position: 'fixed',
+                top: rect.bottom + 4,
+                left: rect.left,
+                width: rect.width,
+                background: '#fff',
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+                zIndex: 9999,
+                maxHeight: '200px',
+                overflowY: 'auto',
+            });
+        }
+    }, [showDropdown, value]);
+
     return (
         <div ref={wrapperRef} style={{ position: 'relative', flex: 1, minWidth: 0 }}>
             <input
+                ref={inputRef}
                 type="email"
                 value={value}
                 onChange={e => onChange(e.target.value)}
@@ -112,20 +141,7 @@ export default function EmailAutocomplete({ value, onChange, onSubmit, disabled,
                 }}
             />
             {showDropdown && (
-                <div style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    background: '#fff',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-                    zIndex: 100,
-                    maxHeight: '200px',
-                    overflowY: 'auto',
-                    marginTop: '4px'
-                }}>
+                <div style={dropdownStyle}>
                     {suggestions.map((s, i) => (
                         <div
                             key={s.email + i}

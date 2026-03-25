@@ -55,6 +55,7 @@
     color: #64748b;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
@@ -210,6 +211,19 @@
     border-color: #e2e8f0;
     background: #f8fafc;
     padding: 4px 8px;
+}
+
+/* Required field variant for RichTextInput */
+.grammar-rich-text-input.required-field .ql-container.ql-snow,
+.grammar-rich-text-input.required-field .ql-toolbar.ql-snow {
+    border-color: #fca5a5;
+    background: #fef8f8;
+}
+
+.grammar-rich-text-input.required-field.filled .ql-container.ql-snow,
+.grammar-rich-text-input.required-field.filled .ql-toolbar.ql-snow {
+    border-color: #86efac;
+    background: #f0fdf4;
 }
 
 .grammar-rich-text-input .ql-toolbar.ql-snow button {

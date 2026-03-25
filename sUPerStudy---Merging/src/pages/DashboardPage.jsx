@@ -2,19 +2,20 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { db } from '../config/firebase';
 import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import { BookOpen, PenLine, FolderOpen, BarChart3, LogOut, Sparkles, Trophy, Flame, Settings, X, PlayCircle, Plus, BrainCircuit, Shield, Clock, Users, Home, ClipboardList, ChevronDown, FileCheck, Sun, Moon, AlertTriangle, Medal, Lock } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { BookOpen, PenLine, FolderOpen, BarChart3, LogOut, Sparkles, Trophy, Flame, Settings, X, PlayCircle, Plus, BrainCircuit, Shield, Clock, Users, Home, ClipboardList, ChevronDown, FileCheck, Sun, Moon, AlertTriangle, Medal, Lock, Check, CheckCheck, XCircle, Heart, Loader, MessageSquareText, Send } from 'lucide-react';
 import Avatar from '../components/common/Avatar';
 import { getRecentLists } from '../services/recentService';
-import { getAllWordProgressMap, getReviewCounts } from '../services/spacedRepetition';
+import { getAllWordProgressMap, getReviewCounts, getLearnedWordsForTopic, getWordProgressMapForTopic } from '../services/spacedRepetition';
 import { getStudentGrammarProgressSummary, getUserOverallGrammarStats } from '../services/grammarSpacedRepetition';
-import { getSavedWords } from '../services/savedService';
+import { getSavedWords, toggleSavedWord } from '../services/savedService';
 import { getAdminTopics, getAdminTopicWords, getUserLearningStats } from '../services/adminService';
 import { getAssignmentsForGroups, getStudentTopicProgressSummary, getSharedAndPublicTeacherTopics, getStudentsInGroup, getGroupById } from '../services/teacherService';
 import { getAndUpdateUserStreak } from '../services/userService';
 import { getCurrentMilestone, getNextMilestone } from '../config/streakMilestones';
 import wordData from '../data/wordData';
 import './DashboardPage.css';
+import './TopicSelectPage.css';
 import BrandLogo from '../components/common/BrandLogo';
 import logo from '../assets/logo.png';
 import { getExamAssignmentsForStudent, getExamSubmissionsForStudent, getExamSubmissionsForAssignments, getExam, getExamAssignmentsForGroup } from '../services/examService';
@@ -22,6 +23,9 @@ import { getStudentSentReports } from '../services/skillReportService';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Tooltip } from 'recharts';
 import ProgressModal from './ProgressPage';
 import { getRedFlagsForStudent } from '../services/redFlagService';
+import { getActiveRatingPeriod, getTeachersForStudent, getStudentRatingsForPeriod } from '../services/teacherRatingService';
+import { getStudentRewardPoints } from '../services/rewardPointsService';
+import { submitFeedback } from '../services/feedbackService';
 
 const LEVEL_OPTIONS = [
     { value: 'A1', label: 'A1', desc: 'Beginner' },
@@ -44,6 +48,7 @@ function getEffectiveDueDate(a, uid) {
 export default function DashboardPage() {
     const { user, signOut } = useAuth();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [selectedLevel, setSelectedLevel] = useState(() => localStorage.getItem('userCefrLevel') || 'A2');
     const [teacherTitle, setTeacherTitle] = useState('');
@@ -61,7 +66,13 @@ export default function DashboardPage() {
     const [showOverdueAssignments, setShowOverdueAssignments] = useState(false);
     const [showAllExams, setShowAllExams] = useState(false);
     const [showOverdueExams, setShowOverdueExams] = useState(false);
-    const [activeMainTab, setActiveMainTab] = useState('learning');
+    const [activeMainTab, setActiveMainTab] = useState(() => {
+        const tabParam = new URLSearchParams(window.location.search).get('tab');
+        if (tabParam === 'assignments') return 'assignments';
+        if (tabParam === 'exams') return 'exams';
+        return 'learning';
+    });
+    const reportsRef = useRef(null);
     const [grammarReviewStats, setGrammarReviewStats] = useState({ totalCount: 0 });
     const [examAssignments, setExamAssignments] = useState([]);
     const [examSubmissions, setExamSubmissions] = useState([]);
@@ -94,6 +105,19 @@ export default function DashboardPage() {
 
     // Red Flags (student side)
     const [studentRedFlags, setStudentRedFlags] = useState([]); // all flags for this student
+
+    // Teacher Rating Period
+    const [activeRatingPeriod, setActiveRatingPeriod] = useState(null);
+    const [allTeachersRated, setAllTeachersRated] = useState(false);
+    const [showRatingPopup, setShowRatingPopup] = useState(false);
+
+    // Reward Points (student dashboard)
+    const [totalRewardPoints, setTotalRewardPoints] = useState(0);
+
+    // Word Selection Modal for Vocab Assignments
+    const [wordSelectData, setWordSelectData] = useState(null); // { words, topicId, topicName, icon, color, isTeacherTopic, progressMap, learnedWords, savedWordsStatus }
+    const [selectedWordsForAssignment, setSelectedWordsForAssignment] = useState(new Set());
+    const [loadingWordSelect, setLoadingWordSelect] = useState(false);
 
     // --- Drag-to-scroll for recent slider ---
     const sliderRef = useRef(null);
@@ -181,6 +205,16 @@ export default function DashboardPage() {
         return user?.groupIdToNameMap || {};
     }, [user?.groupIdToNameMap]);
 
+
+    // Handle ?scrollTo=reports query param — auto-scroll to skill reports section
+    useEffect(() => {
+        const scrollTo = searchParams.get('scrollTo');
+        if (scrollTo === 'reports' && reportsRef.current) {
+            setTimeout(() => {
+                reportsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 600); // wait for data to load
+        }
+    }, [searchParams, skillReports]);
 
     // Apply theme to document
     useEffect(() => {
@@ -271,12 +305,14 @@ export default function DashboardPage() {
             }).catch(console.warn);
         });
 
+        const studentGroupIds = user.visibleGroupIds || user.groupIds || [];
+
         import('../services/grammarService').then(grammarModule => {
-            if (user.groupIds && user.groupIds.length > 0) {
+            if (studentGroupIds.length > 0) {
                 const topicAccess = user?.mergedTopicAccess || user?.topicAccess || [];
 
                 Promise.all([
-                    getAssignmentsForGroups(user.groupIds, user.uid),
+                    getAssignmentsForGroups(studentGroupIds, user.uid),
                     getAdminTopics(),
                     getSharedAndPublicTeacherTopics(topicAccess),
                     grammarModule.getGrammarExercises() // Fetch grammar exercises as well
@@ -293,13 +329,26 @@ export default function DashboardPage() {
                             };
                         });
 
+                        // Build a set of grammar exercise IDs for auto-detection
+                        const grammarExerciseIds = new Set(grammarExercises.map(g => g.id));
+
                         // Map updated names and icons into assignments and filter orphans
                         const updatedAsgns = asgns.map(a => ({
                             ...a,
                             topicName: itemMap[a.topicId]?.name || a.topicName,
                             topicIcon: itemMap[a.topicId]?.icon,
-                            topicColor: itemMap[a.topicId]?.color
-                        })).filter(a => itemMap[a.topicId] !== undefined);
+                            topicColor: itemMap[a.topicId]?.color,
+                            // Auto-detect isGrammar if the topicId matches a grammar exercise
+                            isGrammar: a.isGrammar || grammarExerciseIds.has(a.topicId)
+                        })).filter(a => {
+                            if (itemMap[a.topicId] === undefined) return false;
+                            // Hide assignments with scheduledStart in the future
+                            if (a.scheduledStart) {
+                                const startDate = a.scheduledStart.toDate ? a.scheduledStart.toDate() : new Date(a.scheduledStart);
+                                if (startDate > new Date()) return false;
+                            }
+                            return true;
+                        });
 
                         setAssignments(updatedAsgns);
 
@@ -332,22 +381,33 @@ export default function DashboardPage() {
                     const isStudent = !(user?.role === 'admin' || user?.role === 'teacher' || user?.role === 'staff');
                     if (isStudent && streak < 5) {
                         setTheme('light');
-                    } else if (isStudent && streak < 15 && localStorage.getItem('appTheme') === 'silver') {
+                    } else if (isStudent && streak < 18 && localStorage.getItem('appTheme') === 'silver') {
                         setTheme('light');
-                    } else if (isStudent && streak < 25 && localStorage.getItem('appTheme') === 'gold') {
+                    } else if (isStudent && streak < 30 && localStorage.getItem('appTheme') === 'gold') {
                         setTheme('light');
-                    } else if (isStudent && streak < 35 && localStorage.getItem('appTheme') === 'diamond') {
+                    } else if (isStudent && streak < 40 && localStorage.getItem('appTheme') === 'diamond') {
                         setTheme('light');
-                    } else if (isStudent && streak < 50 && localStorage.getItem('appTheme') === 'ruby') {
+                    } else if (isStudent && streak < 60 && localStorage.getItem('appTheme') === 'ruby') {
                         setTheme('light');
                     }
-                    // Check for new milestone celebration
+                    // Check for new milestone celebration (Firestore-backed)
                     const currentMs = getCurrentMilestone(streak);
                     if (currentMs) {
-                        const lastShown = parseInt(localStorage.getItem('lastMilestoneShown') || '0', 10);
-                        if (currentMs.threshold > lastShown) {
-                            setCelebrationMilestone(currentMs);
-                            localStorage.setItem('lastMilestoneShown', String(currentMs.threshold));
+                        // Quick local check first to avoid flash
+                        const localLastShown = parseInt(localStorage.getItem('lastMilestoneShown') || '0', 10);
+                        if (currentMs.threshold > localLastShown) {
+                            // Verify with Firestore (source of truth)
+                            const msRef = doc(db, `users/${user.uid}/stats`, 'milestone_shown');
+                            getDoc(msRef).then(msSnap => {
+                                const firestoreLastShown = msSnap.exists() ? (msSnap.data().lastThreshold || 0) : 0;
+                                // Sync localStorage with Firestore
+                                localStorage.setItem('lastMilestoneShown', String(Math.max(firestoreLastShown, localLastShown)));
+                                if (currentMs.threshold > firestoreLastShown) {
+                                    setCelebrationMilestone(currentMs);
+                                    localStorage.setItem('lastMilestoneShown', String(currentMs.threshold));
+                                    setDoc(msRef, { lastThreshold: currentMs.threshold, updatedAt: new Date().toISOString() }, { merge: true }).catch(console.warn);
+                                }
+                            }).catch(console.warn);
                         }
                     }
                 })
@@ -371,10 +431,19 @@ export default function DashboardPage() {
             setExamsLoading(true);
             try {
                 const [assigns, subs] = await Promise.all([
-                    getExamAssignmentsForStudent(user.uid, user.groupIds || []),
+                    getExamAssignmentsForStudent(user.uid, studentGroupIds),
                     getExamSubmissionsForStudent(user.uid)
                 ]);
-                setExamAssignments(assigns);
+                // Filter out exam assignments with scheduledStart in the future
+                const now2 = new Date();
+                const visibleAssigns = assigns.filter(a => {
+                    if (a.scheduledStart) {
+                        const startDate = a.scheduledStart.toDate ? a.scheduledStart.toDate() : new Date(a.scheduledStart);
+                        if (startDate > now2) return false;
+                    }
+                    return true;
+                });
+                setExamAssignments(visibleAssigns);
                 setExamSubmissions(subs);
 
                 const subsMap = {};
@@ -408,26 +477,32 @@ export default function DashboardPage() {
                 // Check for alert
                 const hasAlerted = sessionStorage.getItem(`exam_alert_shown_${user.uid}`);
                 if (!hasAlerted) {
-                    // Scenario 1: Urgent unfinished exam
+                    // Scenario 1: Urgent unfinished test (only for examType === 'test')
                     if (pending.length > 0) {
-                        const firstExam = pending[0];
-                        const details = await getExam(firstExam.examId);
-                        setUrgentExam({ ...firstExam, ...details });
-                        setShowAlertType('urgent');
-                        setShowExamAlert(true);
-                        sessionStorage.setItem(`exam_alert_shown_${user.uid}`, 'true');
+                        for (const exam of pending) {
+                            const details = await getExam(exam.examId);
+                            if (details?.examType === 'test') {
+                                setUrgentExam({ ...details, ...exam });
+                                setShowAlertType('urgent');
+                                setShowExamAlert(true);
+                                sessionStorage.setItem(`exam_alert_shown_${user.uid}`, 'true');
+                                break;
+                            }
+                        }
                     }
-                    // Scenario 2: New graded results
-                    else {
+                    // Scenario 2: New graded test results (only if no urgent test alert was shown)
+                    if (!sessionStorage.getItem(`exam_alert_shown_${user.uid}`)) {
                         const unviewedResults = subs.filter(s => s.status === 'graded' && s.resultsReleased && !s.viewedByStudent);
-                        if (unviewedResults.length > 0) {
-                            const firstSub = unviewedResults[0];
-                            const assignment = assigns.find(a => a.id === firstSub.assignmentId);
-                            const details = await getExam(firstSub.examId);
-                            setNewResult({ ...firstSub, examName: details?.name, examIcon: details?.icon, examColor: details?.color });
-                            setShowAlertType('result');
-                            setShowExamAlert(true);
-                            sessionStorage.setItem(`exam_alert_shown_${user.uid}`, 'true');
+                        // Find first test result (skip homework/practice)
+                        for (const sub of unviewedResults) {
+                            const subDetails = await getExam(sub.examId);
+                            if (subDetails?.examType === 'test') {
+                                setNewResult({ ...sub, examName: subDetails?.name, examIcon: subDetails?.icon, examColor: subDetails?.color });
+                                setShowAlertType('result');
+                                setShowExamAlert(true);
+                                sessionStorage.setItem(`exam_alert_shown_${user.uid}`, 'true');
+                                break;
+                            }
                         }
                     }
                 }
@@ -453,7 +528,30 @@ export default function DashboardPage() {
 
         // Fetch red flags for this student
         getRedFlagsForStudent(user.uid).then(setStudentRedFlags).catch(console.warn);
-    }, [user?.uid, user?.groupIds]);
+
+        // Check for active rating period
+        getActiveRatingPeriod().then(async (period) => {
+            setActiveRatingPeriod(period);
+            if (period && user?.uid) {
+                try {
+                    const [teacherList, ratings] = await Promise.all([
+                        getTeachersForStudent(user.uid).catch(() => []),
+                        getStudentRatingsForPeriod(period.id, user.uid).catch(() => []),
+                    ]);
+                    const ratedKeys = new Set(ratings.map(r => `${r.teacherId}_${r.groupId || ''}`));
+                    const allRated = teacherList.length > 0 && teacherList.every(t => ratedKeys.has(`${t.uid}_${t.ratingGroupId || ''}`));
+                    setAllTeachersRated(allRated);
+                    // Show rating popup once per session if not all rated
+                    if (!allRated && !sessionStorage.getItem(`rating_popup_shown_${user.uid}`)) {
+                        setShowRatingPopup(true);
+                        sessionStorage.setItem(`rating_popup_shown_${user.uid}`, 'true');
+                    }
+                } catch (e) {
+                    console.warn('Error checking teacher ratings:', e);
+                }
+            }
+        }).catch(console.warn);
+    }, [user?.uid, user?.groupIds, user?.visibleGroupIds]);
 
     // Compute class ranking per group (cached for 6 hours to minimize Firestore reads)
     useEffect(() => {
@@ -537,6 +635,13 @@ export default function DashboardPage() {
         }
     }, [user?.uid, user?.visibleGroupIds, user?.groupIds, groupIdToName]);
 
+    // Fetch reward points for student (centralized)
+    useEffect(() => {
+        if (!user?.uid) return;
+        if (user?.role === 'admin' || user?.role === 'teacher' || user?.role === 'staff') return;
+        getStudentRewardPoints(user.uid).then(setTotalRewardPoints).catch(() => {});
+    }, [user?.uid, user?.role]);
+
     const handleLevelSelect = async (level) => {
         setSelectedLevel(level);
         localStorage.setItem('userCefrLevel', level);
@@ -576,6 +681,43 @@ export default function DashboardPage() {
     ];
 
     const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
+
+    // Feedback modal state
+    const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+    const [feedbackCategory, setFeedbackCategory] = useState('suggestion');
+    const [feedbackMessage, setFeedbackMessage] = useState('');
+    const [feedbackSending, setFeedbackSending] = useState(false);
+    const [feedbackSuccess, setFeedbackSuccess] = useState(false);
+
+    const FEEDBACK_CATEGORIES = [
+        { value: 'suggestion', label: 'Đề xuất', emoji: '💡', color: '#4f46e5', bg: '#eff6ff' },
+        { value: 'complaint', label: 'Khiếu nại', emoji: '⚠️', color: '#dc2626', bg: '#fef2f2' },
+    ];
+
+    const handleSendFeedback = async () => {
+        if (!feedbackMessage.trim() || feedbackSending) return;
+        setFeedbackSending(true);
+        try {
+            await submitFeedback({
+                message: feedbackMessage,
+                category: feedbackCategory,
+                senderUid: user.uid,
+                senderName: user.displayName || '',
+                senderEmail: user.email || '',
+                senderRole: user.role || 'user',
+            });
+            setFeedbackSuccess(true);
+            setFeedbackMessage('');
+            setTimeout(() => {
+                setFeedbackSuccess(false);
+                setShowFeedbackModal(false);
+            }, 1800);
+        } catch (err) {
+            console.error('Error sending feedback:', err);
+            alert('Có lỗi xảy ra. Vui lòng thử lại.');
+        }
+        setFeedbackSending(false);
+    };
 
     const handleContinueLearning = async (listInfo) => {
         if (!user?.uid || isLoadingRecent) return;
@@ -651,6 +793,134 @@ export default function DashboardPage() {
         } catch (err) {
             console.error('Failed to load recent list', err);
             setIsLoadingRecent(false);
+        }
+    };
+
+    // --- Word Selection Modal Handlers ---
+    const TOTAL_STEPS = 6;
+
+    const handleOpenWordSelect = async (a) => {
+        if (!user?.uid || loadingWordSelect) return;
+        setLoadingWordSelect(true);
+        try {
+            let words = [];
+            if (a.isTeacherTopic) {
+                const wordsSnap = await getDocs(collection(db, `teacher_topics/${a.topicId}/words`));
+                wordsSnap.forEach(docSnap => { words.push(docSnap.data()); });
+            } else {
+                words = await getAdminTopicWords(a.topicId);
+            }
+
+            if (!words || words.length === 0) {
+                alert('Danh sách này hiện không có từ vựng nào.');
+                setLoadingWordSelect(false);
+                return;
+            }
+
+            const [learned, pMap, saved] = await Promise.all([
+                getLearnedWordsForTopic(user.uid, a.topicId),
+                getWordProgressMapForTopic(user.uid, a.topicId),
+                getSavedWords(user.uid)
+            ]);
+
+            const savedMap = {};
+            saved.forEach(w => { savedMap[w.word] = true; });
+
+            setWordSelectData({
+                words,
+                topicId: a.topicId,
+                topicName: a.topicName,
+                icon: a.topicIcon || '📚',
+                color: a.topicColor || 'var(--color-primary)',
+                isTeacherTopic: a.isTeacherTopic,
+                progressMap: pMap,
+                learnedWords: learned,
+                savedWordsStatus: savedMap
+            });
+            setSelectedWordsForAssignment(new Set());
+        } catch (err) {
+            console.error('Failed to load word selection data', err);
+        }
+        setLoadingWordSelect(false);
+    };
+
+    const handleConfirmWordSelect = async () => {
+        if (!wordSelectData || selectedWordsForAssignment.size === 0) return;
+        const { words, topicId, topicName, icon, color, isTeacherTopic, progressMap } = wordSelectData;
+
+        const wordsToLearn = words
+            .filter(w => selectedWordsForAssignment.has(w.word))
+            .map(w => ({
+                ...w,
+                stepsCompleted: progressMap[w.word]?.stepsCompleted ?? 0,
+                stepMastery: progressMap[w.word]?.stepMastery ?? null
+            }));
+
+        if (wordsToLearn.length === 0) return;
+        setWordSelectData(null);
+
+        navigate('/learn', {
+            state: {
+                words: wordsToLearn,
+                topicId,
+                topicName,
+                listType: 'topic',
+                icon,
+                color,
+                isTeacherTopic: isTeacherTopic || false,
+                skipWelcome: true
+            }
+        });
+    };
+
+    const toggleWordForAssignment = (word) => {
+        setSelectedWordsForAssignment(prev => {
+            const next = new Set(prev);
+            if (next.has(word)) next.delete(word);
+            else next.add(word);
+            return next;
+        });
+    };
+
+    const wsSelectAllUnlearned = () => {
+        if (!wordSelectData) return;
+        const incomplete = new Set();
+        wordSelectData.words.forEach(w => {
+            const stepsCompleted = wordSelectData.progressMap[w.word]?.stepsCompleted ?? 0;
+            if (stepsCompleted < TOTAL_STEPS) incomplete.add(w.word);
+        });
+        setSelectedWordsForAssignment(incomplete);
+    };
+
+    const wsSelectAll = () => {
+        if (!wordSelectData) return;
+        setSelectedWordsForAssignment(new Set(wordSelectData.words.map(w => w.word)));
+    };
+
+    const wsDeselectAll = () => {
+        setSelectedWordsForAssignment(new Set());
+    };
+
+    const handleWsToggleSave = async (e, wordObj) => {
+        e.stopPropagation();
+        if (!user?.uid || !wordSelectData) return;
+        const currentStatus = wordSelectData.savedWordsStatus[wordObj.word];
+        setWordSelectData(prev => ({
+            ...prev,
+            savedWordsStatus: { ...prev.savedWordsStatus, [wordObj.word]: !currentStatus }
+        }));
+        try {
+            const newStatus = await toggleSavedWord(user.uid, wordObj);
+            setWordSelectData(prev => prev ? ({
+                ...prev,
+                savedWordsStatus: { ...prev.savedWordsStatus, [wordObj.word]: newStatus }
+            }) : null);
+        } catch (err) {
+            console.error('Failed to toggle saved word', err);
+            setWordSelectData(prev => prev ? ({
+                ...prev,
+                savedWordsStatus: { ...prev.savedWordsStatus, [wordObj.word]: currentStatus }
+            }) : null);
         }
     };
 
@@ -836,21 +1106,23 @@ export default function DashboardPage() {
 
                         {(() => {
                             const isStudent = !(user?.role === 'admin' || user?.role === 'teacher' || user?.role === 'staff');
-                            const darkUnlocked = !isStudent || currentStreak >= 5;
-                            const silverUnlocked = !isStudent || currentStreak >= 15;
-                            const goldUnlocked = !isStudent || currentStreak >= 25;
-                            const diamondUnlocked = !isStudent || currentStreak >= 35;
-                            const rubyUnlocked = !isStudent || currentStreak >= 50;
+                            // TEMP: unlock all themes for test user
+                            const isTestUser = user?.email === 'ngheuac@gmail.com';
+                            const darkUnlocked = !isStudent || isTestUser || currentStreak >= 5;
+                            const silverUnlocked = !isStudent || isTestUser || currentStreak >= 18;
+                            const goldUnlocked = !isStudent || isTestUser || currentStreak >= 30;
+                            const diamondUnlocked = !isStudent || isTestUser || currentStreak >= 40;
+                            const rubyUnlocked = !isStudent || isTestUser || currentStreak >= 60;
                             const nextUnlock = !darkUnlocked
                                 ? `Đạt streak 5 ngày để mở khoá giao diện tối (hiện tại: ${currentStreak} ngày)`
                                 : !silverUnlocked
-                                    ? `Đạt streak 15 ngày để mở khoá Nút Bạc (hiện tại: ${currentStreak} ngày)`
+                                    ? `Đạt streak 18 ngày để mở khoá Nút Bạc (hiện tại: ${currentStreak} ngày)`
                                     : !goldUnlocked
-                                        ? `Đạt streak 25 ngày để mở khoá Nút Vàng (hiện tại: ${currentStreak} ngày)`
+                                        ? `Đạt streak 30 ngày để mở khoá Nút Vàng (hiện tại: ${currentStreak} ngày)`
                                         : !diamondUnlocked
-                                            ? `Đạt streak 35 ngày để mở khoá Kim Cương (hiện tại: ${currentStreak} ngày)`
+                                            ? `Đạt streak 40 ngày để mở khoá Kim Cương (hiện tại: ${currentStreak} ngày)`
                                             : !rubyUnlocked
-                                                ? `Đạt streak 50 ngày để mở khoá Nút Ruby (hiện tại: ${currentStreak} ngày)`
+                                                ? `Đạt streak 60 ngày để mở khoá Nút Ruby (hiện tại: ${currentStreak} ngày)`
                                                 : 'Chọn giao diện yêu thích';
                             return (
                                 <div className="settings-section" style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--border-color)' }}>
@@ -1043,6 +1315,30 @@ export default function DashboardPage() {
                             </div>
                         )}
 
+                        {/* Reward Points Migration */}
+                        {(user?.role === 'admin') && (
+                            <div className="settings-section" style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
+                                <label className="settings-section-label">🎁 Chuyển đổi dữ liệu điểm thưởng</label>
+                                <p className="settings-section-desc">Gộp điểm thưởng từ từng lớp thành điểm tích luỹ cá nhân (chỉ cần chạy 1 lần)</p>
+                                <button
+                                    className="settings-level-pill"
+                                    disabled={isMigrating}
+                                    onClick={async () => {
+                                        setIsMigrating(true); setMigrationStatus('');
+                                        try {
+                                            const { migrateRewardPointsToCentral } = await import('../services/migrateRewardPoints');
+                                            await migrateRewardPointsToCentral(msg => setMigrationStatus(msg));
+                                        } catch (e) {
+                                            setMigrationStatus('❌ Lỗi: ' + e.message);
+                                        }
+                                        setIsMigrating(false);
+                                    }}
+                                    style={{ padding: '12px', fontWeight: 600, width: '100%' }}>
+                                    {isMigrating ? '⏳ Đang chuyển đổi...' : '🔄 Chuyển đổi điểm thưởng'}
+                                </button>
+                            </div>
+                        )}
+
                         {/* The account/logout section has been moved to the header */}
                     </div>
                 </div>
@@ -1098,7 +1394,7 @@ export default function DashboardPage() {
                         {(() => { const hasFlags = studentRedFlags.filter(f => !f.removed).length > 0; return (
                         <div className={`dashboard-progress-stats${hasFlags ? ' has-flags' : ''}`}>
                             {classRanks.length > 0 ? (
-                                <div className={`dashboard-progress-item${!hasFlags ? ' dashboard-rank-no-flags' : ''}`}>
+                                <div className="dashboard-progress-item">
                                     <div className="dashboard-stat-icon-wrapper warning">
                                         <Medal size={22} />
                                     </div>
@@ -1121,7 +1417,7 @@ export default function DashboardPage() {
                                     </div>
                                 </div>
                             ) : (
-                                <div className={`dashboard-progress-item${!hasFlags ? ' dashboard-rank-no-flags' : ''}`}>
+                                <div className="dashboard-progress-item">
                                     <div className="dashboard-stat-icon-wrapper warning">
                                         <Medal size={22} />
                                     </div>
@@ -1160,6 +1456,20 @@ export default function DashboardPage() {
                                     </>
                                 );
                             })()}
+                            {totalRewardPoints > 0 && (
+                                <>
+                                    <div className="dashboard-progress-divider" />
+                                    <div className="dashboard-progress-item">
+                                        <div className="dashboard-stat-icon-wrapper" style={{ background: 'rgba(245, 158, 11, 0.12)' }}>
+                                            <span style={{ fontSize: '20px' }}>⭐</span>
+                                        </div>
+                                        <div className="dashboard-stat-info">
+                                            <span className="dashboard-stat-value" style={{ color: '#f59e0b' }}>{totalRewardPoints}</span>
+                                            <span className="dashboard-stat-label">Điểm thưởng</span>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                             <div className="dashboard-progress-divider dashboard-divider-streak" />
                             <div className="dashboard-progress-item dashboard-streak-item">
                                 <div className="dashboard-stat-icon-wrapper error">
@@ -1186,19 +1496,61 @@ export default function DashboardPage() {
 
                     const newAssignmentsCount = assignments.filter(a => {
                         const prog = assignmentsProgress[a.topicId];
-                        const isStarted = prog && (prog.learned > 0 || (prog.learning ?? 0) > 0 || (prog.completedSteps ?? 0) > 0);
-                        if (isStarted) return false;
                         const isDone = prog && prog.total > 0 && prog.learned === prog.total;
                         if (isDone) return false;
                         const due = getEffectiveDueDate(a, user.uid);
                         const isOverdue = due && due < new Date();
                         if (isOverdue) return false;
-                        const msA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
-                        const isRecentlyAssigned = Date.now() - msA < 3 * 24 * 60 * 60 * 1000;
-                        return isRecentlyAssigned;
+                        return true;
                     }).length;
 
                     return (
+                        <>
+                        {activeRatingPeriod && !allTeachersRated && (() => {
+                            const rEnd = new Date(activeRatingPeriod.ratingEndDate + 'T23:59:59');
+                            const daysLeft = Math.ceil((rEnd - new Date()) / (1000 * 60 * 60 * 24));
+                            const numberOfGroups = (user?.visibleGroupIds || user?.groupIds || []).length;
+                            // Tiered bonus matching TeacherRatingFormPage logic
+                            let baseDays = 1;
+                            if (activeRatingPeriod.ratingStartDate && activeRatingPeriod.ratingEndDate) {
+                                const rStart = new Date(activeRatingPeriod.ratingStartDate + 'T00:00:00');
+                                const totalMs = rEnd - rStart;
+                                const elapsed = Date.now() - rStart;
+                                const progress = Math.max(0, Math.min(1, elapsed / totalMs));
+                                if (progress <= 1 / 3) baseDays = 3;
+                                else if (progress <= 2 / 3) baseDays = 2;
+                                else baseDays = 1;
+                            }
+                            const streakPerGroup = baseDays;
+                            return (
+                                <div
+                                    onClick={() => navigate('/rate-teacher')}
+                                    style={{
+                                        padding: '10px 16px',
+                                        background: 'linear-gradient(135deg, #f59e0b 0%, #f97316 100%)',
+                                        borderRadius: '16px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '10px',
+                                        color: 'white',
+                                        marginBottom: '12px',
+                                        boxShadow: '0 4px 12px rgba(245, 158, 11, 0.2)',
+                                        transition: 'transform 0.15s',
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.01)'}
+                                    onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                                >
+                                    <span style={{ fontSize: '1.3rem' }}>⭐</span>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <span style={{ fontWeight: 700, fontSize: '0.88rem', display: 'block' }}>Đánh giá Giáo viên</span>
+                                        <span style={{ fontSize: '0.72rem', opacity: 0.95, display: 'block', marginTop: '2px' }}>🔥 Hoàn thành để nhận +{streakPerGroup} ngày streak/lớp!</span>
+                                    </div>
+                                    <span style={{ fontSize: '0.75rem', opacity: 0.9, whiteSpace: 'nowrap' }}>{daysLeft > 0 ? `${daysLeft} ngày` : 'Cuối kỳ!'}</span>
+                                    <span style={{ fontSize: '0.85rem' }}>→</span>
+                                </div>
+                            );
+                        })()}
                         <div className="dashboard-nav-pill">
                             <button
                                 onClick={() => setActiveMainTab('learning')}
@@ -1238,28 +1590,48 @@ export default function DashboardPage() {
                                         }
                                     });
                                     const now = new Date();
-                                    const pendingCount = examAssignments.filter(a => {
+                                    const activeCount = examAssignments.filter(a => {
                                         const sub = subsMap[a.id];
                                         const hasSubmitted = sub && (sub.status === 'submitted' || sub.status === 'graded' || sub.status === 'grading');
                                         const due = getEffectiveDueDate(a, user.uid);
                                         const isOverdue = due && due < now;
-                                        return !hasSubmitted && !isOverdue;
+
+                                        // Not submitted and not overdue → active
+                                        if (!hasSubmitted && !isOverdue) return true;
+
+                                        // Submitted but has pending follow-ups → active
+                                        const fuRequested = sub?.followUpRequested || {};
+                                        const fuAnswers = sub?.followUpAnswers || {};
+                                        const hasPendingFollowUp = Object.keys(fuRequested).some(qId => {
+                                            return !Object.values(fuAnswers).some(sec => sec?.[qId]);
+                                        });
+                                        if (hasSubmitted && hasPendingFollowUp) return true;
+
+                                        // Has new results not yet viewed → active
+                                        if (sub?.status === 'graded' && sub?.resultsReleased && !sub?.viewedByStudent) return true;
+
+                                        // Has new follow-up results not yet viewed → active
+                                        if (sub?.followUpResultsReleased && !sub?.followUpResultsViewedByStudent) return true;
+
+                                        return false;
                                     }).length;
 
-                                    if (pendingCount === 0) return null;
+                                    if (activeCount === 0) return null;
                                     return (
                                         <span className="dashboard-nav-badge-round">
-                                            {pendingCount}
+                                            {activeCount}
                                         </span>
                                     );
                                 })()}
                             </button>
                         </div>
-
+                        </>
                     );
                 })()}
 
                 {/* Exam Alert Modal */}
+                {/* Priority Popup System: Exam Alert → Teacher Rating → Milestone */}
+                {/* Priority 1: Exam Alert */}
                 {showExamAlert && (
                     <div className="settings-modal-backdrop" style={{ zIndex: 3000, alignItems: 'center' }}>
                         <div className="settings-modal animate-slide-up" style={{ padding: '32px', borderRadius: '32px', maxWidth: '450px', paddingBottom: '32px' }}>
@@ -1357,6 +1729,63 @@ export default function DashboardPage() {
                         </div>
                     </div>
                 )}
+
+                {/* Priority 2: Teacher Rating Popup (only when Exam Alert is dismissed) */}
+                {!showExamAlert && showRatingPopup && activeRatingPeriod && !allTeachersRated && (() => {
+                    const rEnd = new Date(activeRatingPeriod.ratingEndDate + 'T23:59:59');
+                    const daysLeft = Math.ceil((rEnd - new Date()) / (1000 * 60 * 60 * 24));
+                    let baseDays = 1;
+                    if (activeRatingPeriod.ratingStartDate && activeRatingPeriod.ratingEndDate) {
+                        const rStart = new Date(activeRatingPeriod.ratingStartDate + 'T00:00:00');
+                        const totalMs = rEnd - rStart;
+                        const elapsed = Date.now() - rStart;
+                        const progress = Math.max(0, Math.min(1, elapsed / totalMs));
+                        if (progress <= 1 / 3) baseDays = 3;
+                        else if (progress <= 2 / 3) baseDays = 2;
+                        else baseDays = 1;
+                    }
+                    return (
+                        <div className="settings-modal-backdrop" style={{ zIndex: 3000, alignItems: 'center' }} onClick={() => setShowRatingPopup(false)}>
+                            <div className="settings-modal animate-slide-up" style={{ padding: '32px', borderRadius: '32px', maxWidth: '450px', paddingBottom: '32px' }} onClick={e => e.stopPropagation()}>
+                                <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                                    <div style={{ width: '80px', height: '80px', background: 'linear-gradient(135deg, #fef3c7, #fde68a)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '2.2rem' }}>
+                                        ⭐
+                                    </div>
+                                    <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>Đánh giá Giáo viên</h2>
+                                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.6 }}>
+                                        Kỳ đánh giá giáo viên đang mở! Hãy đánh giá để giúp cải thiện chất lượng giảng dạy.
+                                    </p>
+                                </div>
+
+                                <div style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', padding: '14px 18px', borderRadius: '16px', border: '1.5px solid #f59e0b', marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                    <Flame size={20} color="#ea580c" />
+                                    <span style={{ fontWeight: 800, fontSize: '0.95rem', color: '#92400e' }}>+{baseDays} ngày streak/lớp</span>
+                                    <span style={{ fontSize: '0.78rem', color: '#a16207' }}>• Còn {daysLeft > 0 ? `${daysLeft} ngày` : 'hôm nay!'}</span>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    <button
+                                        className="btn btn-primary"
+                                        style={{ padding: '16px', borderRadius: '16px', fontWeight: 800, fontSize: '1rem', background: 'linear-gradient(135deg, #f59e0b 0%, #f97316 100%)', boxShadow: '0 8px 16px rgba(245, 158, 11, 0.3)' }}
+                                        onClick={() => {
+                                            setShowRatingPopup(false);
+                                            navigate('/rate-teacher');
+                                        }}
+                                    >
+                                        Đánh giá ngay
+                                    </button>
+                                    <button
+                                        className="btn"
+                                        style={{ padding: '14px', borderRadius: '16px', fontWeight: 700, color: 'var(--text-secondary)', background: 'transparent' }}
+                                        onClick={() => setShowRatingPopup(false)}
+                                    >
+                                        Để sau
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })()}
 
                 {activeMainTab === 'learning' && (reviewStats.totalCount > 0 || grammarReviewStats.totalCount > 0) && (
                     <section className="dashboard-reviews-container animate-slide-up" style={{
@@ -1470,7 +1899,7 @@ export default function DashboardPage() {
                         });
 
                     const AssignmentCard = ({ a, isCompleted }) => (
-                        <div key={a.id} className="glass-card" onClick={() => { if (!(a.isOverdue && !a.isDone)) handleContinueLearning({ id: a.topicId, type: 'topic', name: a.topicName, isTeacherTopic: a.isTeacherTopic, isGrammar: a.isGrammar }); }} style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '20px', borderRadius: '20px', position: 'relative', overflow: 'hidden', opacity: isCompleted ? 0.7 : (a.isOverdue && !a.isDone) ? 0.6 : 1, filter: (a.isOverdue && !a.isDone) ? 'grayscale(0.5)' : 'none', cursor: (a.isOverdue && !a.isDone) ? 'not-allowed' : 'pointer' }}>
+                        <div key={a.id} className="glass-card" onClick={() => { if (a.isOverdue && !a.isDone) return; if (a.isGrammar) { handleContinueLearning({ id: a.topicId, type: 'topic', name: a.topicName, isTeacherTopic: a.isTeacherTopic, isGrammar: a.isGrammar }); } else { handleOpenWordSelect(a); } }} style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '20px', borderRadius: '20px', position: 'relative', overflow: 'hidden', opacity: isCompleted ? 0.7 : (a.isOverdue && !a.isDone) ? 0.6 : 1, filter: (a.isOverdue && !a.isDone) ? 'grayscale(0.5)' : 'none', cursor: (a.isOverdue && !a.isDone) ? 'not-allowed' : 'pointer' }}>
                             {groupIdToName[a.groupId] && Object.keys(groupIdToName).length > 1 && (
                                 <div style={{ marginBottom: '4px' }}>
                                     <span className="dashboard-group-chip">
@@ -1635,16 +2064,34 @@ export default function DashboardPage() {
 
                     examAssignments.forEach(a => {
                         const sub = subsMap[a.id];
-                        const isDone = sub && (sub.status === 'submitted' || sub.status === 'grading' || sub.status === 'graded');
+                        const isSubmitted = sub && (sub.status === 'submitted' || sub.status === 'grading' || sub.status === 'graded');
+
+                        // Check if there are pending follow-up requests
+                        const fuRequested = sub?.followUpRequested || {};
+                        const fuAnswers = sub?.followUpAnswers || {};
+                        const hasPendingFollowUp = Object.keys(fuRequested).some(qId => {
+                            return !Object.values(fuAnswers).some(sec => sec?.[qId]);
+                        });
+
+                        const isDone = isSubmitted && !hasPendingFollowUp;
                         const due = getEffectiveDueDate(a, user.uid);
                         const isOverdue = due && due < now;
 
-                        if (isDone) {
+                        // Check if follow-up results were released but student hasn't viewed
+                        const hasNewFollowUpResults = sub?.followUpResultsReleased && !sub?.followUpResultsViewedByStudent;
+                        // Check if first-answer results were released but student hasn't viewed
+                        const hasNewResults = sub?.status === 'graded' && sub?.resultsReleased && !sub?.viewedByStudent;
+
+                        if (isDone && !hasNewFollowUpResults && !hasNewResults) {
                             completed.push({ ...a, sub });
-                        } else if (isOverdue) {
+                        } else if (isDone && hasNewFollowUpResults) {
+                            active.push({ ...a, sub, hasPendingFollowUp: false, hasNewFollowUpResults });
+                        } else if (isDone && hasNewResults) {
+                            active.push({ ...a, sub, hasPendingFollowUp: false, hasNewResults });
+                        } else if (isOverdue && !isSubmitted) {
                             overdue.push({ ...a, sub });
                         } else {
-                            active.push({ ...a, sub });
+                            active.push({ ...a, sub, hasPendingFollowUp });
                         }
                     });
 
@@ -1666,18 +2113,14 @@ export default function DashboardPage() {
                         const isNew = hasZeroProgress && isRecentlyAssigned;
 
                         return (
-                            <div key={a.id} className="glass-card" onClick={() => { if (isOverdue && !isDone) return; if (isDone) navigate(`/exam-result?assignmentId=${a.id}&studentId=${user?.uid}`); else navigate(`/exam?examId=${a.examId}&assignmentId=${a.id}&seed=${a.variationSeed || 0}`); }} style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '20px', borderRadius: '20px', position: 'relative', overflow: 'hidden', opacity: (isOverdue && !isDone) ? 0.6 : 1, filter: (isOverdue && !isDone) ? 'grayscale(0.5)' : 'none', marginBottom: '12px', cursor: (isOverdue && !isDone) ? 'not-allowed' : 'pointer' }}>
+                            <div key={a.id} className="glass-card" onClick={() => { if (isOverdue && !isDone && !a.hasPendingFollowUp && !a.hasNewFollowUpResults && !a.hasNewResults) return; if (isDone || a.hasPendingFollowUp || a.hasNewFollowUpResults || a.hasNewResults) navigate(`/exam-result?assignmentId=${a.id}&studentId=${user?.uid}`); else navigate(`/exam?examId=${a.examId}&assignmentId=${a.id}&seed=${a.variationSeed || 0}`); }} style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '20px', borderRadius: '20px', position: 'relative', overflow: 'hidden', opacity: (isOverdue && !isDone && !a.hasPendingFollowUp && !a.hasNewFollowUpResults && !a.hasNewResults) ? 0.6 : 1, filter: (isOverdue && !isDone && !a.hasPendingFollowUp && !a.hasNewFollowUpResults && !a.hasNewResults) ? 'grayscale(0.5)' : 'none', marginBottom: '12px', cursor: (isOverdue && !isDone && !a.hasPendingFollowUp && !a.hasNewFollowUpResults && !a.hasNewResults) ? 'not-allowed' : 'pointer' }}>
                                 {/* Floating badges */}
                                 {!isDone && isNew && (
                                     <span style={{ position: 'absolute', top: '12px', right: '12px', background: '#ef4444', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '3px 8px', borderRadius: '10px', textTransform: 'uppercase', letterSpacing: '0.5px', boxShadow: '0 0 8px rgba(239, 68, 68, 0.4)', zIndex: 2 }}>
                                         Mới
                                     </span>
                                 )}
-                                {isDone && isGraded && !sub?.viewedByStudent && (
-                                    <span style={{ position: 'absolute', top: '12px', right: '12px', background: '#ef4444', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '3px 8px', borderRadius: '10px', textTransform: 'uppercase', letterSpacing: '0.5px', boxShadow: '0 0 8px rgba(239, 68, 68, 0.4)', zIndex: 2 }}>
-                                        Mới có điểm
-                                    </span>
-                                )}
+
                                 {/* Group chip */}
                                 {a.targetType === 'group' && groupIdToName[a.targetId] && Object.keys(groupIdToName).length > 1 && (
                                     <div style={{ marginBottom: '4px' }}>
@@ -1687,24 +2130,34 @@ export default function DashboardPage() {
                                         </span>
                                     </div>
                                 )}
-                                {/* Type tag + Score on same row */}
+                                {/* Type tag + Score/Status on same row */}
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                                     <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', fontWeight: 800, color: examInfo?.examType === 'test' ? '#dc2626' : '#6366f1', background: examInfo?.examType === 'test' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(99, 102, 241, 0.15)', padding: '4px 8px', borderRadius: '12px', flexShrink: 0 }}>
                                         {examInfo?.icon ? <span style={{ fontSize: '1rem' }}>{examInfo.icon}</span> : <FileCheck size={12} />}
                                         {examInfo?.examType === 'test' ? 'Kiểm tra' : 'Bài tập'}
                                     </span>
-                                    {isDone ? (
-                                        <>
-                                            {isGraded ? (
-                                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800, color: percent >= 80 ? '#10b981' : percent >= 50 ? '#f59e0b' : '#ef4444', background: percent >= 80 ? 'rgba(16, 185, 129, 0.12)' : percent >= 50 ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)', padding: '6px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
-                                                    ✅ {Math.round(sub.totalScore * 10) / 10}/{sub.maxTotalScore}
-                                                </span>
-                                            ) : (
-                                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.12)', padding: '6px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
-                                                    ⏳ Đang chấm
-                                                </span>
-                                            )}
-                                        </>
+                                    {a.hasNewFollowUpResults ? (
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 800, color: '#7c3aed', background: 'rgba(139, 92, 246, 0.12)', padding: '6px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
+                                            📝 Kết quả bài sửa
+                                        </span>
+                                    ) : a.hasNewResults ? (
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 800, color: '#dc2626', background: 'rgba(239, 68, 68, 0.12)', padding: '6px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
+                                            🎉 Mới có điểm
+                                        </span>
+                                    ) : a.hasPendingFollowUp ? (
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 800, color: '#d97706', background: 'rgba(245, 158, 11, 0.12)', padding: '6px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
+                                            ✍️ Cần sửa bài
+                                        </span>
+                                    ) : isDone ? (
+                                        isGraded ? (
+                                            <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800, color: percent >= 80 ? '#10b981' : percent >= 50 ? '#f59e0b' : '#ef4444', background: percent >= 80 ? 'rgba(16, 185, 129, 0.12)' : percent >= 50 ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)', padding: '6px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
+                                                ✅ {Math.round(sub.totalScore * 10) / 10}/{sub.maxTotalScore}
+                                            </span>
+                                        ) : (
+                                            <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.12)', padding: '6px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
+                                                ⏳ Đang chấm
+                                            </span>
+                                        )
                                     ) : (
                                         <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800, color: (isOverdue && !isDone) ? '#ef4444' : isDueSoon ? '#ef4444' : 'var(--text-secondary)', background: (isOverdue && !isDone) ? 'rgba(239, 68, 68, 0.12)' : isDueSoon ? 'rgba(239, 68, 68, 0.12)' : 'rgba(128, 128, 128, 0.1)', padding: '6px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
                                             <Clock size={14} />
@@ -1854,6 +2307,7 @@ export default function DashboardPage() {
                     </section>
                 )}
 
+
                 {activeMainTab === 'learning' && (
                     <section className="dashboard-actions-section">
                         <div className="dashboard-recent-header flex-between" style={{ marginBottom: 'var(--space-md)' }}>
@@ -1878,6 +2332,7 @@ export default function DashboardPage() {
                 )}
 
                 {/* SKILL REPORT CARDS */}
+                <div ref={reportsRef} />
                 {skillReports.length > 0 && activeMainTab === 'learning' && (() => {
                     const filteredSkillReports = selectedGroupFilter === 'all'
                         ? skillReports
@@ -2046,7 +2501,8 @@ export default function DashboardPage() {
             <ProgressModal isOpen={isProgressOpen} onClose={() => setIsProgressOpen(false)} redFlags={studentRedFlags.filter(f => !f.removed)} groupIdToName={groupIdToName} />
 
             {/* Streak Milestone Celebration Popup */}
-            {celebrationMilestone && (
+            {/* Priority 3: Milestone Celebration (only when higher-priority popups are dismissed) */}
+            {!showExamAlert && !showRatingPopup && celebrationMilestone && (
                 <div className="milestone-celebration-backdrop" onClick={() => setCelebrationMilestone(null)}>
                     <div className="milestone-celebration-modal" onClick={e => e.stopPropagation()}>
                         {/* Confetti particles */}
@@ -2068,10 +2524,305 @@ export default function DashboardPage() {
                         <p className="milestone-celebration-streak">
                             🔥 {currentStreak} ngày streak liên tục!
                         </p>
+                        {celebrationMilestone.themeName && (
+                            <p style={{
+                                fontSize: '0.95rem',
+                                fontWeight: 700,
+                                color: celebrationMilestone.color,
+                                background: `${celebrationMilestone.color}15`,
+                                border: `1.5px solid ${celebrationMilestone.color}40`,
+                                padding: '10px 16px',
+                                borderRadius: '14px',
+                                margin: '0 0 8px',
+                                textAlign: 'center',
+                            }}>
+                                🎨 Bạn vừa mở khoá: <strong>{celebrationMilestone.themeName}</strong>
+                            </p>
+                        )}
+                        {(() => {
+                            const nextMs = getNextMilestone(currentStreak);
+                            if (!nextMs) return null;
+                            const daysLeft = nextMs.threshold - currentStreak;
+                            return (
+                                <p style={{
+                                    fontSize: '0.85rem',
+                                    color: 'var(--text-secondary, #64748b)',
+                                    margin: '4px 0 8px',
+                                    textAlign: 'center',
+                                    lineHeight: 1.5,
+                                }}>
+                                    Mốc tiếp theo: <strong style={{ color: nextMs.color }}>{nextMs.emoji} {nextMs.title}</strong> — còn {daysLeft} ngày{nextMs.themeName ? ` (mở khoá ${nextMs.themeName})` : ''}
+                                </p>
+                            );
+                        })()}
                         <button className="milestone-celebration-btn" onClick={() => setCelebrationMilestone(null)}
                             style={{ background: `linear-gradient(135deg, ${celebrationMilestone.color}, ${celebrationMilestone.color}dd)` }}>
                             Tuyệt vời! 🎉
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Word Selection Modal for Vocab Assignments */}
+            {wordSelectData && (
+                <div className="topic-modal-backdrop" onClick={() => setWordSelectData(null)}>
+                    <div className="topic-wordlist-panel" onClick={(e) => e.stopPropagation()}>
+                        {/* Panel Header */}
+                        <div className="wordlist-header">
+                            <div className="wordlist-header-info">
+                                <span className="wordlist-header-icon" style={{ background: `${wordSelectData.color}20` }}>
+                                    {wordSelectData.icon}
+                                </span>
+                                <div>
+                                    <h2 className="wordlist-title">{wordSelectData.topicName}</h2>
+                                    <p className="wordlist-subtitle">
+                                        {selectedWordsForAssignment.size} từ được chọn
+                                    </p>
+                                </div>
+                            </div>
+                            <button className="topic-modal-close" onClick={() => setWordSelectData(null)}>
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Quick Actions */}
+                        <div className="wordlist-actions">
+                            <button className="wordlist-action-btn" onClick={wsSelectAllUnlearned}>
+                                <CheckCheck size={14} />
+                                Chưa hoàn thành
+                            </button>
+                            <button className="wordlist-action-btn" onClick={wsSelectAll}>
+                                <Check size={14} />
+                                Tất cả
+                            </button>
+                            <button className="wordlist-action-btn wordlist-action-btn--danger" onClick={wsDeselectAll}>
+                                <XCircle size={14} />
+                                Bỏ chọn
+                            </button>
+                        </div>
+
+                        {/* Word List */}
+                        <div className="wordlist-scroll">
+                            {wordSelectData.words.map((w, idx) => {
+                                const isLearned = wordSelectData.learnedWords.has(w.word);
+                                const isChecked = selectedWordsForAssignment.has(w.word);
+                                const wordProgress = wordSelectData.progressMap[w.word];
+                                const stepsCompleted = wordProgress?.stepsCompleted ?? 0;
+                                return (
+                                    <div
+                                        key={w.word}
+                                        role="button"
+                                        tabIndex={0}
+                                        className={`wordlist-item ${isChecked ? 'wordlist-item--selected' : ''} ${isLearned ? 'wordlist-item--learned' : ''}`}
+                                        onClick={() => toggleWordForAssignment(w.word)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleWordForAssignment(w.word); } }}
+                                        style={{ animationDelay: `${idx * 0.03}s` }}
+                                    >
+                                        <div className={`wordlist-checkbox ${isChecked ? 'wordlist-checkbox--checked' : ''}`}>
+                                            {isChecked && <Check size={14} />}
+                                        </div>
+                                        <div className="wordlist-item-content">
+                                            <div className="wordlist-item-top">
+                                                <span className="wordlist-item-word">{w.word}</span>
+                                                {isLearned && (
+                                                    <span className="wordlist-learned-badge">✓ Đã học</span>
+                                                )}
+                                            </div>
+                                            <span className="wordlist-item-meaning">{w.vietnameseMeaning}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto', flexShrink: 0 }}>
+                                            <button
+                                                className={`wordlist-bookmark-btn ${wordSelectData.savedWordsStatus[w.word] ? 'is-saved' : ''}`}
+                                                onClick={(e) => handleWsToggleSave(e, w)}
+                                                title={wordSelectData.savedWordsStatus[w.word] ? "Bỏ lưu từ" : "Lưu từ vựng"}
+                                            >
+                                                <Heart size={16} fill={wordSelectData.savedWordsStatus[w.word] ? "currentColor" : "none"} className={wordSelectData.savedWordsStatus[w.word] ? "text-error" : ""} />
+                                            </button>
+                                            {/* 6 progress dots */}
+                                            <div className="wordlist-progress-dots">
+                                                {Array.from({ length: 6 }, (_, i) => (
+                                                    <div
+                                                        key={i}
+                                                        className={`wordlist-progress-dot ${i < stepsCompleted ? 'wordlist-progress-dot--filled' : ''}`}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* Sticky Start Button */}
+                        <div className="wordlist-footer">
+                            <button
+                                className="btn btn-primary btn-lg btn-full topic-modal-start"
+                                onClick={handleConfirmWordSelect}
+                                disabled={selectedWordsForAssignment.size === 0}
+                            >
+                                {selectedWordsForAssignment.size > 0 ? `🚀 Bắt đầu học ${selectedWordsForAssignment.size} từ` : '🚀 Bắt đầu học 0 từ'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Loading overlay for word selection */}
+            {loadingWordSelect && (
+                <div className="topic-modal-backdrop" style={{ zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ textAlign: 'center', color: '#fff' }}>
+                        <Loader size={32} className="spin" style={{ margin: '0 auto 16px' }} />
+                        <p style={{ fontSize: '0.95rem', fontWeight: 600 }}>Đang tải từ vựng...</p>
+                    </div>
+                </div>
+            )}
+
+            {/* Multi-purpose FAB */}
+            <div className="dashboard-fab-wrapper">
+                <button
+                    className={`dashboard-fab ${isCreateMenuOpen ? 'is-open' : ''}`}
+                    onClick={() => setIsCreateMenuOpen(!isCreateMenuOpen)}
+                >
+                    <Plus size={28} />
+                </button>
+
+                {isCreateMenuOpen && (
+                    <>
+                        <div className="dashboard-fab-overlay" onClick={() => setIsCreateMenuOpen(false)} />
+                        <div className="dashboard-fab-menu">
+                            {createActions.map(action => (
+                                <button
+                                    key={action.id}
+                                    className="dashboard-fab-menu-item"
+                                    onClick={() => { setIsCreateMenuOpen(false); navigate(action.path); }}
+                                >
+                                    <div className="dashboard-fab-menu-icon" style={{ background: `${action.color}20`, color: action.color }}>
+                                        <action.icon size={22} />
+                                    </div>
+                                    <div className="dashboard-fab-menu-info">
+                                        <span className="dashboard-fab-menu-title">
+                                            {action.title}
+                                            {action.isAI && (
+                                                <span className="ai-badge-inline">
+                                                    <Sparkles size={10} /> AI
+                                                </span>
+                                            )}
+                                        </span>
+                                        <span className="dashboard-fab-menu-desc">{action.description}</span>
+                                    </div>
+                                </button>
+                            ))}
+                            {/* Anonymous Feedback option — always show for students */}
+                            {!(user?.role === 'admin' || user?.role === 'teacher' || user?.role === 'staff') && (
+                                <button
+                                    className="dashboard-fab-menu-item"
+                                    onClick={() => { setIsCreateMenuOpen(false); setShowFeedbackModal(true); }}
+                                >
+                                    <div className="dashboard-fab-menu-icon" style={{ background: '#f5f3ff', color: '#7c3aed' }}>
+                                        <MessageSquareText size={22} />
+                                    </div>
+                                    <div className="dashboard-fab-menu-info">
+                                        <span className="dashboard-fab-menu-title">Góp ý ẩn danh</span>
+                                        <span className="dashboard-fab-menu-desc">Gửi phản hồi cho ban quản lý</span>
+                                    </div>
+                                </button>
+                            )}
+                        </div>
+                    </>
+                )}
+            </div>
+
+            {/* Feedback Modal */}
+            {showFeedbackModal && (
+                <div className="topic-modal-backdrop" onClick={() => !feedbackSending && setShowFeedbackModal(false)} style={{ zIndex: 2500 }}>
+                    <div className="glass-card" onClick={e => e.stopPropagation()} style={{
+                        maxWidth: '480px', width: '92%', margin: 'auto', padding: '28px 24px',
+                        borderRadius: 'var(--radius-xl)', background: 'var(--bg-primary)',
+                        boxShadow: '0 25px 60px rgba(0,0,0,0.3)',
+                    }}>
+                        {feedbackSuccess ? (
+                            <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                                <div style={{ fontSize: '3rem', marginBottom: '16px' }}>✅</div>
+                                <h3 style={{ color: '#16a34a', fontWeight: 700, marginBottom: '8px' }}>Đã gửi thành công!</h3>
+                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Cảm ơn bạn đã góp ý ❤️</p>
+                            </div>
+                        ) : (
+                            <>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+                                    <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <MessageSquareText size={22} color="#7c3aed" /> Góp ý ẩn danh
+                                    </h3>
+                                    <button onClick={() => setShowFeedbackModal(false)} style={{
+                                        background: 'none', border: 'none', cursor: 'pointer', padding: '6px',
+                                        borderRadius: '10px', color: 'var(--text-secondary)',
+                                    }}>
+                                        <X size={20} />
+                                    </button>
+                                </div>
+
+                                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: 1.5 }}>
+                                    Phản hồi sẽ được gửi ẩn danh đến ban quản lý. Hãy chia sẻ ý kiến thật lòng nhé!
+                                </p>
+
+                                {/* Category Selection */}
+                                <div style={{ marginBottom: '16px' }}>
+                                    <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>Phân loại</label>
+                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                        {FEEDBACK_CATEGORIES.map(c => (
+                                            <button
+                                                key={c.value}
+                                                onClick={() => setFeedbackCategory(c.value)}
+                                                style={{
+                                                    padding: '8px 14px', borderRadius: '12px', fontWeight: 600,
+                                                    fontSize: '0.82rem', cursor: 'pointer', transition: 'all 0.2s',
+                                                    background: feedbackCategory === c.value ? c.bg : 'var(--bg-secondary)',
+                                                    color: feedbackCategory === c.value ? c.color : 'var(--text-secondary)',
+                                                    border: `2px solid ${feedbackCategory === c.value ? c.color : 'transparent'}`,
+                                                }}
+                                            >
+                                                {c.emoji} {c.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Message Input */}
+                                <div style={{ marginBottom: '20px' }}>
+                                    <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>Nội dung</label>
+                                    <textarea
+                                        value={feedbackMessage}
+                                        onChange={e => setFeedbackMessage(e.target.value)}
+                                        placeholder="Viết nội dung góp ý tại đây..."
+                                        rows={4}
+                                        style={{
+                                            width: '100%', padding: '14px 16px', border: '1.5px solid var(--border-color)',
+                                            borderRadius: '14px', fontSize: '0.92rem', outline: 'none', resize: 'vertical',
+                                            lineHeight: 1.6, fontFamily: 'inherit', boxSizing: 'border-box',
+                                            background: 'var(--bg-primary)', color: 'var(--text-primary)',
+                                        }}
+                                    />
+                                </div>
+
+                                {/* Send Button */}
+                                <button
+                                    onClick={handleSendFeedback}
+                                    disabled={!feedbackMessage.trim() || feedbackSending}
+                                    style={{
+                                        width: '100%', padding: '14px', border: 'none', borderRadius: '14px',
+                                        background: !feedbackMessage.trim() ? '#cbd5e1' : 'linear-gradient(135deg, #7c3aed, #6366f1)',
+                                        color: '#fff', fontSize: '0.95rem', fontWeight: 700, cursor: !feedbackMessage.trim() ? 'not-allowed' : 'pointer',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                                        transition: 'all 0.2s', opacity: feedbackSending ? 0.7 : 1,
+                                    }}
+                                >
+                                    {feedbackSending ? (
+                                        <><Loader size={18} className="spin" /> Đang gửi...</>
+                                    ) : (
+                                        <><Send size={18} /> Gửi phản hồi</>
+                                    )}
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
             )}

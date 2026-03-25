@@ -3,9 +3,10 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getGrammarQuestions } from '../services/grammarService';
 import { getGrammarProgress, updateGrammarProgress } from '../services/grammarSpacedRepetition';
-import { gradeGrammarSubmissionWithAI } from '../services/aiGrammarService';
+import { gradeGrammarSubmissionWithAI, gradeFillInBlankBlanksWithAI } from '../services/aiGrammarService';
 import { evaluateAudioAnswer } from '../services/aiService';
-import { ArrowLeft, CheckCircle, XCircle, BrainCircuit, PlayCircle, Award, Sparkles, BookOpen, Sun, Moon } from 'lucide-react';
+import { getPromptById } from '../services/promptService';
+import { ArrowLeft, CheckCircle, XCircle, BrainCircuit, PlayCircle, Award, Sparkles, BookOpen } from 'lucide-react';
 import { useScrollToContent } from '../hooks/useScrollToContent';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { OptionContent, isImageOption } from '../components/common/MCQImageOption';
@@ -13,10 +14,22 @@ import confetti from 'canvas-confetti';
 import 'react-quill-new/dist/quill.snow.css';
 import { getRecentLists, logRecentList } from '../services/recentService';
 import './LearnPage.css'; // Reusing LearnPage styles for consistency
+import './TakeExamPage.css'; // Reusing exam matching styles
 import { useAppSettings } from '../contexts/AppSettingsContext';
 import LessonWelcomeScreen from '../components/learn/LessonWelcomeScreen';
 import MarkdownText from '../components/common/MarkdownText';
 import { useAntiCopy } from '../hooks/useAntiCopy';
+import { normalizeForComparison } from '../utils/textNormalization';
+
+// Decode HTML entities (&#39; → ', &amp; → &, &nbsp; → space, etc.) and strip HTML tags
+const decodeHtmlEntities = (str) => {
+    if (!str) return '';
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = str;
+    return textarea.value
+        .replace(/<[^>]*>/g, '')   // strip HTML tags (e.g. <strong> from Quill)
+        .replace(/\u00a0/g, ' '); // non-breaking space → regular space
+};
 
 const parseContextHtml = (html) => {
     if (!html) return '';
@@ -62,22 +75,6 @@ export default function LearnGrammarPage() {
     const [jumpIndex, setJumpIndex] = useState(null); // For jump-to-unanswered
     const [jumpedQuestionIds, setJumpedQuestionIds] = useState(new Set()); // Track jumped questions to skip later
     const [fontSizeLevel, setFontSizeLevel] = useState(1); // 0: Small, 1: Medium, 2: Large
-    const [theme, setTheme] = useState(() => localStorage.getItem('appTheme') || 'light');
-
-    const toggleTheme = () => {
-        const streak = parseInt(localStorage.getItem('userStreak') || '0', 10);
-        const themes = ['light'];
-        if (streak >= 5) themes.push('dark');
-        if (streak >= 15) themes.push('silver');
-        if (streak >= 25) themes.push('gold');
-        if (streak >= 35) themes.push('diamond');
-        if (streak >= 50) themes.push('ruby');
-        const currentIdx = themes.indexOf(theme);
-        const next = themes[(currentIdx + 1) % themes.length];
-        setTheme(next);
-        document.documentElement.setAttribute('data-theme', next);
-        localStorage.setItem('appTheme', next);
-    };
 
     const [currentAnswer, setCurrentAnswer] = useState('');
     const [isChecking, setIsChecking] = useState(false);
@@ -220,8 +217,15 @@ export default function LearnGrammarPage() {
             });
             initialAnswer = cols;
         } else if (q.type === 'ordering') {
-            // Shuffle items for the student
-            const shuffledItems = [...(variation.items || [])].sort(() => Math.random() - 0.5);
+            // Shuffle items deterministically based on question id
+            const fnvHash = (str) => {
+                let h = 0x811c9dc5;
+                for (let j = 0; j < str.length; j++) { h ^= str.charCodeAt(j); h = Math.imul(h, 0x01000193); }
+                return h >>> 0;
+            };
+            const shuffledItems = (variation.items || []).map((item, i) => ({ item, i }))
+                .sort((a, b) => fnvHash(a.item + '|' + a.i + '|' + q.id) - fnvHash(b.item + '|' + b.i + '|' + q.id))
+                .map(x => x.item);
             initialAnswer = { pool: shuffledItems, answer: [] };
         } else if ((q.type === 'fill_in_blank' || q.type === 'fill_in_blanks') && /\{\{.+?\}\}/.test(variation.text || '')) {
             // New format: initialize as object for word bank
@@ -230,8 +234,8 @@ export default function LearnGrammarPage() {
             const blankRegex = /\{\{(.+?)\}\}/g;
             const correctWords = [];
             let bm;
-            while ((bm = blankRegex.exec(variation.text || '')) !== null) { correctWords.push(bm[1].replace(/&nbsp;/g, ' ')); }
-            const distractors = (variation.distractors || []).map(d => d.replace(/&nbsp;/g, ' '));
+            while ((bm = blankRegex.exec(variation.text || '')) !== null) { correctWords.push(decodeHtmlEntities(bm[1])); }
+            const distractors = (variation.distractors || []).map(d => decodeHtmlEntities(d));
             const shuffled = [...correctWords, ...distractors].sort(() => Math.random() - 0.5);
             extraData.wordBank = shuffled;
             extraData.correctWords = correctWords;
@@ -241,7 +245,7 @@ export default function LearnGrammarPage() {
             const blankRegex = /\{\{(.+?)\}\}/g;
             const correctWords = [];
             let bm;
-            while ((bm = blankRegex.exec(variation.text || '')) !== null) { correctWords.push(bm[1].replace(/&nbsp;/g, ' ')); }
+            while ((bm = blankRegex.exec(variation.text || '')) !== null) { correctWords.push(decodeHtmlEntities(bm[1])); }
             extraData.correctWords = correctWords;
         }
 
@@ -294,6 +298,7 @@ export default function LearnGrammarPage() {
         try {
             let isCorrect = false;
             let aiResponse = null;
+            let savedAiVerdicts = null;
 
             if (questionRef.type === 'multiple_choice') {
                 // correctAnswer is an index (0, 1, 2, 3) pointing to the options array
@@ -304,17 +309,45 @@ export default function LearnGrammarPage() {
                 const markerRegex = /\{\{(.+?)\}\}/g;
                 const cWords = [];
                 let cm;
-                while ((cm = markerRegex.exec(variation.text || '')) !== null) { cWords.push(cm[1].replace(/&nbsp;/g, ' ')); }
+                while ((cm = markerRegex.exec(variation.text || '')) !== null) { cWords.push(decodeHtmlEntities(cm[1])); }
 
                 if (cWords.length > 0 && typeof answerToCheck === 'object' && answerToCheck !== null) {
                     let correctCount = 0;
                     cWords.forEach((cw, idx) => {
                         const sw = answerToCheck[String(idx)];
-                        if (typeof sw === 'string' && sw.trim().toLowerCase() === cw.trim().toLowerCase()) {
+                        if (typeof sw === 'string' && normalizeForComparison(sw) === normalizeForComparison(cw)) {
                             correctCount++;
                         }
                     });
                     isCorrect = correctCount === cWords.length && cWords.length > 0;
+
+
+                    // AI fallback: if exact match failed and teacher enabled AI grading
+                    if (!isCorrect && questionRef.useAIGrading && questionRef.type === 'fill_in_blank_typing' && cWords.length > 0) {
+                        try {
+                            const blanksData = cWords.map((cw, idx) => {
+                                const sw = answerToCheck[String(idx)] || '';
+                                const exactOk = normalizeForComparison(sw) === normalizeForComparison(cw);
+                                return { idx, expected: cw, studentAnswer: sw, exactMatch: exactOk };
+                            });
+                            const cleanText = (variation.text || '').replace(/<[^>]*>/g, ' ').replace(/\{\{.+?\}\}/g, '___');
+                            const contextStr = (questionRef.context || '') + (questionRef.contextScript ? '\n\n[SCRIPT / TRANSCRIPT]:\n' + questionRef.contextScript : '');
+                            const aiVerdicts = await gradeFillInBlankBlanksWithAI(cleanText, blanksData, contextStr);
+
+                            if (aiVerdicts && aiVerdicts.length === cWords.length) {
+                                savedAiVerdicts = aiVerdicts;
+                                let aiCorrectCount = 0;
+                                cWords.forEach((cw, idx) => {
+                                    const sw = answerToCheck[String(idx)] || '';
+                                    const exactOk = normalizeForComparison(sw) === normalizeForComparison(cw);
+                                    if (exactOk || aiVerdicts[idx] === true) aiCorrectCount++;
+                                });
+                                isCorrect = aiCorrectCount === cWords.length;
+                            }
+                        } catch (aiErr) {
+                            console.error('AI fallback grading failed:', aiErr);
+                        }
+                    }
                 } else {
                     // Legacy format
                     isCorrect = typeof answerToCheck === 'string' && answerToCheck.trim().toLowerCase() === variation.correctAnswer?.trim().toLowerCase();
@@ -340,12 +373,24 @@ export default function LearnGrammarPage() {
                 isCorrect = allCorrect;
             } else if (questionRef.type === 'essay') {
                 // Use AI for essay or complex checks
+                // Resolve prompt content from linked prompt if available, combine with specialRequirement
+                let resolvedSpecialReq = questionRef.specialRequirement || '';
+                if (questionRef.promptId) {
+                    try {
+                        const linkedPrompt = await getPromptById(questionRef.promptId);
+                        if (linkedPrompt) {
+                            resolvedSpecialReq = resolvedSpecialReq
+                                ? `${linkedPrompt.content}\n\nYÊU CẦU BỔ SUNG:\n${resolvedSpecialReq}`
+                                : linkedPrompt.content;
+                        }
+                    } catch (e) { console.warn('Could not resolve linked prompt:', e); }
+                }
                 const gradeResult = await gradeGrammarSubmissionWithAI(
                     variation.text,
                     answerToCheck,
                     questionRef.purpose,
                     questionRef.type,
-                    questionRef.specialRequirement || '',
+                    resolvedSpecialReq,
                     (questionRef.context || '') + (questionRef.contextScript ? '\n\n[SCRIPT / TRANSCRIPT CỦA BÀI NGHE/VIDEO]:\n' + questionRef.contextScript : ''),
                     location.state?.teacherTitle || '', // Pass teacherTitle if available
                     location.state?.studentTitle || '' // Pass studentTitle if available
@@ -358,11 +403,23 @@ export default function LearnGrammarPage() {
                 aiResponse = gradeResult.feedback;
             } else if (questionRef.type === 'audio_recording') {
                 // Use AI to grade audio answer
+                // Resolve prompt content from linked prompt if available, combine with specialRequirement
+                let resolvedAudioSpecialReq = questionRef.specialRequirement || '';
+                if (questionRef.promptId) {
+                    try {
+                        const linkedPrompt = await getPromptById(questionRef.promptId);
+                        if (linkedPrompt) {
+                            resolvedAudioSpecialReq = resolvedAudioSpecialReq
+                                ? `${linkedPrompt.content}\n\nYÊU CẦU BỔ SUNG:\n${resolvedAudioSpecialReq}`
+                                : linkedPrompt.content;
+                        }
+                    } catch (e) { console.warn('Could not resolve linked prompt for audio:', e); }
+                }
                 const gradeResult = await evaluateAudioAnswer(
                     audioBlob,
                     variation.text || questionRef.purpose,
                     questionRef.purpose,
-                    questionRef.specialRequirement || '',
+                    resolvedAudioSpecialReq,
                     10,
                     (questionRef.context || '') + (questionRef.contextScript ? '\n\n[SCRIPT / TRANSCRIPT CỦA BÀI NGHE/VIDEO]:\n' + questionRef.contextScript : ''),
                     location.state?.teacherTitle || '', // Pass teacherTitle if available
@@ -389,7 +446,8 @@ export default function LearnGrammarPage() {
             setFeedback({
                 isCorrect,
                 message: isCorrect ? 'Chính xác!' : 'Chưa đúng, thử lại sau nhé.',
-                aiFeedback: aiResponse || variation.explanation
+                aiFeedback: aiResponse || variation.explanation,
+                ...(savedAiVerdicts ? { aiVerdicts: savedAiVerdicts } : {})
             });
 
             // Update Progress in State
@@ -431,22 +489,7 @@ export default function LearnGrammarPage() {
 
         if (source.droppableId === destination.droppableId && source.index === destination.index) return;
 
-        if (currentQuestionData?.questionRef?.type === 'matching') {
-            // New layout: each Droppable is 'row-N', drag swaps items between rows
-            const srcRowId = source.droppableId; // e.g. 'row-2'
-            const dstRowId = destination.droppableId; // e.g. 'row-0'
-            if (srcRowId === dstRowId) return; // same row, no-op
-            const srcIdx = parseInt(srcRowId.replace('row-', ''), 10);
-            const dstIdx = parseInt(dstRowId.replace('row-', ''), 10);
-            if (isNaN(srcIdx) || isNaN(dstIdx)) return;
-            const newAnswer = Array.from(currentAnswer);
-            // Swap the two items
-            const temp = newAnswer[srcIdx];
-            newAnswer[srcIdx] = newAnswer[dstIdx];
-            newAnswer[dstIdx] = temp;
-            setCurrentAnswer(newAnswer);
-            return;
-        }
+        // (matching uses native drag, not DragDropContext)
 
         const newAnswer = { ...currentAnswer };
         const sourceCol = [...(newAnswer[source.droppableId] || [])];
@@ -752,13 +795,15 @@ export default function LearnGrammarPage() {
         if (!html) return '';
         let cleaned = html.replace(/&nbsp;/g, ' ').replace(/<p><\/p>/g, '');
         if (isFillInBlank) {
+            // Convert structural HTML to <br> for line breaks, but keep formatting tags (bold, italic, etc.)
             cleaned = cleaned
-                .replace(/<p><br><\/p>/gi, '\n')
-                .replace(/<\/p>/gi, '\n')
-                .replace(/<\/div>/gi, '\n')
-                .replace(/<br\s*\/?>/gi, '\n')
+                .replace(/<p><br><\/p>/gi, '<br>')
+                .replace(/<\/p>/gi, '<br>')
+                .replace(/<\/div>/gi, '<br>')
                 .replace(/<p[^>]*>/gi, '')
                 .replace(/<div[^>]*>/gi, '');
+            // Remove trailing <br> tags
+            cleaned = cleaned.replace(/(<br\s*\/?\s*>)+$/gi, '');
         }
         return cleaned.trim();
     };
@@ -797,14 +842,7 @@ export default function LearnGrammarPage() {
                             A{fontSizeLevel === 0 ? '-' : fontSizeLevel === 2 ? '+' : ''}
                         </span>
                     </button>
-                    <button
-                        className="btn btn-ghost"
-                        onClick={toggleTheme}
-                        style={{ padding: '8px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
-                        title={theme === 'dark' ? 'Chuyển sang sáng' : 'Chuyển sang tối'}
-                    >
-                        {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-                    </button>
+
                     {/* DEV SKIP */}
                     {settings?.devBypassEnabled && (
                         <button
@@ -943,7 +981,7 @@ export default function LearnGrammarPage() {
                                     if (part.startsWith('{{') && part.endsWith('}}')) {
                                         const idx = blankCounter++;
                                         const filled = answer[String(idx)];
-                                        const isCorrect = displayFeedback && filled && filled.trim().toLowerCase() === correctWords[idx]?.trim().toLowerCase();
+                                        const isCorrect = displayFeedback && filled && normalizeForComparison(filled) === normalizeForComparison(correctWords[idx]);
                                         const isWrong = displayFeedback && filled && !isCorrect;
 
                                         let classes = "learn-inline-blank";
@@ -1056,7 +1094,7 @@ export default function LearnGrammarPage() {
                             // NOTE: fill_in_blank_typing is intentionally excluded here — it renders its own inputs below
                             questionRef.type !== 'fill_in_blank_typing' ? (
                                 <div className="grammar-question-container">
-                                    <div className="grammar-question-text"
+                                    <div className="grammar-question-text ql-editor" style={{ padding: 0 }}
                                         dangerouslySetInnerHTML={{
                                             __html: sanitizeHtml(variation.text || '')
                                         }}
@@ -1078,12 +1116,13 @@ export default function LearnGrammarPage() {
                                     if (part.startsWith('{{') && part.endsWith('}}')) {
                                         const idx = blankCounter++;
                                         const filled = answer[String(idx)] || '';
-                                        const isCorrect = displayFeedback && filled && filled.trim().toLowerCase() === correctWords[idx]?.trim().toLowerCase();
+                                        const isCorrect = displayFeedback && filled && normalizeForComparison(filled) === normalizeForComparison(correctWords[idx]);
                                         const isWrong = displayFeedback && filled && !isCorrect;
                                         const isEmpty = displayFeedback && !filled;
+                                        const isAIAccepted = isWrong && displayFeedback?.aiVerdicts?.[idx] === true;
 
                                         return (
-                                            <span key={`blank-${idx}`} style={{ display: 'inline-block', verticalAlign: 'middle', margin: '2px 4px' }}>
+                                            <span key={`blank-${idx}`} style={{ display: 'inline-block', verticalAlign: 'middle', margin: '2px 4px', maxWidth: '100%' }}>
                                                 <input
                                                     type="text"
                                                     value={filled}
@@ -1095,32 +1134,36 @@ export default function LearnGrammarPage() {
                                                     }}
                                                     style={{
                                                         display: 'inline-block',
-                                                        minWidth: '80px',
-                                                        maxWidth: '180px',
-                                                        width: `${Math.max(80, (filled.length + 2) * 12)}px`,
-                                                        padding: '6px 12px',
+                                                        boxSizing: 'border-box',
+                                                        minWidth: '60px',
+                                                        maxWidth: '100%',
+                                                        width: `${Math.max(6, Math.ceil(filled.length * 0.8) + 1)}ch`,
+                                                        padding: '6px 8px',
                                                         fontSize: '1rem',
                                                         fontWeight: 600,
                                                         borderRadius: '8px',
                                                         border: displayFeedback
-                                                            ? (isCorrect ? '2px solid #10b981' : '2px solid #ef4444')
+                                                            ? (isCorrect ? '2px solid #10b981' : isAIAccepted ? '2px solid #f59e0b' : '2px solid #ef4444')
                                                             : '2px solid var(--border-color)',
                                                         background: displayFeedback
-                                                            ? (isCorrect ? '#ecfdf5' : isEmpty ? '#fef2f2' : '#fef2f2')
+                                                            ? (isCorrect ? '#ecfdf5' : isAIAccepted ? '#fef3c7' : '#fef2f2')
                                                             : 'var(--bg-input, #fff)',
                                                         color: displayFeedback
-                                                            ? (isCorrect ? '#065f46' : '#991b1b')
+                                                            ? (isCorrect ? '#065f46' : isAIAccepted ? '#92400e' : '#991b1b')
                                                             : 'var(--text-primary)',
                                                         outline: 'none',
-                                                        textAlign: 'center',
+                                                        textAlign: 'left',
                                                         fontFamily: 'inherit',
                                                         transition: 'all 0.2s ease'
                                                     }}
                                                 />
-                                                {isWrong && (
+                                                {isWrong && !isAIAccepted && (
                                                     <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 600, marginLeft: '4px' }}>
                                                         ({correctWords[idx]})
                                                     </span>
+                                                )}
+                                                {isAIAccepted && (
+                                                    <span style={{ fontSize: '0.7rem', color: '#d97706', fontWeight: 600, marginLeft: '4px' }}>✓ AI ({correctWords[idx]})</span>
                                                 )}
                                                 {isEmpty && (
                                                     <span style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 600, marginLeft: '4px' }}>
@@ -1302,10 +1345,10 @@ export default function LearnGrammarPage() {
                             {/* Ordering question */}
                             {questionRef.type === 'ordering' && displayAnswer && (() => {
                                 const { pool = [], answer: orderedAnswer = [] } = displayAnswer;
-                                const handleSelectItem = (item) => {
+                                const handleSelectItem = (item, poolIdx) => {
                                     if (isReviewMode || displayFeedback) return;
                                     setCurrentAnswer(prev => ({
-                                        pool: prev.pool.filter(i => i !== item),
+                                        pool: prev.pool.filter((_, i) => i !== poolIdx),
                                         answer: [...prev.answer, item]
                                     }));
                                 };
@@ -1359,7 +1402,7 @@ export default function LearnGrammarPage() {
                                                 {pool.map((item, idx) => (
                                                     <div key={`pool-${idx}`}
                                                         className="exam-ordering-chip pool"
-                                                        onClick={() => handleSelectItem(item)}
+                                                        onClick={() => handleSelectItem(item, idx)}
                                                         style={{ cursor: displayFeedback ? 'default' : 'pointer' }}>
                                                         {item}
                                                     </div>
@@ -1484,80 +1527,217 @@ export default function LearnGrammarPage() {
                                 </DragDropContext>
                             )}
 
-                            {questionRef.type === 'matching' && displayAnswer && Array.isArray(displayAnswer) && (
-                                <DragDropContext onDragEnd={(res) => !isReviewMode && onDragEnd(res)}>
-                                    {/* Grid: left col + right col, one row per pair */}
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 16px', width: '100%', maxWidth: '800px', alignItems: 'stretch' }}>
-                                        {(variation.pairs || []).map((pair, i) => {
-                                            const item = displayAnswer[i];
-                                            const isAnsCorrect = displayFeedback && item?.text === pair.right;
-                                            const isAnsWrong = displayFeedback && item?.text !== pair.right;
-                                            let leftBorder = 'transparent';
-                                            let leftBg = 'var(--bg-secondary)';
-                                            if (isAnsCorrect) { leftBorder = 'var(--color-success)'; leftBg = 'rgba(16, 185, 129, 0.1)'; }
-                                            if (isAnsWrong) { leftBorder = 'var(--color-error)'; leftBg = 'rgba(239, 68, 68, 0.1)'; }
-                                            let rightBorder = 'var(--border-color)';
-                                            let rightBg = 'var(--bg-primary)';
-                                            if (isAnsCorrect) { rightBorder = 'var(--color-success)'; rightBg = 'rgba(16, 185, 129, 0.1)'; }
-                                            if (isAnsWrong) { rightBorder = 'var(--color-error)'; rightBg = 'rgba(239, 68, 68, 0.1)'; }
+                            {questionRef.type === 'matching' && displayAnswer && Array.isArray(displayAnswer) && (() => {
+                                const pairs = variation.pairs || [];
+                                const isDragDisabled = !!displayFeedback || isReviewMode;
+                                const matchId = 'grammar-match';
 
-                                            return (
-                                                <React.Fragment key={`pair-${i}`}>
-                                                    {/* Left cell */}
-                                                    <div className="grammar-matching-item" style={{ background: leftBg, border: `2px solid ${leftBorder}`, color: 'var(--text-primary)', alignSelf: 'stretch', height: 'auto' }}>
-                                                        {pair.left}
+                                // --- Shift animation helpers (same as TakeExamPage) ---
+                                const applyShiftClasses = (fromIdx, hoverIdx) => {
+                                    const allRows = document.querySelectorAll(`[data-match-grammar] .exam-match-swap-row`);
+                                    const chips = document.querySelectorAll(`[data-match-grammar] .exam-match-swap-right`);
+                                    chips.forEach((chip, idx) => {
+                                        chip.classList.remove('drag-hover');
+                                        chip.style.transition = 'transform 0.2s cubic-bezier(0.2, 0, 0, 1)';
+                                        if (hoverIdx === null || hoverIdx === fromIdx) {
+                                            chip.style.transform = '';
+                                            return;
+                                        }
+                                        if (idx === hoverIdx && idx !== fromIdx) {
+                                            chip.classList.add('drag-hover');
+                                        }
+                                        const sourceRowH = allRows[fromIdx] ? allRows[fromIdx].getBoundingClientRect().height + 12 : 60;
+                                        if (fromIdx < hoverIdx && idx > fromIdx && idx <= hoverIdx) {
+                                            chip.style.transform = `translateY(-${sourceRowH}px)`;
+                                        } else if (fromIdx > hoverIdx && idx >= hoverIdx && idx < fromIdx) {
+                                            chip.style.transform = `translateY(${sourceRowH}px)`;
+                                        } else {
+                                            chip.style.transform = '';
+                                        }
+                                    });
+                                };
+
+                                const clearShiftClasses = () => {
+                                    const chips = document.querySelectorAll(`[data-match-grammar] .exam-match-swap-right`);
+                                    chips.forEach(r => {
+                                        r.classList.remove('drag-hover');
+                                        r.style.transform = '';
+                                        r.style.transition = '';
+                                    });
+                                };
+
+                                const addSettleAnimation = (fromIdx, toIdx) => {
+                                    const rows = document.querySelectorAll(`[data-match-grammar] .exam-match-swap-right`);
+                                    const min = Math.min(fromIdx, toIdx);
+                                    const max = Math.max(fromIdx, toIdx);
+                                    for (let i = min; i <= max; i++) {
+                                        if (rows[i]) {
+                                            rows[i].classList.add('just-settled');
+                                            setTimeout(() => rows[i]?.classList.remove('just-settled'), 400);
+                                        }
+                                    }
+                                };
+
+                                // --- Desktop HTML5 drag ---
+                                const handleDragStart = (e, pIdx) => {
+                                    if (isDragDisabled) { e.preventDefault(); return; }
+                                    e.dataTransfer.setData('fromIdx', String(pIdx));
+                                    e.dataTransfer.effectAllowed = 'move';
+                                    // Hide source after browser captures drag image
+                                    requestAnimationFrame(() => { e.target.style.opacity = '0'; });
+                                    window._grammarDragFrom = pIdx;
+                                };
+                                const handleDragEnd = (e) => {
+                                    e.target.style.opacity = '1';
+                                    clearShiftClasses();
+                                    window._grammarDragFrom = null;
+                                };
+                                const handleDragOver = (e) => {
+                                    e.preventDefault();
+                                    e.dataTransfer.dropEffect = 'move';
+                                };
+                                const handleDragEnter = (e, toIdx) => {
+                                    if (window._grammarDragFrom !== null && window._grammarDragFrom !== undefined) {
+                                        applyShiftClasses(window._grammarDragFrom, toIdx);
+                                    }
+                                };
+                                const handleDrop = (e, toIdx) => {
+                                    e.preventDefault();
+                                    const fromIdx = parseInt(e.dataTransfer.getData('fromIdx'));
+                                    if (isNaN(fromIdx) || fromIdx === toIdx) return;
+                                    clearShiftClasses();
+                                    const newAnswer = [...displayAnswer];
+                                    const [moved] = newAnswer.splice(fromIdx, 1);
+                                    newAnswer.splice(toIdx, 0, moved);
+                                    setCurrentAnswer(newAnswer);
+                                    setTimeout(() => addSettleAnimation(fromIdx, toIdx), 50);
+                                };
+
+                                // --- Touch drag ---
+                                const handleTouchStart = (e, pIdx) => {
+                                    if (isDragDisabled) return;
+                                    const touch = e.touches[0];
+                                    const target = e.currentTarget;
+                                    const rect = target.getBoundingClientRect();
+
+                                    const clone = target.cloneNode(true);
+                                    clone.className = 'exam-match-drag-clone';
+                                    clone.style.cssText = `
+                                        position: fixed; z-index: 9999;
+                                        width: ${rect.width}px;
+                                        left: ${touch.clientX - rect.width / 2}px;
+                                        top: ${touch.clientY - 25}px;
+                                        pointer-events: none;
+                                        opacity: 0.9;
+                                        transform: scale(1.08);
+                                        transition: none;
+                                    `;
+                                    document.body.appendChild(clone);
+                                    target.classList.add('dragging-source');
+                                    target.style.opacity = '0';
+
+                                    window._grammarMatchDrag = {
+                                        fromIdx: pIdx,
+                                        clone,
+                                        sourceEl: target,
+                                        answer: displayAnswer,
+                                        hoverIdx: null
+                                    };
+
+                                    const onTouchMove = (ev) => {
+                                        const drag = window._grammarMatchDrag;
+                                        if (!drag) return;
+                                        ev.preventDefault();
+                                        const t = ev.touches[0];
+                                        const r2 = drag.clone.getBoundingClientRect();
+                                        drag.clone.style.left = `${t.clientX - r2.width / 2}px`;
+                                        drag.clone.style.top = `${t.clientY - 25}px`;
+
+                                        const rows = document.querySelectorAll(`[data-match-grammar] .exam-match-swap-row`);
+                                        let newHover = null;
+                                        rows.forEach((row, idx) => {
+                                            const rb = row.getBoundingClientRect();
+                                            if (t.clientY >= rb.top && t.clientY <= rb.bottom) {
+                                                newHover = idx;
+                                            }
+                                        });
+                                        if (newHover !== drag.hoverIdx) {
+                                            drag.hoverIdx = newHover;
+                                            applyShiftClasses(drag.fromIdx, newHover);
+                                        }
+                                    };
+
+                                    const onTouchEnd = () => {
+                                        const drag = window._grammarMatchDrag;
+                                        if (!drag) return;
+                                        document.removeEventListener('touchmove', onTouchMove);
+                                        document.removeEventListener('touchend', onTouchEnd);
+                                        drag.clone.remove();
+                                        drag.sourceEl.classList.remove('dragging-source');
+                                        drag.sourceEl.style.opacity = '1';
+                                        clearShiftClasses();
+
+                                        if (drag.hoverIdx !== null && drag.hoverIdx !== drag.fromIdx) {
+                                            const newAnswer = [...drag.answer];
+                                            const [moved] = newAnswer.splice(drag.fromIdx, 1);
+                                            newAnswer.splice(drag.hoverIdx, 0, moved);
+                                            setCurrentAnswer(newAnswer);
+                                            setTimeout(() => addSettleAnimation(drag.fromIdx, drag.hoverIdx), 50);
+                                        }
+                                        window._grammarMatchDrag = null;
+                                    };
+
+                                    document.addEventListener('touchmove', onTouchMove, { passive: false });
+                                    document.addEventListener('touchend', onTouchEnd);
+                                };
+
+                                return (
+                                    <>
+                                    <div className="exam-matching-swap" data-match-grammar>
+                                        <div className="exam-match-swap-pairs">
+                                            {pairs.map((pair, pIdx) => {
+                                                const item = displayAnswer[pIdx];
+                                                const slotValue = item?.text || '';
+                                                const isAnsCorrect = displayFeedback && item?.text === pair.right;
+                                                const isAnsWrong = displayFeedback && item?.text !== pair.right;
+
+                                                let rowBorder = '1.5px solid var(--border-color)';
+                                                let rowBg = 'var(--bg-primary)';
+                                                if (isAnsCorrect) { rowBorder = '2px solid var(--color-success)'; rowBg = 'rgba(16, 185, 129, 0.08)'; }
+                                                if (isAnsWrong) { rowBorder = '2px solid var(--color-error)'; rowBg = 'rgba(239, 68, 68, 0.08)'; }
+
+                                                return (
+                                                    <div key={pIdx} className="exam-match-swap-row"
+                                                        style={{ background: rowBg, border: rowBorder }}
+                                                        onDragOver={handleDragOver}
+                                                        onDragEnter={e => handleDragEnter(e, pIdx)}
+                                                        onDrop={e => handleDrop(e, pIdx)}>
+                                                        <div className="exam-match-swap-num" style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>{pIdx + 1}</div>
+                                                        <div className="exam-match-swap-left" style={{ color: 'var(--text-primary)' }}>
+                                                            {pair.left}
+                                                        </div>
+                                                        <div className="exam-match-swap-divider" style={{ color: 'var(--text-muted)' }}>—</div>
+                                                        <div
+                                                            className="exam-match-swap-right"
+                                                            style={{
+                                                                background: isAnsCorrect ? 'var(--color-success)' : isAnsWrong ? 'var(--color-error)' : 'var(--color-primary-light, #6366f1)',
+                                                                cursor: isDragDisabled ? 'default' : 'grab',
+                                                                opacity: isDragDisabled && !displayFeedback ? 0.7 : 1
+                                                            }}
+                                                            draggable={!isDragDisabled}
+                                                            onDragStart={e => handleDragStart(e, pIdx)}
+                                                            onDragEnd={handleDragEnd}
+                                                            onTouchStart={e => handleTouchStart(e, pIdx)}
+                                                        >
+                                                            {!isDragDisabled && <span className="exam-match-swap-grip">⠿</span>}
+                                                            <span className="exam-match-swap-value">{slotValue}</span>
+                                                            {isAnsCorrect && <span>✓</span>}
+                                                            {isAnsWrong && <span>✗</span>}
+                                                        </div>
                                                     </div>
-
-                                                    {/* Right cell (single Draggable per row) */}
-                                                    <Droppable droppableId={`row-${i}`} isDropDisabled={isReviewMode}>
-                                                        {(provided, snapshot) => (
-                                                            <div
-                                                                ref={provided.innerRef}
-                                                                {...provided.droppableProps}
-                                                                style={{ display: 'flex', alignItems: 'stretch', background: snapshot.isDraggingOver ? 'rgba(108, 92, 231, 0.05)' : 'transparent', borderRadius: '12px', transition: 'background 0.2s', minHeight: '100px' }}
-                                                            >
-                                                                {item && (
-                                                                    <Draggable key={item.id} draggableId={item.id} index={0} isDragDisabled={!!displayFeedback || isReviewMode}>
-                                                                        {(provided, snapshot) => (
-                                                                            <div
-                                                                                ref={provided.innerRef}
-                                                                                {...provided.draggableProps}
-                                                                                {...provided.dragHandleProps}
-                                                                                className="grammar-matching-item grammar-matching-draggable"
-                                                                                style={{
-                                                                                    userSelect: 'none',
-                                                                                    margin: '0',
-                                                                                    width: '100%',
-                                                                                    background: snapshot.isDragging ? 'var(--color-primary)' : rightBg,
-                                                                                    color: snapshot.isDragging ? '#fff' : 'var(--text-primary)',
-                                                                                    boxShadow: snapshot.isDragging ? '0 5px 15px rgba(0,0,0,0.2)' : '0 2px 4px rgba(0,0,0,0.05)',
-                                                                                    border: `2px solid ${rightBorder}`,
-                                                                                    opacity: isReviewMode ? 0.7 : 1,
-                                                                                    ...provided.draggableProps.style
-                                                                                }}
-                                                                            >
-                                                                                <span>{item.text}</span>
-                                                                                <span style={{ color: snapshot.isDragging ? '#fff' : 'var(--text-muted)', cursor: isReviewMode ? 'default' : 'grab' }}>
-                                                                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                                                        <line x1="8" y1="6" x2="21" y2="6"></line>
-                                                                                        <line x1="8" y1="12" x2="21" y2="12"></line>
-                                                                                        <line x1="8" y1="18" x2="21" y2="18"></line>
-                                                                                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                                                                                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                                                                                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
-                                                                                    </svg>
-                                                                                </span>
-                                                                            </div>
-                                                                        )}
-                                                                    </Draggable>
-                                                                )}
-                                                                {provided.placeholder}
-                                                            </div>
-                                                        )}
-                                                    </Droppable>
-                                                </React.Fragment>
-                                            );
-                                        })}
+                                                );
+                                            })}
+                                        </div>
                                     </div>
 
                                     {/* Feedback details */}
@@ -1565,7 +1745,7 @@ export default function LearnGrammarPage() {
                                         <div style={{ marginTop: '24px', width: '100%', maxWidth: '800px', padding: '16px', background: 'var(--bg-input)', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
                                             <h4 style={{ color: 'var(--color-error)', marginBottom: '12px', fontSize: '1.1rem' }}>Đáp án đúng:</h4>
                                             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                {(variation.pairs || []).map((pair, i) => (
+                                                {pairs.map((pair, i) => (
                                                     <li key={`ans-${i}`} style={{ color: 'var(--text-primary)', fontSize: '1rem', display: 'flex', gap: '8px', alignItems: 'center' }}>
                                                         <span style={{ fontWeight: 600, flex: 1 }}>{pair.left}</span>
                                                         <span style={{ color: 'var(--text-muted)', padding: '0 16px' }}>&rarr;</span>
@@ -1575,8 +1755,9 @@ export default function LearnGrammarPage() {
                                             </ul>
                                         </div>
                                     )}
-                                </DragDropContext>
-                            )}
+                                    </>
+                                );
+                            })()}
                         </div>
 
 
@@ -1600,7 +1781,7 @@ export default function LearnGrammarPage() {
                                 const markerRegex = /\{\{(.+?)\}\}/g;
                                 const cw = [];
                                 let m2;
-                                while ((m2 = markerRegex.exec(variation.text || '')) !== null) { cw.push(m2[1].replace(/&nbsp;/g, ' ')); }
+                                while ((m2 = markerRegex.exec(variation.text || '')) !== null) { cw.push(decodeHtmlEntities(m2[1])); }
                                 if (cw.length > 0) {
                                     return (
                                         <div className="learn-bottom-bar-subtitle">

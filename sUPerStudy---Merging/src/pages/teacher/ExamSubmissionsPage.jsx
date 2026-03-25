@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, Link, useLocation } from 'react-router-dom';
-import { getExam, getExamQuestions, getExamSubmission, overrideExamQuestionScore, releaseExamSubmissionResults, getExamAssignment, gradeExamSubmission } from '../../services/examService';
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
+import { getExam, getExamQuestions, getExamSubmission, overrideExamQuestionScore, releaseExamSubmissionResults, getExamAssignment, gradeExamSubmission, gradeSingleQuestion, regenerateExamSummaryForSubmission, toggleFollowUpRequest, gradeFollowUpAnswer, overrideFollowUpScore, releaseFollowUpResults } from '../../services/examService';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAppSettings } from '../../contexts/AppSettingsContext';
-import { ArrowLeft, Check, X, Edit, Save, Award, AlertCircle, Send, FileText, Flag, AlertTriangle, Sparkles, EyeOff } from 'lucide-react';
+import { ArrowLeft, Check, X, Edit, Save, Award, AlertCircle, Send, FileText, Flag, AlertTriangle, Sparkles, EyeOff, RefreshCw, MessageSquare } from 'lucide-react';
 import ConfirmModal from '../../components/common/ConfirmModal';
 import { getRedFlagsForStudent, addRedFlag, removeRedFlag, VIOLATION_TYPES } from '../../services/redFlagService';
 import { db } from '../../config/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { OptionContent, isImageOption } from '../../components/common/MCQImageOption';
+import { normalizeForComparison } from '../../utils/textNormalization';
 
 const hasContent = (html) => {
     if (!html) return false;
@@ -72,6 +73,7 @@ export default function ExamSubmissionsPage() {
     const { user } = useAuth();
     const { settings } = useAppSettings();
     const location = useLocation();
+    const navigate = useNavigate();
 
     const [submission, setSubmission] = useState(null);
     const [assignment, setAssignment] = useState(null);
@@ -95,6 +97,22 @@ export default function ExamSubmissionsPage() {
     const [removingFlagId, setRemovingFlagId] = useState(null);
     const [removeReasonText, setRemoveReasonText] = useState('');
     const [retryingGrade, setRetryingGrade] = useState(false);
+    const [editingSummary, setEditingSummary] = useState(false);
+    const [summaryEditText, setSummaryEditText] = useState('');
+    const [savingSummary, setSavingSummary] = useState(false);
+    const [generatingSummary, setGeneratingSummary] = useState(false);
+    const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
+    const [summaryClearedByOverride, setSummaryClearedByOverride] = useState(false);
+
+    const [retryingQuestionId, setRetryingQuestionId] = useState(null);
+    const [togglingFollowUp, setTogglingFollowUp] = useState(null);
+    const [gradingFollowUp, setGradingFollowUp] = useState(null);
+    const [editingFollowUpScore, setEditingFollowUpScore] = useState(null);
+    const [followUpOverrideData, setFollowUpOverrideData] = useState({ score: 0, note: '', feedback: '' });
+    const [releasingFollowUp, setReleasingFollowUp] = useState(false);
+    const [showFollowUpConfirm, setShowFollowUpConfirm] = useState(false);
+    const followUpFeedbackRef = useRef(null);
+    const summaryEditRef = useRef(null);
 
     useEffect(() => { loadData(); }, [assignmentId, studentId]);
     useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3000); return () => clearTimeout(t); } }, [toast]);
@@ -133,8 +151,9 @@ export default function ExamSubmissionsPage() {
     function openOverrideForm(questionId) {
         const result = submission?.results?.[questionId];
         setEditingScore(questionId);
+        const scoreVal = result?.teacherOverride?.score ?? result?.score ?? 0;
         setOverrideData({
-            score: result?.teacherOverride?.score ?? result?.score ?? 0,
+            score: String(scoreVal),
             note: result?.teacherOverride?.note ?? '',
             feedback: result?.feedback ?? ''
         });
@@ -148,13 +167,16 @@ export default function ExamSubmissionsPage() {
                 ? feedbackHtmlToMd(feedbackEditorRef.current.innerHTML)
                 : overrideData.feedback;
             const overriderName = user?.displayName || user?.email || (user?.role === 'admin' ? 'Admin' : 'Giáo viên');
+            const finalScore = parseFloat(String(overrideData.score).replace(',', '.')) || 0;
             await overrideExamQuestionScore(
-                submission.id, questionId, overrideData.score, overrideData.note, feedbackMd, user?.uid, overriderName
+                submission.id, questionId, finalScore, overrideData.note, feedbackMd, user?.uid, overriderName
             );
+            const hadSummary = !!submission.examSummary;
             // Reload full data from Firestore to ensure UI reflects the saved state
             const freshSub = await getExamSubmission(assignmentId, studentId);
             if (freshSub) setSubmission(freshSub);
             setEditingScore(null);
+            if (hadSummary) setSummaryClearedByOverride(true);
             setToast({ type: 'success', text: 'Đã cập nhật điểm!' });
         } catch (error) {
             setToast({ type: 'error', text: 'Lỗi: ' + error.message });
@@ -192,11 +214,26 @@ export default function ExamSubmissionsPage() {
 
     if (loading) return <div className="admin-page"><div className="admin-empty-state">Đang tải...</div></div>;
     if (!submission) return <div className="admin-page"><div className="admin-empty-state">Không tìm thấy bài làm.</div></div>;
+    // Helper: check if a single question has AI grading error
+    const isQuestionAiError = (qId, r) => {
+        if (r.feedback && (r.feedback.includes('Lỗi khi chấm') || r.feedback.includes('chấm thủ công') || r.feedback.includes('chưa được AI chấm'))) return true;
+        const q = questions.find(qq => qq.id === qId);
+        if (q?.type === 'audio_recording' && (r.score === 0 || r.score === undefined) && !r.feedback && !r.teacherOverride) {
+            const sectionAnswers = submission.answers?.[q.sectionId] || {};
+            if (sectionAnswers[qId]?.answer?.hasRecording) return true;
+        }
+        return false;
+    };
 
-    // Check if any question has AI grading error feedback
-    const hasAiGradingError = submission.results && Object.values(submission.results).some(r =>
-        r.feedback && (r.feedback.includes('Lỗi khi chấm') || r.feedback.includes('chấm thủ công'))
-    );
+    const hasAiGradingError = submission.results && Object.entries(submission.results).some(([qId, r]) => isQuestionAiError(qId, r));
+
+    // Full re-grade button only when ALL AI-graded questions failed (individual failures use per-question button)
+    const aiGradedQuestions = questions.filter(q => q.type === 'essay' || q.type === 'audio_recording');
+    const allAiQuestionsFailed = aiGradedQuestions.length > 0 && aiGradedQuestions.every(q => {
+        const r = submission.results?.[q.id];
+        if (!r) return true;
+        return isQuestionAiError(q.id, r);
+    });
 
     const statusMap = {
         'in_progress': { label: 'Đang làm', color: '#f59e0b', bg: '#fef3c7' },
@@ -208,12 +245,102 @@ export default function ExamSubmissionsPage() {
     const statusKey = submission.status === 'graded' && submission.resultsReleased ? 'released' : submission.status;
     let status = statusMap[statusKey] || statusMap['submitted'];
     if (hasAiGradingError && submission.status === 'graded' && !submission.resultsReleased) {
-        status = { label: '⚠ AI chấm lỗi', color: '#ea580c', bg: '#fff7ed' };
+        status = { label: 'AI chấm sót', color: '#ea580c', bg: '#fff7ed' };
     }
 
-    const showRetryBtn = submission.status === 'submitted' || (submission.status === 'graded' && hasAiGradingError && !submission.resultsReleased) || (settings?.allowRetryAiGrading && submission.status === 'graded' && !submission.resultsReleased);
+    const showRetryBtn = submission.status === 'submitted' || (submission.status === 'graded' && allAiQuestionsFailed && !submission.resultsReleased) || (settings?.allowRetryAiGrading && submission.status === 'graded' && !submission.resultsReleased);
     const showReleaseBtn = submission.status === 'graded' && !submission.resultsReleased;
+    const canRelease = showReleaseBtn && !!submission.examSummary;
     const showReleasedBadge = submission.resultsReleased;
+
+    // Follow-up state
+    const followUpRequested = submission.followUpRequested || {};
+    const followUpAnswers = submission.followUpAnswers || {};
+    const followUpResults = submission.followUpResults || {};
+    const hasAnyFollowUpRequest = Object.keys(followUpRequested).length > 0;
+    const hasAnyFollowUpAnswer = Object.values(followUpAnswers).some(sec => Object.keys(sec || {}).length > 0);
+    const showFollowUpReleaseBtn = hasAnyFollowUpAnswer && !submission.followUpResultsReleased;
+    const showFollowUpReleasedBadge = submission.followUpResultsReleased;
+    const showPendingFollowUpBadge = submission.resultsReleased && hasAnyFollowUpRequest && !submission.followUpResultsReleased;
+
+    async function handleToggleFollowUp(questionId, currentlyRequested) {
+        setTogglingFollowUp(questionId);
+        try {
+            const teacherName = user?.displayName || user?.email || 'Giáo viên';
+            await toggleFollowUpRequest(submission.id, questionId, user?.uid, teacherName, !currentlyRequested);
+            const freshSub = await getExamSubmission(assignmentId, studentId);
+            if (freshSub) setSubmission(freshSub);
+            setToast({ type: 'success', text: currentlyRequested ? 'Đã hủy yêu cầu sửa bài' : 'Đã yêu cầu học sinh sửa bài' });
+        } catch (e) {
+            setToast({ type: 'error', text: 'Lỗi: ' + e.message });
+        }
+        setTogglingFollowUp(null);
+    }
+
+    async function handleGradeFollowUp(questionId, question) {
+        setGradingFollowUp(questionId);
+        try {
+            await gradeFollowUpAnswer(
+                submission.id, questionId, question,
+                exam?.sections || [],
+                exam?.teacherTitle || 'thầy/cô',
+                exam?.studentTitle || 'em'
+            );
+            const freshSub = await getExamSubmission(assignmentId, studentId);
+            if (freshSub) setSubmission(freshSub);
+            setToast({ type: 'success', text: 'AI đã chấm bài sửa thành công!' });
+        } catch (e) {
+            setToast({ type: 'error', text: 'Lỗi chấm bài sửa: ' + e.message });
+        }
+        setGradingFollowUp(null);
+    }
+
+    function openFollowUpOverrideForm(questionId) {
+        const result = followUpResults[questionId];
+        setEditingFollowUpScore(questionId);
+        const scoreVal = result?.teacherOverride?.score ?? result?.score ?? 0;
+        setFollowUpOverrideData({
+            score: String(scoreVal),
+            note: result?.teacherOverride?.note ?? '',
+            feedback: result?.feedback ?? ''
+        });
+    }
+
+    async function handleSaveFollowUpOverride(questionId) {
+        setSaving(true);
+        try {
+            const feedbackMd = followUpFeedbackRef.current
+                ? feedbackHtmlToMd(followUpFeedbackRef.current.innerHTML)
+                : followUpOverrideData.feedback;
+            const overriderName = user?.displayName || user?.email || 'Giáo viên';
+            const finalScore = parseFloat(String(followUpOverrideData.score).replace(',', '.')) || 0;
+            await overrideFollowUpScore(
+                submission.id, questionId, finalScore, followUpOverrideData.note, feedbackMd, user?.uid, overriderName
+            );
+            const freshSub = await getExamSubmission(assignmentId, studentId);
+            if (freshSub) setSubmission(freshSub);
+            setEditingFollowUpScore(null);
+            setToast({ type: 'success', text: 'Đã cập nhật điểm bài sửa!' });
+        } catch (e) {
+            setToast({ type: 'error', text: 'Lỗi: ' + e.message });
+        }
+        setSaving(false);
+    }
+
+    async function handleReleaseFollowUp() {
+        setReleasingFollowUp(true);
+        try {
+            const releaserName = user?.displayName || user?.email || 'Giáo viên';
+            await releaseFollowUpResults(submission.id, user?.uid, releaserName);
+            const freshSub = await getExamSubmission(assignmentId, studentId);
+            if (freshSub) setSubmission(freshSub);
+            setToast({ type: 'success', text: 'Đã gửi kết quả bài sửa cho học sinh!' });
+        } catch (e) {
+            setToast({ type: 'error', text: 'Lỗi: ' + e.message });
+        }
+        setReleasingFollowUp(false);
+        setShowFollowUpConfirm(false);
+    }
 
     const retryButton = (
         <button className="admin-btn admin-btn-primary" onClick={async () => {
@@ -237,17 +364,43 @@ export default function ExamSubmissionsPage() {
     );
 
     const releaseButton = (
-        <button className="admin-btn admin-btn-primary" onClick={handleReleaseResults} disabled={releasing} style={{ background: '#10b981', display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', fontSize: '0.82rem' }}>
-            <Send size={14} /> {releasing ? 'Đang gửi...' : 'Gửi kết quả'}
-        </button>
-    );
-
-    const releasedBadge = (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#10b981', fontWeight: 700, fontSize: '0.78rem', background: '#ecfdf5', padding: '5px 12px', borderRadius: '10px', border: '1px solid #a7f3d0' }}>
-            <Check size={13} /> Đã gửi trả học sinh
-            {submission.releasedByName && <span style={{ color: '#64748b', fontWeight: 600 }}> ({submission.releasedByName})</span>}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+            <button className="admin-btn admin-btn-primary" onClick={handleReleaseResults} disabled={releasing || !canRelease} style={{ background: canRelease ? '#10b981' : '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', fontSize: '0.82rem', cursor: canRelease ? 'pointer' : 'not-allowed', opacity: canRelease ? 1 : 0.7 }}>
+                <Send size={14} /> {releasing ? 'Đang gửi...' : 'Gửi kết quả'}
+            </button>
+            {!canRelease && showReleaseBtn && (
+                <span style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 600, maxWidth: '200px', textAlign: 'right' }}>Hãy tạo nhận xét tổng thể trước khi gửi điểm về cho học viên</span>
+            )}
         </div>
     );
+
+    const releasedBadge = (() => {
+        const resultsBy = submission.releasedByName || '';
+        const followUpBy = submission.followUpReleasedByName || '';
+        const samePerson = resultsBy && followUpBy && resultsBy === followUpBy;
+        return (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700, fontSize: '0.78rem', padding: '5px 12px', borderRadius: '10px', background: showFollowUpReleasedBadge ? 'linear-gradient(135deg, #ecfdf5, #f5f3ff)' : '#ecfdf5', border: showFollowUpReleasedBadge ? '1px solid #c4b5fd' : '1px solid #a7f3d0' }}>
+                <Check size={13} style={{ color: '#10b981' }} />
+                <span style={{ color: '#10b981' }}>Đã trả kết quả</span>
+                {!samePerson && resultsBy && <span style={{ color: '#94a3b8', fontWeight: 500, fontSize: '0.68rem' }}>({resultsBy})</span>}
+                {showFollowUpReleasedBadge && (
+                    <>
+                        <span style={{ color: '#cbd5e1' }}>•</span>
+                        <span style={{ color: '#8b5cf6' }}>Đã trả bài sửa</span>
+                        {!samePerson && followUpBy && <span style={{ color: '#94a3b8', fontWeight: 500, fontSize: '0.68rem' }}>({followUpBy})</span>}
+                    </>
+                )}
+                {samePerson && <span style={{ color: '#94a3b8', fontWeight: 500, fontSize: '0.68rem' }}>({resultsBy})</span>}
+            </div>
+        );
+    })();
+
+    const pendingFollowUpBadge = showPendingFollowUpBadge ? (
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 700, fontSize: '0.78rem', padding: '5px 12px', borderRadius: '10px', background: '#fffbeb', border: '1px solid #fcd34d', color: '#92400e' }}>
+            <span style={{ fontSize: '0.85rem' }}>🔄</span>
+            <span>Đang yêu cầu sửa bài ({Object.keys(followUpRequested).length} câu)</span>
+        </div>
+    ) : null;
 
     return (
         <div className="admin-page" style={{ paddingBottom: '80px' }}>
@@ -278,23 +431,62 @@ export default function ExamSubmissionsPage() {
                 type="primary"
             />
 
-            {/* Header */}
+            <ConfirmModal
+                isOpen={showFollowUpConfirm}
+                title="Gửi kết quả bài sửa"
+                message="Sau khi gửi, học sinh sẽ xem được điểm và nhận xét bài sửa. Bạn chắc chắn chứ?"
+                onConfirm={handleReleaseFollowUp}
+                onCancel={() => setShowFollowUpConfirm(false)}
+                confirmText="Gửi kết quả bài sửa"
+                type="primary"
+            />
+
+            <ConfirmModal
+                isOpen={showRegenerateConfirm}
+                title="Tạo lại nhận xét AI"
+                message="Tạo lại nhận xét tổng kết bằng AI cho bài này? Nhận xét hiện tại sẽ bị thay thế."
+                onConfirm={async () => {
+                    setShowRegenerateConfirm(false);
+                    setGeneratingSummary(true);
+                    try {
+                        const newSummary = await regenerateExamSummaryForSubmission(submission.id, questions);
+                        setSubmission(prev => ({ ...prev, examSummary: newSummary }));
+                        setEditingSummary(false);
+                        setSummaryClearedByOverride(false);
+                    } catch (e) {
+                        setToast({ type: 'error', text: 'Lỗi khi tạo nhận xét: ' + e.message });
+                    }
+                    setGeneratingSummary(false);
+                }}
+                onCancel={() => setShowRegenerateConfirm(false)}
+                confirmText="Tạo lại"
+                type="primary"
+            />
             <div className="admin-page-header" style={{ alignItems: 'center', paddingBottom: '8px' }}>
                 <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Link to={backLink} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#64748b', textDecoration: 'none', fontSize: '0.9rem', marginBottom: '4px' }}>
+                        <button onClick={() => navigate(-1)} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#64748b', textDecoration: 'none', fontSize: '0.9rem', marginBottom: '4px', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                             <ArrowLeft size={16} /> Quay lại
-                        </Link>
-                        <div className="esp-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        </button>
+                        <div className="esp-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+
                             {showRetryBtn && retryButton}
                             {showReleaseBtn && releaseButton}
                             {showReleasedBadge && releasedBadge}
+                            {pendingFollowUpBadge}
+                            {showFollowUpReleaseBtn && (
+                                <button className="admin-btn admin-btn-primary" onClick={() => setShowFollowUpConfirm(true)} disabled={releasingFollowUp}
+                                    style={{ background: '#8b5cf6', display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', fontSize: '0.82rem' }}>
+                                    <MessageSquare size={14} /> {releasingFollowUp ? 'Đang gửi...' : 'Gửi kết quả bài sửa'}
+                                </button>
+                            )}
                         </div>
                     </div>
 
                     <h1 className="admin-page-title" style={{ margin: '0 0 4px 0', textAlign: 'center' }}>
                         Chi tiết bài làm
                     </h1>
+                    <p className="admin-page-subtitle">Xem chi tiết, chấm điểm và nhận xét bài làm của học viên.</p>
 
                     <span style={{
                         display: 'inline-flex', alignItems: 'center', gap: '6px',
@@ -337,7 +529,7 @@ export default function ExamSubmissionsPage() {
                                                     background: isFilled ? (i >= 3 ? '#fef2f2' : i === 2 ? '#fff7ed' : '#fefce8') : 'transparent',
                                                     border: isFilled ? `1.5px solid ${flagColor}40` : '1.5px solid transparent',
                                                     cursor: (isFilled || isNext) ? 'pointer' : 'default',
-                                                    opacity: isFilled ? 1 : isNext ? 0.4 : 0.2,
+                                                    opacity: isFilled ? 1 : 0.3,
                                                     filter: !isFilled ? 'grayscale(1)' : 'none',
                                                     transition: 'all 0.2s'
                                                 }}
@@ -362,6 +554,7 @@ export default function ExamSubmissionsPage() {
                 display: 'flex', flexWrap: 'wrap', gap: '8px',
                 marginBottom: '16px', justifyContent: 'center', alignItems: 'center'
             }}>
+                {statusKey !== 'released' && (
                 <div style={{
                     display: 'inline-flex', alignItems: 'center', gap: '5px',
                     padding: '5px 12px', borderRadius: '10px',
@@ -370,9 +563,9 @@ export default function ExamSubmissionsPage() {
                     <AlertCircle size={13} style={{ color: status.color }} />
                     <span style={{ fontSize: '0.78rem', fontWeight: 700, color: status.color }}>
                         {status.label}
-                        {(submission.status === 'graded' && submission.resultsReleased && submission.releasedByName) ? ` (${submission.releasedByName})` : ''}
                     </span>
                 </div>
+                )}
 
                 <div style={{
                     display: 'inline-flex', alignItems: 'center', gap: '5px',
@@ -381,7 +574,15 @@ export default function ExamSubmissionsPage() {
                 }}>
                     <Award size={13} style={{ color: '#6366f1' }} />
                     <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#1e293b' }}>
-                        {submission.totalScore != null ? Math.round(submission.totalScore * 10) / 10 : '--'}<span style={{ color: '#94a3b8' }}>/{questions.reduce((sum, q) => sum + (q.points || 1), 0) || submission.maxTotalScore || '--'}</span>
+                        {submission.totalScore != null ? Math.round(submission.totalScore * 10) / 10 : '--'}<span style={{ color: '#94a3b8' }}>/{submission.maxTotalScore || questions.reduce((sum, q) => {
+                            const p = q.points || 1;
+                            const v = q.variations?.[0];
+                            if (!v) return sum + p;
+                            if (['fill_in_blank','fill_in_blanks','fill_in_blank_typing'].includes(q.type)) return sum + p * ((v.text||'').match(/\{\{.+?\}\}/g)?.length||1);
+                            if (q.type === 'matching') return sum + p * ((v.pairs||[]).length||1);
+                            if (q.type === 'categorization') return sum + p * ((v.items||[]).length||1);
+                            return sum + p;
+                        }, 0) || '--'}</span>
                     </span>
                 </div>
 
@@ -407,11 +608,189 @@ export default function ExamSubmissionsPage() {
 
                 {/* Action buttons — visible only on mobile */}
                 <div className="esp-inline-actions">
-                    {showRetryBtn && retryButton}
+                
                     {showReleaseBtn && releaseButton}
-                    {showReleasedBadge && releasedBadge}
+                    {showRetryBtn && retryButton}    {showReleasedBadge && releasedBadge}    {pendingFollowUpBadge}
                 </div>
             </div>
+
+            {/* AI Exam Summary */}
+            {submission.examSummary ? (
+                <div style={{
+                    margin: '0 0 24px',
+                    padding: '16px 20px',
+                    background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+                    borderRadius: '14px',
+                    border: '1px solid #bae6fd'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '1.1rem' }}>📝</span>
+                            <span style={{ fontWeight: 700, color: '#0369a1', fontSize: '0.95rem' }}>Nhận xét tổng kết</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                            {!editingSummary && (
+                                <button
+                                    onClick={() => { setEditingSummary(true); setSummaryEditText(submission.examSummary); }}
+                                    style={{
+                                        background: 'none', border: '1px solid #93c5fd', borderRadius: '8px',
+                                        color: '#3b82f6', fontSize: '0.8rem', padding: '4px 10px', cursor: 'pointer'
+                                    }}
+                                >✏️ Chỉnh sửa</button>
+                            )}
+                            <button
+                                disabled={generatingSummary}
+                                onClick={() => setShowRegenerateConfirm(true)}
+                                style={{
+                                    background: 'none', border: '1px solid #93c5fd', borderRadius: '8px',
+                                    color: '#3b82f6', fontSize: '0.8rem', padding: '4px 10px', cursor: 'pointer'
+                                }}
+                            >{generatingSummary ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><span style={{ display: 'inline-block', width: '12px', height: '12px', border: '2px solid #93c5fd', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} /> Đang tạo...</span> : '🔄 Tạo lại'}</button>
+                        </div>
+                    </div>
+                    {editingSummary ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div
+                                ref={summaryEditRef}
+                                contentEditable
+                                suppressContentEditableWarning
+                                dangerouslySetInnerHTML={{
+                                    __html: summaryEditText
+                                        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                                        .split('\n')
+                                        .map(line => {
+                                            const trimmed = line.trim();
+                                            if (trimmed.startsWith('- ')) return `<li style="margin-left:16px;margin-bottom:2px">${trimmed.slice(2)}</li>`;
+                                            return line;
+                                        })
+                                        .join('<br/>')
+                                        .replace(/<br\/><li/g, '<li')
+                                        .replace(/<\/li><br\/>/g, '</li>')
+                                }}
+                                style={{
+                                    padding: '12px', borderRadius: '10px',
+                                    border: '2px solid #3b82f6', fontSize: '0.9rem', lineHeight: '1.6',
+                                    background: '#fff', color: '#334155', outline: 'none',
+                                    minHeight: '120px', whiteSpace: 'pre-wrap', cursor: 'text'
+                                }}
+                            />
+                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                <button
+                                    onClick={() => setEditingSummary(false)}
+                                    style={{ padding: '6px 14px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600 }}
+                                >Hủy</button>
+                                <button
+                                    disabled={savingSummary}
+                                    onClick={async () => {
+                                        setSavingSummary(true);
+                                        try {
+                                            // Convert HTML back to markdown-like text
+                                            const el = summaryEditRef.current;
+                                            let html = el.innerHTML;
+                                            // Convert <strong>/<b> to **text**
+                                            html = html.replace(/<(strong|b)>(.*?)<\/(strong|b)>/gi, '**$2**');
+                                            // Convert <li> to - text
+                                            html = html.replace(/<li[^>]*>(.*?)<\/li>/gi, '- $1');
+                                            // Convert <br> and <div> to newlines
+                                            html = html.replace(/<br\s*\/?>/gi, '\n');
+                                            html = html.replace(/<\/div>\s*<div[^>]*>/gi, '\n');
+                                            html = html.replace(/<div[^>]*>/gi, '\n');
+                                            html = html.replace(/<\/div>/gi, '');
+                                            // Strip remaining HTML
+                                            html = html.replace(/<[^>]+>/g, '');
+                                            // Decode entities
+                                            const txt = document.createElement('textarea');
+                                            txt.innerHTML = html;
+                                            const markdown = txt.value.replace(/^\n+/, '').replace(/\n{3,}/g, '\n\n');
+
+                                            await updateDoc(doc(db, 'exam_submissions', submission.id), {
+                                                examSummary: markdown,
+                                                updatedAt: serverTimestamp()
+                                            });
+                                            setSubmission(prev => ({ ...prev, examSummary: markdown }));
+                                            setEditingSummary(false);
+                                            setToast({ type: 'success', text: 'Đã lưu nhận xét tổng kết!' });
+                                        } catch (e) {
+                                            setToast({ type: 'error', text: 'Lỗi: ' + e.message });
+                                        }
+                                        setSavingSummary(false);
+                                    }}
+                                    style={{ padding: '6px 14px', borderRadius: '8px', border: 'none', background: '#0284c7', color: '#fff', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600 }}
+                                >{savingSummary ? 'Đang lưu...' : '💾 Lưu nhận xét'}</button>
+                            </div>
+                        </div>
+                    ) : (
+                    <div style={{
+                        color: '#334155',
+                        fontSize: '0.9rem',
+                        lineHeight: '1.6',
+                        whiteSpace: 'pre-wrap'
+                    }}
+                        dangerouslySetInnerHTML={{
+                            __html: submission.examSummary
+                                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                                .split('\n')
+                                .map(line => {
+                                    const trimmed = line.trim();
+                                    if (trimmed.startsWith('- ')) return `<li style="margin-left:16px;margin-bottom:2px">${trimmed.slice(2)}</li>`;
+                                    return line;
+                                })
+                                .join('<br/>')
+                                .replace(/<br\/><li/g, '<li')
+                                .replace(/<\/li><br\/>/g, '</li>')
+                        }}
+                    />
+                    )}
+                </div>
+            ) : (submission.status === 'graded' || submission.status === 'released') && submission.totalScore > 0 && (
+                <div style={{
+                    margin: '0 0 24px',
+                    padding: '14px 18px',
+                    background: hasAiGradingError
+                        ? 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)'
+                        : 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
+                    borderRadius: '14px',
+                    border: hasAiGradingError ? '1px solid #fca5a5' : '1px solid #fcd34d',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                        <span style={{ fontSize: '1.1rem' }}>{hasAiGradingError ? '🚫' : '⚠️'}</span>
+                        <span style={{ color: hasAiGradingError ? '#991b1b' : '#92400e', fontSize: '0.85rem' }}>
+                            {hasAiGradingError
+                                ? 'Hãy chấm xong tất cả các câu trước khi tạo nhận xét tổng kết.'
+                                : summaryClearedByOverride
+                                    ? '⚠️ Nhận xét tổng thể đã bị xóa vì điểm đã thay đổi. Hãy tạo lại nhận xét trước khi trả bài.'
+                                    : 'Chưa có nhận xét tổng kết. Nhấn nút bên cạnh để tạo bằng AI.'
+                            }
+                        </span>
+                    </div>
+                    <button
+                        disabled={hasAiGradingError || generatingSummary}
+                        onClick={async () => {
+                            setGeneratingSummary(true);
+                            try {
+                                const newSummary = await regenerateExamSummaryForSubmission(submission.id, questions);
+                                setSubmission(prev => ({ ...prev, examSummary: newSummary }));
+                                setSummaryClearedByOverride(false);
+                            } catch (e) {
+                                setToast({ type: 'error', text: 'Lỗi khi tạo nhận xét: ' + e.message });
+                            }
+                            setGeneratingSummary(false);
+                        }}
+                        style={{
+                            background: hasAiGradingError ? '#d1d5db' : '#f59e0b', border: 'none', borderRadius: '10px',
+                            color: '#fff', fontSize: '0.85rem', padding: '8px 14px',
+                            cursor: (hasAiGradingError || generatingSummary) ? 'not-allowed' : 'pointer',
+                            fontWeight: 600, whiteSpace: 'nowrap',
+                            opacity: (hasAiGradingError || generatingSummary) ? 0.6 : 1,
+                            display: 'flex', alignItems: 'center', gap: '6px'
+                        }}
+                    >{generatingSummary ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><span style={{ display: 'inline-block', width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} /> Đang tạo...</span> : '✨ Tạo nhận xét AI'}</button>
+                </div>
+            )}
 
             {/* Questions by section */}
             {(exam?.sections || []).map((section, sIdx) => {
@@ -522,7 +901,7 @@ export default function ExamSubmissionsPage() {
                                                     const correctWords = [];
                                                     const regex = /\{\{(.+?)\}\}/g;
                                                     let mm;
-                                                    while ((mm = regex.exec(rawText)) !== null) { correctWords.push(mm[1].replace(/&nbsp;/g, ' ')); }
+                                                    while ((mm = regex.exec(rawText)) !== null) { correctWords.push(mm[1].replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ')); }
 
                                                     let blankIdx = 0;
                                                     return (
@@ -534,23 +913,27 @@ export default function ExamSubmissionsPage() {
                                                                     const sw = sAns[String(idx)] || '';
                                                                     const cw = correctWords[idx];
                                                                     const isFilled = sw.trim().length > 0;
-                                                                    const ok = sw.trim().toLowerCase() === cw.trim().toLowerCase();
+                                                                    const ok = normalizeForComparison(sw) === normalizeForComparison(cw);
+                                                                    const isAIAccepted = !ok && isFilled && result?.aiVerdicts?.[idx] === true;
 
                                                                     return (
                                                                         <span key={i} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', margin: '0 4px', verticalAlign: 'middle' }}>
                                                                             <span style={{
                                                                                 padding: '2px 8px', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 600, lineHeight: '1.2',
-                                                                                border: ok ? '1.5px solid #10b981' : (isFilled ? '1.5px solid #ef4444' : '1.5px dashed #cbd5e1'),
-                                                                                background: ok ? '#d1fae5' : (isFilled ? '#fee2e2' : '#f1f5f9'),
-                                                                                color: ok ? '#065f46' : (isFilled ? '#991b1b' : '#64748b'),
+                                                                                border: ok ? '1.5px solid #10b981' : isAIAccepted ? '1.5px solid #f59e0b' : (isFilled ? '1.5px solid #ef4444' : '1.5px dashed #cbd5e1'),
+                                                                                background: ok ? '#d1fae5' : isAIAccepted ? '#fef3c7' : (isFilled ? '#fee2e2' : '#f1f5f9'),
+                                                                                color: ok ? '#065f46' : isAIAccepted ? '#92400e' : (isFilled ? '#991b1b' : '#64748b'),
                                                                                 minWidth: '40px', textAlign: 'center'
                                                                             }}>
                                                                                 {isFilled ? sw : '—'}
                                                                             </span>
-                                                                            {!ok && (
+                                                                            {!ok && !isAIAccepted && (
                                                                                 <span style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 700, marginTop: '2px', lineHeight: '1' }}>
                                                                                     {cw}
                                                                                 </span>
+                                                                            )}
+                                                                            {isAIAccepted && (
+                                                                                <span style={{ fontSize: '0.65rem', color: '#d97706', fontWeight: 600, marginTop: '2px' }}>✓ AI ({cw})</span>
                                                                             )}
                                                                         </span>
                                                                     );
@@ -726,11 +1109,15 @@ export default function ExamSubmissionsPage() {
                                     )}
 
                                     {/* AI Feedback */}
-                                    {result?.feedback && (
+                                    {result?.feedback ? (
                                         <div style={{ fontSize: '0.8rem', color: '#1e40af', background: '#eff6ff', padding: '8px 12px', borderRadius: '8px', marginBottom: '8px', whiteSpace: 'pre-wrap' }}>
                                             💬 <span dangerouslySetInnerHTML={{ __html: renderFeedbackHtml(result.feedback) }} />
                                         </div>
-                                    )}
+                                    ) : (q.type === 'audio_recording' && (result?.score === 0 || result?.score === undefined) && answer?.answer?.hasRecording) ? (
+                                        <div style={{ fontSize: '0.8rem', color: '#92400e', background: '#fffbeb', padding: '8px 12px', borderRadius: '8px', marginBottom: '8px' }}>
+                                            ⏳ AI chưa chấm được câu này. Bấm "AI chấm lại" hoặc chấm thủ công bên dưới.
+                                        </div>
+                                    ) : null}
 
                                     {/* Teacher override */}
                                     {result?.teacherOverride?.note && (
@@ -743,8 +1130,14 @@ export default function ExamSubmissionsPage() {
                                     {editingScore === q.id ? (
                                         <div style={{ display: 'flex', gap: '8px', flexDirection: 'column', marginTop: '8px', background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                                <input type="number" className="admin-form-input" style={{ width: '80px', margin: 0 }} min={0} max={result?.maxScore || q.points || 1}
-                                                    value={overrideData.score} onChange={e => setOverrideData({ ...overrideData, score: parseFloat(e.target.value) || 0 })} />
+                                                <input type="text" inputMode="decimal" className="admin-form-input" style={{ width: '80px', margin: 0 }}
+                                                    value={overrideData.score} onChange={e => {
+                                                        const raw = e.target.value;
+                                                        // Allow digits, dot, comma, and empty string
+                                                        if (raw === '' || /^[0-9]*[.,]?[0-9]*$/.test(raw)) {
+                                                            setOverrideData({ ...overrideData, score: raw });
+                                                        }
+                                                    }} />
                                                 <input type="text" className="admin-form-input" style={{ flex: 1, margin: 0 }} placeholder="Ghi chú (tùy chọn)"
                                                     value={overrideData.note} onChange={e => setOverrideData({ ...overrideData, note: e.target.value })} />
                                             </div>
@@ -782,12 +1175,363 @@ export default function ExamSubmissionsPage() {
                                             </div>
                                         </div>
                                     ) : (
-                                        result && (
-                                            <button className="admin-btn admin-btn-outline" style={{ padding: '4px 12px', fontSize: '0.8rem', marginTop: '4px' }}
-                                                onClick={() => openOverrideForm(q.id)}>
-                                                <Edit size={14} /> Sửa điểm
-                                            </button>
-                                        )
+                                        <>
+                                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', marginTop: '4px' }}>
+                                            {result && (
+                                                <button className="admin-btn admin-btn-outline" style={{ padding: '4px 12px', fontSize: '0.8rem' }}
+                                                    onClick={() => openOverrideForm(q.id)}>
+                                                    <Edit size={14} /> Sửa điểm
+                                                </button>
+                                            )}
+                                            {/* Follow-up checkbox — only before releasing results, and only if student hasn't submitted yet */}
+                                            {result && !submission.resultsReleased && !followUpAnswers[section.id]?.[q.id] && (
+                                                <label style={{
+                                                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                                    padding: '4px 12px', fontSize: '0.8rem', cursor: 'pointer',
+                                                    borderRadius: '8px', fontWeight: 600,
+                                                    background: followUpRequested[q.id] ? '#fef3c7' : '#f8fafc',
+                                                    border: followUpRequested[q.id] ? '1.5px solid #f59e0b' : '1px solid #e2e8f0',
+                                                    color: followUpRequested[q.id] ? '#92400e' : '#64748b',
+                                                    opacity: togglingFollowUp === q.id ? 0.6 : 1,
+                                                    transition: 'all 0.2s'
+                                                }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={!!followUpRequested[q.id]}
+                                                        disabled={togglingFollowUp === q.id}
+                                                        onChange={() => handleToggleFollowUp(q.id, !!followUpRequested[q.id])}
+                                                        style={{ accentColor: '#f59e0b', width: '16px', height: '16px', cursor: 'pointer' }}
+                                                    />
+                                                    📝 Yêu cầu sửa bài
+                                                </label>
+                                            )}
+                                            {/* Per-question AI re-grade — auto-show for error questions, no admin setting needed */}
+                                            {(q.type === 'audio_recording' || q.type === 'essay' || q.type === 'short_answer') && !submission.resultsReleased && (
+                                                isQuestionAiError(q.id, result || {})
+                                                || (showRetryBtn && !result?.feedback && (result?.score === 0 || result?.score === undefined))
+                                            ) && (
+                                                <button
+                                                    className="admin-btn admin-btn-outline"
+                                                    style={{ padding: '4px 12px', fontSize: '0.8rem', color: '#f59e0b', borderColor: '#fde68a', background: retryingQuestionId === q.id ? '#fffbeb' : undefined }}
+                                                    disabled={retryingQuestionId === q.id}
+                                                    onClick={async () => {
+                                                        setRetryingQuestionId(q.id);
+                                                        try {
+                                                            await gradeSingleQuestion(
+                                                                submission.id, q.id, q,
+                                                                exam?.sections || [],
+                                                                exam?.teacherTitle || '',
+                                                                exam?.studentTitle || ''
+                                                            );
+                                                            await loadData();
+                                                            setToast({ type: 'success', text: `Đã chấm lại câu ${qIdx + 1} thành công!` });
+                                                        } catch (e) {
+                                                            setToast({ type: 'error', text: `Lỗi chấm câu ${qIdx + 1}: ${e.message}` });
+                                                        }
+                                                        setRetryingQuestionId(null);
+                                                    }}
+                                                >
+                                                    <Sparkles size={14} /> {retryingQuestionId === q.id ? 'Đang chấm...' : 'AI chấm lại câu này'}
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {/* ── FOLLOW-UP ANSWER SECTION ── */}
+                                        {(() => {
+                                            const fuAnswer = followUpAnswers[section.id]?.[q.id];
+                                            const fuResult = followUpResults[q.id];
+                                            const isRequested = !!followUpRequested[q.id];
+                                            if (!isRequested && !fuAnswer) return null;
+
+                                            return (
+                                                <div style={{
+                                                    marginTop: '12px', padding: '12px', borderRadius: '12px',
+                                                    background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
+                                                    border: '1.5px solid #c4b5fd'
+                                                }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                            <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#7c3aed' }}>📝 Bài sửa (lần 2)</span>
+                                                            {fuAnswer && <span style={{ fontSize: '0.65rem', color: '#10b981', fontWeight: 700, background: '#ecfdf5', padding: '2px 6px', borderRadius: '4px' }}>Đã nộp</span>}
+                                                            {isRequested && !fuAnswer && <span style={{ fontSize: '0.65rem', color: '#f59e0b', fontWeight: 700, background: '#fef3c7', padding: '2px 6px', borderRadius: '4px' }}>Đang chờ</span>}
+                                                            {fuResult?.teacherOverride && (
+                                                                <span style={{ fontSize: '0.65rem', color: '#8b5cf6', background: '#f5f3ff', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                                                                    {fuResult.teacherOverride.overriddenByName || 'GV'} sửa
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {fuResult && (
+                                                            <span style={{
+                                                                fontWeight: 800, fontSize: '0.85rem',
+                                                                color: (fuResult.teacherOverride?.score ?? fuResult.score) >= fuResult.maxScore ? '#10b981' : '#ef4444',
+                                                                background: (fuResult.teacherOverride?.score ?? fuResult.score) >= fuResult.maxScore ? '#ecfdf5' : '#fef2f2',
+                                                                padding: '3px 10px', borderRadius: '8px'
+                                                            }}>
+                                                                Điểm sửa: {fuResult.teacherOverride?.score ?? fuResult.score}/{fuResult.maxScore}
+                                                                <span style={{ fontSize: '0.65rem', fontWeight: 400, color: '#94a3b8', marginLeft: '6px', fontStyle: 'italic' }}>(không ảnh hưởng điểm gốc)</span>
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    {fuAnswer ? (
+                                                        <>
+                                                            {/* Student's follow-up answer */}
+                                                            <div style={{ padding: '8px 12px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '8px', fontSize: '0.85rem', color: '#1e293b' }}>
+                                                                <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600, marginBottom: '4px' }}>Câu trả lời sửa:</div>
+                                                                {(() => {
+                                                                    const fuAns = fuAnswer.answer;
+
+                                                                    // Multiple choice — show selected option
+                                                                    if (q.type === 'multiple_choice') {
+                                                                        return (
+                                                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                                                                {(variation?.options || []).map((opt, i) => {
+                                                                                    if (!opt) return null;
+                                                                                    const isSelected = opt === fuAns;
+                                                                                    const isCorrectOpt = i === variation?.correctAnswer;
+                                                                                    return (
+                                                                                        <div key={i} style={{
+                                                                                            padding: '3px 10px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: isSelected ? 700 : 500,
+                                                                                            border: isSelected ? `2px solid ${isCorrectOpt ? '#10b981' : '#ef4444'}` : '1px solid #e2e8f0',
+                                                                                            background: isSelected ? (isCorrectOpt ? '#d1fae5' : '#fee2e2') : '#f8fafc',
+                                                                                            color: isSelected ? (isCorrectOpt ? '#065f46' : '#991b1b') : '#64748b'
+                                                                                        }}>
+                                                                                            <span style={{ fontWeight: 800 }}>{String.fromCharCode(65 + i)}.</span> {opt}
+                                                                                            {isSelected && (isCorrectOpt ? ' ✓' : ' ✗')}
+                                                                                        </div>
+                                                                                    );
+                                                                                })}
+                                                                            </div>
+                                                                        );
+                                                                    }
+
+                                                                    // Fill in blank — show sentence with filled slots
+                                                                    if ((q.type === 'fill_in_blank' || q.type === 'fill_in_blanks' || q.type === 'fill_in_blank_typing') && typeof fuAns === 'object' && fuAns !== null && !Array.isArray(fuAns)) {
+                                                                        const rawText = variation?.text || '';
+                                                                        const hasMarkers = /\{\{.+?\}\}/.test(rawText);
+                                                                        if (hasMarkers) {
+                                                                            const parts = rawText.replace(/&nbsp;/g, ' ').split(/(\{\{.+?\}\})/g);
+                                                                            let blankIdx = 0;
+                                                                            return (
+                                                                                <div style={{ lineHeight: '2.2', fontSize: '0.85rem' }}>
+                                                                                    {parts.map((part, i) => {
+                                                                                        const match = part.match(/^\{\{(.+?)\}\}$/);
+                                                                                        if (match) {
+                                                                                            const idx = blankIdx++;
+                                                                                            const filled = fuAns[String(idx)] || '';
+                                                                                            return (
+                                                                                                <span key={i} style={{
+                                                                                                    display: 'inline-block', padding: '1px 8px', borderRadius: '6px',
+                                                                                                    border: filled ? '1.5px solid #8b5cf6' : '1.5px dashed #cbd5e1',
+                                                                                                    background: filled ? '#f5f3ff' : '#f1f5f9',
+                                                                                                    color: filled ? '#5b21b6' : '#94a3b8',
+                                                                                                    fontWeight: 600, margin: '0 3px', minWidth: '40px', textAlign: 'center'
+                                                                                                }}>
+                                                                                                    {filled || '—'}
+                                                                                                </span>
+                                                                                            );
+                                                                                        }
+                                                                                        return <span key={i}>{part}</span>;
+                                                                                    })}
+                                                                                </div>
+                                                                            );
+                                                                        }
+                                                                        // No markers — show as key-value
+                                                                        return (
+                                                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                                                                {Object.entries(fuAns).map(([k, v]) => (
+                                                                                    <span key={k} style={{ padding: '2px 8px', borderRadius: '6px', background: '#f5f3ff', border: '1px solid #c4b5fd', color: '#5b21b6', fontWeight: 600, fontSize: '0.8rem' }}>
+                                                                                        {v || '—'}
+                                                                                    </span>
+                                                                                ))}
+                                                                            </div>
+                                                                        );
+                                                                    }
+
+                                                                    // Matching — show pairs with arrows
+                                                                    if (q.type === 'matching' && Array.isArray(fuAns)) {
+                                                                        const pairs = variation?.pairs || [];
+                                                                        return (
+                                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                                                {pairs.map((pair, pIdx) => {
+                                                                                    const studentMatch = fuAns[pIdx]?.text || fuAns[pIdx] || '';
+                                                                                    const isCorrectMatch = studentMatch === pair.right;
+                                                                                    return (
+                                                                                        <div key={pIdx} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}>
+                                                                                            <div style={{ padding: '3px 8px', background: '#f1f5f9', color: '#475569', fontWeight: 700, borderRadius: '6px', border: '1px solid #e2e8f0', minWidth: '70px', textAlign: 'center' }}>{pair.left}</div>
+                                                                                            <span style={{ color: '#94a3b8', fontWeight: 900 }}>→</span>
+                                                                                            <div style={{
+                                                                                                padding: '3px 8px', borderRadius: '6px', fontWeight: 600, flex: 1,
+                                                                                                border: isCorrectMatch ? '1.5px solid #10b981' : '1.5px solid #ef4444',
+                                                                                                background: isCorrectMatch ? '#f0fdf4' : '#fef2f2',
+                                                                                                color: isCorrectMatch ? '#065f46' : '#991b1b'
+                                                                                            }}>
+                                                                                                {studentMatch || '—'}
+                                                                                            </div>
+                                                                                            {!isCorrectMatch && (
+                                                                                                <div style={{ color: '#059669', fontSize: '0.7rem', fontWeight: 700, background: '#ecfdf5', padding: '1px 6px', borderRadius: '4px' }}>Đúng: {pair.right}</div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    );
+                                                                                })}
+                                                                            </div>
+                                                                        );
+                                                                    }
+
+                                                                    // Categorization — show groups grid
+                                                                    if (q.type === 'categorization' && typeof fuAns === 'object' && !Array.isArray(fuAns)) {
+                                                                        const groups = variation?.groups || [];
+                                                                        return (
+                                                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '6px' }}>
+                                                                                {groups.map((group, gIdx) => {
+                                                                                    const assignedItems = Object.entries(fuAns).filter(([_, g]) => g === group).map(([t]) => t);
+                                                                                    return (
+                                                                                        <div key={gIdx} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px' }}>
+                                                                                            <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#64748b', borderBottom: '1px solid #e2e8f0', marginBottom: '4px', paddingBottom: '2px', textAlign: 'center', textTransform: 'uppercase' }}>{group}</div>
+                                                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                                                                                {assignedItems.length > 0 ? assignedItems.map(item => (
+                                                                                                    <div key={item} style={{ fontSize: '0.75rem', padding: '2px 6px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '4px', color: '#334155', fontWeight: 600, textAlign: 'center' }}>{item}</div>
+                                                                                                )) : <div style={{ fontSize: '0.65rem', color: '#94a3b8', textAlign: 'center', fontStyle: 'italic' }}>Trống</div>}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    );
+                                                                                })}
+                                                                            </div>
+                                                                        );
+                                                                    }
+
+                                                                    // Ordering — show numbered list
+                                                                    if (q.type === 'ordering' && Array.isArray(fuAns)) {
+                                                                        const correctItems = variation?.items || [];
+                                                                        return (
+                                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                                                                {fuAns.map((item, idx) => {
+                                                                                    const isCorrectPos = item === correctItems[idx];
+                                                                                    return (
+                                                                                        <div key={idx} style={{
+                                                                                            display: 'flex', alignItems: 'center', gap: '6px',
+                                                                                            padding: '3px 8px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600,
+                                                                                            border: isCorrectPos ? '1.5px solid #10b981' : '1.5px solid #ef4444',
+                                                                                            background: isCorrectPos ? '#d1fae5' : '#fee2e2',
+                                                                                            color: isCorrectPos ? '#065f46' : '#991b1b'
+                                                                                        }}>
+                                                                                            <span style={{
+                                                                                                width: '18px', height: '18px', borderRadius: '50%',
+                                                                                                background: isCorrectPos ? '#10b981' : '#ef4444', color: '#fff',
+                                                                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                                                fontSize: '0.6rem', fontWeight: 900, flexShrink: 0
+                                                                                            }}>{idx + 1}</span>
+                                                                                            <span>{item}</span>
+                                                                                            {!isCorrectPos && (
+                                                                                                <span style={{ marginLeft: 'auto', fontSize: '0.68rem', color: '#059669', fontWeight: 700 }}>Đúng: {correctItems[idx]}</span>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    );
+                                                                                })}
+                                                                            </div>
+                                                                        );
+                                                                    }
+
+                                                                    // Default: string or fallback
+                                                                    if (typeof fuAns === 'string') {
+                                                                        return <div style={{ whiteSpace: 'pre-wrap' }}>{fuAns}</div>;
+                                                                    }
+                                                                    return <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.8rem', color: '#64748b' }}>{JSON.stringify(fuAns, null, 2)}</div>;
+                                                                })()}
+                                                            </div>
+                                                            <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '8px' }}>
+                                                                Nộp lúc: {new Date(fuAnswer.submittedAt).toLocaleString('vi-VN')}
+                                                            </div>
+
+                                                            {/* Follow-up feedback & teacher note */}
+                                                            {fuResult ? (
+                                                                <div style={{ marginBottom: '8px' }}>
+                                                                    {fuResult.feedback && (
+                                                                        <div style={{ fontSize: '0.8rem', color: '#1e40af', background: '#eff6ff', padding: '8px 12px', borderRadius: '8px', marginBottom: '6px', whiteSpace: 'pre-wrap' }}>
+                                                                            💬 <span dangerouslySetInnerHTML={{ __html: renderFeedbackHtml(fuResult.feedback) }} />
+                                                                        </div>
+                                                                    )}
+                                                                    {fuResult.teacherOverride?.note && (
+                                                                        <div style={{ fontSize: '0.8rem', color: '#7c3aed', background: '#f5f3ff', padding: '8px 12px', borderRadius: '8px', marginBottom: '6px', whiteSpace: 'pre-wrap' }}>
+                                                                            📝 GV: {fuResult.teacherOverride.note}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ) : null}
+
+                                                            {/* Actions: AI grade + edit score */}
+                                                            {editingFollowUpScore === q.id ? (
+                                                                <div style={{ display: 'flex', gap: '8px', flexDirection: 'column', background: '#fff', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                                                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                                        <input type="text" inputMode="decimal" className="admin-form-input" style={{ width: '80px', margin: 0 }}
+                                                                            value={followUpOverrideData.score} onChange={e => {
+                                                                                const raw = e.target.value;
+                                                                                if (raw === '' || /^[0-9]*[.,]?[0-9]*$/.test(raw)) setFollowUpOverrideData({ ...followUpOverrideData, score: raw });
+                                                                            }} />
+                                                                        <input type="text" className="admin-form-input" style={{ flex: 1, margin: 0 }} placeholder="Ghi chú"
+                                                                            value={followUpOverrideData.note} onChange={e => setFollowUpOverrideData({ ...followUpOverrideData, note: e.target.value })} />
+                                                                    </div>
+                                                                    <div
+                                                                        ref={followUpFeedbackRef}
+                                                                        contentEditable
+                                                                        suppressContentEditableWarning
+                                                                        className="admin-form-input"
+                                                                        style={{ minHeight: '60px', resize: 'vertical', margin: 0, fontSize: '0.85rem', whiteSpace: 'pre-wrap', overflowY: 'auto', outline: 'none' }}
+                                                                        dangerouslySetInnerHTML={{ __html: renderFeedbackHtml(followUpOverrideData.feedback) }}
+                                                                        onPaste={e => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData.getData('text/plain')); }}
+                                                                    />
+                                                                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                                                        <button className="admin-btn admin-btn-secondary" style={{ padding: '6px 12px' }} onClick={() => setEditingFollowUpScore(null)}>Hủy</button>
+                                                                        <button className="admin-btn admin-btn-primary" style={{ padding: '6px 12px' }} onClick={() => handleSaveFollowUpOverride(q.id)} disabled={saving}>
+                                                                            <Save size={14} /> Lưu
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+
+                                                                    {showRetryBtn && !fuResult && (
+                                                                        <button className="admin-btn admin-btn-outline"
+                                                                            style={{ padding: '4px 12px', fontSize: '0.8rem', color: '#8b5cf6', borderColor: '#c4b5fd' }}
+                                                                            disabled={gradingFollowUp === q.id}
+                                                                            onClick={() => handleGradeFollowUp(q.id, q)}>
+                                                                            <Sparkles size={14} /> {gradingFollowUp === q.id ? 'Đang chấm...' : 'AI chấm bài sửa'}
+                                                                        </button>
+                                                                    )}
+                                                                    {fuResult && (
+                                                                        <>
+                                                                            <button className="admin-btn admin-btn-outline" style={{ padding: '4px 12px', fontSize: '0.8rem' }}
+                                                                                onClick={() => openFollowUpOverrideForm(q.id)}>
+                                                                                <Edit size={14} /> Sửa điểm bài sửa
+                                                                            </button>
+                                                                            {showRetryBtn && (
+                                                                                <button className="admin-btn admin-btn-outline"
+                                                                                    style={{ padding: '4px 12px', fontSize: '0.8rem', color: '#8b5cf6', borderColor: '#c4b5fd' }}
+                                                                                    disabled={gradingFollowUp === q.id}
+                                                                                    onClick={() => handleGradeFollowUp(q.id, q)}>
+                                                                                    <RefreshCw size={14} /> {gradingFollowUp === q.id ? 'Đang chấm...' : 'AI chấm lại'}
+                                                                                </button>
+                                                                            )}
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    ) : (
+                                                        submission.resultsReleased ? (
+                                                            <div style={{ fontSize: '0.82rem', color: '#94a3b8', fontStyle: 'italic' }}>
+                                                                Đang chờ học sinh nộp bài sửa...
+                                                            </div>
+                                                        ) : (
+                                                            <div style={{ fontSize: '0.82rem', color: '#c4b5fd', fontStyle: 'italic' }}>
+                                                                Sẽ yêu cầu học sinh sửa khi trả bài.
+                                                            </div>
+                                                        )
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+                                        </>
                                     )}
                                 </div>
                             );

@@ -1,36 +1,73 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { saveGrammarExercise, deleteGrammarExercise, getGrammarExercises } from '../../services/grammarService';
-import { getGrammarFolders, saveGrammarFolder, deleteGrammarFolder, getGroups, toggleResourcePublic, getResourceSharedEntities, shareResourceToEmail, unshareResourceFromUser, shareResourceToGroup, unshareResourceFromGroup, updateGrammarFoldersOrder } from '../../services/adminService';
+import { getGrammarFolders, saveGrammarFolder, deleteGrammarFolder, getGroups, toggleResourcePublic, toggleTeacherVisible, getResourceSharedEntities, shareResourceToEmail, unshareResourceFromUser, shareResourceToGroup, unshareResourceFromGroup, updateGrammarFoldersOrder, transferOfficialToTeacher, shareResourceToTeacher, unshareResourceFromTeacher, getResourceSharedTeachers } from '../../services/adminService';
 import { createAssignment, getAssignmentsForTopic } from '../../services/teacherService';
-import { getPendingProposals, approveProposal, rejectProposal } from '../../services/contentProposalService';
+import { getPendingProposals, approveProposal, rejectProposal, findExistingOfficialCopy } from '../../services/contentProposalService';
 import { Timestamp } from 'firebase/firestore';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useAuth } from '../../contexts/AuthContext';
-import { BookOpen, Edit, Trash2, X, Plus, List, FolderOpen, GripVertical, Check, Share2, Globe, Users, Mail, UserPlus, Lock, Search, AlertTriangle, ChevronDown, ChevronRight, CheckCircle, XCircle, Landmark, Clock, Send, FileText } from 'lucide-react';
+import { BookOpen, Edit, Trash2, X, Plus, List, FolderOpen, GripVertical, Check, Share2, Globe, Users, Mail, UserPlus, Lock, Search, AlertTriangle, ChevronDown, ChevronRight, CheckCircle, XCircle, Landmark, Clock, Send, FileText, Filter, ArrowRightLeft, GraduationCap } from 'lucide-react';
+import { convertGrammarToExam } from '../../services/conversionService';
 import CustomSelect from '../../components/common/CustomSelect';
 import EmailAutocomplete from '../../components/common/EmailAutocomplete';
+import '../../components/common/ShareModal.css';
 
 function CustomDropdown({ value, options, onChange, placeholder = "Chọn một mục" }) {
     const [isOpen, setIsOpen] = useState(false);
     const [hoverIdx, setHoverIdx] = useState(null);
-    const dropdownRef = React.useRef(null);
+    const triggerRef = React.useRef(null);
+    const menuRef = React.useRef(null);
     const selectedOption = options.find(opt => opt.value === value);
 
     useEffect(() => {
+        if (!isOpen) return;
         function handleClickOutside(event) {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+            if (
+                triggerRef.current && !triggerRef.current.contains(event.target) &&
+                menuRef.current && !menuRef.current.contains(event.target)
+            ) {
                 setIsOpen(false);
             }
         }
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [isOpen]);
+
+    const [menuStyle, setMenuStyle] = useState({});
+
+    const updatePosition = React.useCallback(() => {
+        if (!triggerRef.current) return;
+        const rect = triggerRef.current.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom - 10;
+        const maxHeight = Math.min(250, Math.max(spaceBelow, 120));
+        setMenuStyle({
+            position: 'fixed',
+            left: rect.left,
+            width: rect.width,
+            top: rect.bottom + 4,
+            maxHeight: `${maxHeight}px`,
+            zIndex: 99999,
+        });
     }, []);
 
+    useEffect(() => {
+        if (!isOpen) return;
+        updatePosition();
+        const handler = () => updatePosition();
+        window.addEventListener('scroll', handler, true);
+        window.addEventListener('resize', handler);
+        return () => {
+            window.removeEventListener('scroll', handler, true);
+            window.removeEventListener('resize', handler);
+        };
+    }, [isOpen, updatePosition]);
+
     return (
-        <div ref={dropdownRef} className="admin-custom-dropdown" style={{ position: 'relative', width: '100%' }}>
+        <div style={{ position: 'relative', width: '100%' }}>
             <div
+                ref={triggerRef}
                 className={`admin-form-input ${isOpen ? 'active' : ''}`}
                 onClick={() => setIsOpen(!isOpen)}
                 style={{
@@ -44,12 +81,12 @@ function CustomDropdown({ value, options, onChange, placeholder = "Chọn một 
                 <ChevronDown size={14} style={{ transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />
             </div>
 
-            {isOpen && (
-                <div style={{
-                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1000,
+            {isOpen && ReactDOM.createPortal(
+                <div ref={menuRef} style={{
+                    ...menuStyle,
                     background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px',
-                    marginTop: '4px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                    maxHeight: '200px', overflowY: 'auto'
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    overflowY: 'auto'
                 }}>
                     {options.map((opt, idx) => (
                         <div
@@ -72,7 +109,8 @@ function CustomDropdown({ value, options, onChange, placeholder = "Chọn một 
                             {opt.label}
                         </div>
                     ))}
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
@@ -80,6 +118,7 @@ function CustomDropdown({ value, options, onChange, placeholder = "Chọn một 
 
 export default function AdminGrammarPage() {
     const { user } = useAuth();
+    const navigate = useNavigate();
     const [exercises, setExercises] = useState([]);
     const [folders, setFolders] = useState([]);
     const [exerciseQuestionCounts, setExerciseQuestionCounts] = useState({});
@@ -87,6 +126,7 @@ export default function AdminGrammarPage() {
     const [expandedFolders, setExpandedFolders] = useState(new Set());
     const [alertMessage, setAlertMessage] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [publicFilter, setPublicFilter] = useState('all'); // 'all' | 'public' | 'private'
 
     // Exercise States
     const [exerciseFormOpen, setExerciseFormOpen] = useState(false);
@@ -94,6 +134,12 @@ export default function AdminGrammarPage() {
     const [isEditingExercise, setIsEditingExercise] = useState(false);
     const [exerciseToDelete, setExerciseToDelete] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
+
+    // Conversion state
+    const [exerciseToConvert, setExerciseToConvert] = useState(null);
+    const [isConverting, setIsConverting] = useState(false);
+    const [convertExamType, setConvertExamType] = useState('homework');
+    const [convertTimingMode, setConvertTimingMode] = useState('exam');
 
     // Folder States
     const [folderFormOpen, setFolderFormOpen] = useState(false);
@@ -111,6 +157,11 @@ export default function AdminGrammarPage() {
     const [shareEmail, setShareEmail] = useState('');
     const [isSharing, setIsSharing] = useState(false);
 
+    // Teacher Share States
+    const [teacherShareEmail, setTeacherShareEmail] = useState('');
+    const [sharedTeachers, setSharedTeachers] = useState([]);
+    const [isTeacherSharing, setIsTeacherSharing] = useState(false);
+
     // Quick Assign States
     const [teacherManagedGroups, setTeacherManagedGroups] = useState([]);
     const [quickAssignGroupId, setQuickAssignGroupId] = useState('');
@@ -124,6 +175,16 @@ export default function AdminGrammarPage() {
     const [rejectModalOpen, setRejectModalOpen] = useState(false);
     const [proposalToReject, setProposalToReject] = useState(null);
     const [rejectNote, setRejectNote] = useState('');
+    const [approveModalOpen, setApproveModalOpen] = useState(false);
+    const [proposalToApprove, setProposalToApprove] = useState(null);
+    const [existingOfficialCopy, setExistingOfficialCopy] = useState(null);
+    const [isApproving, setIsApproving] = useState(false);
+
+    // Transfer ownership state
+    const [transferModalOpen, setTransferModalOpen] = useState(false);
+    const [transferTarget, setTransferTarget] = useState(null);
+    const [transferEmail, setTransferEmail] = useState('');
+    const [isTransferring, setIsTransferring] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -253,6 +314,24 @@ export default function AdminGrammarPage() {
         setExerciseToDelete(null);
     }
 
+    async function handleConfirmConvert() {
+        if (!exerciseToConvert) return;
+        setIsConverting(true);
+        try {
+            const newExamId = await convertGrammarToExam(exerciseToConvert.id, user.uid, {
+                examType: convertExamType,
+                timingMode: convertTimingMode,
+                createdByRole: 'admin'
+            });
+            setExerciseToConvert(null);
+            setAlertMessage({ type: 'success', text: `Đã chuyển đổi "${exerciseToConvert.name}" thành ${convertExamType === 'test' ? 'Bài kiểm tra' : 'Bài tập'}!` });
+            navigate(`/admin/exams/${newExamId}`);
+        } catch (error) {
+            setAlertMessage({ type: 'error', text: 'Lỗi chuyển đổi: ' + error.message });
+        }
+        setIsConverting(false);
+    }
+
     // --- FOLDER HANDLERS ---
     function openAddFolderForm() {
         setFolderFormData({ id: '', name: '', description: '', icon: '', color: '#3b82f6', exerciseIds: [], order: folders.length });
@@ -312,10 +391,30 @@ export default function AdminGrammarPage() {
 
 
     async function handleFolderDragEnd(result) {
-        if (!result.destination) return;
+        const { source, destination, type } = result;
+        if (!destination) return;
+        if (source.droppableId === destination.droppableId && source.index === destination.index) return;
+
+        if (type === 'exercise') {
+            // Reorder exercises within a folder
+            const folderId = source.droppableId.replace('folder-exercises-', '');
+            const folder = folders.find(f => f.id === folderId);
+            if (!folder) return;
+            const ids = Array.from(folder.exerciseIds || []);
+            const [movedId] = ids.splice(source.index, 1);
+            ids.splice(destination.index, 0, movedId);
+            setFolders(prev => prev.map(f => f.id === folderId ? { ...f, exerciseIds: ids } : f));
+            try { await saveGrammarFolder({ ...folder, exerciseIds: ids }); } catch (error) {
+                setAlertMessage({ type: 'error', text: 'Lỗi sắp xếp bài luyện: ' + error.message });
+                loadData();
+            }
+            return;
+        }
+
+        // Default: folder reorder
         const reordered = Array.from(folders);
-        const [moved] = reordered.splice(result.source.index, 1);
-        reordered.splice(result.destination.index, 0, moved);
+        const [moved] = reordered.splice(source.index, 1);
+        reordered.splice(destination.index, 0, moved);
         setFolders(reordered);
         try {
             await updateGrammarFoldersOrder(reordered);
@@ -335,17 +434,21 @@ export default function AdminGrammarPage() {
         setQuickAssignGroupId('');
         setQuickAssignDueDate('');
         setQuickAssignSuccess('');
+        setTeacherShareEmail('');
+        setSharedTeachers([]);
         try {
-            const [entities, groupsData, assignments] = await Promise.all([
+            const [entities, groupsData, assignments, teachers] = await Promise.all([
                 getResourceSharedEntities(type, resource.id),
                 getGroups(),
-                type !== 'grammar_folder' ? getAssignmentsForTopic(resource.id) : Promise.resolve([])
+                type !== 'grammar_folder' ? getAssignmentsForTopic(resource.id) : Promise.resolve([]),
+                getResourceSharedTeachers(type, resource.id)
             ]);
             setShareUsers(entities.users);
             setShareGroups(entities.groups.map(g => g.id));
             setAllGroups(groupsData);
             setTeacherManagedGroups(groupsData);
             setExistingAssignments(assignments);
+            setSharedTeachers(teachers);
         } catch (err) {
             setAlertMessage({ type: 'error', text: 'Lỗi tải thông tin chia sẻ: ' + err.message });
         }
@@ -390,6 +493,49 @@ export default function AdminGrammarPage() {
             setAlertMessage({ type: 'error', text: 'Lỗi cập nhật public: ' + err.message });
         }
         setIsSharing(false);
+    }
+
+    async function handleToggleTeacherVisible(resource, type) {
+        const newStatus = !resource.teacherVisible;
+        setIsTeacherSharing(true);
+        try {
+            await toggleTeacherVisible(type, resource.id, newStatus);
+            setResourceToShare(prev => prev ? { ...prev, teacherVisible: newStatus } : prev);
+            setAlertMessage({ type: 'success', text: newStatus ? 'Đã bật cho GV sử dụng!' : 'Đã tắt quyền GV sử dụng.' });
+            loadData();
+        } catch (err) {
+            setAlertMessage({ type: 'error', text: 'Lỗi cập nhật: ' + err.message });
+        }
+        setIsTeacherSharing(false);
+    }
+
+    async function handleAddTeacherShare(emailOrEvent) {
+        const email = typeof emailOrEvent === 'string' ? emailOrEvent : teacherShareEmail;
+        if (!email || !email.trim() || !resourceToShare) return;
+        setIsTeacherSharing(true);
+        try {
+            const teacher = await shareResourceToTeacher(resourceToShare.type, resourceToShare.id, email);
+            if (!sharedTeachers.some(t => t.uid === teacher.uid)) {
+                setSharedTeachers(prev => [...prev, teacher]);
+            }
+            setTeacherShareEmail('');
+            setAlertMessage({ type: 'success', text: `Đã chia sẻ cho GV ${teacher.displayName || email}` });
+        } catch (err) {
+            setAlertMessage({ type: 'error', text: err.message });
+        }
+        setIsTeacherSharing(false);
+    }
+
+    async function handleRemoveTeacherShare(teacherUid) {
+        if (!resourceToShare) return;
+        setIsTeacherSharing(true);
+        try {
+            await unshareResourceFromTeacher(resourceToShare.type, resourceToShare.id, teacherUid);
+            setSharedTeachers(prev => prev.filter(t => t.uid !== teacherUid));
+        } catch (err) {
+            setAlertMessage({ type: 'error', text: 'Lỗi gỡ quyền: ' + err.message });
+        }
+        setIsTeacherSharing(false);
     }
 
     async function handleAddShareEmail(e) {
@@ -441,21 +587,84 @@ export default function AdminGrammarPage() {
     async function loadProposals() {
         try {
             const proposals = await getPendingProposals('grammar');
-            setPendingProposals(proposals);
+            // Check each proposal if it's new or update
+            const enriched = await Promise.all(proposals.map(async (p) => {
+                try {
+                    const sourceId = p.level === 'folder' ? p.sourceFolderId : p.sourceId;
+                    const existing = await findExistingOfficialCopy(sourceId, p.type, p.level || 'item');
+                    return { ...p, isUpdate: !!existing };
+                } catch { return { ...p, isUpdate: false }; }
+            }));
+            setPendingProposals(enriched);
         } catch (err) {
             console.error('Error loading proposals:', err);
         }
     }
 
-    async function handleApproveProposal(proposalId) {
+    async function handleApproveProposal(proposal) {
         try {
-            await approveProposal(proposalId, 'admin');
-            setAlertMessage({ type: 'success', text: 'Đã duyệt và tạo bài học chính thức thành công!' });
+            const sourceId = proposal.level === 'folder' ? proposal.sourceFolderId : proposal.sourceId;
+            const existing = await findExistingOfficialCopy(sourceId, proposal.type, proposal.level || 'item');
+            if (existing) {
+                setProposalToApprove(proposal);
+                setExistingOfficialCopy(existing);
+                setApproveModalOpen(true);
+            } else {
+                setIsApproving(true);
+                await approveProposal(proposal.id, 'admin', 'create_new');
+                setAlertMessage({ type: 'success', text: 'Đã duyệt và tạo bài học chính thức thành công!' });
+                loadProposals();
+                loadData();
+                setIsApproving(false);
+            }
+        } catch (err) {
+            setAlertMessage({ type: 'error', text: 'Lỗi duyệt: ' + err.message });
+            setIsApproving(false);
+        }
+    }
+
+    async function handleConfirmApprove(mode) {
+        if (!proposalToApprove) return;
+        setIsApproving(true);
+        try {
+            await approveProposal(proposalToApprove.id, 'admin', mode);
+            setAlertMessage({ type: 'success', text: mode === 'overwrite' ? 'Đã duyệt và cập nhật bản chính thức cũ!' : 'Đã duyệt và tạo bản chính thức mới!' });
+            setApproveModalOpen(false);
+            setProposalToApprove(null);
+            setExistingOfficialCopy(null);
             loadProposals();
             loadData();
         } catch (err) {
             setAlertMessage({ type: 'error', text: 'Lỗi duyệt: ' + err.message });
         }
+        setIsApproving(false);
+    }
+
+    // --- TRANSFER OWNERSHIP HANDLER ---
+    function openTransferModal(item, collectionName) {
+        setTransferTarget({ ...item, collectionName });
+        setTransferEmail('');
+        setTransferModalOpen(true);
+    }
+
+    async function handleConfirmTransfer(overrideEmail, overrideCollectionName, overrideId, overrideName) {
+        const email = overrideEmail || transferEmail;
+        const collName = overrideCollectionName || (transferTarget && transferTarget.collectionName);
+        const itemId = overrideId || (transferTarget && transferTarget.id);
+        const itemName = overrideName || (transferTarget && (transferTarget.name || transferTarget.title));
+        if (!collName || !itemId || !email.trim()) return;
+        setIsTransferring(true);
+        try {
+            const result = await transferOfficialToTeacher(collName, itemId, email.trim());
+            setAlertMessage({ type: 'success', text: `Đã chuyển quyền "${itemName}" cho ${result.teacherName}!` });
+            setTransferModalOpen(false);
+            setTransferTarget(null);
+            setShareModalOpen(false);
+            loadData();
+        } catch (err) {
+            setAlertMessage({ type: 'error', text: 'Lỗi chuyển quyền: ' + err.message });
+        }
+        setIsTransferring(false);
     }
 
     function openRejectModal(proposal) {
@@ -477,32 +686,40 @@ export default function AdminGrammarPage() {
         }
     }
 
-    const filteredExercises = exercises.filter(ex =>
-        (ex.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (ex.description || '').toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredExercises = exercises.filter(ex => {
+        const matchesSearch = (ex.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (ex.description || '').toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesPublic = publicFilter === 'all' ? true
+            : publicFilter === 'public' ? !!ex.isPublic
+            : !ex.isPublic;
+        return matchesSearch && matchesPublic;
+    });
 
     const filteredFolders = folders.filter(f => {
-        const matchesFolder = (f.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        const matchesSearch = (f.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (f.id || '').toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesPublic = publicFilter === 'all' ? true
+            : publicFilter === 'public' ? !!f.isPublic
+            : !f.isPublic;
         const hasMatchingExercise = (f.exerciseIds || []).some(eid =>
             filteredExercises.some(ex => ex.id === eid)
         );
-        return matchesFolder || hasMatchingExercise;
+        return (matchesSearch && matchesPublic) || hasMatchingExercise;
     });
 
     return (
         <div className="admin-page">
             <div className="admin-page-header">
                 <h1 className="admin-page-title">Bài học Kỹ năng chính thức</h1>
+                <p className="admin-page-subtitle">Quản lý các bài luyện Kỹ năng chính thức trên hệ thống.</p>
                 <div className="admin-header-actions">
                     <button className="admin-btn admin-btn-outline" onClick={openAddFolderForm}><FolderOpen size={16} /> Thêm Folder</button>
                     <button className="admin-btn admin-btn-primary" onClick={openAddExerciseForm}><Plus size={16} /> Tạo bài luyện mới</button>
                 </div>
             </div>
 
-            <div>
-                <div className="admin-search-box">
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div className="admin-search-box" style={{ flex: 1, minWidth: '200px' }}>
                     <Search size={16} className="search-icon" />
                     <input
                         type="text"
@@ -510,6 +727,17 @@ export default function AdminGrammarPage() {
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                     />
+                </div>
+                <div className="admin-public-filter">
+                    <button className={`admin-filter-btn${publicFilter === 'all' ? ' active' : ''}`} onClick={() => setPublicFilter('all')}>
+                        <Filter size={14} /> Tất cả
+                    </button>
+                    <button className={`admin-filter-btn public${publicFilter === 'public' ? ' active' : ''}`} onClick={() => setPublicFilter('public')}>
+                        <Globe size={14} /> Public
+                    </button>
+                    <button className={`admin-filter-btn private${publicFilter === 'private' ? ' active' : ''}`} onClick={() => setPublicFilter('private')}>
+                        <Lock size={14} /> Chưa public
+                    </button>
                 </div>
             </div>
 
@@ -525,7 +753,7 @@ export default function AdminGrammarPage() {
                                         <th style={{ width: '40px' }}></th>
                                         <th>Tên mục</th>
                                         <th>Thông tin</th>
-                                        <th>Trạng thái</th>
+                                        <th style={{ textAlign: 'center' }}>Trạng thái</th>
                                         <th className="text-right">Hành động</th>
                                     </tr>
                                 </thead>
@@ -534,7 +762,11 @@ export default function AdminGrammarPage() {
                                         <tbody ref={provided.innerRef} {...provided.droppableProps}>
                                             {filteredFolders.map((folder, fIndex) => {
                                                 const isExpanded = expandedFolders.has(folder.id) || searchTerm.length > 0;
-                                                const folderExercises = filteredExercises.filter(ex => (folder.exerciseIds || []).includes(ex.id));
+                                                // Preserve exerciseIds array order for drag-and-drop
+                                                const folderExerciseIds = folder.exerciseIds || [];
+                                                const folderExercises = folderExerciseIds
+                                                    .map(eid => filteredExercises.find(ex => ex.id === eid))
+                                                    .filter(Boolean);
 
                                                 return (
                                                     <React.Fragment key={folder.id}>
@@ -589,6 +821,11 @@ export default function AdminGrammarPage() {
                                                                                             <Globe size={10} /> Public
                                                                                         </span>
                                                                                     )}
+                                                                                    {folder.teacherVisible && !folder.isPublic && (
+                                                                                        <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                                                                            <GraduationCap size={10} /> GV
+                                                                                        </span>
+                                                                                    )}
                                                                                 </div>
                                                                                 <div className="admin-text-muted" style={{ fontSize: '0.8rem', maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                                                     {folder.description || <span style={{ fontStyle: 'italic', color: '#cbd5e1' }}>Không có mô tả</span>}
@@ -637,9 +874,28 @@ export default function AdminGrammarPage() {
                                                                     </td>
                                                                 </tr>
                                                             ) : (
-                                                                folderExercises.map(exercise => (
-                                                                    <tr key={exercise.id} className="table-row-nested">
-                                                                        <td></td>
+                                                                <Droppable droppableId={`folder-exercises-${folder.id}`} type="exercise">
+                                                                    {(exDropProvided) => (
+                                                                        <>
+                                                                        {folderExercises.map((exercise, exIdx) => (
+                                                                            <Draggable key={exercise.id} draggableId={`ex-${exercise.id}`} index={exIdx}>
+                                                                                {(exDragProv, exSnapshot) => (
+                                                                    <tr
+                                                                        ref={(node) => { exDragProv.innerRef(node); if (exIdx === 0) exDropProvided.innerRef(node); }}
+                                                                        {...exDragProv.draggableProps}
+                                                                        {...(exIdx === 0 ? exDropProvided.droppableProps : {})}
+                                                                        className="table-row-nested"
+                                                                        style={{
+                                                                            ...exDragProv.draggableProps.style,
+                                                                            backgroundColor: exSnapshot.isDragging ? '#f0f9ff' : undefined,
+                                                                            boxShadow: exSnapshot.isDragging ? '0 4px 12px rgba(0,0,0,0.08)' : undefined
+                                                                        }}
+                                                                    >
+                                                                        <td>
+                                                                            <div {...exDragProv.dragHandleProps} style={{ cursor: 'grab', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                                <GripVertical size={14} />
+                                                                            </div>
+                                                                        </td>
                                                                         <td data-label="Tên mục">
                                                                             <div className="admin-topic-cell">
                                                                                 <div className="admin-topic-icon" style={{ background: `${exercise.color || '#3b82f6'}20`, width: '32px', height: '32px', fontSize: '0.9rem' }}>{exercise.icon || '📝'}</div>
@@ -649,6 +905,9 @@ export default function AdminGrammarPage() {
                                                                                         <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                                                                                             {exercise.isPublic && (
                                                                                                 <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0', whiteSpace: 'nowrap' }}>Public</span>
+                                                                                            )}
+                                                                                            {exercise.teacherVisible && !exercise.isPublic && (
+                                                                                                <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '2px' }}><GraduationCap size={9} /> GV</span>
                                                                                             )}
                                                                                         </div>
                                                                                     </div>
@@ -678,8 +937,8 @@ export default function AdminGrammarPage() {
                                                                                 </div>
                                                                             </div>
                                                                         </td>
-                                                                        <td data-label="Trạng thái" className="mobile-hide">
-                                                                            <div style={{ display: 'flex', gap: '4px', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                                                        <td data-label="Trạng thái" className="mobile-hide" style={{ textAlign: 'center' }}>
+                                                                            <div style={{ display: 'flex', gap: '4px', flexDirection: 'column', alignItems: 'center' }}>
                                                                                 <span className="admin-status-badge active" style={{ fontSize: '0.6rem', padding: '1px 5px' }}>Đang hoạt động</span>
                                                                             </div>
                                                                         </td>
@@ -688,13 +947,20 @@ export default function AdminGrammarPage() {
                                                                                 <Link to={`/admin/grammar/${exercise.id}`} className="admin-action-btn" title="Quản lý câu hỏi">
                                                                                     <List size={14} />
                                                                                 </Link>
+                                                                                <button className="admin-action-btn" onClick={() => { setExerciseToConvert(exercise); setConvertExamType('homework'); setConvertTimingMode('exam'); }} title="Chuyển thành Bài tập/KT"><ArrowRightLeft size={14} /></button>
                                                                                 <button className="admin-action-btn" onClick={() => openShareModal(exercise, 'admin_grammar')}><Share2 size={14} /></button>
                                                                                 <button className="admin-action-btn" onClick={() => openEditExerciseForm(exercise)}><Edit size={14} /></button>
                                                                                 <button className="admin-action-btn danger" onClick={() => setExerciseToDelete(exercise)}><Trash2 size={14} /></button>
                                                                             </div>
                                                                         </td>
                                                                     </tr>
-                                                                ))
+                                                                                )}
+                                                                            </Draggable>
+                                                                        ))}
+                                                                        {exDropProvided.placeholder}
+                                                                        </>
+                                                                    )}
+                                                                </Droppable>
                                                             )
                                                         )}
                                                     </React.Fragment>
@@ -749,11 +1015,14 @@ export default function AdminGrammarPage() {
                                                                 </div>
                                                             </div>
                                                         </td>
-                                                        <td>
-                                                            <div style={{ display: 'flex', gap: '6px', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                                        <td style={{ textAlign: 'center' }}>
+                                                            <div style={{ display: 'flex', gap: '6px', flexDirection: 'column', alignItems: 'center' }}>
                                                                 <span className="admin-status-badge active">Đang hoạt động</span>
                                                                 {exercise.isPublic && (
                                                                     <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0' }}>Public</span>
+                                                                )}
+                                                                {exercise.teacherVisible && !exercise.isPublic && (
+                                                                    <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', display: 'inline-flex', alignItems: 'center', gap: '3px' }}><GraduationCap size={10} /> GV</span>
                                                                 )}
                                                             </div>
                                                         </td>
@@ -762,6 +1031,7 @@ export default function AdminGrammarPage() {
                                                                 <Link to={`/admin/grammar/${exercise.id}`} className="admin-action-btn" title="Quản lý câu hỏi">
                                                                     <List size={16} />
                                                                 </Link>
+                                                                <button className="admin-action-btn" onClick={() => { setExerciseToConvert(exercise); setConvertExamType('homework'); setConvertTimingMode('exam'); }} title="Chuyển thành Bài tập/KT"><ArrowRightLeft size={16} /></button>
                                                                 <button className="admin-action-btn" onClick={() => openShareModal(exercise, 'admin_grammar')}><Share2 size={16} /></button>
                                                                 <button className="admin-action-btn" onClick={() => openEditExerciseForm(exercise)}><Edit size={16} /></button>
                                                                 <button className="admin-action-btn danger" onClick={() => setExerciseToDelete(exercise)}><Trash2 size={16} /></button>
@@ -804,10 +1074,10 @@ export default function AdminGrammarPage() {
                                     <tr key={proposal.id}>
                                         <td data-label="Nội dung"><div className="admin-topic-cell"><div className="admin-topic-icon" style={{ background: `${proposal.color || '#3b82f6'}20` }}>{proposal.icon || '📝'}</div><div><div className="admin-topic-name">{proposal.proposalName}</div><div className="admin-topic-id" style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{proposal.proposalDescription || 'Không có mô tả'}</div></div></div></td>
                                         <td data-label="Giáo viên"><div style={{ fontSize: '0.85rem', color: '#334155' }}>{proposal.teacherName}</div><div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{proposal.teacherEmail}</div></td>
-                                        <td data-label="Loại"><span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '4px', background: '#e0e7ff', color: '#4f46e5', fontWeight: 600 }}>{proposal.level === 'folder' ? 'Folder' : 'Bài lẻ'}</span></td>
+                                        <td data-label="Loại"><div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}><span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '4px', background: '#e0e7ff', color: '#4f46e5', fontWeight: 600 }}>{proposal.level === 'folder' ? 'Folder' : 'Bài lẻ'}</span><span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '4px', background: proposal.isUpdate ? '#fff7ed' : '#ecfdf5', color: proposal.isUpdate ? '#c2410c' : '#059669', fontWeight: 600, border: `1px solid ${proposal.isUpdate ? '#fed7aa' : '#a7f3d0'}` }}>{proposal.isUpdate ? '🔄 Cập nhật' : '🆕 Tài liệu mới'}</span></div></td>
                                         <td data-label="Hành động" className="text-right">
                                             <div className="admin-table-actions">
-                                                <button className="admin-action-btn" style={{ color: '#10b981' }} onClick={() => handleApproveProposal(proposal.id)} title="Duyệt"><CheckCircle size={16} /></button>
+                                                <button className="admin-action-btn" style={{ color: '#10b981' }} onClick={() => handleApproveProposal(proposal)} disabled={isApproving} title="Duyệt"><CheckCircle size={16} /></button>
                                                 <button className="admin-action-btn danger" onClick={() => openRejectModal(proposal)} title="Từ chối"><XCircle size={16} /></button>
                                             </div>
                                         </td>
@@ -840,6 +1110,59 @@ export default function AdminGrammarPage() {
                     </div>
                 </div>
             )}
+
+            {/* APPROVE MODE MODAL */}
+            {approveModalOpen && proposalToApprove && existingOfficialCopy && (
+                <div className="admin-modal-overlay">
+                    <div className="admin-modal" style={{ maxWidth: '480px' }}>
+                        <h2 className="admin-modal-title" style={{ color: '#f59e0b' }}>⚠️ Đã có bản chính thức</h2>
+                        <p className="admin-modal-desc" style={{ marginBottom: '8px' }}>
+                            Nội dung <strong>"{proposalToApprove.proposalName}"</strong> đã có bản chính thức trước đó:
+                        </p>
+                        <div style={{
+                            background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px',
+                            padding: '12px', marginBottom: '16px', fontSize: '0.85rem', color: '#9a3412'
+                        }}>
+                            📄 <strong>{existingOfficialCopy.name}</strong>
+                            <div style={{ fontSize: '0.75rem', color: '#c2410c', marginTop: '4px' }}>
+                                ID: {existingOfficialCopy.id}
+                            </div>
+                        </div>
+                        <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '20px' }}>
+                            Bạn muốn <strong>cập nhật bản cũ</strong> hay <strong>tạo bản mới</strong>?
+                        </p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <button
+                                className="admin-btn admin-btn-primary"
+                                style={{ backgroundColor: '#f59e0b', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                                onClick={() => handleConfirmApprove('overwrite')}
+                                disabled={isApproving}
+                            >
+                                🔄 Cập nhật bản cũ (đè lên)
+                            </button>
+                            <button
+                                className="admin-btn admin-btn-primary"
+                                style={{ backgroundColor: '#10b981', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                                onClick={() => handleConfirmApprove('create_new')}
+                                disabled={isApproving}
+                            >
+                                ➕ Tạo bản chính thức mới
+                            </button>
+                            <button
+                                className="admin-btn admin-btn-secondary"
+                                style={{ width: '100%' }}
+                                onClick={() => { setApproveModalOpen(false); setProposalToApprove(null); setExistingOfficialCopy(null); }}
+                                disabled={isApproving}
+                            >
+                                Hủy
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+
+
 
             {/* --- EXERCISE FORM MODAL --- */}
             {exerciseFormOpen && (
@@ -947,7 +1270,7 @@ export default function AdminGrammarPage() {
             {/* --- FOLDER MODALS --- */}
             {folderFormOpen && (
                 <div className="teacher-modal-overlay">
-                    <div className="teacher-modal wide" style={{ maxWidth: '600px', overflow: 'auto' }}>
+                    <div className="teacher-modal wide" style={{ maxWidth: '960px', overflow: 'auto' }}>
                         <div style={{ position: 'sticky', top: '0px', zIndex: 100, display: 'flex', justifyContent: 'flex-end', height: 0, overflow: 'visible', pointerEvents: 'none' }}>
                             <button type="button" className="teacher-modal-close" onClick={() => setFolderFormOpen(false)} style={{ pointerEvents: 'auto', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, background: 'rgba(241, 245, 249, 0.95)', backdropFilter: 'blur(4px)', border: 'none', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                                 <X size={20} />
@@ -1039,7 +1362,7 @@ export default function AdminGrammarPage() {
             )}
 
             {alertMessage && (
-                <div className="teacher-modal-overlay">
+                <div className="teacher-modal-overlay" style={{ zIndex: 3000 }}>
                     <div className="teacher-modal">
                         <h2 className="admin-modal-title">
                             {alertMessage.type === 'success' ? <span style={{ color: '#10b981' }}>Thành công</span> : <span style={{ color: '#ef4444' }}>Đã có lỗi</span>}
@@ -1095,138 +1418,239 @@ export default function AdminGrammarPage() {
                             </div>
                         </div>
 
-                        {/* Public Toggle */}
-                        <div className="admin-share-public-toggle" style={{ background: resourceToShare.isPublic ? '#ecfdf5' : '#fff', border: `1px solid ${resourceToShare.isPublic ? '#10b981' : '#e2e8f0'}`, marginBottom: '20px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: resourceToShare.isPublic ? '#10b981' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: resourceToShare.isPublic ? '#fff' : '#64748b' }}>
-                                    {resourceToShare.isPublic ? <Globe size={20} /> : <Lock size={20} />}
+                        {/* Mobile tabs */}
+                            <div className="share-modal-tabs">
+                                <button className={`share-modal-tab tab-internal ${adminShareTab === 'internal' ? 'active' : ''}`} onClick={() => setAdminShareTab('internal')}>
+                                    <Lock size={16} /> Nội bộ (GV)
+                                </button>
+                                <button className={`share-modal-tab tab-student ${adminShareTab === 'student' ? 'active' : ''}`} onClick={() => setAdminShareTab('student')}>
+                                    <GraduationCap size={16} /> Học viên
+                                </button>
+                            </div>
+
+                            {/* Two columns */}
+                            <div className="share-modal-columns">
+                                {/* LEFT COLUMN: Nội bộ */}
+                                <div className={`share-modal-col ${adminShareTab === 'internal' ? 'active' : ''}`}>
+                                    <div className="share-modal-col-header teacher">
+                                        <Lock size={18} /> Nội bộ (Giáo viên)
+                                    </div>
+
+                                    <div className="share-modal-section">
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                                            <Globe size={18} color="#3b82f6" />
+                                            <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#334155', margin: 0 }}>Quyền truy cập chung</h4>
+                                        </div>
+                                        <div className="admin-share-public-toggle" style={{ background: resourceToShare.isPublic ? '#ecfdf5' : '#fff', border: `1px solid ${resourceToShare.isPublic ? '#10b981' : '#e2e8f0'}` }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: resourceToShare.isPublic ? '#10b981' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: resourceToShare.isPublic ? '#fff' : '#64748b' }}>
+                                                    {resourceToShare.isPublic ? <Globe size={20} /> : <Lock size={20} />}
+                                                </div>
+                                                <div>
+                                                    <h4 style={{ fontWeight: 600, fontSize: '0.95rem', color: '#1e293b', margin: '0 0 4px 0' }}>{resourceToShare.isPublic ? 'Đang Công khai' : 'Hạn chế'}</h4>
+                                                    <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>{resourceToShare.isPublic ? 'Bất kỳ ai cũng có thể tìm và học bài này.' : 'Cần cấp quyền bên dưới hoặc gửi Link trực tiếp.'}</p>
+                                                </div>
+                                            </div>
+                                            <button onClick={handleTogglePublic} disabled={isSharing} style={{ padding: '8px 16px', background: resourceToShare.isPublic ? 'transparent' : 'var(--color-primary)', color: resourceToShare.isPublic ? '#ef4444' : '#fff', border: resourceToShare.isPublic ? '1px solid #ef4444' : 'none', borderRadius: '6px', cursor: isSharing ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>
+                                                {resourceToShare.isPublic ? 'Tắt Public' : 'Bật Public'}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="share-modal-section">
+                                        <h4><GraduationCap size={16} color="#8b5cf6" /> Dành cho Giáo viên</h4>
+                                        <div style={{ padding: '16px', background: '#eff6ff', borderRadius: '12px', border: '1px solid #bfdbfe' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '12px' }}>
+                                                <div>
+                                                    <div style={{ fontWeight: 600, fontSize: '0.88rem', color: '#0f172a', marginBottom: '2px' }}>Cho tất cả GV sử dụng</div>
+                                                    <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{resourceToShare.teacherVisible ? 'Tất cả GV đều thấy và giao bài được.' : 'Chỉ GV được chỉ định bên dưới mới thấy.'}</div>
+                                                </div>
+                                                <button onClick={() => handleToggleTeacherVisible(resourceToShare, resourceToShare.type)} disabled={isTeacherSharing} style={{ position: 'relative', flexShrink: 0, width: '40px', height: '24px', borderRadius: '12px', background: resourceToShare.teacherVisible ? '#3b82f6' : '#cbd5e1', border: 'none', cursor: 'pointer', transition: 'background 0.3s' }}>
+                                                    <div style={{ position: 'absolute', top: '2px', left: resourceToShare.teacherVisible ? '18px' : '2px', width: '20px', height: '20px', borderRadius: '50%', background: '#fff', transition: 'left 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}></div>
+                                                </button>
+                                            </div>
+                                            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><UserPlus size={14} /> Chia sẻ cho GV cụ thể</div>
+                                            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                                                <EmailAutocomplete value={teacherShareEmail} onChange={setTeacherShareEmail} onSelect={(email) => handleAddTeacherShare(email)} placeholder="Email giáo viên..." roleFilter="teacher" />
+                                                <button onClick={() => handleAddTeacherShare(teacherShareEmail)} disabled={isTeacherSharing || !teacherShareEmail} style={{ flexShrink: 0, padding: '8px 12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', cursor: isTeacherSharing ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>Thêm</button>
+                                            </div>
+                                            {sharedTeachers.length > 0 && (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                    {sharedTeachers.map(t => (
+                                                        <div key={t.uid} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', background: '#fff', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#dbeafe', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 'bold' }}>{(t.displayName || t.email || 'G').charAt(0).toUpperCase()}</div>
+                                                                <div>
+                                                                    <div style={{ fontSize: '0.85rem', fontWeight: 500, color: '#0f172a' }}>{t.displayName || 'Giáo viên'}</div>
+                                                                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{t.email}</div>
+                                                                </div>
+                                                            </div>
+                                                            <button onClick={() => handleRemoveTeacherShare(t.uid)} disabled={isTeacherSharing} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }} title="Gỡ quyền"><X size={14} /></button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            <div style={{ marginTop: '16px', padding: '14px', background: '#faf5ff', borderRadius: '10px', border: '1px dashed #c4b5fd' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                                                    <span style={{ fontSize: '1rem' }}>🔄</span>
+                                                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#6d28d9' }}>Chuyển quyền sở hữu</span>
+                                                </div>
+                                                <p style={{ fontSize: '0.75rem', color: '#7c3aed', margin: '0 0 8px 0' }}>Nội dung sẽ mất tag "Chính thức" và thuộc về giáo viên.</p>
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                    <EmailAutocomplete value={transferEmail} onChange={setTransferEmail} onSelect={(email) => { const collName = resourceToShare.type === 'grammar_folder' ? 'grammar_folders' : 'grammar_exercises'; handleConfirmTransfer(email, collName, resourceToShare.id, resourceToShare.name || resourceToShare.title); }} placeholder="Email giáo viên nhận..." roleFilter="teacher" />
+                                                    <button onClick={() => { const collName = resourceToShare.type === 'grammar_folder' ? 'grammar_folders' : 'grammar_exercises'; handleConfirmTransfer(transferEmail, collName, resourceToShare.id, resourceToShare.name || resourceToShare.title); }} disabled={isTransferring || !transferEmail.trim()} style={{ flexShrink: 0, padding: '8px 14px', background: '#8b5cf6', color: '#fff', border: 'none', borderRadius: '6px', cursor: (isTransferring || !transferEmail.trim()) ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: '0.82rem', opacity: (isTransferring || !transferEmail.trim()) ? 0.5 : 1 }}>
+                                                        {isTransferring ? 'Đang chuyển...' : 'Chuyển'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h4 style={{ fontWeight: 600, fontSize: '0.95rem', color: '#1e293b', margin: '0 0 4px 0' }}>{resourceToShare.isPublic ? 'Đang Công khai' : 'Hạn chế (Chỉ ai có quyền hoặc có link)'}</h4>
-                                    <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>{resourceToShare.isPublic ? 'Bất kỳ ai cũng có thể tìm và học bài này.' : 'Cần cấp quyền bên dưới hoặc gửi Link trực tiếp.'}</p>
+
+                                {/* RIGHT COLUMN: Học viên */}
+                                <div className={`share-modal-col ${adminShareTab === 'student' ? 'active' : ''}`}>
+                                    <div className="share-modal-col-header student">
+                                        <GraduationCap size={18} /> Học viên
+                                    </div>
+
+                                    {!resourceToShare.isPublic && (
+                                        <div className="share-modal-section">
+                                            <div className="admin-share-grid">
+                                                <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
+                                                    <h4 style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', fontWeight: 600, color: '#334155', margin: '0 0 12px 0' }}><Users size={16} /> Chia sẻ cho Nhóm</h4>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+                                                        {allGroups.length === 0 ? <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: 0 }}>Chưa có nhóm nào.</p> : null}
+                                                        {allGroups.map(g => (
+                                                            <label key={g.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '0.85rem', color: '#475569', cursor: 'pointer', background: '#f8fafc', padding: '8px', borderRadius: '6px' }}>
+                                                                <input type="checkbox" checked={shareGroups.includes(g.id)} disabled={isSharing} onChange={() => handleToggleGroupShare(g.id)} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
+                                                                <span style={{ flex: 1 }}>{g.name}</span>
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
+                                                    <h4 style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', fontWeight: 600, color: '#334155', margin: '0 0 12px 0' }}><Mail size={16} /> Chia sẻ cá nhân</h4>
+                                                    <form onSubmit={handleAddShareEmail} style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                                                        <EmailAutocomplete value={shareEmail} onChange={setShareEmail} onSubmit={(email) => handleAddShareEmail(email)} disabled={isSharing} roleFilter="student" />
+                                                        <button type="submit" disabled={isSharing} style={{ flexShrink: 0, padding: '8px 12px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: '6px', cursor: isSharing ? 'not-allowed' : 'pointer' }}><UserPlus size={16} /></button>
+                                                    </form>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '150px', overflowY: 'auto' }}>
+                                                        {shareUsers.length === 0 ? <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: 0 }}>Chưa thêm ai.</p> : null}
+                                                        {shareUsers.map(u => (
+                                                            <div key={u.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', fontSize: '0.85rem', color: '#475569', background: '#f8fafc', padding: '8px', borderRadius: '6px' }}>
+                                                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</span>
+                                                                <button onClick={() => handleRemoveShareUser(u.id)} disabled={isSharing} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: isSharing ? 'not-allowed' : 'pointer', padding: '4px' }} title="Gỡ quyền"><X size={14} /></button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {resourceToShare.type !== 'grammar_folder' && (
+                                        <div className="share-modal-section" style={{ padding: '16px', background: 'linear-gradient(135deg, #fffbeb, #fef3c7)', borderRadius: '12px', border: '1px solid #fde68a' }}>
+                                            <h4 style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.95rem', fontWeight: 700, color: '#92400e', margin: '0 0 6px 0' }}><FileText size={16} /> Giao bài cho lớp</h4>
+                                            <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '12px' }}>Giao nhanh bài học này cho 1 lớp mà bạn đang chủ nhiệm.</p>
+                                            {existingAssignments.length > 0 && (
+                                                <div style={{ marginBottom: '12px' }}>
+                                                    <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '6px', fontWeight: 600 }}>Đã giao cho:</p>
+                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                                        {existingAssignments.map(a => (
+                                                            <span key={a.id} style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '20px', background: 'linear-gradient(135deg, #fef3c7, #fde68a)', color: '#92400e', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px solid #fcd34d' }}>✅ {a.groupName || a.targetName || allGroups.find(g => g.id === a.groupId)?.name || 'Lớp'}</span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {teacherManagedGroups.length > 0 ? (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                        <div style={{ flex: '1 1 140px', minWidth: 0, position: 'relative', zIndex: 20 }}>
+                                                            <CustomSelect value={quickAssignGroupId} onChange={v => setQuickAssignGroupId(v)} placeholder="-- Chọn lớp --" options={teacherManagedGroups.map(g => ({ value: g.id, label: g.name, icon: '🏫' }))} style={{ margin: 0 }} />
+                                                        </div>
+                                                        <div style={{ flex: '1 1 140px', minWidth: 0 }}>
+                                                            <input type="datetime-local" value={quickAssignDueDate} onChange={e => setQuickAssignDueDate(e.target.value)} style={{ width: '100%', padding: '6px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.88rem', color: '#1e293b', minHeight: '38px', boxSizing: 'border-box' }} />
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#334155', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>⏰ Thời điểm bắt đầu</div>
+                                                        <div style={{ display: 'flex', gap: '6px' }}>
+                                                            <button type="button" onClick={() => setQuickAssignScheduledStart('')} style={{ flex: 1, padding: '7px 10px', borderRadius: '8px', border: !quickAssignScheduledStart ? '2px solid #059669' : '1.5px solid #e2e8f0', background: !quickAssignScheduledStart ? 'linear-gradient(135deg, #10b981, #059669)' : '#fff', color: !quickAssignScheduledStart ? '#fff' : '#64748b', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.2s' }}>Bắt đầu ngay</button>
+                                                            <button type="button" onClick={() => setQuickAssignScheduledStart('pending')} style={{ flex: 1, padding: '7px 10px', borderRadius: '8px', border: quickAssignScheduledStart ? '2px solid #d97706' : '1.5px solid #e2e8f0', background: quickAssignScheduledStart ? 'linear-gradient(135deg, #f59e0b, #d97706)' : '#fff', color: quickAssignScheduledStart ? '#fff' : '#64748b', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.2s' }}>Hẹn ngày...</button>
+                                                        </div>
+                                                        {quickAssignScheduledStart && (
+                                                            <div style={{ marginTop: '6px' }}>
+                                                                <input type="datetime-local" value={quickAssignScheduledStart === 'pending' ? '' : quickAssignScheduledStart} onChange={e => setQuickAssignScheduledStart(e.target.value)} style={{ width: '100%', padding: '6px 12px', borderRadius: '8px', border: '1.5px solid #f59e0b', fontSize: '0.85rem', color: '#1e293b', background: '#fffbeb', boxSizing: 'border-box' }} />
+                                                                {quickAssignScheduledStart && quickAssignScheduledStart !== 'pending' && quickAssignDueDate && new Date(quickAssignScheduledStart) >= new Date(quickAssignDueDate) && (
+                                                                    <p style={{ color: '#ef4444', fontSize: '0.75rem', margin: '4px 0 0', fontWeight: 600 }}>⚠ Ngày bắt đầu phải trước hạn nộp!</p>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <button type="button" onClick={handleQuickAssign} disabled={isQuickAssigning || !quickAssignGroupId || !quickAssignDueDate || quickAssignScheduledStart === 'pending' || (quickAssignScheduledStart && quickAssignScheduledStart !== 'pending' && quickAssignDueDate && new Date(quickAssignScheduledStart) >= new Date(quickAssignDueDate))} className="admin-btn admin-btn-primary" style={{ width: '100%', padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: 'linear-gradient(135deg, #f59e0b, #d97706)', border: 'none', opacity: (isQuickAssigning || !quickAssignGroupId || !quickAssignDueDate || quickAssignScheduledStart === 'pending') ? 0.6 : 1 }}>
+                                                        <Send size={14} /> {isQuickAssigning ? 'Đang giao...' : 'Giao bài'}
+                                                    </button>
+                                                    {quickAssignSuccess && (
+                                                        <div style={{ padding: '10px 14px', borderRadius: '8px', background: '#ecfdf5', border: '1px solid #a7f3d0', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: '#059669', fontWeight: 500 }}><CheckCircle size={16} /> {quickAssignSuccess}</div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <p style={{ fontSize: '0.85rem', color: '#94a3b8', fontStyle: 'italic' }}>Bạn chưa quản lý lớp nào.</p>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
-                            <button
-                                onClick={handleTogglePublic}
-                                disabled={isSharing}
-                                style={{
-                                    padding: '8px 16px', background: resourceToShare.isPublic ? 'transparent' : 'var(--color-primary)',
-                                    color: resourceToShare.isPublic ? '#ef4444' : '#fff',
-                                    border: resourceToShare.isPublic ? '1px solid #ef4444' : 'none',
-                                    borderRadius: '6px', cursor: isSharing ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: '0.85rem'
-                                }}>
-                                {resourceToShare.isPublic ? 'Tắt Public' : 'Bật Public'}
-                            </button>
+
+                            <div className="admin-modal-actions" style={{ marginTop: '24px', flexDirection: 'row' }}>
+                                <button className="admin-btn admin-btn-primary" style={{ flex: 1 }} onClick={() => setShareModalOpen(false)}>Đóng</button>
+                            </div>
+                    </div>
+                </div>
+            )}
+
+            {/* CONVERT TO EXAM MODAL */}
+            {exerciseToConvert && (
+                <div className="admin-modal-overlay">
+                    <div className="admin-modal" style={{ maxWidth: '520px' }}>
+                        <h2 className="admin-modal-title" style={{ color: '#7c3aed' }}><ArrowRightLeft size={24} /> Chuyển thành Bài tập/KT</h2>
+                        <p className="admin-modal-desc">
+                            Chuyển bài kỹ năng <strong>{exerciseToConvert.name}</strong> thành Bài tập hoặc Kiểm tra. Bài gốc sẽ được giữ nguyên.
+                        </p>
+                        <div style={{ marginBottom: '16px' }}>
+                            <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '8px', display: 'block' }}>Loại bài</label>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                {[{ value: 'homework', label: '📋 Bài tập', desc: 'Bài luyện tập' }, { value: 'test', label: '📝 Kiểm tra', desc: 'Bài kiểm tra chính thức' }].map(opt => (
+                                    <button key={opt.value} type="button" onClick={() => setConvertExamType(opt.value)}
+                                        style={{ flex: 1, padding: '12px', borderRadius: '12px', border: convertExamType === opt.value ? '2px solid #7c3aed' : '2px solid #e2e8f0', background: convertExamType === opt.value ? '#f5f3ff' : '#fff', color: convertExamType === opt.value ? '#6d28d9' : '#64748b', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', transition: 'all 0.2s', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                                        <div>{opt.label}</div>
+                                        <div style={{ fontSize: '0.72rem', fontWeight: 400 }}>{opt.desc}</div>
+                                    </button>
+                                ))}
+                            </div>
                         </div>
-
-                        {!resourceToShare.isPublic && (
-                            <div className="admin-share-grid">
-                                {/* Group Share */}
-                                <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
-                                    <h4 style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', fontWeight: 600, color: '#334155', margin: '0 0 12px 0' }}><Users size={16} /> Chia sẻ cho Nhóm</h4>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
-                                        {allGroups.length === 0 ? <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: 0 }}>Chưa có nhóm nào.</p> : null}
-                                        {allGroups.map(g => (
-                                            <label key={g.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '0.85rem', color: '#475569', cursor: 'pointer', background: '#f8fafc', padding: '8px', borderRadius: '6px' }}>
-                                                <input type="checkbox" checked={shareGroups.includes(g.id)} disabled={isSharing} onChange={() => handleToggleGroupShare(g.id)} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
-                                                <span style={{ flex: 1 }}>{g.name}</span>
-                                            </label>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Email Share */}
-                                <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
-                                    <h4 style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', fontWeight: 600, color: '#334155', margin: '0 0 12px 0' }}><Mail size={16} /> Chia sẻ cá nhân</h4>
-                                    <form onSubmit={handleAddShareEmail} style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-                                        <EmailAutocomplete
-                                            value={shareEmail}
-                                            onChange={setShareEmail}
-                                            onSubmit={(email) => handleAddShareEmail(email)}
-                                            disabled={isSharing}
-                                        />
-                                        <button type="submit" disabled={isSharing} style={{ flexShrink: 0, padding: '8px 12px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: '6px', cursor: isSharing ? 'not-allowed' : 'pointer' }}><UserPlus size={16} /></button>
-                                    </form>
-
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '150px', overflowY: 'auto' }}>
-                                        {shareUsers.length === 0 ? <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: 0 }}>Chưa thêm ai.</p> : null}
-                                        {shareUsers.map(u => (
-                                            <div key={u.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', fontSize: '0.85rem', color: '#475569', background: '#f8fafc', padding: '8px', borderRadius: '6px' }}>
-                                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</span>
-                                                <button onClick={() => handleRemoveShareUser(u.id)} disabled={isSharing} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: isSharing ? 'not-allowed' : 'pointer', padding: '4px' }} title="Gỡ quyền"><X size={14} /></button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
+                        <div style={{ marginBottom: '16px' }}>
+                            <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '8px', display: 'block' }}>Quản lý thời gian</label>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                {[{ value: 'exam', label: '⏱ Cả bài' }, { value: 'section', label: '📑 Theo section' }, { value: 'question', label: '❓ Theo câu' }].map(mode => (
+                                    <button key={mode.value} type="button" onClick={() => setConvertTimingMode(mode.value)}
+                                        style={{ flex: 1, padding: '10px 8px', borderRadius: '12px', border: convertTimingMode === mode.value ? '2px solid #7c3aed' : '2px solid #e2e8f0', background: convertTimingMode === mode.value ? '#f5f3ff' : '#fff', color: convertTimingMode === mode.value ? '#6d28d9' : '#64748b', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.2s', textAlign: 'center' }}>
+                                        {mode.label}
+                                    </button>
+                                ))}
                             </div>
-                        )}
-
-                        {/* Quick Assign Section */}
-                        {resourceToShare.type !== 'grammar_folder' && (
-                            <div style={{ marginTop: '20px', padding: '16px', background: 'linear-gradient(135deg, #fffbeb, #fef3c7)', borderRadius: '12px', border: '1px solid #fde68a' }}>
-                                <h4 style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.95rem', fontWeight: 700, color: '#92400e', margin: '0 0 6px 0' }}>
-                                    <FileText size={16} /> Giao bài cho lớp
-                                </h4>
-                                <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '12px' }}>Giao nhanh bài học này cho 1 lớp mà bạn đang chủ nhiệm.</p>
-
-                                {existingAssignments.length > 0 && (
-                                    <div style={{ marginBottom: '12px' }}>
-                                        <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '6px', fontWeight: 600 }}>Đã giao cho:</p>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                            {existingAssignments.map(a => (
-                                                <span key={a.id} style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '20px', background: 'linear-gradient(135deg, #fef3c7, #fde68a)', color: '#92400e', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px solid #fcd34d' }}>
-                                                    ✅ {a.groupName || a.targetName || 'Lớp'}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {teacherManagedGroups.length > 0 ? (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                            <div style={{ flex: 1, minWidth: 0, position: 'relative', zIndex: 20 }}>
-                                                <CustomSelect
-                                                    value={quickAssignGroupId}
-                                                    onChange={v => setQuickAssignGroupId(v)}
-                                                    placeholder="-- Chọn lớp --"
-                                                    options={teacherManagedGroups.map(g => ({ value: g.id, label: g.name, icon: '🏫' }))}
-                                                    style={{ margin: 0 }}
-                                                />
-                                            </div>
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <input
-                                                    type="datetime-local"
-                                                    value={quickAssignDueDate}
-                                                    onChange={e => setQuickAssignDueDate(e.target.value)}
-                                                    style={{ width: '100%', padding: '6px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.88rem', color: '#1e293b', minHeight: '38px', boxSizing: 'border-box' }}
-                                                />
-                                            </div>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={handleQuickAssign}
-                                            disabled={isQuickAssigning || !quickAssignGroupId || !quickAssignDueDate}
-                                            className="admin-btn admin-btn-primary"
-                                            style={{ width: '100%', padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: 'linear-gradient(135deg, #f59e0b, #d97706)', border: 'none', opacity: (isQuickAssigning || !quickAssignGroupId || !quickAssignDueDate) ? 0.6 : 1 }}
-                                        >
-                                            <Send size={14} />
-                                            {isQuickAssigning ? 'Đang giao...' : 'Giao bài'}
-                                        </button>
-                                        {quickAssignSuccess && (
-                                            <div style={{ padding: '10px 14px', borderRadius: '8px', background: '#ecfdf5', border: '1px solid #a7f3d0', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: '#059669', fontWeight: 500 }}>
-                                                <CheckCircle size={16} /> {quickAssignSuccess}
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <p style={{ fontSize: '0.85rem', color: '#94a3b8', fontStyle: 'italic' }}>Bạn chưa quản lý lớp nào.</p>
-                                )}
-                            </div>
-                        )}
-
-                        <div className="admin-modal-actions" style={{ marginTop: '24px', flexDirection: 'row' }}>
-                            <button className="admin-btn admin-btn-primary" style={{ flex: 1 }} onClick={() => setShareModalOpen(false)}>Đóng</button>
+                        </div>
+                        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '10px 14px', fontSize: '0.8rem', color: '#92400e', marginBottom: '16px' }}>
+                            💡 Sau khi chuyển đổi, bạn có thể thiết lập lại section và thời gian trong trang chỉnh sửa.
+                        </div>
+                        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '10px 14px', fontSize: '0.8rem', color: '#166534', marginBottom: '16px' }}>
+                            🔒 Bài mới sẽ được lưu vào mục <strong>Bài tập/KT Admin</strong>.
+                        </div>
+                        <div className="admin-modal-actions">
+                            <button className="admin-btn admin-btn-secondary" onClick={() => setExerciseToConvert(null)} disabled={isConverting}>Hủy</button>
+                            <button className="admin-btn admin-btn-primary" onClick={handleConfirmConvert} disabled={isConverting} style={{ background: '#7c3aed' }}>
+                                {isConverting ? 'Đang chuyển đổi...' : '🔄 Chuyển đổi'}
+                            </button>
                         </div>
                     </div>
                 </div>

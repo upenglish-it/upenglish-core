@@ -39,6 +39,11 @@ export default function ProtectedRoute({ children }) {
         return <Navigate to="/admin" replace />;
     }
 
+    // IT role redirects to IT portal
+    if (user.role === 'it') {
+        return <Navigate to="/it" replace />;
+    }
+
     // Redirect admin/teacher to their panel by default unless they manually switched to App mode
     const viewMode = sessionStorage.getItem('viewMode');
     if (viewMode !== 'app') {

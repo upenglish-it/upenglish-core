@@ -3,10 +3,13 @@ import { db } from '../../config/firebase';
 import { collection, getDocs, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { getGroups, saveGroup, deleteGroup, getFolders, getGrammarFolders, addUserToGroup, removeUserFromGroup, getWhitelistEmails } from '../../services/adminService';
 import { Link } from 'react-router-dom';
-import { Layers, Plus, Edit, Trash2, Tag, Save, X, FolderOpen, Users, Check, Search, UserPlus, UserMinus, User, Shield, Award, BarChart3, Mail, Briefcase, Eye, EyeOff } from 'lucide-react';
+import { Layers, Plus, Edit, Trash2, Tag, Save, X, FolderOpen, Users, Check, Search, UserPlus, UserMinus, User, Shield, Award, BarChart3, Mail, Briefcase, Eye, EyeOff, Gift } from 'lucide-react';
 import Avatar from '../../components/common/Avatar';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function AdminGroupsPage() {
+    const { user } = useAuth();
+    const isStaff = user?.role === 'staff';
     const [groups, setGroups] = useState([]);
     const [vocabFolders, setVocabFolders] = useState([]);
     const [grammarFolders, setGrammarFolders] = useState([]);
@@ -15,7 +18,7 @@ export default function AdminGroupsPage() {
     const [formOpen, setFormOpen] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState({
-        id: '', name: '', description: '', folderAccess: [], isHidden: false
+        id: '', name: '', description: '', folderAccess: [], isHidden: false, enableRewardPoints: false
     });
     const [groupToDelete, setGroupToDelete] = useState(null);
     const [alertMessage, setAlertMessage] = useState(null);
@@ -60,7 +63,7 @@ export default function AdminGroupsPage() {
     }
 
     function openAddForm() {
-        setFormData({ id: '', name: '', description: '', folderAccess: [], isHidden: false });
+        setFormData({ id: '', name: '', description: '', folderAccess: [], isHidden: false, enableRewardPoints: false });
         setIsEditing(false);
         setFormOpen(true);
     }
@@ -251,6 +254,7 @@ export default function AdminGroupsPage() {
         <div className="admin-page">
             <div className="admin-page-header">
                 <h1 className="admin-page-title">Quản lý Nhóm học viên</h1>
+                <p className="admin-page-subtitle">Tạo và quản lý các nhóm học viên để giao bài tập, chia sẻ nội dung.</p>
                 <div className="admin-header-actions">
                     <button className="admin-btn admin-btn-primary" onClick={openAddForm}>
                         <Plus size={16} /> Tạo Nhóm mới
@@ -305,7 +309,14 @@ export default function AdminGroupsPage() {
                                                     <Layers size={20} />
                                                 </div>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                                    <div className="admin-topic-name">{group.name}</div>
+                                                    <div className="admin-topic-name" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                        {group.name}
+                                                        {group.enableRewardPoints && (
+                                                            <span title="Tích điểm đổi quà" style={{ fontSize: '0.75rem', background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '6px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                                                <Gift size={12} /> Điểm
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     <div className="admin-topic-id">ID: {group.id}</div>
                                                 </div>
                                             </div>
@@ -339,15 +350,15 @@ export default function AdminGroupsPage() {
                                                 <Link to={`/admin/groups/${group.id}`} className="admin-action-btn" title="Xem chi tiết: Thống kê & Bài luyện">
                                                     <BarChart3 size={16} />
                                                 </Link>
-                                                <button className="admin-action-btn" onClick={() => openMembersModal(group)} title="Quản lý thành viên">
-                                                    <Users size={16} />
-                                                </button>
-                                                <button className="admin-action-btn" onClick={() => openEditForm(group)} title="Sửa nhóm">
-                                                    <Edit size={16} />
-                                                </button>
-                                                <button className="admin-action-btn" onClick={() => handleToggleHide(group)} title="Ẩn nhóm học xong">
-                                                    <EyeOff size={16} />
-                                                </button>
+                                                        <button className="admin-action-btn" onClick={() => openMembersModal(group)} title="Quản lý thành viên">
+                                                            <Users size={16} />
+                                                        </button>
+                                                        <button className="admin-action-btn" onClick={() => openEditForm(group)} title="Sửa nhóm">
+                                                            <Edit size={16} />
+                                                        </button>
+                                                        <button className="admin-action-btn" onClick={() => handleToggleHide(group)} title="Ẩn nhóm học xong">
+                                                            <EyeOff size={16} />
+                                                        </button>
                                             </div>
                                         </td>
                                     </tr>
@@ -416,15 +427,15 @@ export default function AdminGroupsPage() {
                                                     <Link to={`/admin/groups/${group.id}`} className="admin-action-btn" title="Xem chi tiết: Thống kê & Bài luyện">
                                                         <BarChart3 size={16} />
                                                     </Link>
-                                                    <button className="admin-action-btn" onClick={() => openMembersModal(group)} title="Quản lý thành viên">
-                                                        <Users size={16} />
-                                                    </button>
-                                                    <button className="admin-action-btn" onClick={() => openEditForm(group)} title="Sửa nhóm">
-                                                        <Edit size={16} />
-                                                    </button>
-                                                    <button className="admin-action-btn" onClick={() => handleToggleHide(group)} title="Hiện lại nhóm">
-                                                        <Eye size={16} color="#10b981" />
-                                                    </button>
+                                                        <button className="admin-action-btn" onClick={() => openMembersModal(group)} title="Quản lý thành viên">
+                                                            <Users size={16} />
+                                                        </button>
+                                                        <button className="admin-action-btn" onClick={() => openEditForm(group)} title="Sửa nhóm">
+                                                            <Edit size={16} />
+                                                        </button>
+                                                        <button className="admin-action-btn" onClick={() => handleToggleHide(group)} title="Hiện lại nhóm">
+                                                            <Eye size={16} color="#10b981" />
+                                                        </button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -569,6 +580,31 @@ export default function AdminGroupsPage() {
                                             )}
                                         </div>
                                     )}
+                                </div>
+                            </div>
+
+                            {/* REWARD POINTS TOGGLE */}
+                            <div className="admin-form-group" style={{ marginTop: '20px' }}>
+                                <div
+                                    onClick={() => setFormData(prev => ({ ...prev, enableRewardPoints: !prev.enableRewardPoints }))}
+                                    style={{
+                                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                        padding: '14px 16px', borderRadius: '12px', cursor: 'pointer',
+                                        background: formData.enableRewardPoints ? '#fffbeb' : '#f8fafc',
+                                        border: `1.5px solid ${formData.enableRewardPoints ? '#f59e0b' : '#e2e8f0'}`,
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <Gift size={20} color={formData.enableRewardPoints ? '#f59e0b' : '#94a3b8'} />
+                                        <div>
+                                            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: formData.enableRewardPoints ? '#92400e' : '#475569' }}>🎁 Tích điểm đổi quà</div>
+                                            <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '2px' }}>Bật để theo dõi điểm thưởng và lịch sử đổi quà của từng học viên trong lớp này</div>
+                                        </div>
+                                    </div>
+                                    <div style={{ width: '44px', height: '24px', borderRadius: '12px', background: formData.enableRewardPoints ? '#f59e0b' : '#cbd5e1', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+                                        <div style={{ width: '20px', height: '20px', borderRadius: '10px', background: '#fff', position: 'absolute', top: '2px', left: formData.enableRewardPoints ? '22px' : '2px', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                                    </div>
                                 </div>
                             </div>
 

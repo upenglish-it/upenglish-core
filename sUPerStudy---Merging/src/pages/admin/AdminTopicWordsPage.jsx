@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { getAdminTopicWords, saveAdminTopicWords, getAdminTopics, deleteAdminTopicWord, recalcTopicWordCount } from '../../services/adminService';
 import { generateFullWordData } from '../../services/aiService';
 import { prepareVocabImage, generateVocabImageLocal, uploadVocabImageBlob, deleteVocabImage } from '../../services/vocabImageService';
@@ -8,6 +8,7 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 export default function AdminTopicWordsPage() {
     const { topicId } = useParams();
+    const navigate = useNavigate();
     const [topicName, setTopicName] = useState('');
     const [words, setWords] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -364,7 +365,7 @@ export default function AdminTopicWordsPage() {
 
     return (
         <div className="admin-page">
-            <Link to="/admin/topics" className="admin-btn admin-btn-secondary" style={{
+            <button onClick={() => navigate(-1)} className="admin-btn admin-btn-secondary" style={{
                 display: 'inline-flex',
                 marginBottom: '16px',
                 border: 'none',
@@ -372,10 +373,11 @@ export default function AdminTopicWordsPage() {
                 padding: '4px 8px',
                 color: '#64748b',
                 boxShadow: 'none',
-                width: 'fit-content'
+                width: 'fit-content',
+                cursor: 'pointer'
             }}>
                 <ArrowLeft size={18} /> Quay lại
-            </Link>
+            </button>
 
             <div className="admin-page-header" style={{ alignItems: 'center', textAlign: 'center' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>

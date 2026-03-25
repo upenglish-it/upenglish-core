@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { updateWordProgress, updateIntermediateWordProgress } from '../services/spacedRepetition';
 import { checkWordSaved, toggleSavedWord } from '../services/savedService';
 import { logRecentList } from '../services/recentService';
-import { Heart, Sun, Moon } from 'lucide-react';
+import { Heart } from 'lucide-react';
 import StepListening from '../components/learn/StepListening';
 import StepPronunciation from '../components/learn/StepPronunciation';
 import StepMeaning from '../components/learn/StepMeaning';
@@ -175,22 +175,7 @@ export default function LearnPage() {
     const [isSaved, setIsSaved] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [fontSizeLevel, setFontSizeLevel] = useState(1); // 0: Small, 1: Medium, 2: Large
-    const [theme, setTheme] = useState(() => localStorage.getItem('appTheme') || 'light');
 
-    const toggleTheme = () => {
-        const streak = parseInt(localStorage.getItem('userStreak') || '0', 10);
-        const themes = ['light'];
-        if (streak >= 5) themes.push('dark');
-        if (streak >= 15) themes.push('silver');
-        if (streak >= 25) themes.push('gold');
-        if (streak >= 35) themes.push('diamond');
-        if (streak >= 50) themes.push('ruby');
-        const currentIdx = themes.indexOf(theme);
-        const next = themes[(currentIdx + 1) % themes.length];
-        setTheme(next);
-        document.documentElement.setAttribute('data-theme', next);
-        localStorage.setItem('appTheme', next);
-    };
 
     // Derive from state (needed before useEffect)
     const currentBatch = batches[batchIndex] || [];
@@ -264,9 +249,10 @@ export default function LearnPage() {
             const baseSteps = Math.min(w.stepsCompleted || 0, STEPS.length);
             mastered += baseSteps;
 
-            // Add any newly mastered steps beyond the base
+            // Add any newly mastered steps beyond the base (consecutive only)
             for (let s = baseSteps; s < STEPS.length; s++) {
                 if ((wordMap[s]?.correct || 0) >= ((wordMap[s]?.wrong || 0) > 0 ? REQUIRED_CORRECT_WITH_ERRORS : REQUIRED_CORRECT_DEFAULT)) mastered++;
+                else break;
             }
         }
         return mastered;
@@ -286,6 +272,7 @@ export default function LearnPage() {
         let count = baseSteps;
         for (let s = baseSteps; s < STEPS.length; s++) {
             if ((wordMap[s]?.correct || 0) >= ((wordMap[s]?.wrong || 0) > 0 ? REQUIRED_CORRECT_WITH_ERRORS : REQUIRED_CORRECT_DEFAULT)) count++;
+            else break;
         }
         return count;
     }
@@ -323,10 +310,12 @@ export default function LearnPage() {
                     let stepsCompleted = baseSteps;
                     let sessionCorrect = 0;
                     let sessionWrong = 0;
+                    let doneCountingSteps = false;
                     for (let s = baseSteps; s < STEPS.length; s++) {
                         const stepData = wordMap[s] || {};
                         const required = (stepData.wrong || 0) > 0 ? REQUIRED_CORRECT_WITH_ERRORS : REQUIRED_CORRECT_DEFAULT;
-                        if ((stepData.correct || 0) >= required) stepsCompleted++;
+                        if (!doneCountingSteps && (stepData.correct || 0) >= required) stepsCompleted++;
+                        else doneCountingSteps = true;
                         sessionCorrect += (stepData.correct || 0);
                         sessionWrong += (stepData.wrong || 0);
                     }
@@ -404,6 +393,7 @@ export default function LearnPage() {
                 const stepData = updatedMap[wordKey][s] || {};
                 const required = (stepData.wrong || 0) > 0 ? REQUIRED_CORRECT_WITH_ERRORS : REQUIRED_CORRECT_DEFAULT;
                 if ((stepData.correct || 0) >= required) stepsCompleted++;
+                else break;
             }
             updateIntermediateWordProgress(user.uid, `${topicId}_${wordKey}`, topicId, wordKey, stepsCompleted, updatedMap[wordKey]).catch(console.warn);
         }
@@ -476,6 +466,24 @@ export default function LearnPage() {
 
     // Handle case when initial queue is empty (all words already fully learned)
     if (!completed && (!currentWord || !currentStepDef)) {
+        // Auto-fix: patch any words that have stepsCompleted=6 but level=0 (stuck data)
+        // Uses updateIntermediateWordProgress which safely only bumps level 0→1
+        // and won't affect words already at level >= 1
+        if (user?.uid && topicId) {
+            const fixStuckWords = async () => {
+                for (const w of words) {
+                    if ((w.stepsCompleted ?? 0) >= 6) {
+                        try {
+                            await updateIntermediateWordProgress(user.uid, `${topicId}_${w.word}`, topicId, w.word, 6);
+                        } catch (e) {
+                            console.warn('Auto-fix word level failed:', e);
+                        }
+                    }
+                }
+            };
+            fixStuckWords();
+        }
+
         // If queue is empty from the start, treat as if the session is done to show results
         // Re-learn: reset stepsCompleted so user can start over with all steps
         const wordsForRelearn = words.map(w => ({ ...w, stepsCompleted: 0 }));
@@ -572,14 +580,7 @@ export default function LearnPage() {
                             A{fontSizeLevel === 0 ? '-' : fontSizeLevel === 2 ? '+' : ''}
                         </span>
                     </button>
-                    <button
-                        className="btn btn-ghost"
-                        onClick={toggleTheme}
-                        style={{ padding: '8px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
-                        title={theme === 'dark' ? 'Chuyển sang sáng' : theme === 'silver' ? 'Chuyển sang sáng' : 'Chuyển giao diện'}
-                    >
-                        {theme === 'dark' ? <Sun size={18} /> : theme === 'silver' ? <Sun size={18} /> : <Moon size={18} />}
-                    </button>
+
                     <button
                         className={`btn btn-ghost learn-topbar-bookmark ${isSaved ? 'is-saved' : ''} ${isSaving ? 'is-saving' : ''}`}
                         onClick={handleToggleSave}

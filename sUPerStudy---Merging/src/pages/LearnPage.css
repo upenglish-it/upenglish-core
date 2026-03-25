@@ -6,7 +6,7 @@
     min-height: 100vh;
     display: flex;
     flex-direction: column;
-    padding: 85px var(--space-md) calc(var(--space-md) + env(safe-area-inset-bottom, 0px));
+    padding: 85px var(--space-md) calc(140px + env(safe-area-inset-bottom, 0px));
     /* Added top padding for fixed topbar */
     max-width: 1000px;
     /* Increased from 640px for desktop grid */
@@ -367,6 +367,7 @@
     margin: 0 auto var(--space-xl);
     padding: 0 var(--space-md);
     box-sizing: border-box;
+    overflow: hidden;
     overflow-wrap: break-word;
     word-wrap: break-word;
     word-break: break-word;
@@ -403,10 +404,6 @@
 }
 
 @media (max-width: 768px) {
-    .learn-page {
-        padding-bottom: 140px;
-    }
-
     .grammar-question-text {
         font-size: 1.25rem;
     }
@@ -516,6 +513,7 @@
 .learn-bottom-bar {
     margin-top: var(--space-xl);
     width: 100%;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     animation: feedbackFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -1550,14 +1548,13 @@
     display: flex;
     justify-content: center;
     margin-top: var(--space-xl);
-    padding-bottom: var(--space-2xl); /* Some padding at the bottom of the page */
+    padding-bottom: calc(var(--space-2xl) + env(safe-area-inset-bottom, 0px)); /* Safe area for iPad landscape */
 }
 
 /* Responsive — Small phones (iPhone SE, 375px) */
 @media (max-width: 480px) {
     .learn-page {
         padding-top: 70px;
-        padding-bottom: 140px;
     }
 
     /* Topbar */

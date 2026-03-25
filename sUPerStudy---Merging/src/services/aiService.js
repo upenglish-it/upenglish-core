@@ -333,7 +333,7 @@ CRITICAL RULES:
    - "phonetic": IPA pronunciation (e.g., "/ˈæp.əl/").
    - "partOfSpeech": "noun", "verb", "adjective", etc.
    - "vietnameseMeaning": precise short Vietnamese translation.
-   - "explanation": a detailed Vietnamese explanation of what the word means and how to use it.
+   - "explanation": a detailed Vietnamese explanation of what the word means and how to use it. CRITICAL: Do NOT include or mention the original English word in this explanation — the student needs to recall the word on their own.
    - "pronunciationTip": a short tip in Vietnamese on how to pronounce it, showing stressed syllables.
    - "distractors": an array of EXACTLY 3 English words that look or sound similar to the main word, used to trick the student in listening exercises (e.g. ["appal", "ample", "amble"]).
    - "collocations": an array of 1 to 3 objects, each with "phrase" (a common English collocation using the word) and "vietnamese" (its translation).
@@ -358,7 +358,7 @@ Output your response ENTIRELY and STRICTLY as a JSON array of objects. Do not wr
     "phonetic": "/nɪˈɡoʊ.ʃi.eɪt/",
     "partOfSpeech": "verb",
     "vietnameseMeaning": "thương lượng",
-    "explanation": "Trao đổi, thảo luận với đối tác nhằm đi đến một thỏa hiệp.",
+    "explanation": "Hành động trao đổi, thảo luận với đối tác nhằm đi đến một thỏa hiệp hoặc hợp đồng chung.",
     "distractors": ["navigate", "negligent", "nominate"],
     "pronunciationTip": "Nhấn trọng âm ở âm tiết thứ 2: ne-GO-shi-ate",
     "collocations": [
@@ -446,7 +446,7 @@ CRITICAL RULES:
    - "phonetic": IPA pronunciation (e.g., "/ˈæp.əl/").
    - "partOfSpeech": "noun", "verb", "adjective", etc.
    - "vietnameseMeaning": precise short Vietnamese translation.
-   - "explanation": a detailed Vietnamese explanation of what the word means and how to use it.
+   - "explanation": a detailed Vietnamese explanation of what the word means and how to use it. CRITICAL: Do NOT include or mention the original English word in this explanation — the student needs to recall the word on their own.
    - "pronunciationTip": a short tip in Vietnamese on how to pronounce it, showing stressed syllables.
    - "distractors": an array of EXACTLY 3 English words that look or sound similar to the main word, used to trick the student in listening exercises (e.g. ["appal", "ample", "amble"]).
    - "collocations": an array of 1 to 3 objects, each with "phrase" (a common English collocation using the word) and "vietnamese" (its translation).
@@ -471,7 +471,7 @@ Output your response ENTIRELY and STRICTLY as a JSON array of objects. Do not wr
     "phonetic": "/nɪˈɡoʊ.ʃi.eɪt/",
     "partOfSpeech": "verb",
     "vietnameseMeaning": "thương lượng",
-    "explanation": "Trao đổi, thảo luận với đối tác nhằm đi đến một thỏa hiệp.",
+    "explanation": "Hành động trao đổi, thảo luận với đối tác nhằm đi đến một thỏa hiệp hoặc hợp đồng chung.",
     "distractors": ["navigate", "negligent", "nominate"],
     "pronunciationTip": "Nhấn trọng âm ở âm tiết thứ 2: ne-GO-shi-ate",
     "collocations": [
@@ -525,6 +525,37 @@ Output your response ENTIRELY and STRICTLY as a JSON array of objects. Do not wr
     }
 }
 
+/**
+ * Detect if an audio blob is silent (no meaningful speech).
+ * Uses Web Audio API to decode and analyze RMS amplitude.
+ * @param {Blob} blob - The audio blob to analyze
+ * @param {number} threshold - RMS threshold below which audio is considered silent (default: 0.01)
+ * @returns {Promise<boolean>} true if audio is silent
+ */
+export async function isSilentAudio(blob, threshold = 0.01) {
+    try {
+        const arrayBuffer = await blob.arrayBuffer();
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        try {
+            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+            const channelData = audioBuffer.getChannelData(0); // mono or first channel
+            // Calculate RMS (root mean square) amplitude
+            let sumSquares = 0;
+            for (let i = 0; i < channelData.length; i++) {
+                sumSquares += channelData[i] * channelData[i];
+            }
+            const rms = Math.sqrt(sumSquares / channelData.length);
+            console.log(`[SilenceDetect] RMS amplitude: ${rms.toFixed(6)}, threshold: ${threshold}, silent: ${rms < threshold}`);
+            return rms < threshold;
+        } finally {
+            await audioCtx.close();
+        }
+    } catch (e) {
+        console.warn('[SilenceDetect] Could not analyze audio, assuming not silent:', e);
+        return false; // If analysis fails, don't skip AI — let it grade
+    }
+}
+
 export function blobToBase64(blob) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -549,7 +580,7 @@ export function blobToBase64(blob) {
  * @param {string} context Optional section context (reading passage / listening transcript) the question is based on
  * @returns {Promise<Object>} { score (0-maxPoints), feedback, transcript, teacherNote }
  */
-export async function evaluateAudioAnswer(audioBlob, questionText, purpose, specialRequirement = '', maxPoints = 10, context = '', teacherTitle = '', studentTitle = '', questionIndex = 0, previousResults = [], totalQuestions = 0, cefrLevel = '') {
+export async function evaluateAudioAnswer(audioBlob, questionText, purpose, specialRequirement = '', maxPoints = 10, context = '', teacherTitle = '', studentTitle = '', questionIndex = 0, totalQuestions = 0, cefrLevel = '', useDefaultCriteria = true) {
     if (!audioBlob) throw new Error('No audio provided');
 
     const base64Audio = await blobToBase64(audioBlob);
@@ -570,24 +601,15 @@ export async function evaluateAudioAnswer(audioBlob, questionText, purpose, spec
         ? `\n\nQUAN TRỌNG VỀ NGỮ CẢNH BÀI LÀM: Học viên đang làm MỘT bài kiểm tra/bài tập duy nhất gồm ${totalQuestions} câu hỏi, và nộp bài MỘT LẦN duy nhất. Đây KHÔNG phải là nhiều lần nộp bài riêng lẻ. Bạn đang chấm câu hỏi thứ ${questionIndex + 1}/${totalQuestions} trong bài này.`
         : '';
 
-    const previousResultsContext = previousResults.length > 0
-        ? `\nKẾT QUẢ CÁC CÂU TRƯỚC TRONG CÙNG BÀI (đây là các câu khác nhau trong CÙNG MỘT bài kiểm tra, KHÔNG phải các lần nộp bài riêng lẻ):\n${previousResults.map(r => {
-            let detail = `- Câu ${r.questionNumber} (${r.typeName}${r.purpose ? ' - ' + r.purpose : ''}): ${r.isCorrect ? 'ĐÚNG' : 'SAI'} — ${r.score}/${r.maxScore} điểm`;
-            if (r.questionText) detail += `\n  Đề bài: "${r.questionText}"`;
-            if (!r.isCorrect) {
-                if (r.studentAnswer) detail += `\n  Học viên trả lời: "${r.studentAnswer}"`;
-                if (r.correctAnswer) detail += `\n  Đáp án đúng: "${r.correctAnswer}"`;
-            }
-            if (r.feedback && r.feedback !== 'Chính xác!') {
-                detail += `\n  Nhận xét: "${r.feedback}"`;
-            }
-            return detail;
-        }).join('\n')}\nNhận xét cho câu này nên có cách diễn đạt khác với các câu trước.`
-        : '';
-
     const systemPrompt = `Bạn là giáo viên tiếng Anh đang chấm bài nói (speaking) cho học viên Việt Nam. Gọi học viên bằng "${finalStudentTitle}". Có thể xưng "${finalTeacherTitle}" nhưng KHÔNG nhất thiết phải xưng hô trong mọi câu — đôi khi chỉ cần nhận xét trực tiếp về bài làm là đủ.${totalQuestionsInfo}${greetingInstruction}
 ${cefrLevel ? `Trình độ mục tiêu của học viên: ${cefrLevel}. Hãy chấm và gợi ý phù hợp với trình độ này.` : ''}
-${previousResultsContext}
+
+**CRITICAL — PHÁT HIỆN IM LẶNG / KHÔNG CÓ GIỌNG NÓI:**
+- Nếu audio IM LẶNG, chỉ có tiếng ồn nền, hoặc KHÔNG CÓ GIỌNG NÓI RÕ RÀNG, BẮT BUỘC trả về score: 0, transcript: "", feedback giải thích không phát hiện giọng nói.
+- KHÔNG ĐƯỢC tưởng tượng hoặc bịa ra nội dung học viên nói. CHỈ đánh giá những gì THỰC SỰ nghe được trong audio.
+- Nếu audio quá ngắn (dưới 1 giây giọng nói) hoặc không rõ, cho score: 0.
+- Nếu không chắc chắn có giọng nói hay không, ưu tiên cho 0 điểm.
+
 ${plainContext ? `\nNGỮ CẢNH / ĐỀ BÀI (Đây là đoạn văn / bài nghe mà câu hỏi dựa vào. Chấm điểm phải xem xét nội dung này):\n"""\n${plainContext}\n"""` : ''}
 
 CÂU HỎI / ĐỀ BÀI:
@@ -600,7 +622,7 @@ ${specialRequirement ? `\nYÊU CẦU ĐẶC BIỆT TỪ GIÁO VIÊN (Rất quan 
 
 NHIỆM VỤ:
     1. Nghe bản thu âm của học viên.
-2. Ghi lại chính xác những gì học viên nói(transcript).
+2. Ghi lại chính xác những gì học viên nói(transcript). NẾU KHÔNG NGHE THẤY GÌ, transcript PHẢI là chuỗi rỗng "".
 3. Đánh giá câu trả lời dựa trên:
     - Nội dung: Câu trả lời có đúng yêu cầu đề bài không ? ${plainContext ? ' Có dựa trên nội dung Ngữ cảnh không?' : ''}
     - Tính đầy đủ: Câu trả lời có bao quát ĐẦY ĐỦ tất cả thông tin mà câu hỏi yêu cầu không ?
@@ -611,7 +633,7 @@ NHIỆM VỤ:
 5. Nếu không cho điểm tối đa, hãy GIẢI THÍCH NGẮN GỌN vì sao bị trừ điểm (ví dụ: thiếu thông tin gì, lỗi ngữ pháp nào, phát âm sai chỗ nào).
 6. Ngoài việc sửa lỗi, hãy gợi ý cách diễn đạt TỰ NHIÊN hơn cho câu trả lời (nếu nghe gượng hoặc máy móc). Ví dụ: cách dùng từ nối, cách rút gọn, cụm từ phổ biến trong giao tiếp thực tế.
 
-TIÊU CHÍ CHẤM NGHIÊM NGẶT — TÍNH ĐẦY ĐỦ(RẤT QUAN TRỌNG):
+${useDefaultCriteria ? `TIÊU CHÍ CHẤM NGHIÊM NGẶT — TÍNH ĐẦY ĐỦ(RẤT QUAN TRỌNG):
     - Nếu Ngữ cảnh hoặc đề bài chứa NHIỀU mục thông tin(ví dụ: nhiều mức giá, nhiều điều kiện, nhiều bước, nhiều đối tượng...) mà câu hỏi hỏi về, thì câu trả lời PHẢI đề cập TẤT CẢ các mục đó.Ví dụ: Nếu câu hỏi hỏi "How much does it cost?" và Ngữ cảnh có giá cho cả adults($75) VÀ children($50), thì chỉ nói giá adults mà bỏ sót giá children = THIẾU THÔNG TIN → trừ điểm đáng kể.
 - Câu trả lời đúng nhưng THIẾU thông tin quan trọng: tối đa 50 - 60 % điểm tối đa.
 - Câu trả lời chỉ đề cập được một phần nhỏ: tối đa 30 - 40 % điểm tối đa.
@@ -622,10 +644,10 @@ HƯỚNG DẪN CHẤM ĐIỂM(theo tỷ lệ phần trăm của điểm tối đ
         - 70 % -80 %: Tốt — trả lời đúng và khá đầy đủ nhưng có lỗi nhỏ
             - 50 % -60 %: Trung bình — hiểu được nhưng thiếu thông tin hoặc nhiều lỗi
                 - 30 % -40 %: Yếu — thiếu nhiều thông tin quan trọng hoặc khó hiểu
-                    - 0 % -20 %: Rất yếu — không liên quan hoặc không nghe được
+                    - 0 % -20 %: Rất yếu — không liên quan hoặc không nghe được` : 'Chấm điểm dựa trên YÊU CẦU ĐẶC BIỆT TỪ GIÁO VIÊN ở trên (nếu có) và Mục đích kiểm tra. Không áp dụng tiêu chí mặc định của hệ thống.'}
 
 LƯU Ý:
-- Viết feedback bằng TIẾNG VIỆT, ngắn gọn (2-4 câu). Gọi học viên bằng "${finalStudentTitle}". Có thể xưng "${finalTeacherTitle}" nhưng không cần xưng hô ở mọi câu.
+- Viết feedback bằng TIẾNG VIỆT, súc tích không dài dòng nhưng THOROUGH — liệt kê TẤT CẢ lỗi, không bỏ sót. Gọi học viên bằng "${finalStudentTitle}". Có thể xưng "${finalTeacherTitle}" nhưng không cần xưng hô ở mọi câu.
 - TRÁNH mở đầu bằng các cụm khuôn mẫu như "Thầy khen em", "Thầy thấy em", "Đúng hướng rồi", "Em làm tốt lắm". Thay vào đó, đi thẳng vào nhận xét cụ thể về bài làm.
 - Viết tự nhiên, tập trung vào kiến thức cụ thể. Mỗi câu hỏi cần nhận xét với cách diễn đạt khác nhau.
 - KHÔNG nhắc đến "các câu trước" hay "như đã nói" trừ khi có dữ liệu KẾT QUẢ CÁC CÂU TRƯỚC được cung cấp ở trên.
@@ -635,12 +657,12 @@ LƯU Ý:
 Trả về JSON:
     {
         "score": number(0 - ${maxPoints}),
-            "transcript": "Nội dung học viên đã nói",
+            "transcript": "Nội dung học viên đã nói (PHẢI là chuỗi rỗng nếu không nghe thấy giọng nói)",
                 "feedback": "Nhận xét chi tiết cho học viên bằng tiếng Việt",
                     "teacherNote": "Ghi chú ngắn cho giáo viên bằng tiếng Việt"
     } `;
 
-    const userContent = `Hãy nghe bản thu âm và chấm điểm câu trả lời của học viên.`;
+    const userContent = `Hãy nghe bản thu âm và chấm điểm câu trả lời của học viên. LƯU Ý: Nếu audio im lặng hoặc không có giọng nói, PHẢI trả về score: 0 và transcript: "".`;
 
     if (IS_PROD && PROXY_URL) {
         return fetchAudioEvalFromProxy({ systemPrompt, userContent, base64Audio, audioMimeType });
@@ -1001,7 +1023,7 @@ CRITICAL RULES:
 2. Generate ALL of the following fields with high accuracy:
    - "phonetic": IPA pronunciation (e.g., "/ˈæp.əl/").
    - "partOfSpeech": "noun", "verb", "adjective", etc.
-   - "explanation": a detailed Vietnamese explanation of what the word means and how to use it.
+   - "explanation": a detailed Vietnamese explanation of what the word means and how to use it. CRITICAL: Do NOT include or mention the original English word in this explanation — the student needs to recall the word on their own.
    - "pronunciationTip": a short tip in Vietnamese on how to pronounce it, showing stressed syllables.
    - "distractors": an array of EXACTLY 3 English words that look or sound similar to the main word, used to trick the student in listening exercises (e.g. ["appal", "ample", "amble"]).
    - "collocations": an array of EXACTLY 3 objects, each with "phrase" (a common English collocation using the word) and "vietnamese" (its translation).
@@ -1026,7 +1048,7 @@ Example:
   "phonetic": "/nɪˈɡoʊ.ʃi.eɪt/",
   "partOfSpeech": "verb",
   "vietnameseMeaning": "thương lượng",
-  "explanation": "Trao đổi, thảo luận với đối tác nhằm đi đến một thỏa hiệp.",
+  "explanation": "Hành động trao đổi, thảo luận với đối tác nhằm đi đến một thỏa hiệp hoặc hợp đồng chung.",
   "pronunciationTip": "Nhấn trọng âm ở âm tiết thứ 2: ne-GO-shi-ate",
   "distractors": ["navigate", "negligent", "nominate"],
   "collocations": [

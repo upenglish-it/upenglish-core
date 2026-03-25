@@ -19,7 +19,7 @@ Với MỖI từ trong danh sách, trả về object có ĐÚNG cấu trúc sau:
   "phonetic": "phiên âm IPA, ví dụ /nɪˈɡoʊ.ʃi.eɪt/",
   "partOfSpeech": "noun/verb/adjective/adverb/...",
   "vietnameseMeaning": "nghĩa tiếng Việt ngắn gọn",
-  "explanation": "Giải thích ý nghĩa bằng tiếng Việt dễ hiểu (2-3 câu)",
+  "explanation": "Giải thích ý nghĩa bằng tiếng Việt dễ hiểu (2-3 câu), KHÔNG được nhắc lại từ tiếng Anh gốc trong phần giải thích",
   "distractors": ["từ1_giống_phát_âm", "từ2", "từ3"],
   "pronunciationTip": "Gợi ý cách phát âm bằng tiếng Việt, ví dụ: Nhấn trọng âm ở âm tiết thứ 2: ne-GO-shi-ate",
   "collocations": [
@@ -41,7 +41,7 @@ QUY TẮC:
 - distractors: 3 từ có cách phát âm hoặc hình dạng tương tự để gây nhiễu
 - collocations: đúng 3 cụm từ thông dụng
 - sentenceSequence: 1 câu tiếng Anh thông dụng để ráp chữ.
-- explanation phải bằng tiếng Việt, giải thích dễ hiểu cho người Việt`;
+- explanation phải bằng tiếng Việt, giải thích dễ hiểu cho người Việt. TUYỆT ĐỐI KHÔNG được nhắc lại hoặc bao gồm từ tiếng Anh gốc trong phần explanation — học viên cần tự nhớ lại từ đó`;
 
 export default function CustomInputPage() {
     const navigate = useNavigate();

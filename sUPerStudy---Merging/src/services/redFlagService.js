@@ -153,7 +153,7 @@ export async function addRedFlag({
         heading: isContractTerminated ? 'Chấm dứt đảm bảo chất lượng đầu ra' : `Cờ cảnh báo lần ${flagNumber}/3`,
         headingColor: isContractTerminated ? '#dc2626' : '#ca8a04',
         body: emailBody,
-        ctaText: 'Mở sUPerStudy',
+        ctaText: 'Mở sUPerStudy', ctaLink: 'https://upenglishvietnam.com/preview/superstudy/dashboard?scrollTo=reports',
         ctaColor: isContractTerminated ? '#dc2626' : '#ca8a04',
         ctaColor2: isContractTerminated ? '#ef4444' : '#f59e0b',
         greeting: `Chào ${studentName} 👋`
@@ -177,7 +177,7 @@ export async function addRedFlag({
             ? `🔴 Chấm dứt đảm bảo CLĐR — ${groupName}`
             : `${flagEmoji} Cờ cảnh báo lần ${flagNumber}/3`,
         message: `Lý do: ${violationLabel}. ${note}`,
-        link: '/dashboard'
+        link: '/dashboard?scrollTo=reports'
     });
 
     return { id: flagRef.id, ...flagData, flagNumber };
@@ -234,7 +234,7 @@ export async function removeRedFlag({ flagId, removedBy, removedByName, removedB
             heading: 'Cờ cảnh báo đã được gỡ',
             headingColor: '#10b981',
             body: emailBody,
-            ctaText: 'Mở sUPerStudy',
+            ctaText: 'Mở sUPerStudy', ctaLink: 'https://upenglishvietnam.com/preview/superstudy/dashboard?scrollTo=reports',
             ctaColor: '#10b981',
             ctaColor2: '#34d399',
             greeting: `Chào ${flagData.studentName} 👋`
@@ -250,7 +250,7 @@ export async function removeRedFlag({ flagId, removedBy, removedByName, removedB
             type: 'red_flag_removed',
             title: `✅ Cờ cảnh báo đã được gỡ — ${flagData.groupName}`,
             message: `${roleLabel} ${removedByName} đã gỡ cờ: ${flagData.violationLabel}`,
-            link: '/dashboard'
+            link: '/dashboard?scrollTo=reports'
         });
     }
 }

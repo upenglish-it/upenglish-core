@@ -1,6 +1,6 @@
 import { db } from '../config/firebase';
 import {
-    collection, doc, getDocs, addDoc, updateDoc, deleteDoc,
+    collection, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc,
     query, where, orderBy, serverTimestamp
 } from 'firebase/firestore';
 
@@ -67,4 +67,17 @@ export async function updatePrompt(id, data) {
  */
 export async function deletePrompt(id) {
     await deleteDoc(doc(db, COLLECTION, id));
+}
+
+/**
+ * Get a single prompt by its document ID.
+ * Used to resolve prompt content at grading time.
+ * @param {string} id - Document ID
+ * @returns {Promise<Object|null>} The prompt object or null if not found
+ */
+export async function getPromptById(id) {
+    if (!id) return null;
+    const snap = await getDoc(doc(db, COLLECTION, id));
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...snap.data() };
 }

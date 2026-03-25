@@ -58,6 +58,41 @@ export async function getAndUpdateUserStreak(uid) {
         return 0;
     }
 }
+
+/**
+ * Award bonus streak days to a user (e.g. for completing teacher ratings).
+ * Adds bonusDays to the current streak without resetting lastActiveDate.
+ * @param {string} uid The user ID
+ * @param {number} bonusDays Number of bonus days to add
+ * @returns {Promise<number>} The new streak value
+ */
+export async function awardStreakBonus(uid, bonusDays) {
+    if (!uid || !bonusDays || bonusDays <= 0) return 0;
+
+    const statsRef = doc(db, `users/${uid}/stats`, 'overview');
+
+    try {
+        const snap = await getDoc(statsRef);
+        let currentStreak = 1;
+
+        if (snap.exists()) {
+            currentStreak = snap.data().currentStreak || 1;
+        }
+
+        const newStreak = currentStreak + bonusDays;
+
+        await setDoc(statsRef, {
+            currentStreak: newStreak,
+            lastUpdatedAt: serverTimestamp()
+        }, { merge: true });
+
+        return newStreak;
+    } catch (error) {
+        console.error("Error awarding streak bonus:", error);
+        return 0;
+    }
+}
+
 /**
  * Fetch names/emails for a list of UIDs (public info)
  * @param {string[]} uids 

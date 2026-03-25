@@ -4,16 +4,16 @@
 
 .dashboard-main {
     padding-top: var(--space-xl);
-    padding-bottom: var(--space-2xl);
+    padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px));
 }
 
+/* Force two-row layout: welcome-main + progress-card always stacked */
 .dashboard-welcome {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: space-between;
-    gap: var(--space-xl);
+    gap: var(--space-md);
     margin-bottom: var(--space-2xl);
-    flex-wrap: wrap;
 }
 
 .dashboard-welcome-main {
@@ -91,8 +91,7 @@
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
-    width: calc(50% - 12px);
-    min-width: 280px;
+    width: 100%;
     flex-shrink: 0;
 }
 
@@ -128,24 +127,17 @@
     display: flex;
     align-items: center;
     gap: 0;
-    justify-content: space-evenly;
+    justify-content: center;
 }
 
 .dashboard-progress-item {
     display: flex;
     align-items: center;
     gap: 10px;
-    flex: 1;
     padding: 4px 0;
 }
 
-.dashboard-rank-no-flags {
-    flex-direction: row-reverse;
-}
 
-.dashboard-rank-no-flags .dashboard-stat-info {
-    text-align: right;
-}
 
 .dashboard-progress-divider {
     width: 1px;
@@ -166,8 +158,8 @@
 }
 
 .dashboard-stat-icon-wrapper.warning {
-    background: rgba(255, 193, 7, 0.15);
-    color: var(--color-warning);
+    background: rgba(255, 193, 7, 0.3);
+    color: #b8860b;
 }
 
 .dashboard-stat-icon-wrapper.error {
@@ -427,14 +419,7 @@
 }
 
 @media (max-width: 768px) {
-    .dashboard-main {
-        padding-bottom: 140px;
-    }
-
     .dashboard-welcome {
-        flex-direction: column;
-        align-items: center;
-        gap: var(--space-md);
         margin-bottom: var(--space-md);
     }
 
@@ -448,8 +433,6 @@
     }
 
     .dashboard-progress-card {
-        width: 100%;
-        min-width: unset;
         padding: 12px 12px 10px;
     }
 
@@ -545,18 +528,14 @@
         overflow: hidden;
     }
 
-    /* Constrain ranking item to not exceed half the row */
-    .dashboard-progress-item:first-child {
-        max-width: 50%;
-        padding-right: 4px;
-    }
+
 
     .dashboard-stat-label {
         font-size: 0.72rem;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        max-width: 60px;
+        max-width: 80px;
     }
 
     /* Streak label should never be truncated */
@@ -572,7 +551,7 @@
 
     .dashboard-rank-group {
         font-size: 0.6rem;
-        max-width: 50px;
+        max-width: 70px;
     }
 
     .dashboard-actions {
@@ -833,7 +812,7 @@
 /* ---------- FAB Button & Create Menu ---------- */
 .dashboard-fab-wrapper {
     position: fixed;
-    bottom: max(28px, calc(16px + env(safe-area-inset-bottom, 0px)));
+    bottom: max(100px, calc(80px + env(safe-area-inset-bottom, 0px)));
     right: 28px;
     z-index: var(--z-modal);
     display: flex;

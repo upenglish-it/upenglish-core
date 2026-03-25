@@ -163,7 +163,13 @@ html[data-theme="ruby"] {
 [data-theme="ruby"] .glass-card--static,
 [data-theme="ruby"] .glass-card *,
 [data-theme="ruby"] .glass-card--static * {
-    color: #FFF5F5;
+    color: #FFF5F5 !important;
+}
+
+/* Override inline icon styles inside ruby gem cards */
+[data-theme="ruby"] .glass-card .dashboard-action-icon {
+    background: rgba(212,66,78,0.20) !important;
+    color: #FFF5F5 !important;
 }
 
 [data-theme="ruby"] .glass-card .text-muted,
@@ -322,11 +328,11 @@ html[data-theme="ruby"] {
 }
 
 [data-theme="ruby"] .dashboard-action-card * {
-    color: #6B0C14;
+    color: #6B0C14 !important;
 }
 
 [data-theme="ruby"] .dashboard-action-card .dashboard-action-info p {
-    color: rgba(107,12,20,0.50);
+    color: rgba(107,12,20,0.50) !important;
 }
 
 [data-theme="ruby"] .dashboard-action-card:hover {
@@ -427,6 +433,18 @@ html[data-theme="ruby"] {
     border: 1px solid rgba(212,66,78,0.15);
     color: #FFF5F5;
     backdrop-filter: blur(10px);
+}
+
+[data-theme="ruby"] .dashboard-nav-item {
+    color: rgba(255,245,245,0.65);
+}
+
+[data-theme="ruby"] .dashboard-nav-item:hover {
+    color: #FFF5F5;
+}
+
+[data-theme="ruby"] .dashboard-nav-item.active {
+    color: #FFF5F5;
 }
 
 /* ============================================
@@ -566,20 +584,20 @@ html[data-theme="ruby"] {
 [data-theme="ruby"] .learn-explanation {
     background: linear-gradient(135deg, rgba(255,248,246,0.58), rgba(252,234,232,0.44));
     border: 1.5px solid rgba(155,17,30,0.12);
-    color: #4A0A10;
+    color: #4A0A10 !important;
     backdrop-filter: blur(8px);
 }
 
 [data-theme="ruby"] .learn-collocations {
     background: linear-gradient(145deg, rgba(255,248,246,0.85) 0%, rgba(252,234,232,0.72) 100%);
     border: 1.5px solid rgba(155,17,30,0.12);
-    color: #4A0A10;
+    color: #4A0A10 !important;
     box-shadow: 0 4px 16px rgba(107,12,20,0.05), inset 0 1px 0 rgba(255,248,246,0.65);
     backdrop-filter: blur(8px);
 }
 
 [data-theme="ruby"] .learn-collocations * {
-    color: #4A0A10;
+    color: #4A0A10 !important;
 }
 
 [data-theme="ruby"] .learn-colloc-item {
@@ -589,13 +607,13 @@ html[data-theme="ruby"] {
 [data-theme="ruby"] .learn-example {
     background: linear-gradient(145deg, rgba(255,248,246,0.85) 0%, rgba(252,234,232,0.72) 100%);
     border: 1.5px solid rgba(155,17,30,0.12);
-    color: #4A0A10;
+    color: #4A0A10 !important;
     box-shadow: 0 4px 16px rgba(107,12,20,0.05), inset 0 1px 0 rgba(255,248,246,0.65);
     backdrop-filter: blur(8px);
 }
 
 [data-theme="ruby"] .learn-example * {
-    color: #4A0A10;
+    color: #4A0A10 !important;
 }
 
 [data-theme="ruby"] .learn-bottom-bar-inner {
@@ -653,6 +671,93 @@ html[data-theme="ruby"] {
     background: rgba(255,248,246,0.95);
 }
 
+[data-theme="ruby"] .learn-spelling-interactive-card {
+    background: linear-gradient(145deg, rgba(255,248,246,0.92) 0%, rgba(252,234,232,0.82) 100%) !important;
+    border: 1.5px solid rgba(155,17,30,0.15);
+    color: #4A0A10 !important;
+    box-shadow: 0 4px 16px rgba(107,12,20,0.06), inset 0 1px 0 rgba(255,248,246,0.70);
+}
+
+[data-theme="ruby"] .learn-spelling-interactive-card * {
+    color: #4A0A10 !important;
+}
+
+[data-theme="ruby"] .learn-collocation-hint-card {
+    background: linear-gradient(145deg, rgba(255,248,246,0.92) 0%, rgba(252,234,232,0.82) 100%) !important;
+    border: 1.5px solid rgba(155,17,30,0.15);
+    color: #4A0A10 !important;
+    box-shadow: 0 4px 16px rgba(107,12,20,0.06), inset 0 1px 0 rgba(255,248,246,0.70);
+}
+
+[data-theme="ruby"] .learn-collocation-hint-card * {
+    color: #4A0A10 !important;
+}
+
+[data-theme="ruby"] .learn-collocation-container {
+    color: #1C1917;
+}
+
+/* --- Learn content text readability on pink background --- */
+[data-theme="ruby"] .learn-word-big {
+    background: linear-gradient(135deg, #3D0A0F 0%, #6B0C14 40%, #9B111E 70%, #3D0A0F 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 1px 2px rgba(107,12,20,0.15));
+}
+
+[data-theme="ruby"] .learn-word-phonetic {
+    color: #6B0C14;
+}
+
+[data-theme="ruby"] .learn-word-pos {
+    background: rgba(155,17,30,0.12);
+    color: #9B111E;
+}
+
+[data-theme="ruby"] .learn-word-tip {
+    color: #7A0D18;
+}
+
+[data-theme="ruby"] .learn-step-title {
+    color: #FFF5F5;
+}
+
+[data-theme="ruby"] .learn-step-desc {
+    color: rgba(255,245,245,0.75);
+}
+
+[data-theme="ruby"] .learn-content {
+    color: #1C1917;
+}
+
+[data-theme="ruby"] .learn-word-display-centered,
+[data-theme="ruby"] .learn-word-display {
+    color: #1C1917;
+}
+
+/* Ensure definition/meaning text inside cards is dark & readable */
+[data-theme="ruby"] .learn-example .learn-example-en {
+    color: #3D0A0F !important;
+}
+
+[data-theme="ruby"] .learn-example .learn-example-vi {
+    color: #9B111E !important;
+}
+
+[data-theme="ruby"] .learn-spelling-hint {
+    color: #57534E !important;
+}
+
+/* Grammar question text on ruby */
+[data-theme="ruby"] .grammar-question-text {
+    color: #1C1917;
+}
+
+[data-theme="ruby"] .grammar-question-container::before {
+    color: #9B111E;
+}
+
 /* ============================================
    TopicSelectPage / SavedListsPage / GenerateListPage
    ============================================ */
@@ -703,8 +808,13 @@ html[data-theme="ruby"] {
     backdrop-filter: blur(8px);
 }
 
+[data-theme="ruby"] .progress-group-tab {
+    color: #78716C;
+}
+
 [data-theme="ruby"] .progress-group-tab:hover {
     background: rgba(155,17,30,0.06);
+    color: #57534E;
 }
 
 [data-theme="ruby"] .progress-group-tab--active,
@@ -723,9 +833,31 @@ html[data-theme="ruby"] {
 }
 
 [data-theme="ruby"] .progress-modal {
-    background: linear-gradient(180deg, rgba(255,252,252,0.98), rgba(255,245,245,0.98), rgba(254,226,226,0.96));
+    background: linear-gradient(180deg, rgba(255,252,252,0.99) 0%, rgba(255,248,246,0.99) 50%, rgba(254,240,238,0.98) 100%);
     border: 1px solid rgba(155,17,30,0.12);
-    box-shadow: 0 -16px 64px rgba(107,12,20,0.12);
+    box-shadow: 0 -16px 64px rgba(107,12,20,0.12), 0 0 0 1px rgba(255,228,230,0.50) inset;
+}
+
+/* --- Progress modal: light cream card style (readable on all themes) --- */
+
+[data-theme="ruby"] .progress-modal-title {
+    color: #1C1917;
+}
+
+[data-theme="ruby"] .progress-section-title {
+    color: #57534E;
+}
+
+[data-theme="ruby"] .progress-modal-close {
+    background: linear-gradient(135deg, rgba(255,245,245,0.60), rgba(254,226,226,0.45));
+    border: 1px solid rgba(155,17,30,0.10);
+    color: #78716C;
+}
+
+[data-theme="ruby"] .progress-modal-close:hover {
+    background: var(--color-error);
+    border-color: var(--color-error);
+    color: white;
 }
 
 [data-theme="ruby"] .progress-stat-card {
@@ -740,36 +872,70 @@ html[data-theme="ruby"] {
     color: #FFF5F5;
 }
 
+/* Mastery & Grammar cards — light cream background for readability */
 [data-theme="ruby"] .mastery-card,
 [data-theme="ruby"] .grammar-stats-card {
-    background: linear-gradient(145deg, rgba(107,12,20,0.85) 0%, rgba(135,15,25,0.72) 100%);
-    border: 1.5px solid rgba(212,66,78,0.18);
-    color: #FFF5F5;
-    box-shadow: 0 0 15px rgba(155,17,30,0.08), 0 6px 24px rgba(107,12,20,0.12), inset 0 1px 0 rgba(212,66,78,0.10);
+    background: linear-gradient(145deg, rgba(255,252,252,0.96) 0%, rgba(255,245,245,0.92) 100%);
+    border: 1.5px solid rgba(155,17,30,0.15);
+    box-shadow: 0 4px 16px rgba(107,12,20,0.08);
     backdrop-filter: blur(8px);
 }
 
-[data-theme="ruby"] .mastery-card *,
-[data-theme="ruby"] .grammar-stats-card * {
-    color: #FFF5F5;
+/* Reset text colors inside mastery/grammar cards to dark */
+[data-theme="ruby"] .mastery-card .mastery-legend-label,
+[data-theme="ruby"] .grammar-stats-card .grammar-detail-label,
+[data-theme="ruby"] .grammar-stats-card .grammar-accuracy-label {
+    color: #78716C;
 }
 
+[data-theme="ruby"] .mastery-card .mastery-legend-count,
+[data-theme="ruby"] .grammar-stats-card .grammar-detail-value,
+[data-theme="ruby"] .grammar-stats-card .grammar-accuracy-value {
+    color: #1C1917;
+}
+
+[data-theme="ruby"] .mastery-legend-item {
+    background: rgba(155,17,30,0.04);
+    border: 1px solid rgba(155,17,30,0.08);
+}
+
+[data-theme="ruby"] .grammar-detail-item {
+    background: rgba(155,17,30,0.04);
+    border: 1px solid rgba(155,17,30,0.08);
+}
+
+[data-theme="ruby"] .mastery-bar-container {
+    box-shadow: inset 0 2px 4px rgba(107,12,20,0.10);
+}
+
+/* Exam history items — light style */
 [data-theme="ruby"] .exam-history-item {
-    background: linear-gradient(145deg, rgba(107,12,20,0.85) 0%, rgba(135,15,25,0.72) 100%);
-    border: 1.5px solid rgba(212,66,78,0.18);
-    color: #FFF5F5;
-    box-shadow: 0 0 15px rgba(155,17,30,0.08), 0 6px 24px rgba(107,12,20,0.12), inset 0 1px 0 rgba(212,66,78,0.10);
+    background: linear-gradient(145deg, rgba(255,252,252,0.96) 0%, rgba(255,245,245,0.92) 100%);
+    border: 1.5px solid rgba(155,17,30,0.15);
+    box-shadow: 0 4px 16px rgba(107,12,20,0.08);
     backdrop-filter: blur(8px);
 }
 
-[data-theme="ruby"] .exam-history-item * {
-    color: #FFF5F5;
+[data-theme="ruby"] .exam-history-name {
+    color: #1C1917;
+}
+
+[data-theme="ruby"] .exam-history-meta {
+    color: #78716C;
 }
 
 [data-theme="ruby"] .exam-history-item:hover {
-    border-color: rgba(212,66,78,0.30);
-    box-shadow: 0 0 25px rgba(155,17,30,0.15), 0 12px 40px rgba(107,12,20,0.18);
+    background: linear-gradient(145deg, rgba(255,255,255,0.98), rgba(255,248,246,0.96));
+    border-color: rgba(155,17,30,0.25);
+    box-shadow: 0 8px 24px rgba(107,12,20,0.12);
     transform: translateY(-1px);
+}
+
+/* Progress empty state */
+[data-theme="ruby"] .progress-empty {
+    color: #78716C;
+    border-color: rgba(155,17,30,0.15);
+    background: rgba(255,245,245,0.50);
 }
 
 /* ============================================
@@ -900,10 +1066,7 @@ html[data-theme="ruby"] {
 [data-theme="ruby"] .custom-list-card,
 [data-theme="ruby"] .learn-option,
 [data-theme="ruby"] .learn-welcome-card,
-[data-theme="ruby"] .progress-stat-card,
-[data-theme="ruby"] .mastery-card,
-[data-theme="ruby"] .grammar-stats-card,
-[data-theme="ruby"] .exam-history-item {
+[data-theme="ruby"] .progress-stat-card {
     position: relative;
     overflow: hidden;
 }
@@ -916,10 +1079,7 @@ html[data-theme="ruby"] {
 [data-theme="ruby"] .custom-list-card::before,
 [data-theme="ruby"] .learn-option::before,
 [data-theme="ruby"] .learn-welcome-card::before,
-[data-theme="ruby"] .progress-stat-card::before,
-[data-theme="ruby"] .mastery-card::before,
-[data-theme="ruby"] .grammar-stats-card::before,
-[data-theme="ruby"] .exam-history-item::before {
+[data-theme="ruby"] .progress-stat-card::before {
     content: '';
     position: absolute;
     top: -50%;
@@ -944,15 +1104,83 @@ html[data-theme="ruby"] {
 [data-theme="ruby"] .dashboard-action-card:hover::before,
 [data-theme="ruby"] .review-card:hover::before,
 [data-theme="ruby"] .custom-list-card:hover::before,
-[data-theme="ruby"] .learn-option:hover::before,
-[data-theme="ruby"] .exam-history-item:hover::before {
+[data-theme="ruby"] .learn-option:hover::before {
     animation: rubyReflection 0.8s ease-out forwards;
 }
 
 [data-theme="ruby"] .glass-card--static::before,
 [data-theme="ruby"] .learn-welcome-card::before,
-[data-theme="ruby"] .progress-stat-card::before,
-[data-theme="ruby"] .mastery-card::before,
-[data-theme="ruby"] .grammar-stats-card::before {
+[data-theme="ruby"] .progress-stat-card::before {
     animation: rubyReflection 4s ease-in-out infinite;
+}
+
+/* ============================================
+   EXAM RESULT PAGE — Ruby Overrides
+   Ruby's --bg-glass is a dark surface, but exam-result
+   uses it with dark text. Override to use light pink bg.
+   ============================================ */
+
+[data-theme="ruby"] .exam-result-page {
+    background: linear-gradient(160deg, #F5E1DE 0%, #EECFCC 30%, #F0D4D0 60%, #E8C5C1 100%) !important;
+    background-attachment: fixed !important;
+}
+
+[data-theme="ruby"] .exam-result-score-card {
+    background: rgba(255, 248, 246, 0.85);
+    border-color: rgba(155, 17, 30, 0.15);
+    backdrop-filter: blur(12px);
+}
+
+[data-theme="ruby"] .exam-result-section-title {
+    background: rgba(255, 248, 246, 0.7);
+    border-color: rgba(155, 17, 30, 0.12);
+    color: #1C1917;
+}
+
+[data-theme="ruby"] .exam-result-question-item {
+    background: rgba(255, 252, 252, 0.8);
+    border-color: rgba(155, 17, 30, 0.12);
+    backdrop-filter: blur(8px);
+}
+
+[data-theme="ruby"] .exam-result-answer-box {
+    background: rgba(255, 245, 245, 0.6);
+    border-color: rgba(155, 17, 30, 0.1);
+}
+
+[data-theme="ruby"] .exam-result-fill-sentence {
+    background: rgba(255, 245, 245, 0.6);
+    border-color: rgba(155, 17, 30, 0.1);
+    color: #1C1917;
+}
+
+[data-theme="ruby"] .exam-result-match-left {
+    background: rgba(155, 17, 30, 0.08);
+    border-color: rgba(155, 17, 30, 0.15);
+    color: #1C1917;
+}
+
+[data-theme="ruby"] .exam-result-cat-group {
+    background: rgba(255, 248, 246, 0.7);
+    border-color: rgba(155, 17, 30, 0.12);
+}
+
+[data-theme="ruby"] .exam-result-cat-item {
+    background: rgba(255, 252, 252, 0.8);
+    border-color: rgba(155, 17, 30, 0.1);
+    color: #1C1917;
+}
+
+[data-theme="ruby"] .exam-result-summary-card {
+    background: rgba(255, 248, 246, 0.85);
+    border-color: rgba(155, 17, 30, 0.15);
+}
+
+[data-theme="ruby"] .exam-result-summary-title {
+    color: #9B111E;
+}
+
+[data-theme="ruby"] .exam-result-summary-body,
+[data-theme="ruby"] .exam-result-summary-body * {
+    color: #1C1917;
 }

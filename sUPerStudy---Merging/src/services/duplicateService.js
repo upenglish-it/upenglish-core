@@ -44,20 +44,27 @@ async function copyStorageFile(url, targetFolder) {
 }
 
 /**
- * Copy all context_images URLs found inside an HTML string.
+ * Copy ALL Firebase Storage URLs found inside an HTML string.
+ * Downloads each file and re-uploads to a new path for full data independence.
  * Returns the HTML with old URLs replaced by new ones.
  */
-async function copyContextImagesInHtml(html) {
+async function copyAllStorageUrlsInHtml(html) {
     if (!html || typeof html !== 'string') return html;
-    const regex = /https:\/\/firebasestorage\.googleapis\.com[^"'\s)]*context_images[^"'\s)]*/g;
+    const regex = /https:\/\/firebasestorage\.googleapis\.com\/[^"'\s)<>]+/g;
     const urls = [...new Set(html.match(regex) || [])];
     if (urls.length === 0) return html;
 
     let newHtml = html;
     for (const oldUrl of urls) {
-        const newUrl = await copyStorageFile(oldUrl, 'context_images');
+        // Detect target folder from the URL path
+        let folder = 'duplicated_assets';
+        if (oldUrl.includes('context_images')) folder = 'context_images';
+        else if (oldUrl.includes('option_images')) folder = 'option_images';
+        else if (oldUrl.includes('context_audio')) folder = 'context_audio/duplicated';
+        else if (oldUrl.includes('vocab_images')) folder = 'vocab_images';
+
+        const newUrl = await copyStorageFile(oldUrl, folder);
         if (newUrl && newUrl !== oldUrl) {
-            // Replace all occurrences of the old URL
             newHtml = newHtml.split(oldUrl).join(newUrl);
         }
     }
@@ -65,7 +72,8 @@ async function copyContextImagesInHtml(html) {
 }
 
 /**
- * Copy option images in a multiple_choice question's variations.
+ * Copy option images/URLs in a multiple_choice question's variations.
+ * Copies ANY Firebase Storage URL found in options (not just option_images paths).
  * Returns the updated variations array.
  */
 async function copyQuestionOptionImages(variations) {
@@ -78,8 +86,9 @@ async function copyQuestionOptionImages(variations) {
         }
         const newOptions = [];
         for (const opt of v.options) {
-            if (opt && typeof opt === 'string' && opt.includes('option_images')) {
-                const newUrl = await copyStorageFile(opt, 'option_images');
+            if (opt && typeof opt === 'string' && opt.includes('firebasestorage.googleapis.com')) {
+                const folder = opt.includes('option_images') ? 'option_images' : 'duplicated_assets';
+                const newUrl = await copyStorageFile(opt, folder);
                 newOptions.push(newUrl || opt);
             } else {
                 newOptions.push(opt);
@@ -186,13 +195,17 @@ export async function duplicateExam(examId, teacherId) {
         return { ...section, id: newSectionId };
     });
 
-    // 3. Copy section-level context audio
+    // 3. Copy section-level context audio & context images
     for (let i = 0; i < newSections.length; i++) {
         if (newSections[i].contextAudioUrl) {
             newSections[i].contextAudioUrl = await copyStorageFile(
                 newSections[i].contextAudioUrl,
                 `context_audio/exam/${crypto.randomUUID()}`
             );
+        }
+        // Copy all Firebase Storage URLs in section HTML (images etc.)
+        if (newSections[i].context) {
+            newSections[i].context = await copyAllStorageUrlsInHtml(newSections[i].context);
         }
     }
 
@@ -224,39 +237,53 @@ export async function duplicateExam(examId, teacherId) {
     );
 
     for (const qDoc of questionsSnap.docs) {
-        const qData = { ...qDoc.data() };
+        try {
+            const qData = { ...qDoc.data() };
 
-        // Map IDs
-        qData.examId = newExamId;
-        if (qData.sectionId && sectionIdMap[qData.sectionId]) {
-            qData.sectionId = sectionIdMap[qData.sectionId];
+            // Map IDs
+            qData.examId = newExamId;
+            if (qData.sectionId && sectionIdMap[qData.sectionId]) {
+                qData.sectionId = sectionIdMap[qData.sectionId];
+            }
+
+            // Copy option images (multiple_choice)
+            if (qData.type === 'multiple_choice' && qData.variations) {
+                qData.variations = await copyQuestionOptionImages(qData.variations);
+            }
+
+            // Copy context audio
+            if (qData.contextAudioUrl) {
+                qData.contextAudioUrl = await copyStorageFile(
+                    qData.contextAudioUrl,
+                    `context_audio/exam/${newExamId}`
+                );
+            }
+
+            // Copy all Firebase Storage URLs in question context HTML
+            if (qData.context) {
+                qData.context = await copyAllStorageUrlsInHtml(qData.context);
+            }
+
+            // Deep-copy all Firebase Storage URLs in variation text HTML
+            if (qData.variations && Array.isArray(qData.variations)) {
+                for (let vi = 0; vi < qData.variations.length; vi++) {
+                    const v = qData.variations[vi];
+                    if (v && v.text && typeof v.text === 'string' && v.text.includes('firebasestorage.googleapis.com')) {
+                        qData.variations[vi] = { ...v, text: await copyAllStorageUrlsInHtml(v.text) };
+                    }
+                }
+            }
+
+            // Save new question (auto-ID)
+            const newQRef = doc(collection(db, 'exam_questions'));
+            await setDoc(newQRef, {
+                ...qData,
+                createdAt: Timestamp.now(),
+                updatedAt: Timestamp.now()
+            });
+        } catch (e) {
+            console.error('[duplicateService] Error copying exam question:', qDoc.id, e);
         }
-
-        // Copy option images (multiple_choice)
-        if (qData.type === 'multiple_choice' && qData.variations) {
-            qData.variations = await copyQuestionOptionImages(qData.variations);
-        }
-
-        // Copy context audio
-        if (qData.contextAudioUrl) {
-            qData.contextAudioUrl = await copyStorageFile(
-                qData.contextAudioUrl,
-                `context_audio/exam/${newExamId}`
-            );
-        }
-
-        // Copy context images in HTML
-        if (qData.context) {
-            qData.context = await copyContextImagesInHtml(qData.context);
-        }
-
-        // Save new question (auto-ID)
-        const newQRef = doc(collection(db, 'exam_questions'));
-        await setDoc(newQRef, {
-            ...qData,
-            createdAt: Timestamp.now(),
-            updatedAt: Timestamp.now()
-        });
     }
 
     // 6. Recalc cache
@@ -309,36 +336,50 @@ export async function duplicateGrammarExercise(exerciseId, teacherId) {
     );
 
     for (const qDoc of questionsSnap.docs) {
-        const qData = { ...qDoc.data() };
+        try {
+            const qData = { ...qDoc.data() };
 
-        // Map exercise ID
-        qData.exerciseId = newExId;
+            // Map exercise ID
+            qData.exerciseId = newExId;
 
-        // Copy option images (multiple_choice)
-        if (qData.type === 'multiple_choice' && qData.variations) {
-            qData.variations = await copyQuestionOptionImages(qData.variations);
+            // Copy option images (multiple_choice)
+            if (qData.type === 'multiple_choice' && qData.variations) {
+                qData.variations = await copyQuestionOptionImages(qData.variations);
+            }
+
+            // Copy context audio
+            if (qData.contextAudioUrl) {
+                qData.contextAudioUrl = await copyStorageFile(
+                    qData.contextAudioUrl,
+                    `context_audio/grammar/${newExId}`
+                );
+            }
+
+            // Copy all Firebase Storage URLs in question context HTML
+            if (qData.context) {
+                qData.context = await copyAllStorageUrlsInHtml(qData.context);
+            }
+
+            // Deep-copy all Firebase Storage URLs in variation text HTML
+            if (qData.variations && Array.isArray(qData.variations)) {
+                for (let vi = 0; vi < qData.variations.length; vi++) {
+                    const v = qData.variations[vi];
+                    if (v && v.text && typeof v.text === 'string' && v.text.includes('firebasestorage.googleapis.com')) {
+                        qData.variations[vi] = { ...v, text: await copyAllStorageUrlsInHtml(v.text) };
+                    }
+                }
+            }
+
+            // Save new question (auto-ID)
+            const newQRef = doc(collection(db, 'grammar_questions'));
+            await setDoc(newQRef, {
+                ...qData,
+                createdAt: Timestamp.now(),
+                updatedAt: Timestamp.now()
+            });
+        } catch (e) {
+            console.error('[duplicateService] Error copying grammar question:', qDoc.id, e);
         }
-
-        // Copy context audio
-        if (qData.contextAudioUrl) {
-            qData.contextAudioUrl = await copyStorageFile(
-                qData.contextAudioUrl,
-                `context_audio/grammar/${newExId}`
-            );
-        }
-
-        // Copy context images in HTML
-        if (qData.context) {
-            qData.context = await copyContextImagesInHtml(qData.context);
-        }
-
-        // Save new question (auto-ID)
-        const newQRef = doc(collection(db, 'grammar_questions'));
-        await setDoc(newQRef, {
-            ...qData,
-            createdAt: Timestamp.now(),
-            updatedAt: Timestamp.now()
-        });
     }
 
     // 4. Recalc cache

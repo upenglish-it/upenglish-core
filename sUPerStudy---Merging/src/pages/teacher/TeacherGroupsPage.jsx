@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getTeacherGroups, getStudentsInGroup } from '../../services/teacherService';
 import { getActiveReportPeriod, getGroupReportStatus, computePeriodStatus } from '../../services/reportPeriodService';
-import { Layers, Users, ChevronRight, ClipboardList, CheckCircle, AlertTriangle } from 'lucide-react';
+import { getLatestRatingStatsForTeacher } from '../../services/teacherRatingService';
+import { Layers, Users, ChevronRight, ClipboardList, CheckCircle, AlertTriangle, Star } from 'lucide-react';
 
 export default function TeacherGroupsPage() {
     const { user } = useAuth();
@@ -14,6 +15,7 @@ export default function TeacherGroupsPage() {
     // Report period
     const [activePeriod, setActivePeriod] = useState(null);
     const [groupReportStats, setGroupReportStats] = useState({}); // { [groupId]: { sent, total } }
+    const [ratingStats, setRatingStats] = useState(null); // { periodLabel, groups: { [groupId]: { avgScore, count } } }
 
     useEffect(() => {
         loadGroups();
@@ -53,6 +55,14 @@ export default function TeacherGroupsPage() {
                 }));
                 setGroupReportStats(statsMap);
             }
+
+            // Load teacher rating stats
+            try {
+                const rStats = await getLatestRatingStatsForTeacher(user.uid);
+                setRatingStats(rStats);
+            } catch (e) {
+                console.warn('Error loading rating stats', e);
+            }
         } catch (err) {
             console.error(err);
             setError('Lỗi tải danh sách lớp học.');
@@ -86,6 +96,7 @@ export default function TeacherGroupsPage() {
                             const stats = groupReportStats[group.id];
                             const periodStatus = activePeriod ? computePeriodStatus(activePeriod) : null;
                             const missing = stats ? stats.total - stats.sent : 0;
+                            const groupRating = ratingStats?.groups?.[group.id];
 
                             return (
                                 <Link key={group.id} to={`/teacher/groups/${group.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
@@ -134,6 +145,31 @@ export default function TeacherGroupsPage() {
                                                             <AlertTriangle size={14} /> {missing} chưa gửi
                                                         </span>
                                                     )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Teacher rating badge */}
+                                        {groupRating && (
+                                            <div style={{
+                                                padding: '10px 14px', borderRadius: '12px', marginBottom: '16px',
+                                                background: groupRating.avgScore >= 80 ? '#f0fdf4' : groupRating.avgScore >= 60 ? '#fffbeb' : '#fef2f2',
+                                                border: `1px solid ${groupRating.avgScore >= 80 ? '#bbf7d0' : groupRating.avgScore >= 60 ? '#fde68a' : '#fecaca'}`,
+                                            }}>
+                                                <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                    <Star size={12} fill="#f59e0b" color="#f59e0b" /> {ratingStats.periodLabel}
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                    <span style={{
+                                                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                                        fontSize: '0.95rem', fontWeight: 800,
+                                                        color: groupRating.avgScore >= 80 ? '#16a34a' : groupRating.avgScore >= 60 ? '#d97706' : '#dc2626',
+                                                    }}>
+                                                        {groupRating.avgScore}%
+                                                    </span>
+                                                    <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 500 }}>
+                                                        từ {groupRating.count} đánh giá
+                                                    </span>
                                                 </div>
                                             </div>
                                         )}

@@ -1,5 +1,5 @@
 import { db } from '../config/firebase';
-import { collection, doc, getDocs, getDoc, setDoc, deleteDoc, updateDoc, writeBatch, serverTimestamp, query, where, orderBy, getCountFromServer } from 'firebase/firestore';
+import { collection, doc, getDocs, getDoc, setDoc, deleteDoc, updateDoc, writeBatch, serverTimestamp, query, where, orderBy, getCountFromServer, deleteField } from 'firebase/firestore';
 import { deleteQuestionImages, deleteContextImages } from './examService';
 import { deleteContextAudio } from './contextAudioService';
 
@@ -47,7 +47,10 @@ export async function getGrammarExercises(teacherId = null) {
     }
     const snapshot = await getDocs(q);
     const exercises = [];
-    snapshot.forEach(docSnap => exercises.push({ id: docSnap.id, ...docSnap.data() }));
+    snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        if (!data.isDeleted) exercises.push({ id: docSnap.id, ...data });
+    });
     // Client-side sort to avoid requiring a composite index
     return exercises.sort((a, b) => {
         const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
@@ -118,6 +121,21 @@ export async function saveGrammarExercise(exerciseData) {
 }
 
 export async function deleteGrammarExercise(id) {
+    // Soft delete: mark as deleted instead of removing
+    await updateDoc(doc(db, 'grammar_exercises', id), {
+        isDeleted: true,
+        deletedAt: serverTimestamp()
+    });
+}
+
+export async function restoreGrammarExercise(id) {
+    await updateDoc(doc(db, 'grammar_exercises', id), {
+        isDeleted: deleteField(),
+        deletedAt: deleteField()
+    });
+}
+
+export async function permanentlyDeleteGrammarExercise(id) {
     // Delete questions first
     const questions = await getGrammarQuestions(id);
     const batch = writeBatch(db);
@@ -140,6 +158,23 @@ export async function deleteGrammarExercise(id) {
 
     batch.delete(doc(db, 'grammar_exercises', id));
     await batch.commit();
+}
+
+export async function getDeletedGrammarExercises() {
+    try {
+        const q = query(collection(db, 'grammar_exercises'), where('isDeleted', '==', true));
+        const snapshot = await getDocs(q);
+        const exercises = [];
+        snapshot.forEach(docSnap => exercises.push({ id: docSnap.id, ...docSnap.data() }));
+        return exercises.sort((a, b) => {
+            const tA = a.deletedAt?.toMillis ? a.deletedAt.toMillis() : 0;
+            const tB = b.deletedAt?.toMillis ? b.deletedAt.toMillis() : 0;
+            return tB - tA;
+        });
+    } catch (error) {
+        console.error("Error fetching deleted grammar exercises:", error);
+        return [];
+    }
 }
 
 // --- QUESTIONS ---
@@ -304,14 +339,29 @@ export async function getTeacherGrammarFolders(teacherId) {
     const q = query(collection(db, 'teacher_grammar_folders'), where('teacherId', '==', teacherId));
     const snapshot = await getDocs(q);
     const folders = [];
-    snapshot.forEach(docSnap => folders.push({ id: docSnap.id, ...docSnap.data() }));
+    snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        if (!data.isDeleted) folders.push({ id: docSnap.id, ...data });
+    });
     return folders.sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+
+export async function updateTeacherGrammarFoldersOrder(orderedFolders) {
+    const batch = writeBatch(db);
+    orderedFolders.forEach((folder, index) => {
+        const ref = doc(db, 'teacher_grammar_folders', folder.id);
+        batch.update(ref, { order: index, updatedAt: serverTimestamp() });
+    });
+    await batch.commit();
 }
 
 export async function getAllTeacherGrammarFolders() {
     const snapshot = await getDocs(collection(db, 'teacher_grammar_folders'));
     const folders = [];
-    snapshot.forEach(docSnap => folders.push({ id: docSnap.id, ...docSnap.data() }));
+    snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        if (!data.isDeleted) folders.push({ id: docSnap.id, ...data });
+    });
     return folders.sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
@@ -329,5 +379,37 @@ export async function saveTeacherGrammarFolder(teacherId, folderData) {
 }
 
 export async function deleteTeacherGrammarFolder(folderId) {
+    // Soft delete
+    await updateDoc(doc(db, 'teacher_grammar_folders', folderId), {
+        isDeleted: true,
+        deletedAt: serverTimestamp()
+    });
+}
+
+export async function restoreTeacherGrammarFolder(folderId) {
+    await updateDoc(doc(db, 'teacher_grammar_folders', folderId), {
+        isDeleted: deleteField(),
+        deletedAt: deleteField()
+    });
+}
+
+export async function permanentlyDeleteTeacherGrammarFolder(folderId) {
     await deleteDoc(doc(db, 'teacher_grammar_folders', folderId));
+}
+
+export async function getDeletedTeacherGrammarFolders() {
+    try {
+        const q = query(collection(db, 'teacher_grammar_folders'), where('isDeleted', '==', true));
+        const snapshot = await getDocs(q);
+        const folders = [];
+        snapshot.forEach(docSnap => folders.push({ id: docSnap.id, ...docSnap.data() }));
+        return folders.sort((a, b) => {
+            const tA = a.deletedAt?.toMillis ? a.deletedAt.toMillis() : 0;
+            const tB = b.deletedAt?.toMillis ? b.deletedAt.toMillis() : 0;
+            return tB - tA;
+        });
+    } catch (error) {
+        console.error("Error fetching deleted teacher grammar folders:", error);
+        return [];
+    }
 }

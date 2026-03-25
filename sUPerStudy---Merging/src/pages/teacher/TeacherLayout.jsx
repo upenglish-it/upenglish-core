@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Users, LogOut, Home, Menu, Layers, BookOpen, ClipboardCheck, Settings, X, Mail, MessageSquare } from 'lucide-react';
+import { Users, LogOut, Home, Menu, Layers, BookOpen, ClipboardCheck, Settings, X, Mail, MessageSquare, Star, Gift, MessageSquareText, Gamepad2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../config/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { getMyUnreadFeedbackCount } from '../../services/feedbackService';
 import Avatar from '../../components/common/Avatar';
 import BrandLogo from '../../components/common/BrandLogo';
 import NotificationBell from '../../components/common/NotificationBell';
@@ -21,16 +22,30 @@ export default function TeacherLayout() {
     const [customTeacher, setCustomTeacher] = useState('');
     const [customStudent, setCustomStudent] = useState('');
     const [emailPreferences, setEmailPreferences] = useState({});
+    const [hasRewardGroups, setHasRewardGroups] = useState(false);
+    const [receivedUnread, setReceivedUnread] = useState(0);
 
     useEffect(() => {
         if (!user?.uid) return;
+        getMyUnreadFeedbackCount(user.uid).then(setReceivedUnread).catch(() => {});
         const userRef = doc(db, `users/${user.uid}`);
-        getDoc(userRef).then(snap => {
+        getDoc(userRef).then(async snap => {
             if (snap.exists()) {
                 const data = snap.data();
                 if (data.teacherTitle) setTeacherTitle(data.teacherTitle);
                 if (data.studentTitle) setStudentTitle(data.studentTitle);
                 if (data.emailPreferences) setEmailPreferences(data.emailPreferences);
+                // Check if teacher has any groups with reward points enabled
+                const groupIds = data.groupIds || [];
+                if (groupIds.length > 0) {
+                    try {
+                        const { getTeacherGroups } = await import('../../services/teacherService');
+                        const groups = await getTeacherGroups(groupIds);
+                        setHasRewardGroups(groups.some(g => g.enableRewardPoints));
+                    } catch (e) {
+                        console.warn('Could not check reward groups:', e);
+                    }
+                }
             }
         }).catch(err => console.warn('Could not load user settings:', err));
     }, [user?.uid]);
@@ -50,9 +65,11 @@ export default function TeacherLayout() {
 
     const TEACHER_EMAIL_TYPES = [
         { key: 'deadline_expired', label: 'Bài hết hạn — cần chấm', emoji: '⏰' },
+        { key: 'half_submitted', label: '50% học viên đã nộp bài', emoji: '📊' },
         { key: 'skill_report_reminder', label: 'Nhắc viết báo cáo kỹ năng', emoji: '📊' },
         { key: 'student_joined', label: 'Học viên mới vào lớp', emoji: '👤' },
         { key: 'exam_graded_by_other', label: 'Bài được GV khác chấm', emoji: '📝' },
+        { key: 'student_periodic_rating', label: 'Kết quả đánh giá theo kỳ', emoji: '⭐' },
         { key: 'collab', label: 'Cộng tác', emoji: '🤝' },
         { key: 'content_proposal', label: 'Đề xuất nội dung', emoji: '📩' },
     ];
@@ -92,6 +109,21 @@ export default function TeacherLayout() {
                     </Link>
                     <Link to="/teacher/prompts" className={`admin-nav-item ${pathname.includes('/teacher/prompts') ? 'active' : ''}`} onClick={() => setSidebarOpen(false)}>
                         <MessageSquare size={20} /> Quản lý prompt
+                    </Link>
+                    <Link to="/teacher/ratings" className={`admin-nav-item ${pathname.includes('/teacher/ratings') ? 'active' : ''}`} onClick={() => setSidebarOpen(false)}>
+                        <Star size={20} /> Đánh giá của tôi
+                    </Link>
+                    {hasRewardGroups && (
+                        <Link to="/teacher/reward-points" className={`admin-nav-item ${pathname.includes('/teacher/reward-points') ? 'active' : ''}`} onClick={() => setSidebarOpen(false)}>
+                            <Gift size={20} /> Tích điểm đổi quà
+                        </Link>
+                    )}
+                    <Link to="/teacher/feedback" className={`admin-nav-item ${pathname.includes('/teacher/feedback') ? 'active' : ''}`} onClick={() => setSidebarOpen(false)}>
+                        <MessageSquareText size={20} /> Góp ý ẩn danh
+                        {receivedUnread > 0 && <span style={{ fontSize: '0.68rem', fontWeight: 700, background: '#ef4444', color: '#fff', borderRadius: '100px', padding: '1px 7px', marginLeft: 'auto' }}>{receivedUnread}</span>}
+                    </Link>
+                    <Link to="/teacher/mini-games" className={`admin-nav-item ${pathname.includes('/teacher/mini-games') ? 'active' : ''}`} onClick={() => setSidebarOpen(false)}>
+                        <Gamepad2 size={20} /> Mini Games
                     </Link>
                     <button className="admin-nav-item" onClick={() => { setIsSettingsOpen(true); setSidebarOpen(false); }}>
                         <Settings size={20} /> Thiết lập
@@ -216,6 +248,7 @@ export default function TeacherLayout() {
                     </div>
                 </div>
             )}
+
         </div>
     );
 }

@@ -1,5 +1,5 @@
 import { db } from '../config/firebase';
-import { collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, query, where, orderBy } from 'firebase/firestore';
+import { collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, deleteField, query, where, orderBy } from 'firebase/firestore';
 import { createNotificationForAdmins, createNotification } from './notificationService';
 
 // ========== CONTENT PROPOSALS ==========
@@ -105,9 +105,37 @@ export async function getProposalForSource(sourceId, type) {
 }
 
 /**
- * Approve a proposal and copy content to the official preset collection.
+ * Find existing official copy for a source item (to detect re-proposals).
+ * Returns { id, name/title, collection } or null.
  */
-export async function approveProposal(proposalId, adminUid) {
+export async function findExistingOfficialCopy(sourceId, type, level = 'item') {
+    const collectionMap = {
+        vocab: level === 'folder' ? 'topic_folders' : 'topics',
+        grammar: level === 'folder' ? 'grammar_folders' : 'grammar_exercises',
+        exam: level === 'folder' ? 'exam_folders' : 'exams'
+    };
+    const col = collectionMap[type];
+    if (!col) return null;
+
+    const copiedFromField = 'copiedFrom';
+    const q = query(collection(db, col), where(copiedFromField, '==', sourceId));
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+
+    const docSnap = snap.docs[0];
+    const data = docSnap.data();
+    return {
+        id: docSnap.id,
+        name: data.name || data.title || 'Không rõ tên',
+        collection: col
+    };
+}
+
+/**
+ * Approve a proposal and copy content to the official preset collection.
+ * @param {string} mode - 'create_new' (default) or 'overwrite'
+ */
+export async function approveProposal(proposalId, adminUid, mode = 'create_new') {
     const proposalRef = doc(db, 'content_proposals', proposalId);
     const proposalSnap = await getDoc(proposalRef);
     if (!proposalSnap.exists()) throw new Error('Proposal not found');
@@ -116,15 +144,24 @@ export async function approveProposal(proposalId, adminUid) {
     if (proposal.status !== 'pending') throw new Error('Proposal already reviewed');
 
     try {
-        if (proposal.level === 'folder') {
-            await copyFolderToPreset(proposal);
+        if (mode === 'overwrite') {
+            if (proposal.level === 'folder') {
+                await overwriteFolderToPreset(proposal);
+            } else {
+                await overwriteItemToPreset(proposal);
+            }
         } else {
-            await copyItemToPreset(proposal);
+            if (proposal.level === 'folder') {
+                await copyFolderToPreset(proposal);
+            } else {
+                await copyItemToPreset(proposal);
+            }
         }
 
         // Mark as approved
         await updateDoc(proposalRef, {
             status: 'approved',
+            approveMode: mode,
             reviewedAt: serverTimestamp(),
             reviewedBy: adminUid
         });
@@ -132,12 +169,13 @@ export async function approveProposal(proposalId, adminUid) {
         // Notify teacher
         const typeLabels = { vocab: 'Từ vựng', grammar: 'Kỹ năng', exam: 'Bài tập và Kiểm tra' };
         const teacherLinks = { vocab: '/teacher/topics', grammar: '/teacher/grammar', exam: '/teacher/exams' };
+        const modeLabel = mode === 'overwrite' ? ' (cập nhật bản cũ)' : '';
         try {
             await createNotification({
                 userId: proposal.teacherId,
                 type: 'proposal_approved',
                 title: `✅ Đề xuất được duyệt: ${typeLabels[proposal.type] || proposal.type}`,
-                message: `"${proposal.proposalName}" đã được admin duyệt thành tài liệu chính thức!`,
+                message: `"${proposal.proposalName}" đã được admin duyệt thành tài liệu chính thức${modeLabel}!`,
                 link: teacherLinks[proposal.type] || '/teacher'
             });
 
@@ -150,7 +188,7 @@ export async function approveProposal(proposalId, adminUid) {
                         subject: `Đề xuất "${proposal.proposalName}" được duyệt!`,
                         html: buildEmailHtml({
                             emoji: '✅', heading: 'Đề xuất được duyệt!', headingColor: '#10b981',
-                            body: `<p>Tin vui! Tài liệu <strong>"${proposal.proposalName}"</strong> của bạn đã được duyệt thành tài liệu chính thức của Trung tâm Ngoại ngữ UP. Cảm ơn bạn đã đóng góp! 🌟</p>`,
+                            body: `<p>Tin vui! Tài liệu <strong>"${proposal.proposalName}"</strong> của bạn đã được duyệt thành tài liệu chính thức của Trung tâm Ngoại ngữ UP${modeLabel}. Cảm ơn bạn đã đóng góp! 🌟</p>`,
                             ctaText: 'Mở sUPerStudy', ctaColor: '#10b981', ctaColor2: '#34d399'
                         })
                     });
@@ -246,22 +284,28 @@ async function copyVocabToPreset(sourceId, proposal) {
     // Read teacher topic
     const sourceRef = doc(db, 'teacher_topics', sourceId);
     const sourceSnap = await getDoc(sourceRef);
-    if (!sourceSnap.exists()) throw new Error('Source topic not found');
+    if (!sourceSnap.exists()) {
+        console.error('[VOCAB COPY] Source topic NOT FOUND in teacher_topics:', sourceId);
+        throw new Error('Source topic not found');
+    }
 
     const sourceData = sourceSnap.data();
-    const newId = `preset-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    
+    // Use Firestore auto-generated ID for reliability
+    const presetRef = doc(collection(db, 'topics'));
+    const newId = presetRef.id;
 
-    // Create preset topic
-    const presetRef = doc(db, 'topics', newId);
+    // Create preset topic (spread all source data, strip teacher fields AND id)
+    const { id: _sourceId, teacherId, createdBy, createdByRole, sharedWith, collaboratorIds, collaboratorNames, collaboratorRoles, isDeleted, deletedAt, ...cleanData } = sourceData;
     await setDoc(presetRef, {
+        ...cleanData,
         name: sourceData.name || proposal.proposalName,
-        description: sourceData.description || proposal.proposalDescription || '',
-        icon: sourceData.icon || proposal.icon || '📘',
-        color: sourceData.color || proposal.color || '#10b981',
+        createdByRole: 'admin',
         copiedFrom: sourceId,
         proposedBy: proposal.teacherId,
         proposedByName: proposal.teacherName,
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
     });
 
     // Copy words subcollection
@@ -293,24 +337,25 @@ async function copyVocabFolderToPreset(sourceFolderId, proposal) {
             const newId = await copyVocabToPreset(topicId, proposal);
             newTopicIds.push(newId);
         } catch (e) {
-            console.error(`Error copying topic ${topicId}:`, e);
+            console.error(`[VOCAB FOLDER COPY] Error copying topic ${topicId}:`, e);
         }
     }
 
     // Create preset folder
     const newFolderId = `pf-${Date.now()}`;
     const presetFolderRef = doc(db, 'topic_folders', newFolderId);
-    await setDoc(presetFolderRef, {
+    const { teacherId, createdBy, createdByRole, sharedWith, collaboratorIds, collaboratorNames, collaboratorRoles, isDeleted, deletedAt, topicIds: _ids, ...cleanFolderData } = folderData;
+    
+    const folderWriteData = {
+        ...cleanFolderData,
         name: folderData.name || proposal.proposalName,
-        description: folderData.description || '',
-        icon: folderData.icon || '📁',
-        color: folderData.color || '#3b82f6',
         topicIds: newTopicIds,
         copiedFrom: sourceFolderId,
         proposedBy: proposal.teacherId,
         proposedByName: proposal.teacherName,
         updatedAt: serverTimestamp()
-    });
+    };
+    await setDoc(presetFolderRef, folderWriteData);
 
     return newFolderId;
 }
@@ -326,12 +371,12 @@ async function copyGrammarToPreset(sourceId, proposal) {
     const newExerciseRef = doc(collection(db, 'grammar_exercises'));
     const newId = newExerciseRef.id;
 
-    // Create new exercise as admin/preset
+    // Create new exercise as admin/preset (spread all source data, strip teacher fields)
+    const { id: _sourceId, teacherId, createdBy, createdByRole, sharedWith, collaboratorIds, collaboratorNames, collaboratorRoles, isDeleted, deletedAt, ...cleanData } = sourceData;
     await setDoc(newExerciseRef, {
-        title: sourceData.title || proposal.proposalName,
-        description: sourceData.description || proposal.proposalDescription || '',
-        icon: sourceData.icon || proposal.icon || '📝',
-        color: sourceData.color || proposal.color || '#8b5cf6',
+        ...cleanData,
+        title: sourceData.title || sourceData.name || proposal.proposalName,
+        name: sourceData.name || sourceData.title || proposal.proposalName,
         createdByRole: 'admin',
         copiedFrom: sourceId,
         proposedBy: proposal.teacherId,
@@ -350,6 +395,7 @@ async function copyGrammarToPreset(sourceId, proposal) {
         batch.set(newQRef, {
             ...qData,
             exerciseId: newId,
+            copiedFrom: qDoc.id,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
         });
@@ -379,11 +425,10 @@ async function copyGrammarFolderToPreset(sourceFolderId, proposal) {
 
     const newFolderId = `gf-${Date.now()}`;
     const presetFolderRef = doc(db, 'grammar_folders', newFolderId);
+    const { teacherId, createdBy, createdByRole, sharedWith, collaboratorIds, collaboratorNames, collaboratorRoles, isDeleted, deletedAt, exerciseIds: _ids, ...cleanFolderData } = folderData;
     await setDoc(presetFolderRef, {
+        ...cleanFolderData,
         name: folderData.name || proposal.proposalName,
-        description: folderData.description || '',
-        icon: folderData.icon || '📁',
-        color: folderData.color || '#8b5cf6',
         exerciseIds: newExerciseIds,
         copiedFrom: sourceFolderId,
         proposedBy: proposal.teacherId,
@@ -406,7 +451,7 @@ async function copyExamToPreset(sourceId, proposal) {
     const newId = newExamRef.id;
 
     // Create new exam as admin/preset
-    const { teacherId, createdBy, sharedWith, ...cleanData } = sourceData;
+    const { id: _sourceId, teacherId, createdBy, createdByRole, sharedWith, collaboratorIds, collaboratorNames, collaboratorRoles, isDeleted, deletedAt, ...cleanData } = sourceData;
     await setDoc(newExamRef, {
         ...cleanData,
         title: sourceData.title || proposal.proposalName,
@@ -428,6 +473,7 @@ async function copyExamToPreset(sourceId, proposal) {
         batch.set(newQRef, {
             ...qData,
             examId: newId,
+            copiedFrom: qDoc.id,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
         });
@@ -457,11 +503,10 @@ async function copyExamFolderToPreset(sourceFolderId, proposal) {
 
     const newFolderId = `ef-${Date.now()}`;
     const presetFolderRef = doc(db, 'exam_folders', newFolderId);
+    const { teacherId, createdBy, createdByRole, sharedWith, collaboratorIds, collaboratorNames, collaboratorRoles, isDeleted, deletedAt, examIds: _ids, ...cleanFolderData } = folderData;
     await setDoc(presetFolderRef, {
+        ...cleanFolderData,
         name: folderData.name || proposal.proposalName,
-        description: folderData.description || '',
-        icon: folderData.icon || '📁',
-        color: folderData.color || '#3b82f6',
         examIds: newExamIds,
         copiedFrom: sourceFolderId,
         proposedBy: proposal.teacherId,
@@ -470,4 +515,448 @@ async function copyExamFolderToPreset(sourceFolderId, proposal) {
     });
 
     return newFolderId;
+}
+
+// ========== OVERWRITE HELPERS ==========
+
+async function overwriteItemToPreset(proposal) {
+    const { type, sourceId } = proposal;
+    if (type === 'vocab') {
+        await overwriteVocabPreset(sourceId, proposal);
+    } else if (type === 'grammar') {
+        await overwriteGrammarPreset(sourceId, proposal);
+    } else if (type === 'exam') {
+        await overwriteExamPreset(sourceId, proposal);
+    }
+}
+
+async function overwriteFolderToPreset(proposal) {
+    const { type, sourceFolderId } = proposal;
+    if (type === 'vocab') {
+        await overwriteVocabFolderPreset(sourceFolderId, proposal);
+    } else if (type === 'grammar') {
+        await overwriteGrammarFolderPreset(sourceFolderId, proposal);
+    } else if (type === 'exam') {
+        await overwriteExamFolderPreset(sourceFolderId, proposal);
+    }
+}
+
+// --- VOCAB OVERWRITE ---
+
+async function overwriteVocabPreset(sourceId, proposal) {
+    const existing = await findExistingOfficialCopy(sourceId, 'vocab');
+    if (!existing) return copyVocabToPreset(sourceId, proposal);
+
+    const targetId = existing.id;
+    const sourceRef = doc(db, 'teacher_topics', sourceId);
+    const sourceSnap = await getDoc(sourceRef);
+    if (!sourceSnap.exists()) throw new Error('Source topic not found');
+
+    const sourceData = sourceSnap.data();
+    const { id: _sourceId, teacherId, createdBy, createdByRole, sharedWith, collaboratorIds, collaboratorNames, collaboratorRoles, copiedFrom, isDeleted, deletedAt, archived, ...cleanData } = sourceData;
+
+    await updateDoc(doc(db, 'topics', targetId), {
+        ...cleanData,
+        name: sourceData.name || proposal.proposalName,
+        isDeleted: deleteField(),
+        deletedAt: deleteField(),
+        archived: deleteField(),
+        updatedAt: serverTimestamp()
+    });
+
+    // Smart merge words: update existing, add new, delete removed (preserves IDs for student progress)
+    const oldWordsSnap = await getDocs(collection(db, `topics/${targetId}/words`));
+    const newWordsSnap = await getDocs(collection(db, `teacher_topics/${sourceId}/words`));
+
+    const oldWordIds = new Set(oldWordsSnap.docs.map(d => d.id));
+    const newWordIds = new Set(newWordsSnap.docs.map(d => d.id));
+    const newWordsMap = new Map(newWordsSnap.docs.map(d => [d.id, d.data()]));
+
+    const batch = writeBatch(db);
+
+    // Update existing + add new words
+    for (const [wordId, wordData] of newWordsMap) {
+        const wordRef = doc(db, `topics/${targetId}/words`, wordId);
+        batch.set(wordRef, { ...wordData }, { merge: true });
+    }
+
+    // Delete words that no longer exist in teacher's version
+    for (const oldId of oldWordIds) {
+        if (!newWordIds.has(oldId)) {
+            batch.delete(doc(db, `topics/${targetId}/words`, oldId));
+        }
+    }
+
+    await batch.commit();
+
+    return targetId;
+}
+
+async function overwriteVocabFolderPreset(sourceFolderId, proposal) {
+    const existing = await findExistingOfficialCopy(sourceFolderId, 'vocab', 'folder');
+    if (!existing) return copyVocabFolderToPreset(sourceFolderId, proposal);
+
+    const folderRef = doc(db, 'teacher_topic_folders', sourceFolderId);
+    const folderSnap = await getDoc(folderRef);
+    if (!folderSnap.exists()) throw new Error('Source folder not found');
+
+    const folderData = folderSnap.data();
+    const rawTopicIds = folderData.topicIds || [];
+
+    // Filter out soft-deleted teacher topics
+    const topicIds = [];
+    for (const tid of rawTopicIds) {
+        const tSnap = await getDoc(doc(db, 'teacher_topics', tid));
+        if (tSnap.exists() && !tSnap.data().isDeleted) {
+            topicIds.push(tid);
+        }
+    }
+
+    // Get old official folder's current item IDs
+    const oldFolderSnap = await getDoc(doc(db, 'topic_folders', existing.id));
+    const oldTopicIds = oldFolderSnap.exists() ? (oldFolderSnap.data().topicIds || []) : [];
+
+    const newTopicIds = [];
+    for (const topicId of topicIds) {
+        try {
+            const newId = await overwriteVocabPreset(topicId, proposal);
+            newTopicIds.push(newId);
+        } catch (e) {
+            console.error(`Error overwriting topic ${topicId}:`, e);
+        }
+    }
+
+    // Archive orphaned items (in old folder but not in new results)
+    const orphanedIds = oldTopicIds.filter(id => !newTopicIds.includes(id));
+    for (const orphanId of orphanedIds) {
+        try {
+            const orphanSnap = await getDoc(doc(db, 'topics', orphanId));
+            if (orphanSnap.exists()) {
+                const orphanData = orphanSnap.data();
+                const currentName = orphanData.name || '';
+                if (!currentName.startsWith('[Archived]')) {
+                    await updateDoc(doc(db, 'topics', orphanId), {
+                        name: `[Archived] ${currentName}`,
+                        archived: true,
+                        createdByRole: 'admin',
+                        isDeleted: deleteField(),
+                        deletedAt: deleteField(),
+                        updatedAt: serverTimestamp()
+                    });
+                }
+            }
+        } catch (e) {
+            console.error(`Error archiving topic ${orphanId}:`, e);
+        }
+    }
+
+    const { teacherId: _t, createdBy: _c, createdByRole: _r, sharedWith: _s, collaboratorIds: _ci, collaboratorNames: _cn, collaboratorRoles: _cr, isDeleted: _d, deletedAt: _da, topicIds: _ids, ...cleanFolderData } = folderData;
+    const finalTopicIds = [...newTopicIds, ...orphanedIds];
+    await updateDoc(doc(db, 'topic_folders', existing.id), {
+        ...cleanFolderData,
+        name: folderData.name || proposal.proposalName,
+        topicIds: finalTopicIds,
+        updatedAt: serverTimestamp()
+    });
+
+    return existing.id;
+}
+
+// --- GRAMMAR OVERWRITE ---
+
+async function overwriteGrammarPreset(sourceId, proposal) {
+    const existing = await findExistingOfficialCopy(sourceId, 'grammar');
+    if (!existing) return copyGrammarToPreset(sourceId, proposal);
+
+    const targetId = existing.id;
+    const sourceRef = doc(db, 'grammar_exercises', sourceId);
+    const sourceSnap = await getDoc(sourceRef);
+    if (!sourceSnap.exists()) throw new Error('Source grammar exercise not found');
+
+    const sourceData = sourceSnap.data();
+    const { id: _sourceId, teacherId, createdBy, createdByRole, sharedWith, collaboratorIds, collaboratorNames, collaboratorRoles, copiedFrom, isDeleted, deletedAt, archived, ...cleanData } = sourceData;
+
+    await updateDoc(doc(db, 'grammar_exercises', targetId), {
+        ...cleanData,
+        title: sourceData.title || sourceData.name || proposal.proposalName,
+        name: sourceData.name || sourceData.title || proposal.proposalName,
+        createdByRole: 'admin',
+        isDeleted: deleteField(),
+        deletedAt: deleteField(),
+        archived: deleteField(),
+        updatedAt: serverTimestamp()
+    });
+
+    // Smart merge questions: update existing, add new, delete removed (preserves IDs for student submissions)
+    const oldQuestionsQ = query(collection(db, 'grammar_questions'), where('exerciseId', '==', targetId));
+    const oldQSnap = await getDocs(oldQuestionsQ);
+    const newQuestionsQ = query(collection(db, 'grammar_questions'), where('exerciseId', '==', sourceId));
+    const newQSnap = await getDocs(newQuestionsQ);
+
+    // Build maps: old questions indexed by copiedFrom, new questions by their ID
+    const oldBySource = new Map();
+    oldQSnap.docs.forEach(d => {
+        const cf = d.data().copiedFrom;
+        if (cf) oldBySource.set(cf, d);
+    });
+    const oldQIds = new Set(oldQSnap.docs.map(d => d.id));
+    const matchedOldIds = new Set();
+
+    const batch = writeBatch(db);
+
+    // Update existing or add new questions
+    for (const qDoc of newQSnap.docs) {
+        const existingDoc = oldBySource.get(qDoc.id);
+        if (existingDoc) {
+            // Question already has an official copy → update it in-place
+            matchedOldIds.add(existingDoc.id);
+            batch.update(existingDoc.ref, {
+                ...qDoc.data(),
+                exerciseId: targetId,
+                copiedFrom: qDoc.id,
+                updatedAt: serverTimestamp()
+            });
+        } else {
+            // New question → create with copiedFrom reference
+            const newQRef = doc(collection(db, 'grammar_questions'));
+            batch.set(newQRef, {
+                ...qDoc.data(),
+                exerciseId: targetId,
+                copiedFrom: qDoc.id,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+            });
+        }
+    }
+
+    // Delete questions no longer in teacher's version
+    for (const oldDoc of oldQSnap.docs) {
+        if (!matchedOldIds.has(oldDoc.id)) {
+            batch.delete(oldDoc.ref);
+        }
+    }
+
+    await batch.commit();
+
+    return targetId;
+}
+
+async function overwriteGrammarFolderPreset(sourceFolderId, proposal) {
+    const existing = await findExistingOfficialCopy(sourceFolderId, 'grammar', 'folder');
+    if (!existing) return copyGrammarFolderToPreset(sourceFolderId, proposal);
+
+    const folderRef = doc(db, 'teacher_grammar_folders', sourceFolderId);
+    const folderSnap = await getDoc(folderRef);
+    if (!folderSnap.exists()) throw new Error('Source grammar folder not found');
+
+    const folderData = folderSnap.data();
+    const rawExerciseIds = folderData.exerciseIds || [];
+
+    // Filter out soft-deleted teacher grammar exercises
+    const exerciseIds = [];
+    for (const eid of rawExerciseIds) {
+        const eSnap = await getDoc(doc(db, 'grammar_exercises', eid));
+        if (eSnap.exists() && !eSnap.data().isDeleted) {
+            exerciseIds.push(eid);
+        }
+    }
+
+    // Get old official folder's current item IDs
+    const oldFolderSnap = await getDoc(doc(db, 'grammar_folders', existing.id));
+    const oldExerciseIds = oldFolderSnap.exists() ? (oldFolderSnap.data().exerciseIds || []) : [];
+
+    const newExerciseIds = [];
+    for (const exId of exerciseIds) {
+        try {
+            const newId = await overwriteGrammarPreset(exId, proposal);
+            newExerciseIds.push(newId);
+        } catch (e) {
+            console.error(`Error overwriting grammar exercise ${exId}:`, e);
+        }
+    }
+
+    // Archive orphaned items
+    const orphanedIds = oldExerciseIds.filter(id => !newExerciseIds.includes(id));
+    for (const orphanId of orphanedIds) {
+        try {
+            const orphanSnap = await getDoc(doc(db, 'grammar_exercises', orphanId));
+            if (orphanSnap.exists()) {
+                const orphanData = orphanSnap.data();
+                const currentTitle = orphanData.name || orphanData.title || '';
+                if (!currentTitle.startsWith('[Archived]')) {
+                    await updateDoc(doc(db, 'grammar_exercises', orphanId), {
+                        title: `[Archived] ${currentTitle}`,
+                        name: `[Archived] ${currentTitle}`,
+                        archived: true,
+                        createdByRole: 'admin',
+                        isDeleted: deleteField(),
+                        deletedAt: deleteField(),
+                        updatedAt: serverTimestamp()
+                    });
+                }
+            }
+        } catch (e) {
+            console.error(`Error archiving grammar exercise ${orphanId}:`, e);
+        }
+    }
+
+    const { teacherId: _t, createdBy: _c, createdByRole: _r, sharedWith: _s, collaboratorIds: _ci, collaboratorNames: _cn, collaboratorRoles: _cr, isDeleted: _d, deletedAt: _da, exerciseIds: _ids, ...cleanFolderData } = folderData;
+    await updateDoc(doc(db, 'grammar_folders', existing.id), {
+        ...cleanFolderData,
+        name: folderData.name || proposal.proposalName,
+        exerciseIds: [...newExerciseIds, ...orphanedIds],
+        updatedAt: serverTimestamp()
+    });
+
+    return existing.id;
+}
+
+// --- EXAM OVERWRITE ---
+
+async function overwriteExamPreset(sourceId, proposal) {
+    const existing = await findExistingOfficialCopy(sourceId, 'exam');
+    if (!existing) return copyExamToPreset(sourceId, proposal);
+
+    const targetId = existing.id;
+    const sourceRef = doc(db, 'exams', sourceId);
+    const sourceSnap = await getDoc(sourceRef);
+    if (!sourceSnap.exists()) throw new Error('Source exam not found');
+
+    const sourceData = sourceSnap.data();
+    const { id: _sourceId, teacherId, createdBy, createdByRole, sharedWith, collaboratorIds, collaboratorNames, collaboratorRoles, copiedFrom, isDeleted, deletedAt, archived, ...cleanData } = sourceData;
+
+    await updateDoc(doc(db, 'exams', targetId), {
+        ...cleanData,
+        title: sourceData.title || proposal.proposalName,
+        createdByRole: 'admin',
+        isDeleted: deleteField(),
+        deletedAt: deleteField(),
+        archived: deleteField(),
+        updatedAt: serverTimestamp()
+    });
+
+    // Smart merge questions: update existing, add new, delete removed (preserves IDs for student submissions)
+    const oldQuestionsQ = query(collection(db, 'exam_questions'), where('examId', '==', targetId));
+    const oldQSnap = await getDocs(oldQuestionsQ);
+    const newQuestionsQ = query(collection(db, 'exam_questions'), where('examId', '==', sourceId));
+    const newQSnap = await getDocs(newQuestionsQ);
+
+    // Build maps: old questions indexed by copiedFrom
+    const oldBySource = new Map();
+    oldQSnap.docs.forEach(d => {
+        const cf = d.data().copiedFrom;
+        if (cf) oldBySource.set(cf, d);
+    });
+    const matchedOldIds = new Set();
+
+    const batch = writeBatch(db);
+
+    // Update existing or add new questions
+    for (const qDoc of newQSnap.docs) {
+        const existingDoc = oldBySource.get(qDoc.id);
+        if (existingDoc) {
+            // Question already has an official copy → update it in-place
+            matchedOldIds.add(existingDoc.id);
+            batch.update(existingDoc.ref, {
+                ...qDoc.data(),
+                examId: targetId,
+                copiedFrom: qDoc.id,
+                updatedAt: serverTimestamp()
+            });
+        } else {
+            // New question → create with copiedFrom reference
+            const newQRef = doc(collection(db, 'exam_questions'));
+            batch.set(newQRef, {
+                ...qDoc.data(),
+                examId: targetId,
+                copiedFrom: qDoc.id,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+            });
+        }
+    }
+
+    // Delete questions no longer in teacher's version
+    for (const oldDoc of oldQSnap.docs) {
+        if (!matchedOldIds.has(oldDoc.id)) {
+            batch.delete(oldDoc.ref);
+        }
+    }
+
+    await batch.commit();
+
+    return targetId;
+}
+
+async function overwriteExamFolderPreset(sourceFolderId, proposal) {
+    const existing = await findExistingOfficialCopy(sourceFolderId, 'exam', 'folder');
+    if (!existing) return copyExamFolderToPreset(sourceFolderId, proposal);
+
+    const folderRef = doc(db, 'teacher_exam_folders', sourceFolderId);
+    const folderSnap = await getDoc(folderRef);
+    if (!folderSnap.exists()) throw new Error('Source exam folder not found');
+
+    const folderData = folderSnap.data();
+    const rawExamIds = folderData.examIds || [];
+
+    // Filter out soft-deleted teacher exams
+    const examIds = [];
+    for (const exId of rawExamIds) {
+        const exSnap = await getDoc(doc(db, 'exams', exId));
+        if (exSnap.exists() && !exSnap.data().isDeleted) {
+            examIds.push(exId);
+        }
+    }
+
+    // Get old official folder's current item IDs
+    const oldFolderSnap = await getDoc(doc(db, 'exam_folders', existing.id));
+    const oldExamIds = oldFolderSnap.exists() ? (oldFolderSnap.data().examIds || []) : [];
+
+    const newExamIds = [];
+    for (const exId of examIds) {
+        try {
+            const newId = await overwriteExamPreset(exId, proposal);
+            newExamIds.push(newId);
+        } catch (e) {
+            console.error(`Error overwriting exam ${exId}:`, e);
+        }
+    }
+
+    // Archive orphaned items
+    const orphanedIds = oldExamIds.filter(id => !newExamIds.includes(id));
+
+    for (const orphanId of orphanedIds) {
+        try {
+            const orphanSnap = await getDoc(doc(db, 'exams', orphanId));
+            if (orphanSnap.exists()) {
+                const orphanData = orphanSnap.data();
+                const currentTitle = orphanData.name || orphanData.title || '';
+                if (!currentTitle.startsWith('[Archived]')) {
+                    await updateDoc(doc(db, 'exams', orphanId), {
+                        title: `[Archived] ${currentTitle}`,
+                        name: `[Archived] ${currentTitle}`,
+                        archived: true,
+                        createdByRole: 'admin',
+                        isDeleted: deleteField(),
+                        deletedAt: deleteField(),
+                        updatedAt: serverTimestamp()
+                    });
+                }
+            }
+        } catch (e) {
+            console.error(`Error archiving exam ${orphanId}:`, e);
+        }
+    }
+
+    const finalExamIds = [...newExamIds, ...orphanedIds];
+
+    const { teacherId: _t, createdBy: _c, createdByRole: _r, sharedWith: _s, collaboratorIds: _ci, collaboratorNames: _cn, collaboratorRoles: _cr, isDeleted: _d, deletedAt: _da, examIds: _ids, ...cleanFolderData } = folderData;
+    await updateDoc(doc(db, 'exam_folders', existing.id), {
+        ...cleanFolderData,
+        name: folderData.name || proposal.proposalName,
+        examIds: finalExamIds,
+        updatedAt: serverTimestamp()
+    });
+
+    return existing.id;
 }

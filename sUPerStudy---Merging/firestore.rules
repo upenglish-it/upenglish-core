@@ -27,6 +27,10 @@ service cloud.firestore {
       return isAuth() && getUserRole() == 'teacher';
     }
 
+    function isIT() {
+      return isAuth() && getUserRole() == 'it';
+    }
+
     function isAdminOrStaff() {
       return isAuth() && getUserRole() in ['admin', 'staff'];
     }
@@ -96,6 +100,28 @@ service cloud.firestore {
       allow read: if isAuth();
       allow create, delete: if isAdminOrStaff();
       allow update: if isAdminOrStaff() || isTeacher();
+
+      // Reward points tracking (LEGACY — kept for migration)
+      match /reward_points/{userId} {
+        allow read: if isAuth();
+        allow write: if isAdminOrTeacher();
+
+        match /history/{historyId} {
+          allow read: if isAuth();
+          allow write: if isAdminOrTeacher();
+        }
+      }
+    }
+
+    // ─── Centralized Reward Points (per student, not per group) ───
+    match /reward_points/{userId} {
+      allow read: if isAuth();
+      allow write: if isAdminOrTeacher();
+
+      match /history/{historyId} {
+        allow read: if isAuth();
+        allow write: if isAdminOrTeacher();
+      }
     }
 
     // ─── Topics (system/admin vocabulary topics) ───
@@ -140,8 +166,11 @@ service cloud.firestore {
     match /teacher_topic_folders/{folderId} {
       allow read: if isAuth();
       allow create: if isAdminOrTeacher();
-      allow update, delete: if isAdminOrStaff()
-                            || (isAuth() && resource.data.teacherId == request.auth.uid);
+      allow update: if isAdminOrStaff()
+                    || (isAuth() && resource.data.teacherId == request.auth.uid)
+                    || (isAuth() && request.auth.uid in resource.data.collaboratorIds);
+      allow delete: if isAdminOrStaff()
+                    || (isAuth() && resource.data.teacherId == request.auth.uid);
     }
 
     // ─── Grammar Exercises ───
@@ -185,16 +214,22 @@ service cloud.firestore {
     match /teacher_grammar_folders/{folderId} {
       allow read: if isAuth();
       allow create: if isAdminOrTeacher();
-      allow update, delete: if isAdminOrStaff()
-                            || (isAuth() && resource.data.teacherId == request.auth.uid);
+      allow update: if isAdminOrStaff()
+                    || (isAuth() && resource.data.teacherId == request.auth.uid)
+                    || (isAuth() && request.auth.uid in resource.data.collaboratorIds);
+      allow delete: if isAdminOrStaff()
+                    || (isAuth() && resource.data.teacherId == request.auth.uid);
     }
 
     // ─── Teacher Exam Folders ───
     match /teacher_exam_folders/{folderId} {
       allow read: if isAuth();
       allow create: if isAdminOrTeacher();
-      allow update, delete: if isAdminOrStaff()
-                            || (isAuth() && resource.data.teacherId == request.auth.uid);
+      allow update: if isAdminOrStaff()
+                    || (isAuth() && resource.data.teacherId == request.auth.uid)
+                    || (isAuth() && request.auth.uid in resource.data.collaboratorIds);
+      allow delete: if isAdminOrStaff()
+                    || (isAuth() && resource.data.teacherId == request.auth.uid);
     }
 
     // ─── Assignments ───
@@ -268,6 +303,21 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // ─── Teacher Ratings (student submissions) ───
+    match /teacher_ratings/{ratingId} {
+      // Students can create ratings; anyone auth'd can read (admin/teacher need for reports)
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update, delete: if isAdminOrStaff();
+    }
+
+    // ─── Teacher Rating Summaries (AI-generated) ───
+    match /teacher_rating_summaries/{summaryId} {
+      allow read: if isAuth();
+      allow create, update: if isAdminOrStaff();
+      allow delete: if isAdmin();
+    }
+
     // ─── Email Whitelist ───
     match /email_whitelist/{emailId} {
       allow read: if isAuth();
@@ -315,12 +365,42 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ─── Anonymous Feedback ───
+    match /anonymous_feedback/{feedbackId} {
+      // Any authenticated user can submit feedback
+      allow create: if isAuth();
+      // Admin/staff can read all; direct recipients can read their own
+      allow read: if isAdminOrStaff()
+                  || (isAuth() && resource.data.targetUid == request.auth.uid);
+      // Admin/staff can update (mark as read); recipients can mark their own as read
+      allow update: if isAdminOrStaff()
+                    || (isAuth() && resource.data.targetUid == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
     // ─── Mail Queue (for Cloud Functions email sender) ───
     match /mail_queue/{mailId} {
       // Any authenticated user can create mail queue items (system-controlled)
       allow create: if isAuth();
       // Only Cloud Functions (admin SDK) can read/update/delete
       allow read, update, delete: if false;
+    }
+
+    // ─── Mini Games (IT game submissions & approval) ───
+    match /mini_games/{gameId} {
+      // Anyone authenticated can read approved+active games (for teacher/student game launcher)
+      // IT can read their own games; Admin/staff can read all
+      allow read: if isAdminOrStaff()
+                  || (isIT() && resource.data.createdBy == request.auth.uid)
+                  || (isAuth() && resource.data.status == 'approved' && resource.data.isActive == true);
+      // IT can create new games
+      allow create: if isIT() || isAdmin();
+      // IT can update their own draft/rejected games; Admin can update any (approve/reject)
+      allow update: if isAdmin()
+                    || (isIT() && resource.data.createdBy == request.auth.uid);
+      // IT can delete their own drafts; Admin can delete any
+      allow delete: if isAdmin()
+                    || (isIT() && resource.data.createdBy == request.auth.uid && resource.data.status == 'draft');
     }
 
     // ─── Default: deny everything else ───

@@ -40,12 +40,13 @@ async function sendEmail(to, subject, html) {
  */
 function buildEmailHtml({ emoji = '📬', heading, headingColor = '#4f46e5', body,
     highlight, highlightBg = '#eef2ff', highlightBorder = '#4f46e5',
-    ctaText, ctaColor = '#4f46e5', ctaColor2 = '#3b82f6', greeting }) {
+    ctaText, ctaColor = '#4f46e5', ctaColor2 = '#3b82f6', ctaLink, greeting }) {
     const logoUrl = 'https://upenglishvietnam.com/logo.png';
     const appUrl = 'https://upenglishvietnam.com/preview/superstudy';
+    const finalCtaLink = ctaLink || appUrl;
     const highlightBlock = highlight ? `<div style="background:${highlightBg};padding:16px 20px;border-radius:12px;margin:16px 0;border-left:4px solid ${highlightBorder};">${highlight}</div>` : '';
     const greetingBlock = greeting ? `<p style="color:#334155;font-size:1.05rem;line-height:1.6;margin-bottom:4px;">${greeting}</p>` : '';
-    const ctaBlock = ctaText ? `<div style="text-align:center;margin-top:28px;"><a href="${appUrl}" style="display:inline-block;background:linear-gradient(135deg,${ctaColor},${ctaColor2});color:white;padding:13px 36px;border-radius:12px;text-decoration:none;font-weight:700;font-size:0.95rem;box-shadow:0 4px 14px rgba(0,0,0,0.1);">${ctaText}</a></div>` : '';
+    const ctaBlock = ctaText ? `<div style="text-align:center;margin-top:28px;"><a href="${finalCtaLink}" style="display:inline-block;background:linear-gradient(135deg,${ctaColor},${ctaColor2});color:white;padding:13px 36px;border-radius:12px;text-decoration:none;font-weight:700;font-size:0.95rem;box-shadow:0 4px 14px rgba(0,0,0,0.1);">${ctaText}</a></div>` : '';
     return `<div style="font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;max-width:540px;margin:0 auto;padding:0;background:#f8fafc;"><div style="text-align:center;padding:28px 24px 16px;"><img src="${logoUrl}" alt="UP English" style="height:48px;width:auto;margin-bottom:8px;" /><p style="color:#94a3b8;font-size:0.75rem;margin:0;letter-spacing:0.5px;">Trung tâm Ngoại ngữ UP</p></div><div style="background:#ffffff;margin:0 16px;padding:28px 24px;border-radius:16px;border:1px solid #e2e8f0;box-shadow:0 2px 8px rgba(0,0,0,0.04);"><h2 style="color:${headingColor};margin:0 0 16px;font-size:1.35rem;text-align:center;">${emoji} ${heading}</h2>${greetingBlock}<div style="color:#334155;font-size:0.95rem;line-height:1.7;">${body}</div>${highlightBlock}${ctaBlock}</div><div style="text-align:center;padding:20px 24px 28px;"><p style="color:#94a3b8;font-size:0.75rem;margin:0;">Bạn nhận email này vì đang là thành viên của sUPerStudy.</p><p style="color:#cbd5e1;font-size:0.7rem;margin:6px 0 0;">© ${new Date().getFullYear()} Trung tâm Ngoại ngữ UP — upenglishvietnam.com</p></div></div>`;
 }
 
@@ -129,7 +130,7 @@ exports.checkDeadlineExpired = functions
                         type: "deadline_expired",
                         title: `⏰ Bài "${topicName}" đã hết hạn`,
                         message: `Bài luyện "${topicName}" đã hết deadline. Hãy vào kiểm tra kết quả.`,
-                        link: "/"
+                        link: "/teacher/groups"
                     });
                     // Email (respect preference)
                     if (t.wantsEmail) {
@@ -138,7 +139,8 @@ exports.checkDeadlineExpired = functions
                             buildEmailHtml({
                                 emoji: '⏰', heading: 'Bài đã hết hạn', headingColor: '#ef4444',
                                 body: `<p>Bài luyện <strong>"${topicName}"</strong> đã hết deadline. Học viên đã nộp bài, hãy vào kiểm tra và đánh giá kết quả nhé!</p>`,
-                                ctaText: 'Vào kiểm tra', ctaColor: '#ef4444', ctaColor2: '#f87171'
+                                ctaText: 'Vào kiểm tra', ctaColor: '#ef4444', ctaColor2: '#f87171',
+                                ctaLink: 'https://upenglishvietnam.com/preview/superstudy/teacher/groups'
                             })
                         );
                     }
@@ -183,7 +185,7 @@ exports.checkDeadlineExpired = functions
                         type: "deadline_expired",
                         title: `⏰ Bài "${examName}" đã hết hạn`,
                         message: `Bài "${examName}" đã hết deadline. Hãy vào chấm bài cho học viên.`,
-                        link: "/"
+                        link: "/teacher/groups"
                     });
                     // Email (respect preference)
                     if (t.wantsEmail) {
@@ -192,7 +194,8 @@ exports.checkDeadlineExpired = functions
                             buildEmailHtml({
                                 emoji: '⏰', heading: 'Bài đã hết hạn', headingColor: '#ef4444',
                                 body: `<p>Bài <strong>"${examName}"</strong> đã hết deadline. Học viên đã nộp bài, hãy vào chấm điểm nhé!</p>`,
-                                ctaText: 'Vào chấm bài', ctaColor: '#ef4444', ctaColor2: '#f87171'
+                                ctaText: 'Vào chấm bài', ctaColor: '#ef4444', ctaColor2: '#f87171',
+                                ctaLink: 'https://upenglishvietnam.com/preview/superstudy/teacher/groups'
                             })
                         );
                     }
@@ -234,7 +237,7 @@ exports.monthlySkillReportReminder = functions
                     type: "skill_report_reminder",
                     title: `📊 Nhắc nhở: Viết báo cáo kỹ năng`,
                     message: `Đã gần cuối tháng! Hãy viết báo cáo đánh giá kỹ năng cho các học viên.`,
-                    link: "/"
+                    link: "/teacher/groups"
                 });
 
                 // Email (check preference)
@@ -246,7 +249,8 @@ exports.monthlySkillReportReminder = functions
                             buildEmailHtml({
                                 emoji: '📊', heading: 'Nhắc nhở cuối tháng', headingColor: '#8b5cf6',
                                 body: `<p>Đã gần cuối tháng rồi! Bạn nhớ viết <strong>báo cáo đánh giá kỹ năng</strong> cho các học viên trong các lớp bạn phụ trách nhé.</p><p style="color:#64748b;font-size:0.9rem;">Vào <strong>Tiến trình học viên → Báo cáo kỹ năng</strong> để tạo báo cáo.</p>`,
-                                ctaText: 'Mở sUPerStudy', ctaColor: '#8b5cf6', ctaColor2: '#a78bfa'
+                                ctaText: 'Mở sUPerStudy', ctaColor: '#8b5cf6', ctaColor2: '#a78bfa',
+                                ctaLink: 'https://upenglishvietnam.com/preview/superstudy/teacher/groups'
                             })
                         );
                     }
@@ -307,7 +311,8 @@ exports.checkExpiringAccounts = functions
                 type: "accounts_expiring",
                 title: `⚠️ ${expiringUsers.length} tài khoản sắp hết hạn`,
                 message: `Có ${expiringUsers.length} tài khoản sẽ hết hạn trong 7 ngày tới. Hãy vào kiểm tra và gia hạn.`,
-                link: "/admin/users"
+                link: "/admin/users",
+                expiringUserIds: expiringUsers.map(u => u.ref.id),
             });
 
             // Email to admins
@@ -331,7 +336,8 @@ exports.checkExpiringAccounts = functions
                     buildEmailHtml({
                         emoji: '⚠️', heading: 'Tài khoản sắp hết hạn', headingColor: '#f59e0b',
                         body: `<p>Các tài khoản sau sẽ hết hạn trong 7 ngày tới:</p><ul style="line-height:1.8;padding-left:20px;">${userList}</ul>`,
-                        ctaText: 'Gia hạn tài khoản', ctaColor: '#f59e0b', ctaColor2: '#fbbf24'
+                        ctaText: 'Gia hạn tài khoản', ctaColor: '#f59e0b', ctaColor2: '#fbbf24',
+                        ctaLink: 'https://upenglishvietnam.com/preview/superstudy/admin/users'
                     })
                 );
             }

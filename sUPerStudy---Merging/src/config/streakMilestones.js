@@ -4,11 +4,11 @@
  * Ordered from highest to lowest for easy lookup.
  */
 export const STREAK_MILESTONES = [
-    { threshold: 50, emoji: '👑', title: 'G.O.A.T', subtitle: 'Greatest Of All Time', color: '#f59e0b' },
-    { threshold: 35, emoji: '🧊', title: 'Lạnh lùng tàn nhẫn', subtitle: 'Bình tĩnh streak như không', color: '#06b6d4' },
-    { threshold: 25, emoji: '🚀', title: 'Không ai đỡ nổi', subtitle: 'Đà này ai chặn được?', color: '#10b981' },
-    { threshold: 15, emoji: '💪', title: 'Dính streak như keo 502', subtitle: 'Học hoài không biết mệt', color: '#8b5cf6' },
-    { threshold: 5, emoji: '🔥', title: 'Máu lửa thật sự', subtitle: 'Bạn không phải dạng vừa', color: '#ef4444' },
+    { threshold: 60, emoji: '👑', title: 'G.O.A.T', subtitle: 'Greatest Of All Time', color: '#f59e0b', themeName: 'Nút Ruby 💎' },
+    { threshold: 40, emoji: '🧊', title: 'Lạnh lùng tàn nhẫn', subtitle: 'Bình tĩnh streak như không', color: '#06b6d4', themeName: 'Kim Cương 💠' },
+    { threshold: 30, emoji: '🚀', title: 'Không ai đỡ nổi', subtitle: 'Đà này ai chặn được?', color: '#10b981', themeName: 'Nút Vàng 🥇' },
+    { threshold: 18, emoji: '💪', title: 'Dính streak như keo 502', subtitle: 'Học hoài không biết mệt', color: '#8b5cf6', themeName: 'Nút Bạc 🥈' },
+    { threshold: 5, emoji: '🔥', title: 'Máu lửa thật sự', subtitle: 'Bạn không phải dạng vừa', color: '#ef4444', themeName: 'Giao diện tối 🌙' },
 ];
 
 /**

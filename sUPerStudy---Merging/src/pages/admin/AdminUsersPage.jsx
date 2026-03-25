@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { db } from '../../config/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
@@ -7,13 +8,14 @@ import {
     approveUser, rejectUser, renewUser,
     addEmailToWhitelist, removeEmailFromWhitelist, getWhitelistEmails, updateWhitelistDisplayName, updateWhitelistEntry,
     getFolders, updateUserFolderAccess, getUserFolderAccess,
-    getGroups, updateUserGroups, permanentDeleteUser, updateUserDisplayName, changeUserEmail
+    getGroups, updateUserGroups, permanentDeleteUser, updateUserDisplayName, changeUserEmail,
+    softDeleteUser, restoreUser
 } from '../../services/adminService';
 import {
     User, Shield, X, Calendar, Hash, Mail, Award, Lock, Unlock,
     ShieldCheck, ShieldOff, Trash2, BookOpen, BarChart3, RefreshCw,
     CheckCircle, XCircle, Clock, UserPlus, Plus, Timer, Users, FolderOpen, Save, Layers, Search, Briefcase,
-    Edit, Check
+    Edit, Check, RotateCcw, Archive, Monitor
 } from 'lucide-react';
 import Avatar from '../../components/common/Avatar';
 import CustomSelect from '../../components/common/CustomSelect';
@@ -29,6 +31,9 @@ const DURATION_OPTIONS = [
 
 export default function AdminUsersPage() {
     const { user: currentAdmin } = useAuth();
+    const isStaff = currentAdmin?.role === 'staff';
+    const location = useLocation();
+    const hasHandledNotification = useRef(false);
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('approved'); // pending | approved | whitelist
@@ -66,6 +71,7 @@ export default function AdminUsersPage() {
 
     const roleOptions = [
         { value: 'user', label: 'Học viên', icon: <User size={16} /> },
+        { value: 'it', label: 'IT', icon: <Monitor size={16} /> },
         { value: 'staff', label: 'Nhân viên VP', icon: <Briefcase size={16} /> },
         { value: 'teacher', label: 'Giáo viên', icon: <Award size={16} /> },
         ...(currentAdmin?.role === 'admin' ? [{ value: 'admin', label: 'Admin', icon: <ShieldCheck size={16} /> }] : [])
@@ -102,6 +108,38 @@ export default function AdminUsersPage() {
         loadWhitelist();
         loadDataLists();
     }, []);
+
+    // Auto-open user detail popup when navigated from notification
+    useEffect(() => {
+        const notifData = location.state?.notificationData;
+        if (!notifData || hasHandledNotification.current || loading || users.length === 0) return;
+
+        if (notifData.type === 'accounts_expiring') {
+            hasHandledNotification.current = true;
+            const expiringIds = notifData.expiringUserIds;
+            if (expiringIds && expiringIds.length > 0) {
+                // Open detail for the first expiring user
+                const firstUser = users.find(u => expiringIds.includes(u.uid));
+                if (firstUser) {
+                    openUserDetail(firstUser);
+                }
+            } else {
+                // Fallback: find users that are expiring within 7 days (for old notifications without expiringUserIds)
+                const now = new Date();
+                const sevenDaysLater = new Date(now.getTime() + 7 * 86400000);
+                const expiringUsers = users.filter(u => {
+                    if (!u.expiresAt || u.status !== 'approved') return false;
+                    const d = u.expiresAt.toDate ? u.expiresAt.toDate() : new Date(u.expiresAt);
+                    return d >= now && d <= sevenDaysLater;
+                });
+                if (expiringUsers.length > 0) {
+                    openUserDetail(expiringUsers[0]);
+                }
+            }
+            // Clear location state to prevent re-triggering
+            window.history.replaceState({}, '');
+        }
+    }, [location.state, loading, users]);
 
     async function loadDataLists() {
         try {
@@ -161,8 +199,9 @@ export default function AdminUsersPage() {
     }
 
     // Filtered lists
-    const pendingUsers = users.filter(u => u.status === 'pending');
-    const approvedUsersRaw = users.filter(u => u.status === 'approved');
+    const pendingUsers = users.filter(u => u.status === 'pending' && !u.isDeleted);
+    const archivedUsers = users.filter(u => u.isDeleted);
+    const approvedUsersRaw = users.filter(u => u.status === 'approved' && !u.isDeleted);
     const approvedUsers = approvedUsersRaw
         .filter(u => {
             const matchesSearch = (u.displayName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -186,9 +225,15 @@ export default function AdminUsersPage() {
         });
 
     // Whitelist emails that haven't joined yet
-    const pendingInvites = whitelist.filter(w =>
+    const pendingInvitesRaw = whitelist.filter(w =>
         !users.some(u => u.email.toLowerCase() === w.email.toLowerCase())
     );
+    const pendingInvites = searchTerm
+        ? pendingInvitesRaw.filter(w =>
+            (w.displayName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (w.email || '').toLowerCase().includes(searchTerm.toLowerCase())
+        )
+        : pendingInvitesRaw;
 
     async function openUserDetail(u) {
         setSelectedUser(u);
@@ -320,8 +365,24 @@ export default function AdminUsersPage() {
 
         setConfirmAction({
             type: 'delete',
-            message: `Xóa vĩnh viễn tài khoản ${u.email} khỏi Firebase Auth và Firestore? Hành động này không thể hoàn tác.`,
+            message: `Chuyển tài khoản ${u.email} vào "Người dùng cũ"? Bạn có thể khôi phục sau này.`,
+            action: async () => { await softDeleteUser(u.uid); }
+        });
+    }
+
+    function handlePermanentDelete(u) {
+        setConfirmAction({
+            type: 'delete',
+            message: `Xóa vĩnh viễn tài khoản ${u.email} khỏi Firebase Auth và Firestore? Hành động này KHÔNG THỂ hoàn tác.`,
             action: async () => { await permanentDeleteUser(u.uid); }
+        });
+    }
+
+    function handleRestore(u) {
+        setConfirmAction({
+            type: 'restore',
+            message: `Khôi phục tài khoản ${u.email}?`,
+            action: async () => { await restoreUser(u.uid); }
         });
     }
 
@@ -501,6 +562,7 @@ export default function AdminUsersPage() {
         <div className="admin-page">
             <div className="admin-page-header">
                 <h1 className="admin-page-title">Quản lý Người dùng</h1>
+                <p className="admin-page-subtitle">Duyệt, phân quyền và quản lý tài khoản học viên, giáo viên, nhân viên.</p>
             </div>
 
             {/* TABS */}
@@ -519,6 +581,17 @@ export default function AdminUsersPage() {
                     {pendingUsers.length > 0 && (
                         <span style={{ background: '#ef4444', color: '#fff', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700 }}>
                             {pendingUsers.length <= 99 ? pendingUsers.length : '99+'}
+                        </span>
+                    )}
+                </button>
+                <button
+                    onClick={() => setActiveTab('archived')}
+                    className={activeTab === 'archived' ? 'active' : ''}
+                >
+                    <Archive size={16} /> <span className="admin-tab-label">Người dùng cũ</span>
+                    {archivedUsers.length > 0 && (
+                        <span style={{ background: '#94a3b8', color: '#fff', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700 }}>
+                            {archivedUsers.length <= 99 ? archivedUsers.length : '99+'}
                         </span>
                     )}
                 </button>
@@ -572,6 +645,30 @@ export default function AdminUsersPage() {
             {
                 activeTab === 'approved' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                        {/* UNIFIED SEARCH BAR */}
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+                            <div className="admin-search-box" style={{ flex: 1, minWidth: '240px', maxWidth: '460px' }}>
+                                <Search size={18} className="search-icon" />
+                                <input
+                                    type="text"
+                                    placeholder="Tìm tên hoặc email..."
+                                    value={searchTerm}
+                                    onChange={e => setSearchTerm(e.target.value)}
+                                />
+                            </div>
+                            <div style={{ width: '160px' }}>
+                                <CustomSelect
+                                    value={roleFilter}
+                                    onChange={setRoleFilter}
+                                    options={[
+                                        { value: 'all', label: 'Tất cả vai trò' },
+                                        ...roleOptions
+                                    ]}
+                                    placeholder="Lọc vai trò"
+                                    style={{ marginBottom: 0 }}
+                                />
+                            </div>
+                        </div>
                         {/* TRẠNG THÁI WAITING / PRE-APPROVE */}
                         <div className="admin-card">
                             <div className="admin-card-header" style={{ marginBottom: pendingInvites.length > 0 ? '16px' : '0' }}>
@@ -608,6 +705,8 @@ export default function AdminUsersPage() {
                                                         <span className="admin-role-badge teacher">Giáo viên</span>
                                                     ) : w.role === 'staff' ? (
                                                         <span className="admin-role-badge staff">Nhân viên VP</span>
+                                                    ) : w.role === 'it' ? (
+                                                        <span className="admin-role-badge" style={{ background: '#f0fdf4', color: '#15803d' }}>IT</span>
                                                     ) : (
                                                         <span className="admin-role-badge user">Học viên</span>
                                                     )}
@@ -645,29 +744,6 @@ export default function AdminUsersPage() {
                         <div className="admin-card">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', gap: '12px', flexWrap: 'wrap' }}>
                                 <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#1e293b', whiteSpace: 'nowrap' }}>Thành viên hiện tại</h3>
-                                <div style={{ display: 'flex', gap: '12px', flex: 1, minWidth: '300px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                                    <div style={{ width: '160px' }}>
-                                        <CustomSelect
-                                            value={roleFilter}
-                                            onChange={setRoleFilter}
-                                            options={[
-                                                { value: 'all', label: 'Tất cả vai trò' },
-                                                ...roleOptions
-                                            ]}
-                                            placeholder="Lọc vai trò"
-                                            style={{ marginBottom: 0 }}
-                                        />
-                                    </div>
-                                    <div className="admin-search-box" style={{ flex: 1, maxWidth: '300px' }}>
-                                        <Search size={18} className="search-icon" />
-                                        <input
-                                            type="text"
-                                            placeholder="Tìm tên hoặc email..."
-                                            value={searchTerm}
-                                            onChange={e => setSearchTerm(e.target.value)}
-                                        />
-                                    </div>
-                                </div>
                             </div>
                             {loading ? (
                                 <div className="admin-empty-state">Đang tải...</div>
@@ -705,6 +781,8 @@ export default function AdminUsersPage() {
                                                                             <span className="admin-role-badge teacher"><Award size={12} /> Giáo viên</span>
                                                                         ) : u.role === 'staff' ? (
                                                                             <span className="admin-role-badge staff"><Briefcase size={12} /> Nhân viên VP</span>
+                                                                        ) : u.role === 'it' ? (
+                                                                            <span className="admin-role-badge" style={{ background: '#f0fdf4', color: '#15803d' }}><Monitor size={12} /> IT</span>
                                                                         ) : (
                                                                             <span className="admin-role-badge user">Học viên</span>
                                                                         )}
@@ -740,12 +818,12 @@ export default function AdminUsersPage() {
                                                                         {!(currentAdmin?.role === 'staff' && u.role === 'admin') && (
                                                                             <>
                                                                                 <button className="admin-action-btn" onClick={() => openRoleModal(u)} title="Đổi vai trò">
-                                                                                    {u.role === 'admin' ? <ShieldCheck size={16} /> : u.role === 'teacher' ? <Award size={16} /> : u.role === 'staff' ? <Briefcase size={16} /> : <User size={16} />}
+                                                                                    {u.role === 'admin' ? <ShieldCheck size={16} /> : u.role === 'teacher' ? <Award size={16} /> : u.role === 'staff' ? <Briefcase size={16} /> : u.role === 'it' ? <Monitor size={16} /> : <User size={16} />}
                                                                                 </button>
                                                                                 <button className={`admin-action-btn ${u.disabled ? '' : 'danger'}`} onClick={() => handleToggleDisabled(u)} title={u.disabled ? 'Mở khóa' : 'Khóa'}>
                                                                                     {u.disabled ? <Unlock size={16} /> : <Lock size={16} />}
                                                                                 </button>
-                                                                                <button className="admin-action-btn danger" onClick={() => handleDelete(u)} title="Xóa vĩnh viễn">
+                                                                                <button className="admin-action-btn danger" onClick={() => handleDelete(u)} title="Xoá">
                                                                                     <Trash2 size={16} />
                                                                                 </button>
                                                                             </>
@@ -762,6 +840,80 @@ export default function AdminUsersPage() {
                                 </div>
                             )}
                         </div>
+                    </div>
+                )
+            }
+
+            {/* ===== TAB: ARCHIVED ===== */}
+            {
+                activeTab === 'archived' && (
+                    <div className="admin-card">
+                        {loading ? (
+                            <div className="admin-empty-state">Đang tải...</div>
+                        ) : archivedUsers.length === 0 ? (
+                            <div className="admin-empty-state" style={{ padding: '48px 24px' }}>
+                                <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                                    <CheckCircle size={28} color="#22c55e" />
+                                </div>
+                                <h3 style={{ margin: '0 0 4px', fontWeight: 700 }}>Không có người dùng cũ</h3>
+                                <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.9rem' }}>Tài khoản bị xoá sẽ xuất hiện ở đây.</p>
+                            </div>
+                        ) : (
+                            <div className="admin-table-container">
+                                <table className="admin-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Người dùng</th>
+                                            <th>Ngày xoá</th>
+                                            <th className="text-right">Thao tác</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {archivedUsers.map(u => (
+                                            <tr key={u.uid} style={{ opacity: 0.7 }}>
+                                                <td data-label="Người dùng">
+                                                    <div className="admin-topic-cell">
+                                                        <div className="admin-user-icon" style={{ background: '#f1f5f9' }}>
+                                                            <Avatar src={u.photoURL} alt={u.displayName} size={36} />
+                                                        </div>
+                                                        <div>
+                                                            <div className="admin-topic-name">
+                                                                {u.displayName || u.email}
+                                                                {u.role === 'admin' ? (
+                                                                    <span className="admin-role-badge admin"><Shield size={12} /> Admin</span>
+                                                                ) : u.role === 'teacher' ? (
+                                                                    <span className="admin-role-badge teacher"><Award size={12} /> Giáo viên</span>
+                                                                ) : u.role === 'staff' ? (
+                                                                    <span className="admin-role-badge staff"><Briefcase size={12} /> Nhân viên VP</span>
+                                                                ) : u.role === 'it' ? (
+                                                                    <span className="admin-role-badge" style={{ background: '#f0fdf4', color: '#15803d' }}><Monitor size={12} /> IT</span>
+                                                                ) : (
+                                                                    <span className="admin-role-badge user">Học viên</span>
+                                                                )}
+                                                            </div>
+                                                            <div className="admin-topic-id">{u.email}</div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td data-label="Ngày xoá" className="admin-text-muted" style={{ fontSize: '0.85rem' }}>
+                                                    {formatDate(u.deletedAt)}
+                                                </td>
+                                                <td data-label="Thao tác" className="text-right">
+                                                    <div className="admin-table-actions">
+                                                        <button className="admin-action-btn" onClick={() => handleRestore(u)} title="Khôi phục" style={{ color: '#22c55e' }}>
+                                                            <RotateCcw size={16} />
+                                                        </button>
+                                                        <button className="admin-action-btn danger" onClick={() => handlePermanentDelete(u)} title="Xoá vĩnh viễn">
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </div>
                 )
             }
@@ -837,6 +989,8 @@ export default function AdminUsersPage() {
                                             <span className="admin-role-badge teacher" style={{ fontSize: '0.75rem' }}><Award size={12} /> Giáo viên</span>
                                         ) : selectedUser.role === 'staff' ? (
                                             <span className="admin-role-badge staff" style={{ fontSize: '0.75rem' }}><Briefcase size={12} /> Nhân viên VP</span>
+                                        ) : selectedUser.role === 'it' ? (
+                                            <span className="admin-role-badge" style={{ fontSize: '0.75rem', background: '#f0fdf4', color: '#15803d' }}><Monitor size={12} /> IT</span>
                                         ) : (
                                             <span className="admin-role-badge user" style={{ fontSize: '0.75rem' }}>Học viên</span>
                                         )}
@@ -880,7 +1034,7 @@ export default function AdminUsersPage() {
                                 </div>
 
                                 {/* Permissions Assignment */}
-                                {!isSelf(selectedUser.uid) && selectedUser.role !== 'admin' && selectedUser.role !== 'staff' && (
+                                {!isSelf(selectedUser.uid) && selectedUser.role !== 'admin' && selectedUser.role !== 'staff' && selectedUser.role !== 'it' && (
                                     <div>
                                         <p style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                             <ShieldCheck size={16} /> Phân quyền truy cập
@@ -952,7 +1106,7 @@ export default function AdminUsersPage() {
             {
                 approveModal && (
                     <div className="teacher-modal-overlay" style={{ zIndex: 1001 }}>
-                        <div className="teacher-modal wide" style={{ maxWidth: '440px' }}>
+                        <div className="teacher-modal wide" style={{ maxWidth: !approveModal.isRenew && approveRole !== 'admin' && approveRole !== 'staff' && approveRole !== 'it' && groups.length > 0 ? '720px' : '440px' }}>
                             <div style={{ position: 'sticky', top: '0px', zIndex: 100, display: 'flex', justifyContent: 'flex-end', height: 0, overflow: 'visible', pointerEvents: 'none' }}>
                                 <button className="teacher-modal-close" onClick={() => setApproveModal(null)} style={{ pointerEvents: 'auto', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, background: 'rgba(241, 245, 249, 0.95)', backdropFilter: 'blur(4px)', border: 'none', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                                     <X size={20} />
@@ -965,85 +1119,74 @@ export default function AdminUsersPage() {
                                 {approveModal.user.displayName || approveModal.user.email}
                             </p>
 
-                            {!approveModal.isRenew && (
-                                <div style={{ marginBottom: '16px' }}>
-                                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Vai trò</label>
-                                    <CustomSelect
-                                        value={approveRole}
-                                        onChange={setApproveRole}
-                                        options={roleOptions}
-                                        placeholder="Chọn vai trò..."
-                                    />
-                                </div>
-                            )}
-
-                            {approveRole !== 'admin' && approveRole !== 'staff' && (
-                                <div style={{ marginBottom: '16px' }}>
-                                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Thời hạn sử dụng</label>
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
-                                        {DURATION_OPTIONS.map(opt => (
-                                            <button key={String(opt.value)} type="button"
-                                                onClick={() => setApproveDuration(opt.value)}
-                                                style={{
-                                                    padding: '8px', border: '2px solid',
-                                                    borderColor: approveDuration === opt.value ? '#3b82f6' : '#e2e8f0',
-                                                    background: approveDuration === opt.value ? '#eff6ff' : '#fff',
-                                                    color: approveDuration === opt.value ? '#2563eb' : '#64748b',
-                                                    borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
-                                                }}>
-                                                {opt.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    {approveDuration === 'custom' && (
-                                        <div style={{ marginTop: '10px' }}>
-                                            <input type="date"
-                                                className="admin-form-input"
-                                                style={{ width: '100%', borderColor: '#3b82f6', background: '#eff6ff' }}
-                                                value={approveCustomDate}
-                                                onChange={e => setApproveCustomDate(e.target.value)}
-                                                required
+                            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                                {/* Left column - Form fields */}
+                                <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+                                    {!approveModal.isRenew && (
+                                        <div style={{ marginBottom: '16px' }}>
+                                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Vai trò</label>
+                                            <CustomSelect
+                                                value={approveRole}
+                                                onChange={setApproveRole}
+                                                options={roleOptions}
+                                                placeholder="Chọn vai trò..."
                                             />
                                         </div>
                                     )}
+
+                                    {approveRole !== 'admin' && approveRole !== 'staff' && approveRole !== 'it' && (
+                                        <div style={{ marginBottom: '16px' }}>
+                                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Thời hạn sử dụng</label>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                                                {DURATION_OPTIONS.map(opt => (
+                                                    <button key={String(opt.value)} type="button"
+                                                        onClick={() => setApproveDuration(opt.value)}
+                                                        style={{
+                                                            padding: '8px', border: '2px solid',
+                                                            borderColor: approveDuration === opt.value ? '#3b82f6' : '#e2e8f0',
+                                                            background: approveDuration === opt.value ? '#eff6ff' : '#fff',
+                                                            color: approveDuration === opt.value ? '#2563eb' : '#64748b',
+                                                            borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
+                                                        }}>
+                                                        {opt.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            {approveDuration === 'custom' && (
+                                                <div style={{ marginTop: '10px' }}>
+                                                    <input type="date"
+                                                        className="admin-form-input"
+                                                        style={{ width: '100%', borderColor: '#3b82f6', background: '#eff6ff' }}
+                                                        value={approveCustomDate}
+                                                        onChange={e => setApproveCustomDate(e.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
-                            )}
 
-                            {!approveModal.isRenew && approveRole !== 'admin' && approveRole !== 'staff' && (groups.length > 0 || folders.length > 0) && (
-                                <div style={{ marginBottom: '20px' }}>
-                                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
-                                        Phân quyền truy cập (tuỳ chọn)
-                                    </label>
-
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '8px', background: '#f8fafc', padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                            <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '4px' }}><Layers size={12} /> Thuộc Nhóm</p>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '100px', overflowY: 'auto', paddingRight: '2px' }}>
+                                {/* Right column - Group permissions */}
+                                {!approveModal.isRenew && approveRole !== 'admin' && approveRole !== 'staff' && approveRole !== 'it' && groups.length > 0 && (
+                                    <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+                                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+                                            Phân quyền truy cập (tuỳ chọn)
+                                        </label>
+                                        <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                            <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '4px' }}><Layers size={12} /> Thuộc Nhóm</p>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '220px', overflowY: 'auto', paddingRight: '2px' }}>
                                                 {groups.map(g => (
                                                     <label key={g.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '0.75rem', color: '#475569', cursor: 'pointer', background: '#fff', padding: '4px 6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
                                                         <input type="checkbox" checked={approveGroupIds.includes(g.id)} onChange={() => toggleApproveGroup(g.id)} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
                                                         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.3 }}>{g.name}</span>
                                                     </label>
                                                 ))}
-                                                {groups.length === 0 && <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Chưa có nhóm</span>}
-                                            </div>
-                                        </div>
-
-                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                            <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '4px' }}><FolderOpen size={12} /> Folders cá nhân</p>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '100px', overflowY: 'auto', paddingRight: '2px' }}>
-                                                {folders.map(f => (
-                                                    <label key={f.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '0.75rem', color: '#475569', cursor: 'pointer', background: '#fff', padding: '4px 6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
-                                                        <input type="checkbox" checked={approveFolderIds.includes(f.id)} onChange={() => toggleApproveFolder(f.id)} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
-                                                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.3 }}>{f.icon || '📁'} {f.name}</span>
-                                                    </label>
-                                                ))}
-                                                {folders.length === 0 && <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Chưa có folder</span>}
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                            )}
+                                )}
+                            </div>
 
                             <div className="admin-modal-actions" style={{ flexDirection: 'row' }}>
                                 <button className="admin-btn admin-btn-secondary" style={{ flex: 1 }} onClick={() => setApproveModal(null)} disabled={actionLoading}>Hủy</button>
@@ -1060,7 +1203,7 @@ export default function AdminUsersPage() {
             {
                 whitelistForm && (
                     <div className="teacher-modal-overlay" style={{ zIndex: 1001 }}>
-                        <div className="teacher-modal wide" style={{ maxWidth: '440px' }}>
+                        <div className="teacher-modal wide" style={{ maxWidth: wlRole !== 'admin' && wlRole !== 'staff' && wlRole !== 'it' && groups.length > 0 ? '720px' : '440px' }}>
                             <div style={{ position: 'sticky', top: '0px', zIndex: 100, display: 'flex', justifyContent: 'flex-end', height: 0, overflow: 'visible', pointerEvents: 'none' }}>
                                 <button className="teacher-modal-close" onClick={() => setWhitelistForm(false)} style={{ pointerEvents: 'auto', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, background: 'rgba(241, 245, 249, 0.95)', backdropFilter: 'blur(4px)', border: 'none', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                                     <X size={20} />
@@ -1070,91 +1213,82 @@ export default function AdminUsersPage() {
                                 <UserPlus size={22} /> Thêm email Pre-approve
                             </h2>
                             <form onSubmit={handleAddWhitelist}>
-                                <div style={{ marginBottom: '14px' }}>
-                                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Email</label>
-                                    <input type="email" className="admin-form-input" style={{ width: '100%' }} placeholder="student@gmail.com"
-                                        value={wlEmail} onChange={e => setWlEmail(e.target.value)} required autoFocus />
-                                </div>
-                                <div style={{ marginBottom: '14px' }}>
-                                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Tên học viên (Tùy chọn)</label>
-                                    <input type="text" className="admin-form-input" style={{ width: '100%' }} placeholder="Họ và tên..."
-                                        value={wlDisplayName} onChange={e => setWlDisplayName(e.target.value)} />
-                                </div>
-                                <div style={{ marginBottom: '14px' }}>
-                                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Vai trò</label>
-                                    <CustomSelect
-                                        value={wlRole}
-                                        onChange={setWlRole}
-                                        options={roleOptions}
-                                        placeholder="Chọn vai trò..."
-                                    />
-                                </div>
-                                {wlRole !== 'admin' && wlRole !== 'staff' && (
-                                    <div style={{ marginBottom: '14px' }}>
-                                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Thời hạn</label>
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
-                                            {DURATION_OPTIONS.map(opt => (
-                                                <button key={String(opt.value)} type="button"
-                                                    onClick={() => setWlDuration(opt.value)}
-                                                    style={{
-                                                        padding: '8px', border: '2px solid',
-                                                        borderColor: wlDuration === opt.value ? '#10b981' : '#e2e8f0',
-                                                        background: wlDuration === opt.value ? '#f0fdf4' : '#fff',
-                                                        color: wlDuration === opt.value ? '#059669' : '#64748b',
-                                                        borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
-                                                    }}>
-                                                    {opt.label}
-                                                </button>
-                                            ))}
+                                <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                                    {/* Left column - Form fields */}
+                                    <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+                                        <div style={{ marginBottom: '14px' }}>
+                                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Email</label>
+                                            <input type="email" className="admin-form-input" style={{ width: '100%' }} placeholder="student@gmail.com"
+                                                value={wlEmail} onChange={e => setWlEmail(e.target.value)} required autoFocus />
                                         </div>
-                                        {wlDuration === 'custom' && (
-                                            <div style={{ marginTop: '10px' }}>
-                                                <input type="date"
-                                                    className="admin-form-input"
-                                                    style={{ width: '100%', borderColor: '#10b981', background: '#f0fdf4' }}
-                                                    value={wlCustomDate}
-                                                    onChange={e => setWlCustomDate(e.target.value)}
-                                                    required
-                                                />
+                                        <div style={{ marginBottom: '14px' }}>
+                                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Tên học viên (Tùy chọn)</label>
+                                            <input type="text" className="admin-form-input" style={{ width: '100%' }} placeholder="Họ và tên..."
+                                                value={wlDisplayName} onChange={e => setWlDisplayName(e.target.value)} />
+                                        </div>
+                                        <div style={{ marginBottom: '14px' }}>
+                                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Vai trò</label>
+                                            <CustomSelect
+                                                value={wlRole}
+                                                onChange={setWlRole}
+                                                options={roleOptions}
+                                                placeholder="Chọn vai trò..."
+                                            />
+                                        </div>
+                                        {wlRole !== 'admin' && wlRole !== 'staff' && wlRole !== 'it' && (
+                                            <div style={{ marginBottom: '14px' }}>
+                                                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Thời hạn</label>
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                                                    {DURATION_OPTIONS.map(opt => (
+                                                        <button key={String(opt.value)} type="button"
+                                                            onClick={() => setWlDuration(opt.value)}
+                                                            style={{
+                                                                padding: '8px', border: '2px solid',
+                                                                borderColor: wlDuration === opt.value ? '#10b981' : '#e2e8f0',
+                                                                background: wlDuration === opt.value ? '#f0fdf4' : '#fff',
+                                                                color: wlDuration === opt.value ? '#059669' : '#64748b',
+                                                                borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
+                                                            }}>
+                                                            {opt.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                {wlDuration === 'custom' && (
+                                                    <div style={{ marginTop: '10px' }}>
+                                                        <input type="date"
+                                                            className="admin-form-input"
+                                                            style={{ width: '100%', borderColor: '#10b981', background: '#f0fdf4' }}
+                                                            value={wlCustomDate}
+                                                            onChange={e => setWlCustomDate(e.target.value)}
+                                                            required
+                                                        />
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>
-                                )}
 
-                                {/* Groups & Folders */}
-                                {wlRole !== 'admin' && wlRole !== 'staff' && (groups.length > 0 || folders.length > 0) && (
-                                    <div style={{ marginBottom: '14px' }}>
-                                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
-                                            Phân quyền truy cập (tuỳ chọn)
-                                        </label>
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '8px', background: '#f8fafc', padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '4px' }}><Layers size={12} /> Thuộc Nhóm</p>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '120px', overflowY: 'auto', paddingRight: '2px' }}>
+                                    {/* Right column - Group permissions */}
+                                    {wlRole !== 'admin' && wlRole !== 'staff' && wlRole !== 'it' && groups.length > 0 && (
+                                        <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+                                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+                                                Phân quyền truy cập (tuỳ chọn)
+                                            </label>
+                                            <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                                <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '4px' }}><Layers size={12} /> Thuộc Nhóm</p>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '220px', overflowY: 'auto', paddingRight: '2px' }}>
                                                     {groups.map(g => (
                                                         <label key={g.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '0.75rem', color: '#475569', cursor: 'pointer', background: '#fff', padding: '4px 6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
                                                             <input type="checkbox" checked={wlGroupIds.includes(g.id)} onChange={() => setWlGroupIds(prev => prev.includes(g.id) ? prev.filter(id => id !== g.id) : [...prev, g.id])} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
                                                             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.3 }}>{g.name}</span>
                                                         </label>
                                                     ))}
-                                                    {groups.length === 0 && <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Chưa có nhóm</span>}
-                                                </div>
-                                            </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '4px' }}><FolderOpen size={12} /> Folders cá nhân</p>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '120px', overflowY: 'auto', paddingRight: '2px' }}>
-                                                    {folders.map(f => (
-                                                        <label key={f.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '0.75rem', color: '#475569', cursor: 'pointer', background: '#fff', padding: '4px 6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
-                                                            <input type="checkbox" checked={wlFolderIds.includes(f.id)} onChange={() => setWlFolderIds(prev => prev.includes(f.id) ? prev.filter(id => id !== f.id) : [...prev, f.id])} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
-                                                            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.3 }}>{f.icon || '📁'} {f.name}</span>
-                                                        </label>
-                                                    ))}
-                                                    {folders.length === 0 && <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Chưa có folder</span>}
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
-                                )}
+                                    )}
+                                </div>
+
                                 <div className="admin-modal-actions">
                                     <button type="submit" className="admin-btn admin-btn-primary" style={{ width: '100%' }} disabled={actionLoading || !wlEmail.trim()}>
                                         {actionLoading ? 'Đang lưu...' : 'Thêm vào danh sách'}
@@ -1170,7 +1304,7 @@ export default function AdminUsersPage() {
             {
                 editWlModal && (
                     <div className="teacher-modal-overlay" style={{ zIndex: 1001 }}>
-                        <div className="teacher-modal wide" style={{ maxWidth: '440px' }}>
+                        <div className="teacher-modal wide" style={{ maxWidth: editWlRole !== 'admin' && editWlRole !== 'staff' && editWlRole !== 'it' && groups.length > 0 ? '720px' : '440px' }}>
                             <div style={{ position: 'sticky', top: '0px', zIndex: 100, display: 'flex', justifyContent: 'flex-end', height: 0, overflow: 'visible', pointerEvents: 'none' }}>
                                 <button className="teacher-modal-close" onClick={() => setEditWlModal(null)} style={{ pointerEvents: 'auto', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, background: 'rgba(241, 245, 249, 0.95)', backdropFilter: 'blur(4px)', border: 'none', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                                     <X size={20} />
@@ -1181,81 +1315,70 @@ export default function AdminUsersPage() {
                             </h2>
                             <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '16px' }}>{editWlModal.email}</p>
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Tên hiển thị</label>
-                                    <input type="text" className="admin-form-input" style={{ width: '100%' }} placeholder="Họ và tên..."
-                                        value={editWlName} onChange={e => setEditWlName(e.target.value)} />
-                                </div>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Vai trò</label>
-                                    <CustomSelect
-                                        value={editWlRole}
-                                        onChange={setEditWlRole}
-                                        options={roleOptions}
-                                        placeholder="Chọn vai trò..."
-                                    />
-                                </div>
-                                {editWlRole !== 'admin' && editWlRole !== 'staff' && (
+                            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                                {/* Left column - Form fields */}
+                                <div style={{ flex: '1 1 280px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '14px' }}>
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Thời hạn</label>
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
-                                            {DURATION_OPTIONS.map(opt => (
-                                                <button key={String(opt.value)} type="button"
-                                                    onClick={() => setEditWlDuration(opt.value)}
-                                                    style={{
-                                                        padding: '8px', border: '2px solid',
-                                                        borderColor: editWlDuration === opt.value ? '#3b82f6' : '#e2e8f0',
-                                                        background: editWlDuration === opt.value ? '#eff6ff' : '#fff',
-                                                        color: editWlDuration === opt.value ? '#2563eb' : '#64748b',
-                                                        borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
-                                                    }}>
-                                                    {opt.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                        {editWlDuration === 'custom' && (
-                                            <div style={{ marginTop: '10px' }}>
-                                                <input type="date"
-                                                    className="admin-form-input"
-                                                    style={{ width: '100%', borderColor: '#3b82f6', background: '#eff6ff' }}
-                                                    value={editWlCustomDate}
-                                                    onChange={e => setEditWlCustomDate(e.target.value)}
-                                                />
-                                            </div>
-                                        )}
+                                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Tên hiển thị</label>
+                                        <input type="text" className="admin-form-input" style={{ width: '100%' }} placeholder="Họ và tên..."
+                                            value={editWlName} onChange={e => setEditWlName(e.target.value)} />
                                     </div>
-                                )}
-
-                                {editWlRole !== 'admin' && editWlRole !== 'staff' && (groups.length > 0 || folders.length > 0) && (
                                     <div>
+                                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Vai trò</label>
+                                        <CustomSelect
+                                            value={editWlRole}
+                                            onChange={setEditWlRole}
+                                            options={roleOptions}
+                                            placeholder="Chọn vai trò..."
+                                        />
+                                    </div>
+                                    {editWlRole !== 'admin' && editWlRole !== 'staff' && editWlRole !== 'it' && (
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Thời hạn</label>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                                                {DURATION_OPTIONS.map(opt => (
+                                                    <button key={String(opt.value)} type="button"
+                                                        onClick={() => setEditWlDuration(opt.value)}
+                                                        style={{
+                                                            padding: '8px', border: '2px solid',
+                                                            borderColor: editWlDuration === opt.value ? '#3b82f6' : '#e2e8f0',
+                                                            background: editWlDuration === opt.value ? '#eff6ff' : '#fff',
+                                                            color: editWlDuration === opt.value ? '#2563eb' : '#64748b',
+                                                            borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
+                                                        }}>
+                                                        {opt.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            {editWlDuration === 'custom' && (
+                                                <div style={{ marginTop: '10px' }}>
+                                                    <input type="date"
+                                                        className="admin-form-input"
+                                                        style={{ width: '100%', borderColor: '#3b82f6', background: '#eff6ff' }}
+                                                        value={editWlCustomDate}
+                                                        onChange={e => setEditWlCustomDate(e.target.value)}
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Right column - Group permissions */}
+                                {editWlRole !== 'admin' && editWlRole !== 'staff' && editWlRole !== 'it' && groups.length > 0 && (
+                                    <div style={{ flex: '1 1 220px', minWidth: 0 }}>
                                         <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
                                             Phân quyền truy cập
                                         </label>
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '8px', background: '#f8fafc', padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '4px' }}><Layers size={12} /> Thuộc Nhóm</p>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '120px', overflowY: 'auto', paddingRight: '2px' }}>
-                                                    {groups.map(g => (
-                                                        <label key={g.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '0.75rem', color: '#475569', cursor: 'pointer', background: '#fff', padding: '4px 6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
-                                                            <input type="checkbox" checked={editWlGroupIds.includes(g.id)} onChange={() => setEditWlGroupIds(prev => prev.includes(g.id) ? prev.filter(id => id !== g.id) : [...prev, g.id])} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
-                                                            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.3 }}>{g.name}</span>
-                                                        </label>
-                                                    ))}
-                                                    {groups.length === 0 && <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Chưa có nhóm</span>}
-                                                </div>
-                                            </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '4px' }}><FolderOpen size={12} /> Folders cá nhân</p>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '120px', overflowY: 'auto', paddingRight: '2px' }}>
-                                                    {folders.map(f => (
-                                                        <label key={f.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '0.75rem', color: '#475569', cursor: 'pointer', background: '#fff', padding: '4px 6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
-                                                            <input type="checkbox" checked={editWlFolderIds.includes(f.id)} onChange={() => setEditWlFolderIds(prev => prev.includes(f.id) ? prev.filter(id => id !== f.id) : [...prev, f.id])} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
-                                                            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.3 }}>{f.icon || '📁'} {f.name}</span>
-                                                        </label>
-                                                    ))}
-                                                    {folders.length === 0 && <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Chưa có folder</span>}
-                                                </div>
+                                        <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                            <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '4px' }}><Layers size={12} /> Thuộc Nhóm</p>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '220px', overflowY: 'auto', paddingRight: '2px' }}>
+                                                {groups.map(g => (
+                                                    <label key={g.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '0.75rem', color: '#475569', cursor: 'pointer', background: '#fff', padding: '4px 6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                                                        <input type="checkbox" checked={editWlGroupIds.includes(g.id)} onChange={() => setEditWlGroupIds(prev => prev.includes(g.id) ? prev.filter(id => id !== g.id) : [...prev, g.id])} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
+                                                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.3 }}>{g.name}</span>
+                                                    </label>
+                                                ))}
                                             </div>
                                         </div>
                                     </div>

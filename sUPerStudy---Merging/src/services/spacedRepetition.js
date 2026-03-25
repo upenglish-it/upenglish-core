@@ -93,14 +93,19 @@ export async function updateIntermediateWordProgress(uid, wordId, topicId, word,
         const masteryData = stepMastery ? JSON.stringify(stepMastery) : null;
 
         if (!snap.exists()) {
+            // Auto-bump level to 1 if all 6 steps are already completed
+            const autoLevel = stepsCompleted >= 6 ? 1 : 0;
+            const now = new Date();
+            const interval = autoLevel >= 1 ? INTERVALS[autoLevel] || 0 : 0;
+            const nextReview = new Date(now.getTime() + interval * 86400000);
             const data = {
                 word,
                 topicId,
-                level: 0,
+                level: autoLevel,
                 easeFactor: 2.5,
-                interval: 0,
-                nextReview: Timestamp.fromDate(new Date()),
-                lastStudied: Timestamp.fromDate(new Date()),
+                interval,
+                nextReview: Timestamp.fromDate(nextReview),
+                lastStudied: Timestamp.fromDate(now),
                 correctStreak: 0,
                 totalReviews: 0,
                 stepsCompleted,
@@ -108,11 +113,24 @@ export async function updateIntermediateWordProgress(uid, wordId, topicId, word,
             if (masteryData) data.stepMastery = masteryData;
             await setDoc(ref, data);
         } else {
+            const existing = snap.data();
             const updateData = {
                 stepsCompleted,
                 lastStudied: Timestamp.fromDate(new Date()),
             };
             if (masteryData) updateData.stepMastery = masteryData;
+
+            // Auto-bump level to 1 if all 6 steps completed but level is still 0
+            // This prevents the edge case where finalizeBatch is never called
+            if (stepsCompleted >= 6 && (existing.level ?? 0) < 1) {
+                updateData.level = 1;
+                updateData.easeFactor = Math.min((existing.easeFactor ?? 2.5) + 0.1, 3.0);
+                updateData.correctStreak = (existing.correctStreak ?? 0) + 1;
+                const interval = INTERVALS[1] || 0;
+                updateData.interval = interval;
+                updateData.nextReview = Timestamp.fromDate(new Date(Date.now() + interval * 86400000));
+            }
+
             await updateDoc(ref, updateData);
         }
     } catch (err) {
@@ -134,7 +152,8 @@ export async function resetWordProgress(uid, wordId) {
             easeFactor: 2.5,
             interval: 0,
             correctStreak: 0,
-            totalReviews: 0
+            totalReviews: 0,
+            stepMastery: null
         }, { merge: true });
         return true;
     } catch (err) {

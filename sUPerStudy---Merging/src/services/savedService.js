@@ -6,6 +6,7 @@ import {
     getDoc,
     getDocs,
     deleteDoc,
+    updateDoc,
     query,
     orderBy,
     serverTimestamp,
@@ -107,6 +108,21 @@ export async function getCustomLists(userId) {
     );
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => doc.data());
+}
+
+/**
+ * Update the words array of an existing custom list.
+ * @param {string} userId - The user's ID
+ * @param {string} listId - The ID of the list to update
+ * @param {Array} newWords - The updated array of word data objects
+ */
+export async function updateCustomListWords(userId, listId, newWords) {
+    if (!userId || !listId || !newWords) throw new Error('Invalid data');
+    const docRef = doc(db, `users/${userId}/custom_lists`, listId);
+    await updateDoc(docRef, {
+        words: newWords,
+        wordCount: newWords.length,
+    });
 }
 
 /**

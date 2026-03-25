@@ -44,7 +44,7 @@ export default function NotificationBell() {
         }
         setIsOpen(false);
         if (notification.link) {
-            navigate(notification.link);
+            navigate(notification.link, { state: { notificationData: notification } });
         }
     };
 

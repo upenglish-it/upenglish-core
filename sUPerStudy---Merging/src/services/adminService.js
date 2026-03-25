@@ -1,16 +1,17 @@
 import { db } from '../config/firebase';
-import { collection, doc, getDocs, getDoc, setDoc, deleteDoc, updateDoc, writeBatch, serverTimestamp, Timestamp, arrayUnion, arrayRemove, query, where, orderBy, getCountFromServer } from 'firebase/firestore';
+import { collection, doc, getDocs, getDoc, setDoc, deleteDoc, updateDoc, writeBatch, serverTimestamp, Timestamp, arrayUnion, arrayRemove, query, where, orderBy, getCountFromServer, deleteField, getDocsFromServer } from 'firebase/firestore';
 import localTopics from '../data/topics';
 import localWordData from '../data/wordData';
 import { deleteQuestionImages } from './examService';
 import { deleteContextAudio } from './contextAudioService';
 
-// Fetch all topics from Firestore
+// Fetch all topics from Firestore (use server source to bypass persistent local cache)
 export async function getAdminTopics() {
-    const snapshot = await getDocs(collection(db, 'topics'));
+    const snapshot = await getDocsFromServer(collection(db, 'topics'));
     const topics = [];
     snapshot.forEach(docSnap => {
-        topics.push({ id: docSnap.id, ...docSnap.data() });
+        const data = docSnap.data();
+        if (!data.isDeleted) topics.push({ ...data, id: docSnap.id });
     });
     return topics;
 }
@@ -88,12 +89,20 @@ export async function getAdminTopicWords(topicId) {
     return words;
 }
 
+// Sanitize a word string for safe use as a Firestore document ID.
+// Firestore interprets '/' as a path separator, so words like
+// "Internal audit / External audit" would break document references.
+function sanitizeDocId(word) {
+    return word.replace(/\//g, '∕'); // Replace '/' with Unicode fullwidth solidus U+2215
+}
+
 // Save words to a topic
 export async function saveAdminTopicWords(topicId, wordsArray) {
     const batch = writeBatch(db);
     wordsArray.forEach((wordObj, index) => {
-        // Use the word itself as ID, or a custom index
-        const wordRef = doc(db, `topics/${topicId}/words`, wordObj.word);
+        // Use sanitized word as ID to avoid '/' breaking Firestore paths
+        const safeId = sanitizeDocId(wordObj.word);
+        const wordRef = doc(db, `topics/${topicId}/words`, safeId);
         batch.set(wordRef, { ...wordObj, index });
     });
     await batch.commit();
@@ -102,7 +111,8 @@ export async function saveAdminTopicWords(topicId, wordsArray) {
 // Delete a single word from a topic
 export async function deleteAdminTopicWord(topicId, word) {
     if (!topicId || !word) throw new Error("Missing topicId or word");
-    const wordRef = doc(db, `topics/${topicId}/words`, word);
+    const safeId = sanitizeDocId(word);
+    const wordRef = doc(db, `topics/${topicId}/words`, safeId);
     await deleteDoc(wordRef);
 }
 
@@ -122,7 +132,7 @@ export async function deleteAdminTopic(topicId) {
 
 // Fetch all folders
 export async function getFolders() {
-    const snapshot = await getDocs(collection(db, 'topic_folders'));
+    const snapshot = await getDocsFromServer(collection(db, 'topic_folders'));
     const folders = [];
     snapshot.forEach(docSnap => {
         folders.push({ id: docSnap.id, ...docSnap.data() });
@@ -279,18 +289,19 @@ export async function addUserToGroup(uid, groupId) {
         const studentName = userSnap.exists() ? (userSnap.data().displayName || userSnap.data().email || 'Học viên') : 'Học viên';
         const groupName = groupSnap.exists() ? (groupSnap.data().name || 'lớp') : 'lớp';
         const { createNotificationForGroupTeachers, queueEmailForGroupTeachers, buildEmailHtml } = await import('./notificationService');
+        const appUrl = 'https://upenglishvietnam.com/preview/superstudy';
         await createNotificationForGroupTeachers(groupId, {
             type: 'student_joined',
             title: '👤 Học viên mới',
             message: `${studentName} vừa được thêm vào lớp ${groupName}.`,
-            link: '/admin/groups'
+            link: `/teacher/groups/${groupId}`
         });
         await queueEmailForGroupTeachers(groupId, {
             subject: `Học viên mới: ${studentName} — lớp ${groupName}`,
             html: buildEmailHtml({
                 emoji: '👤', heading: 'Học viên mới vào lớp', headingColor: '#0ea5e9',
                 body: `<p>Lớp <strong>${groupName}</strong> của bạn vừa có thêm thành viên mới: <strong>${studentName}</strong>. Chào đón các bạn mới nhé! 🎉</p>`,
-                ctaText: 'Xem lớp học', ctaColor: '#0ea5e9', ctaColor2: '#38bdf8'
+                ctaText: 'Xem lớp học', ctaLink: `${appUrl}/teacher/groups/${groupId}`, ctaColor: '#0ea5e9', ctaColor2: '#38bdf8'
             })
         }, 'student_joined');
     } catch (e) {
@@ -398,7 +409,7 @@ export async function approveUser(uid, role, durationDays = null, customExpiresA
                 type: 'account_approved',
                 title: '🎉 Tài khoản đã được duyệt!',
                 message: `Chào mừng ${userName}! Tài khoản của bạn đã được phê duyệt. Hãy bắt đầu học ngay!`,
-                link: '/'
+                link: '/dashboard'
             });
 
             if (userSnap.data().email) {
@@ -510,6 +521,79 @@ export async function toggleResourcePublic(resourceType, resourceId, isPublic) {
     await updateDoc(ref, { isPublic });
 }
 
+// Toggle teacherVisible status (allows teachers to see & assign without making public to students)
+export async function toggleTeacherVisible(resourceType, resourceId, teacherVisible) {
+    let collectionName = 'topics';
+    if (resourceType === 'folder') collectionName = 'topic_folders';
+    if (resourceType === 'teacher_grammar' || resourceType === 'admin_grammar') collectionName = 'grammar_exercises';
+    if (resourceType === 'grammar_folder') collectionName = 'grammar_folders';
+    if (resourceType === 'exam') collectionName = 'exams';
+    if (resourceType === 'exam_folder') collectionName = 'exam_folders';
+
+    const ref = doc(db, collectionName, resourceId);
+    await updateDoc(ref, { teacherVisible });
+}
+
+// Helper: resolve collection name from resource type (admin-only types)
+function _resolveAdminCollection(resourceType) {
+    if (resourceType === 'folder') return 'topic_folders';
+    if (resourceType === 'topic') return 'topics';
+    if (resourceType === 'teacher_grammar' || resourceType === 'admin_grammar') return 'grammar_exercises';
+    if (resourceType === 'grammar_folder') return 'grammar_folders';
+    if (resourceType === 'exam') return 'exams';
+    if (resourceType === 'exam_folder') return 'exam_folders';
+    return 'topics';
+}
+
+// Share a resource with a specific teacher by email
+export async function shareResourceToTeacher(resourceType, resourceId, teacherEmail) {
+    // Find the teacher by email
+    const usersQuery = query(collection(db, 'users'), where('email', '==', teacherEmail.trim().toLowerCase()));
+    const snap = await getDocs(usersQuery);
+    if (snap.empty) throw new Error('Không tìm thấy giáo viên với email: ' + teacherEmail);
+    const teacherDoc = snap.docs[0];
+    const teacherData = teacherDoc.data();
+
+    const collectionName = _resolveAdminCollection(resourceType);
+    const ref = doc(db, collectionName, resourceId);
+    await updateDoc(ref, { sharedWithTeacherIds: arrayUnion(teacherDoc.id) });
+
+    return { uid: teacherDoc.id, displayName: teacherData.displayName || '', email: teacherData.email };
+}
+
+// Remove a specific teacher's access to a resource
+export async function unshareResourceFromTeacher(resourceType, resourceId, teacherUid) {
+    const collectionName = _resolveAdminCollection(resourceType);
+    const ref = doc(db, collectionName, resourceId);
+    await updateDoc(ref, { sharedWithTeacherIds: arrayRemove(teacherUid) });
+}
+
+// Get list of teachers who have been individually shared a resource
+export async function getResourceSharedTeachers(resourceType, resourceId) {
+    const collectionName = _resolveAdminCollection(resourceType);
+    const ref = doc(db, collectionName, resourceId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return [];
+
+    const sharedIds = snap.data().sharedWithTeacherIds || [];
+    if (sharedIds.length === 0) return [];
+
+    // Fetch teacher details
+    const teachers = [];
+    for (const uid of sharedIds) {
+        try {
+            const userSnap = await getDoc(doc(db, 'users', uid));
+            if (userSnap.exists()) {
+                const data = userSnap.data();
+                teachers.push({ uid, displayName: data.displayName || '', email: data.email || '' });
+            }
+        } catch (e) {
+            teachers.push({ uid, displayName: '', email: '(không tìm thấy)' });
+        }
+    }
+    return teachers;
+}
+
 // Get entities (users, groups) that have explicit access to a resource
 export async function getResourceSharedEntities(resourceType, resourceId) {
     const accessField = (resourceType === 'folder' || resourceType === 'grammar_folder' || resourceType === 'exam_folder' || resourceType === 'teacher_topic_folder' || resourceType === 'teacher_grammar_folder' || resourceType === 'teacher_exam_folder') ? 'folderAccess' :
@@ -563,7 +647,7 @@ export async function shareResourceToEmail(resourceType, resourceId, email) {
                 type: 'resource_shared',
                 title: '📚 Tài liệu mới được chia sẻ',
                 message: `Bạn vừa được chia sẻ ${typeLabels[resourceType] || 'tài liệu'} mới.`,
-                link: '/'
+                link: '/dashboard'
             });
 
             const userData = usersSnap.docs[0].data();
@@ -640,7 +724,8 @@ export async function getAdminAllTeacherTopics() {
     const snapshot = await getDocs(q);
     const topics = [];
     snapshot.forEach(docSnap => {
-        topics.push({ id: docSnap.id, ...docSnap.data() });
+        const data = docSnap.data();
+        if (!data.isDeleted) topics.push({ id: docSnap.id, ...data });
     });
     return topics;
 }
@@ -704,7 +789,8 @@ export async function getAdminAllGrammarExercises() {
     const snapshot = await getDocs(collection(db, 'grammar_exercises'));
     const exercises = [];
     snapshot.forEach(docSnap => {
-        exercises.push({ id: docSnap.id, ...docSnap.data() });
+        const data = docSnap.data();
+        if (!data.isDeleted) exercises.push({ id: docSnap.id, ...data });
     });
     return exercises.sort((a, b) => {
         const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
@@ -750,6 +836,27 @@ export async function permanentDeleteUser(uid) {
 }
 
 /**
+ * Soft-delete a user — mark as deleted instead of permanently removing.
+ * The user doc stays in Firestore, just flagged as deleted.
+ */
+export async function softDeleteUser(uid) {
+    await updateDoc(doc(db, 'users', uid), {
+        isDeleted: true,
+        deletedAt: serverTimestamp()
+    });
+}
+
+/**
+ * Restore a soft-deleted user — remove the isDeleted flag.
+ */
+export async function restoreUser(uid) {
+    await updateDoc(doc(db, 'users', uid), {
+        isDeleted: deleteField(),
+        deletedAt: deleteField()
+    });
+}
+
+/**
  * Change a user's email in Firebase Auth AND Firestore.
  * Requires deployed changeUserEmail Cloud Function.
  */
@@ -757,4 +864,258 @@ export async function changeUserEmail(uid, newEmail) {
     const changeEmailFn = httpsCallable(functions, 'changeUserEmail');
     const result = await changeEmailFn({ uid, newEmail });
     return result.data;
+}
+
+// ========== AUTO-PURGE SOFT-DELETED CONTENT ==========
+
+/**
+ * Auto-purge soft-deleted teacher content older than 30 days.
+ * Call on admin pages load (fire-and-forget).
+ */
+export async function cleanupExpiredDeletedContent() {
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    const cutoff = Date.now() - THIRTY_DAYS_MS;
+
+    const collections = ['teacher_topics', 'teacher_topic_folders', 'grammar_exercises', 'teacher_grammar_folders', 'exams', 'teacher_exam_folders'];
+    let totalPurged = 0;
+
+    try {
+        for (const colName of collections) {
+            const q = query(collection(db, colName), where('isDeleted', '==', true));
+            const snapshot = await getDocs(q);
+            for (const docSnap of snapshot.docs) {
+                const data = docSnap.data();
+                if (data.deletedAt) {
+                    const deletedMs = data.deletedAt.toMillis ? data.deletedAt.toMillis() : new Date(data.deletedAt).getTime();
+                    if (deletedMs < cutoff) {
+                        // For teacher_topics, also delete sub-collections (words)
+                        if (colName === 'teacher_topics') {
+                            const wordsSnap = await getDocs(collection(db, `teacher_topics/${docSnap.id}/words`));
+                            const delPromises = [];
+                            wordsSnap.forEach(w => delPromises.push(deleteDoc(w.ref)));
+                            await Promise.all(delPromises);
+                        }
+                        await deleteDoc(docSnap.ref);
+                        totalPurged++;
+                    }
+                }
+            }
+        }
+        if (totalPurged > 0) {
+            console.log(`[Cleanup] Purged ${totalPurged} expired soft-deleted content items.`);
+        }
+    } catch (error) {
+        console.error('Error during cleanup of expired deleted content:', error);
+    }
+}
+
+// ========== RESTORE TO ADMIN ==========
+
+/**
+ * Restore a soft-deleted teacher topic as an admin topic.
+ * Copies the document + words subcollection to 'topics', then deletes original.
+ */
+export async function restoreTeacherTopicToAdmin(topicId) {
+    const topicRef = doc(db, 'teacher_topics', topicId);
+    const topicSnap = await getDoc(topicRef);
+    if (!topicSnap.exists()) throw new Error('Topic not found');
+
+    const data = topicSnap.data();
+    const { isDeleted, deletedAt, teacherId, ...cleanData } = data;
+
+    // Create in admin 'topics' collection
+    const newTopicRef = doc(db, 'topics', topicId);
+    await setDoc(newTopicRef, {
+        ...cleanData,
+        restoredFromTeacher: teacherId || true,
+        restoredAt: serverTimestamp()
+    });
+
+    // Copy words subcollection
+    const wordsSnap = await getDocs(collection(db, `teacher_topics/${topicId}/words`));
+    const batch = writeBatch(db);
+    wordsSnap.forEach(wordDoc => {
+        batch.set(doc(db, `topics/${topicId}/words`, wordDoc.id), wordDoc.data());
+    });
+    // Delete original words
+    wordsSnap.forEach(wordDoc => {
+        batch.delete(wordDoc.ref);
+    });
+    await batch.commit();
+
+    // Delete original teacher topic
+    await deleteDoc(topicRef);
+}
+
+/**
+ * Restore a soft-deleted grammar exercise as admin (system) grammar.
+ * Removes teacherId to make it a system exercise.
+ */
+export async function restoreGrammarExerciseToAdmin(exerciseId) {
+    await updateDoc(doc(db, 'grammar_exercises', exerciseId), {
+        isDeleted: deleteField(),
+        deletedAt: deleteField(),
+        teacherId: deleteField(),
+        restoredFromTeacher: true,
+        restoredAt: serverTimestamp()
+    });
+}
+
+/**
+ * Restore a soft-deleted exam as an admin exam.
+ * Changes createdByRole to 'admin'.
+ */
+export async function restoreExamToAdmin(examId) {
+    await updateDoc(doc(db, 'exams', examId), {
+        isDeleted: deleteField(),
+        deletedAt: deleteField(),
+        createdByRole: 'admin',
+        restoredFromTeacher: true,
+        restoredAt: serverTimestamp()
+    });
+}
+
+// ========== TRANSFER OFFICIAL CONTENT TO TEACHER ==========
+
+/**
+ * Transfer ownership of official content to a teacher by email.
+ * Handles cross-collection moves for folders and topics.
+ */
+export async function transferOfficialToTeacher(collectionName, docId, teacherEmail) {
+    if (!collectionName || !docId || !teacherEmail) throw new Error('Missing parameters');
+
+    // Find teacher by email
+    const emailKey = teacherEmail.toLowerCase().trim();
+    const usersQ = query(collection(db, 'users'), where('email', '==', emailKey));
+    const usersSnap = await getDocs(usersQ);
+    if (usersSnap.empty) throw new Error('Không tìm thấy giáo viên với email này.');
+
+    const teacherDoc = usersSnap.docs[0];
+    const teacherData = teacherDoc.data();
+    if (teacherData.role !== 'teacher' && teacherData.role !== 'admin') {
+        throw new Error('Email này không phải của giáo viên.');
+    }
+    const teacherUid = teacherDoc.id;
+    const teacherName = teacherData.displayName || teacherData.email;
+
+    // Cross-collection mapping: official → teacher
+    const crossCollectionMap = {
+        exam_folders: 'teacher_exam_folders',
+        grammar_folders: 'teacher_grammar_folders',
+        topic_folders: 'teacher_topic_folders',
+        topics: 'teacher_topics'
+    };
+
+    const sourceRef = doc(db, collectionName, docId);
+    const sourceSnap = await getDoc(sourceRef);
+    if (!sourceSnap.exists()) throw new Error('Document not found');
+
+    const sourceData = sourceSnap.data();
+    // Strip collaboration & admin fields
+    const { collaboratorIds, collaboratorNames, collaboratorRoles, createdByRole, ...cleanData } = sourceData;
+
+    if (crossCollectionMap[collectionName]) {
+        // CROSS-COLLECTION MOVE: copy to teacher collection, delete original
+        const targetCollection = crossCollectionMap[collectionName];
+        const newRef = doc(collection(db, targetCollection));
+
+        const ownerField = 'teacherId';
+        await setDoc(newRef, {
+            ...cleanData,
+            [ownerField]: teacherUid,
+            createdByRole: 'teacher',
+            transferredAt: serverTimestamp(),
+            transferredFromOfficial: docId,
+            updatedAt: serverTimestamp()
+        });
+
+        // For exam_folders: also transfer the exams inside
+        if (collectionName === 'exam_folders' && cleanData.examIds?.length) {
+            for (const examId of cleanData.examIds) {
+                try {
+                    const examRef = doc(db, 'exams', examId);
+                    const examSnap = await getDoc(examRef);
+                    if (examSnap.exists()) {
+                        const examData = examSnap.data();
+                        const examUpdate = {
+                            createdBy: teacherUid,
+                            createdByRole: 'teacher',
+                            updatedAt: serverTimestamp()
+                        };
+                        if (examData.collaboratorIds) examUpdate.collaboratorIds = deleteField();
+                        if (examData.collaboratorNames) examUpdate.collaboratorNames = deleteField();
+                        if (examData.collaboratorRoles) examUpdate.collaboratorRoles = deleteField();
+                        await updateDoc(examRef, examUpdate);
+                    }
+                } catch (e) { console.error(`Error transferring exam ${examId}:`, e); }
+            }
+        }
+
+        // For grammar_folders: also transfer the exercises inside
+        if (collectionName === 'grammar_folders' && cleanData.exerciseIds?.length) {
+            for (const exId of cleanData.exerciseIds) {
+                try {
+                    const exRef = doc(db, 'grammar_exercises', exId);
+                    const exSnap = await getDoc(exRef);
+                    if (exSnap.exists()) {
+                        const exUpdate = {
+                            teacherId: teacherUid,
+                            createdByRole: 'teacher',
+                            updatedAt: serverTimestamp()
+                        };
+                        const exData = exSnap.data();
+                        if (exData.collaboratorIds) exUpdate.collaboratorIds = deleteField();
+                        if (exData.collaboratorNames) exUpdate.collaboratorNames = deleteField();
+                        if (exData.collaboratorRoles) exUpdate.collaboratorRoles = deleteField();
+                        await updateDoc(exRef, exUpdate);
+                    }
+                } catch (e) { console.error(`Error transferring exercise ${exId}:`, e); }
+            }
+        }
+
+        // For topic_folders: also transfer the topics inside
+        if (collectionName === 'topic_folders' && cleanData.topicIds?.length) {
+            for (const topicId of cleanData.topicIds) {
+                try {
+                    await transferOfficialToTeacher('topics', topicId, teacherEmail);
+                } catch (e) { console.error(`Error transferring topic ${topicId}:`, e); }
+            }
+        }
+
+        // For topics: also copy the words subcollection
+        if (collectionName === 'topics') {
+            const wordsSnap = await getDocs(collection(db, `topics/${docId}/words`));
+            if (!wordsSnap.empty) {
+                const batch = writeBatch(db);
+                wordsSnap.forEach(wordDoc => {
+                    const newWordRef = doc(collection(db, `teacher_topics/${newRef.id}/words`));
+                    batch.set(newWordRef, { ...wordDoc.data() });
+                });
+                await batch.commit();
+            }
+        }
+
+        // Delete original official document
+        await deleteDoc(sourceRef);
+
+    } else {
+        // SAME COLLECTION (exams, grammar_exercises): update in place
+        const ownerField = collectionName === 'exams' ? 'createdBy' : 'teacherId';
+
+        const updateData = {
+            [ownerField]: teacherUid,
+            createdByRole: 'teacher',
+            transferredAt: serverTimestamp(),
+            transferredToName: teacherName,
+            updatedAt: serverTimestamp()
+        };
+
+        if (collaboratorIds) updateData.collaboratorIds = deleteField();
+        if (collaboratorNames) updateData.collaboratorNames = deleteField();
+        if (collaboratorRoles) updateData.collaboratorRoles = deleteField();
+
+        await updateDoc(sourceRef, updateData);
+    }
+
+    return { teacherUid, teacherName };
 }

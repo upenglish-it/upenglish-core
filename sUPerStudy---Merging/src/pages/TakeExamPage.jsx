@@ -1,14 +1,26 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { getExam, getExamQuestions, getExamSubmission, saveExamSubmission, gradeExamSubmission, getExamAssignment, uploadAudioAnswer } from '../services/examService';
+import { saveAudioToCache, removeAudioFromCache, retryPendingUploads, clearAllForSubmission } from '../services/audioOfflineService';
 import { useAuth } from '../contexts/AuthContext';
-import { Clock, ChevronRight, ChevronLeft, Send, AlertTriangle, Check } from 'lucide-react';
-import { evaluateAudioAnswer } from '../services/aiService';
+import { Clock, ChevronRight, ChevronLeft, Send, AlertTriangle, Check, BookOpen, X } from 'lucide-react';
+
 import './TakeExamPage.css';
 import ConfirmModal from '../components/common/ConfirmModal';
 import { renderFormattedText } from '../utils/textFormatting';
 import { OptionContent, isImageOption } from '../components/common/MCQImageOption';
 import { useAntiCopy } from '../hooks/useAntiCopy';
+
+// Decode HTML entities (&#39; → ', &amp; → &, &nbsp; → space, etc.) and strip HTML tags
+const decodeHtmlEntities = (str) => {
+    if (!str) return '';
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = str;
+    return textarea.value
+        .replace(/<[^>]*>/g, '')   // strip HTML tags (e.g. <strong> from Quill)
+        .replace(/\u00a0/g, ' '); // non-breaking space → regular space
+};
+
 const hasContent = (html) => {
     if (!html) return false;
     const stripped = html.replace(/<[^>]*>/g, '').trim();
@@ -34,13 +46,15 @@ const sanitizeHtml = (html, isFillInBlank = false) => {
     if (!html) return '';
     let cleaned = html.replace(/&nbsp;/g, ' ').replace(/<p><\/p>/g, '');
     if (isFillInBlank) {
+        // Convert structural HTML to <br> for line breaks, but keep formatting tags (bold, italic, etc.)
         cleaned = cleaned
-            .replace(/<p><br><\/p>/gi, '\n')
-            .replace(/<\/p>/gi, '\n')
-            .replace(/<\/div>/gi, '\n')
-            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<p><br><\/p>/gi, '<br>')
+            .replace(/<\/p>/gi, '<br>')
+            .replace(/<\/div>/gi, '<br>')
             .replace(/<p[^>]*>/gi, '')
             .replace(/<div[^>]*>/gi, '');
+        // Remove trailing <br> tags
+        cleaned = cleaned.replace(/(<br\s*\/?\s*>)+$/gi, '');
     }
     return cleaned.trim();
 };
@@ -75,6 +89,9 @@ export default function TakeExamPage() {
     const [confirmSubmitSection, setConfirmSubmitSection] = useState(false);
     const [confirmSubmitAll, setConfirmSubmitAll] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [submitStatus, setSubmitStatus] = useState(''); // Dynamic status message for overlay
+    const submitCalledRef = useRef(false); // Guard against multiple simultaneous auto-submit calls
+    const submissionRef = useRef(null); // Mirrors submission.id for use in unmount cleanup
     const [assignment, setAssignment] = useState(null);
     const [globalTimeLeft, setGlobalTimeLeft] = useState(null);
     const [infoModal, setInfoModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
@@ -93,6 +110,21 @@ export default function TakeExamPage() {
     const [questionExpired, setQuestionExpired] = useState({}); // { questionId: true }
     const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
 
+    // Refs that always hold latest timer values (for use in closures like beforeunload/visibilitychange)
+    const sectionTimersLatest = useRef(sectionTimers);
+    const sectionExpiredLatest = useRef(sectionExpired);
+    const questionTimersLatest = useRef(questionTimers);
+    const questionExpiredLatest = useRef(questionExpired);
+    const currentSectionIdxRef = useRef(0);
+    const currentQuestionIdxRef = useRef(0);
+    useEffect(() => { sectionTimersLatest.current = sectionTimers; }, [sectionTimers]);
+    useEffect(() => { sectionExpiredLatest.current = sectionExpired; }, [sectionExpired]);
+    useEffect(() => { questionTimersLatest.current = questionTimers; }, [questionTimers]);
+    useEffect(() => { questionExpiredLatest.current = questionExpired; }, [questionExpired]);
+    useEffect(() => { currentSectionIdxRef.current = currentSectionIdx; }, [currentSectionIdx]);
+    useEffect(() => { currentQuestionIdxRef.current = currentQuestionIdx; }, [currentQuestionIdx]);
+    useEffect(() => { submissionRef.current = submission?.id || null; }, [submission?.id]);
+
     // Toast for auto-advance notifications
     const [toastMessage, setToastMessage] = useState(null);
     const toastTimerRef = useRef(null);
@@ -103,7 +135,11 @@ export default function TakeExamPage() {
     const examAudioChunksRef = useRef({}); // { questionId: [] }
     const audioProcessingRef = useRef({}); // { questionId: Promise } — tracks in-flight audio processing
     const [recordingQuestionId, setRecordingQuestionId] = useState(null);
-    const [gradingAudioQuestionId, setGradingAudioQuestionId] = useState(null);
+    const recordingQuestionIdRef = useRef(null); // Mirrors state for use in closures (visibilitychange)
+    useEffect(() => { recordingQuestionIdRef.current = recordingQuestionId; }, [recordingQuestionId]);
+    const [uploadingAudioQuestionId, setUploadingAudioQuestionId] = useState(null);
+
+
 
     // Tab switch detection
     const tabSwitchCountRef = useRef(0);
@@ -116,6 +152,50 @@ export default function TakeExamPage() {
         const timer = setTimeout(() => setTabWarningVisible(false), 5000);
         return () => clearTimeout(timer);
     }, [tabWarningVisible]);
+
+    // Sticky context panel state
+    const [contextPanelOpen, setContextPanelOpen] = useState(false);
+    const [showContextFab, setShowContextFab] = useState(false);
+    const contextSectionRef = useRef(null);
+
+    // Floating mini timer: visible when topbar scrolls out of view (e.g. mobile keyboard open)
+    const topbarRef = useRef(null);
+    const [showFloatingTimer, setShowFloatingTimer] = useState(false);
+
+    useEffect(() => {
+        const el = topbarRef.current;
+        if (!el) return;
+        const observer = new IntersectionObserver(
+            ([entry]) => setShowFloatingTimer(!entry.isIntersecting),
+            { threshold: 0 }
+        );
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [exam]);
+
+    // Show FAB when user scrolls past the original context section
+    useEffect(() => {
+        const sectionHasContext = hasContent(exam?.sections?.[currentSectionIdx]?.context) || !!exam?.sections?.[currentSectionIdx]?.contextAudioUrl;
+        if (!sectionHasContext) { setShowContextFab(false); return; }
+
+        const checkVisibility = () => {
+            const el = contextSectionRef.current;
+            if (!el) return;
+            // Show FAB when the bottom of the context element scrolls above the topbar (~80px)
+            const rect = el.getBoundingClientRect();
+            setShowContextFab(rect.bottom < 80);
+        };
+
+        window.addEventListener('scroll', checkVisibility, { passive: true });
+        checkVisibility();
+
+        return () => window.removeEventListener('scroll', checkVisibility);
+    }, [currentSectionIdx, exam?.sections]);
+
+    // Close context panel when switching sections
+    useEffect(() => {
+        setContextPanelOpen(false);
+    }, [currentSectionIdx]);
 
     const currentSectionSafeContext = exam?.sections?.[currentSectionIdx]?.context;
     const parsedContext = useMemo(() => {
@@ -130,6 +210,11 @@ export default function TakeExamPage() {
             if (sectionTimerRef.current) clearInterval(sectionTimerRef.current);
             if (questionTimerRef.current) clearInterval(questionTimerRef.current);
             if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+            if (periodicTimerSaveRef.current) clearInterval(periodicTimerSaveRef.current);
+            // Save timers on component unmount (covers SPA navigation where beforeunload won't fire)
+            if (submissionRef.current) {
+                saveExamSubmission({ id: submissionRef.current, answers: answersRef.current, sectionTimers: sectionTimersLatest.current, sectionExpired: sectionExpiredLatest.current, questionTimers: questionTimersLatest.current, questionExpired: questionExpiredLatest.current, timersSavedAt: new Date().toISOString(), lastActiveSectionIdx: currentSectionIdxRef.current, lastActiveQuestionIdx: currentQuestionIdxRef.current }).catch(() => {});
+            }
         };
     }, []);
 
@@ -156,13 +241,30 @@ export default function TakeExamPage() {
                 : (assignmentData?.dueDate ? (assignmentData.dueDate.toDate ? assignmentData.dueDate.toDate() : new Date(assignmentData.dueDate)) : null);
             if (dueDate && dueDate < now) {
                 if (sub && sub.status === 'in_progress') {
+                    // Retry pending audio uploads from IndexedDB before force-submitting
+                    let finalAnswers = { ...(sub.answers || {}) };
+                    try {
+                        await retryPendingUploads(sub.id, uploadAudioAnswer, (questionId, audioUrl) => {
+                            const q = questionsData.find(qd => qd.id === questionId);
+                            const sectionId = q?.sectionId;
+                            if (sectionId) {
+                                finalAnswers = {
+                                    ...finalAnswers,
+                                    [sectionId]: {
+                                        ...(finalAnswers[sectionId] || {}),
+                                        [questionId]: { answer: { audioUrl, hasRecording: true }, submittedAt: new Date().toISOString() }
+                                    }
+                                };
+                            }
+                        });
+                    } catch (e) { console.warn('[AudioOffline] Retry on deadline submit:', e); }
                     // Force submit existing work
                     await saveExamSubmission({
-                        id: sub.id, answers: sub.answers || {},
+                        id: sub.id, answers: finalAnswers,
                         status: 'submitted',
                         submittedAt: new Date().toISOString()
                     });
-                    gradeExamSubmission(sub.id, { ...sub, answers: sub.answers || {} }, questionsData, examData?.sections || [], assignmentData?.teacherTitle || '', assignmentData?.studentTitle || '').catch(e => console.error(e));
+                    gradeExamSubmission(sub.id, { ...sub, answers: finalAnswers }, questionsData, examData?.sections || [], assignmentData?.teacherTitle || '', assignmentData?.studentTitle || '').catch(e => console.error(e));
                     setLoading(false);
                     setInfoModal({
                         isOpen: true,
@@ -177,7 +279,7 @@ export default function TakeExamPage() {
                 setInfoModal({
                     isOpen: true,
                     title: 'Hết hạn',
-                    message: 'Rất tiếc, bài tập và kiểm tra này đã hết hạn!',
+                    message: `Rất tiếc, ${examData?.examType === 'test' ? 'bài kiểm tra' : 'bài tập'} này đã hết hạn!`,
                     onConfirm: () => navigate(-1)
                 });
                 return;
@@ -190,13 +292,30 @@ export default function TakeExamPage() {
                     const endTime = sub.examEndTime?.toDate ? sub.examEndTime.toDate() : new Date(sub.examEndTime);
                     if (endTime <= now) {
                         // Time has expired — force submit client-side (in case Cloud Function hasn't run yet)
+                        // Retry pending audio uploads from IndexedDB first
+                        let finalAnswers = { ...(sub.answers || {}) };
+                        try {
+                            await retryPendingUploads(sub.id, uploadAudioAnswer, (questionId, audioUrl) => {
+                                const q = questionsData.find(qd => qd.id === questionId);
+                                const sectionId = q?.sectionId;
+                                if (sectionId) {
+                                    finalAnswers = {
+                                        ...finalAnswers,
+                                        [sectionId]: {
+                                            ...(finalAnswers[sectionId] || {}),
+                                            [questionId]: { answer: { audioUrl, hasRecording: true }, submittedAt: new Date().toISOString() }
+                                        }
+                                    };
+                                }
+                            });
+                        } catch (e) { console.warn('[AudioOffline] Retry on time-expired submit:', e); }
                         await saveExamSubmission({
-                            id: sub.id, answers: sub.answers || {},
+                            id: sub.id, answers: finalAnswers,
                             status: 'submitted',
                             submittedAt: new Date().toISOString(),
                             autoSubmitted: true
                         });
-                        gradeExamSubmission(sub.id, { ...sub, answers: sub.answers || {} }, questionsData, examData?.sections || [], assignmentData?.teacherTitle || '', assignmentData?.studentTitle || '').catch(e => console.error('Auto-grade failed:', e));
+                        gradeExamSubmission(sub.id, { ...sub, answers: finalAnswers }, questionsData, examData?.sections || [], assignmentData?.teacherTitle || '', assignmentData?.studentTitle || '').catch(e => console.error('Auto-grade failed:', e));
                         setLoading(false);
                         setInfoModal({
                             isOpen: true,
@@ -220,6 +339,28 @@ export default function TakeExamPage() {
                 // Restore tab switch count from saved submission
                 tabSwitchCountRef.current = sub.tabSwitchCount || 0;
 
+                // Retry any pending audio uploads from previous session — AWAIT to ensure audio is recovered
+                try {
+                    const retryCount = await retryPendingUploads(sub.id, uploadAudioAnswer, async (questionId, audioUrl) => {
+                        // Find which section this question belongs to
+                        const q = questionsData.find(qd => qd.id === questionId);
+                        const sectionId = q?.sectionId;
+                        if (sectionId) {
+                            const updated = {
+                                ...answersRef.current,
+                                [sectionId]: {
+                                    ...(answersRef.current[sectionId] || {}),
+                                    [questionId]: { answer: { audioUrl, hasRecording: true }, submittedAt: new Date().toISOString() }
+                                }
+                            };
+                            answersRef.current = updated;
+                            setAnswers(updated);
+                            await saveExamSubmission({ id: sub.id, answers: updated });
+                        }
+                    });
+                    if (retryCount > 0) console.log(`[AudioOffline] Retried ${retryCount} pending audio upload(s)`);
+                } catch (e) { console.warn('[AudioOffline] Retry on resume failed:', e); }
+
                 // Timer — compute remaining time from examEndTime
                 const timingMode = examData.timingMode || 'exam';
                 if (timingMode === 'exam') {
@@ -242,6 +383,11 @@ export default function TakeExamPage() {
                     const savedSTimers = sub.sectionTimers || {};
                     const savedSExpired = sub.sectionExpired || {};
                     const sections = examData.sections || [];
+                    // Compute elapsed time since last save to deduct from active section
+                    const savedAt = sub.timersSavedAt ? new Date(sub.timersSavedAt) : null;
+                    const elapsedSinceSave = savedAt ? Math.max(0, Math.floor((new Date() - savedAt) / 1000)) : 0;
+                    const lastActiveIdx = sub.lastActiveSectionIdx ?? 0;
+                    const activeSectionId = sections[lastActiveIdx]?.id;
                     const initTimers = {};
                     const initExpired = {};
                     sections.forEach(s => {
@@ -249,17 +395,44 @@ export default function TakeExamPage() {
                             initExpired[s.id] = true;
                             initTimers[s.id] = 0;
                         } else if (savedSTimers[s.id] !== undefined) {
-                            initTimers[s.id] = savedSTimers[s.id];
+                            // Deduct elapsed time only from the section that was active when saved
+                            const deduction = (s.id === activeSectionId) ? elapsedSinceSave : 0;
+                            const remaining = Math.max(0, savedSTimers[s.id] - deduction);
+                            initTimers[s.id] = remaining;
+                            if (remaining <= 0) initExpired[s.id] = true;
                         } else {
                             initTimers[s.id] = (s.timeLimitMinutes || 10) * 60;
                         }
                     });
                     setSectionTimers(initTimers);
                     setSectionExpired(initExpired);
+                    // Navigate to first section with time remaining AND unanswered questions
+                    const savedAnswers = sub.answers || {};
+                    let bestSectionIdx = lastActiveIdx; // fallback
+                    for (let i = 0; i < sections.length; i++) {
+                        const s = sections[i];
+                        if (initExpired[s.id]) continue; // no time left
+                        if (initTimers[s.id] <= 0) continue;
+                        const sectionQs = questionsData.filter(q => q.sectionId === s.id);
+                        const sectionAnswers = savedAnswers[s.id] || {};
+                        const hasUnanswered = sectionQs.some(q => !sectionAnswers[q.id]);
+                        if (hasUnanswered) { bestSectionIdx = i; break; }
+                    }
+                    if (bestSectionIdx >= 0 && bestSectionIdx < sections.length) {
+                        setCurrentSectionIdx(bestSectionIdx);
+                    }
                 } else if (timingMode === 'question') {
                     // Restore question timers from submission or initialize
                     const savedQTimers = sub.questionTimers || {};
                     const savedQExpired = sub.questionExpired || {};
+                    // Compute elapsed time since last save to deduct from active question
+                    const savedAt = sub.timersSavedAt ? new Date(sub.timersSavedAt) : null;
+                    const elapsedSinceSave = savedAt ? Math.max(0, Math.floor((new Date() - savedAt) / 1000)) : 0;
+                    const lastActiveSIdx = sub.lastActiveSectionIdx ?? 0;
+                    const lastActiveQIdx = sub.lastActiveQuestionIdx ?? 0;
+                    const sections = examData.sections || [];
+                    const activeSectionQs = questionsData.filter(q => q.sectionId === sections[lastActiveSIdx]?.id).sort((a, b) => (a.order || 0) - (b.order || 0));
+                    const activeQuestionId = activeSectionQs[lastActiveQIdx]?.id;
                     const initTimers = {};
                     const initExpired = {};
                     questionsData.forEach(q => {
@@ -267,13 +440,36 @@ export default function TakeExamPage() {
                             initExpired[q.id] = true;
                             initTimers[q.id] = 0;
                         } else if (savedQTimers[q.id] !== undefined) {
-                            initTimers[q.id] = savedQTimers[q.id];
+                            // Deduct elapsed time only from the question that was active when saved
+                            const deduction = (q.id === activeQuestionId) ? elapsedSinceSave : 0;
+                            const remaining = Math.max(0, savedQTimers[q.id] - deduction);
+                            initTimers[q.id] = remaining;
+                            if (remaining <= 0) initExpired[q.id] = true;
                         } else {
                             initTimers[q.id] = q.timeLimitSeconds || 60;
                         }
                     });
                     setQuestionTimers(initTimers);
                     setQuestionExpired(initExpired);
+                    // Navigate to first section with time + unanswered questions
+                    const savedAnswers = sub.answers || {};
+                    let bestSIdx = lastActiveSIdx;
+                    let bestQIdx = lastActiveQIdx;
+                    let found = false;
+                    for (let si = 0; si < sections.length && !found; si++) {
+                        const s = sections[si];
+                        const sectionQs = questionsData.filter(q => q.sectionId === s.id).sort((a, b) => (a.order || 0) - (b.order || 0));
+                        const sectionAnswers = savedAnswers[s.id] || {};
+                        for (let qi = 0; qi < sectionQs.length; qi++) {
+                            const q = sectionQs[qi];
+                            if (initExpired[q.id] || initTimers[q.id] <= 0) continue;
+                            if (!sectionAnswers[q.id]) { bestSIdx = si; bestQIdx = qi; found = true; break; }
+                        }
+                    }
+                    if (bestSIdx >= 0 && bestSIdx < sections.length) {
+                        setCurrentSectionIdx(bestSIdx);
+                    }
+                    setCurrentQuestionIdx(bestQIdx >= 0 ? bestQIdx : 0);
                 }
 
                 // Absolute deadline timer
@@ -296,14 +492,14 @@ export default function TakeExamPage() {
     useEffect(() => {
         if (globalTimeLeft === null) return;
         if (globalTimeLeft <= 0) {
-            handleSubmitAll(true);
+            setTimeout(() => handleSubmitAll(true), 500);
             return;
         }
         globalTimerRef.current = setInterval(() => {
             setGlobalTimeLeft(prev => {
                 if (prev <= 1) {
                     clearInterval(globalTimerRef.current);
-                    handleSubmitAll(true);
+                    setTimeout(() => handleSubmitAll(true), 500);
                     return 0;
                 }
                 return prev - 1;
@@ -316,14 +512,14 @@ export default function TakeExamPage() {
     useEffect(() => {
         if (timeLeft === null) return;
         if (timeLeft <= 0) {
-            handleSubmitAll(true);
+            setTimeout(() => handleSubmitAll(true), 500);
             return;
         }
         timerRef.current = setInterval(() => {
             setTimeLeft(prev => {
                 if (prev <= 1) {
                     clearInterval(timerRef.current);
-                    handleSubmitAll(true);
+                    setTimeout(() => handleSubmitAll(true), 500);
                     return 0;
                 }
                 return prev - 1;
@@ -347,18 +543,28 @@ export default function TakeExamPage() {
         if (!currentSid || sectionExpired[currentSid]) return;
         if (sectionTimers[currentSid] === undefined) return;
         if (sectionTimers[currentSid] <= 0) {
-            // Section just expired
+            // Section just expired — stop any active recording in this section
+            if (recordingQuestionId && examMediaRecordersRef.current[recordingQuestionId]) {
+                const sectionQIds = new Set(questions.filter(q => q.sectionId === currentSid).map(q => q.id));
+                if (sectionQIds.has(recordingQuestionId)) {
+                    const activeRecorder = examMediaRecordersRef.current[recordingQuestionId];
+                    if (activeRecorder.state === 'recording' || activeRecorder.state === 'paused') {
+                        activeRecorder.stop(); // triggers onstop → upload + save answer
+                        setRecordingQuestionId(null);
+                    }
+                }
+            }
             setSectionExpired(prev => ({ ...prev, [currentSid]: true }));
             // Auto-advance
             const sections = exam.sections || [];
             const nextIdx = sections.findIndex((s, i) => i > currentSectionIdx && !sectionExpired[s.id]);
             if (nextIdx >= 0) {
-                showToast(`⏰ Hết giờ section "${sections[currentSectionIdx]?.title}"! Chuyển sang section tiếp theo.`);
+
                 setCurrentSectionIdx(nextIdx);
                 window.scrollTo(0, 0);
             } else {
-                // All sections expired → auto submit
-                handleSubmitAll(true);
+                // All sections expired → auto submit (delay to let onstop fire for any stopped recorder)
+                setTimeout(() => handleSubmitAll(true), 500);
             }
             return;
         }
@@ -389,7 +595,14 @@ export default function TakeExamPage() {
         if (questionExpired[qId]) return;
         if (questionTimers[qId] === undefined) return;
         if (questionTimers[qId] <= 0) {
-            // Question just expired
+            // Question just expired — stop recording if active for this question
+            if (recordingQuestionId === qId && examMediaRecordersRef.current[qId]) {
+                const activeRecorder = examMediaRecordersRef.current[qId];
+                if (activeRecorder.state === 'recording' || activeRecorder.state === 'paused') {
+                    activeRecorder.stop(); // triggers onstop → upload + save answer
+                    setRecordingQuestionId(null);
+                }
+            }
             setQuestionExpired(prev => ({ ...prev, [qId]: true }));
             // Auto-advance to next non-expired question
             let nextQIdx = -1;
@@ -397,7 +610,7 @@ export default function TakeExamPage() {
                 if (!questionExpired[sqQuestions[i].id]) { nextQIdx = i; break; }
             }
             if (nextQIdx >= 0) {
-                showToast(`⏰ Hết giờ câu ${currentQuestionIdx + 1}! Chuyển sang câu tiếp theo.`);
+
                 setCurrentQuestionIdx(nextQIdx);
                 window.scrollTo(0, 0);
             } else {
@@ -407,7 +620,7 @@ export default function TakeExamPage() {
                     const nextSQ = questions.filter(q => q.sectionId === sections[si].id).sort((a, b) => (a.order || 0) - (b.order || 0));
                     const nextAvailQ = nextSQ.findIndex(q => !questionExpired[q.id]);
                     if (nextAvailQ >= 0) {
-                        showToast(`⏰ Hết giờ! Chuyển sang section tiếp theo.`);
+
                         setCurrentSectionIdx(si);
                         setCurrentQuestionIdx(nextAvailQ);
                         window.scrollTo(0, 0);
@@ -415,7 +628,7 @@ export default function TakeExamPage() {
                         break;
                     }
                 }
-                if (!found) handleSubmitAll(true);
+                if (!found) setTimeout(() => handleSubmitAll(true), 500); // delay to let onstop fire for any stopped recorder
             }
             return;
         }
@@ -439,7 +652,19 @@ export default function TakeExamPage() {
             // Filter out orphan questions not belonging to any active section
             const validSectionIds = new Set((exam.sections || []).map(s => s.id));
             const validQuestions = questions.filter(q => q.sectionId && validSectionIds.has(q.sectionId));
+            // Simple hash function for per-student variation selection
+            function simpleHash(str) {
+                let hash = 0;
+                for (let i = 0; i < str.length; i++) {
+                    const char = str.charCodeAt(i);
+                    hash = ((hash << 5) - hash) + char;
+                    hash |= 0; // Convert to 32bit integer
+                }
+                return Math.abs(hash);
+            }
+
             const variationMap = {};
+            const studentId = user?.uid || '';
             validQuestions.forEach(q => {
                 // Only pick from valid (non-empty) variations
                 const validIndices = (q.variations || []).map((v, i) => i).filter(i => {
@@ -452,8 +677,12 @@ export default function TakeExamPage() {
                     const hasItems = Array.isArray(v.items) && v.items.length > 0;
                     return hasText || hasOptions || hasPairs || hasItems;
                 });
-                if (validIndices.length > 0) {
-                    variationMap[q.id] = validIndices[variationSeed % validIndices.length];
+                if (validIndices.length > 1) {
+                    // Multiple variations: use student-specific hash for unique selection per student
+                    const perStudentHash = simpleHash(studentId + ':' + q.id);
+                    variationMap[q.id] = validIndices[perStudentHash % validIndices.length];
+                } else if (validIndices.length === 1) {
+                    variationMap[q.id] = validIndices[0];
                 } else {
                     variationMap[q.id] = 0; // fallback to first
                 }
@@ -471,6 +700,22 @@ export default function TakeExamPage() {
             }
             const examEndTime = new Date(startedAtDate.getTime() + totalSeconds * 1000);
 
+            // Build initial timer data to persist immediately
+            const initialTimerData = {};
+            if (timingMode === 'section') {
+                const initST = {};
+                (exam.sections || []).forEach(s => { initST[s.id] = (s.timeLimitMinutes || 10) * 60; });
+                initialTimerData.sectionTimers = initST;
+                initialTimerData.sectionExpired = {};
+                initialTimerData.lastActiveSectionIdx = 0;
+            } else if (timingMode === 'question') {
+                const initQT = {};
+                validQuestions.forEach(q => { initQT[q.id] = q.timeLimitSeconds || 60; });
+                initialTimerData.questionTimers = initQT;
+                initialTimerData.questionExpired = {};
+                initialTimerData.lastActiveSectionIdx = 0;
+                initialTimerData.lastActiveQuestionIdx = 0;
+            }
             const newSubId = await saveExamSubmission({
                 examId, assignmentId, studentId: user?.uid,
                 status: 'in_progress',
@@ -479,7 +724,9 @@ export default function TakeExamPage() {
                 variationMap,
                 answers: {},
                 results: {},
-                totalScore: null, maxTotalScore: null
+                totalScore: null, maxTotalScore: null,
+                timersSavedAt: startedAtDate.toISOString(),
+                ...initialTimerData
             });
             const sub = { id: newSubId, status: 'in_progress', variationMap, answers: {}, startedAt: new Date().toISOString() };
             setSubmission(sub);
@@ -510,7 +757,7 @@ export default function TakeExamPage() {
             setInfoModal({
                 isOpen: true,
                 title: '❌ Có lỗi xảy ra',
-                message: 'Không thể bắt đầu bài tập và kiểm tra. Vui lòng thử lại.',
+                message: `Không thể bắt đầu ${exam?.examType === 'test' ? 'bài kiểm tra' : 'bài tập'}. Vui lòng thử lại.`,
                 onConfirm: null
             });
         }
@@ -537,29 +784,51 @@ export default function TakeExamPage() {
         setAnswers(updated);
     }
 
-    // Auto-save: debounced 3s after each answer change + periodic backup every 30s
+    // Auto-save: debounced 5s after each answer change (onBlur + visibilitychange handle immediate saves)
     const autoSaveTimerRef = useRef(null);
     useEffect(() => {
         if (!submission?.id) return;
-        // Debounced save: 3 seconds after last answer change
+        // Debounced save: 5 seconds after last answer change
         if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
         autoSaveTimerRef.current = setTimeout(async () => {
             try {
-                await saveExamSubmission({ id: submission.id, answers: answersRef.current, sectionTimers, sectionExpired, questionTimers, questionExpired });
+                await saveExamSubmission({ id: submission.id, answers: answersRef.current, sectionTimers, sectionExpired, questionTimers, questionExpired, timersSavedAt: new Date().toISOString(), lastActiveSectionIdx: currentSectionIdxRef.current, lastActiveQuestionIdx: currentQuestionIdxRef.current });
             } catch (e) { console.error('Auto-save failed:', e); }
-        }, 3000);
+        }, 5000);
         return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
     }, [answers, submission?.id]);
+
+    // Periodic timer auto-save every 30s (independent of answer changes)
+    const periodicTimerSaveRef = useRef(null);
+    useEffect(() => {
+        if (!submission?.id) return;
+        const timingMode = exam?.timingMode || 'exam';
+        if (timingMode === 'exam') return; // exam mode uses absolute examEndTime, no need
+        periodicTimerSaveRef.current = setInterval(() => {
+            saveExamSubmission({ id: submission.id, sectionTimers: sectionTimersLatest.current, sectionExpired: sectionExpiredLatest.current, questionTimers: questionTimersLatest.current, questionExpired: questionExpiredLatest.current, timersSavedAt: new Date().toISOString(), lastActiveSectionIdx: currentSectionIdxRef.current, lastActiveQuestionIdx: currentQuestionIdxRef.current }).catch(() => {});
+        }, 30000);
+        return () => { if (periodicTimerSaveRef.current) clearInterval(periodicTimerSaveRef.current); };
+    }, [submission?.id, exam?.timingMode]);
 
     // Save answers on page unload (tab close / navigate away)
     useEffect(() => {
         if (!submission?.id) return;
         const handleBeforeUnload = () => {
-            // Use sendBeacon for reliable save on unload (navigator.sendBeacon is fire-and-forget)
-            // Fallback: synchronous save via answersRef
+            // Stop any active recording so the blob is captured to IndexedDB before page unloads
+            try {
+                const activeQId = recordingQuestionIdRef.current;
+                if (activeQId && examMediaRecordersRef.current[activeQId]) {
+                    const recorder = examMediaRecordersRef.current[activeQId];
+                    if (recorder.state === 'recording' || recorder.state === 'paused') {
+                        recorder.stop(); // triggers onstop → blob → IndexedDB cache
+                        recordingQuestionIdRef.current = null;
+                    }
+                }
+            } catch (_) { /* ignore */ }
+            // Firestore offline persistence queues this write to local IndexedDB even if tab is killed
             try {
                 const isTest = exam?.examType === 'test';
-                saveExamSubmission({ id: submission.id, answers: answersRef.current, sectionTimers, sectionExpired, questionTimers, questionExpired, ...(isTest ? { tabSwitchCount: tabSwitchCountRef.current } : {}) })
+                saveExamSubmission({ id: submission.id, answers: answersRef.current, sectionTimers: sectionTimersLatest.current, sectionExpired: sectionExpiredLatest.current, questionTimers: questionTimersLatest.current, questionExpired: questionExpiredLatest.current, timersSavedAt: new Date().toISOString(), lastActiveSectionIdx: currentSectionIdxRef.current, lastActiveQuestionIdx: currentQuestionIdxRef.current, ...(isTest ? { tabSwitchCount: tabSwitchCountRef.current } : {}) })
                     .catch(() => {});
             } catch (e) { /* ignore */ }
         };
@@ -568,9 +837,19 @@ export default function TakeExamPage() {
         const isTest = exam?.examType === 'test';
         const handleVisibilityChange = () => {
             if (document.visibilityState === 'hidden' && submission?.id) {
+                // Auto-stop any active recording before the OS kills the MediaRecorder
+                const activeQId = recordingQuestionIdRef.current;
+                if (activeQId && examMediaRecordersRef.current[activeQId]) {
+                    const recorder = examMediaRecordersRef.current[activeQId];
+                    if (recorder.state === 'recording' || recorder.state === 'paused') {
+                        recorder.stop(); // triggers onstop → blob → IndexedDB cache → upload
+                        setRecordingQuestionId(null);
+                        recordingQuestionIdRef.current = null;
+                    }
+                }
                 // Increment tab switch count (only for tests)
                 if (isTest) tabSwitchCountRef.current += 1;
-                saveExamSubmission({ id: submission.id, answers: answersRef.current, sectionTimers, sectionExpired, questionTimers, questionExpired, ...(isTest ? { tabSwitchCount: tabSwitchCountRef.current } : {}) })
+                saveExamSubmission({ id: submission.id, answers: answersRef.current, sectionTimers: sectionTimersLatest.current, sectionExpired: sectionExpiredLatest.current, questionTimers: questionTimersLatest.current, questionExpired: questionExpiredLatest.current, timersSavedAt: new Date().toISOString(), lastActiveSectionIdx: currentSectionIdxRef.current, lastActiveQuestionIdx: currentQuestionIdxRef.current, ...(isTest ? { tabSwitchCount: tabSwitchCountRef.current } : {}) })
                     .catch(() => {});
             } else if (document.visibilityState === 'visible' && submission?.id && isTest) {
                 // Show warning banner once after 2+ switches (tests only)
@@ -587,48 +866,137 @@ export default function TakeExamPage() {
         };
     }, [submission?.id]);
 
+    // Helper: stop any active recording so audio is captured before navigating away
+    async function stopActiveRecording() {
+        const activeQId = recordingQuestionIdRef.current; // Use ref, not state (state may be stale)
+        if (activeQId && examMediaRecordersRef.current[activeQId]) {
+            const activeRecorder = examMediaRecordersRef.current[activeQId];
+            if (activeRecorder.state === 'recording' || activeRecorder.state === 'paused') {
+                activeRecorder.stop(); // triggers onstop → upload + save answer
+                setRecordingQuestionId(null);
+                recordingQuestionIdRef.current = null;
+                // Give onstop a moment to fire and register the processing promise
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
+    }
+
     async function handleNextSection() {
+        await stopActiveRecording();
+        const totalSections = (exam?.sections || []).length;
+        const nextIdx = Math.min(currentSectionIdx + 1, totalSections - 1);
         try {
-            await saveExamSubmission({ id: submission.id, answers, sectionTimers, sectionExpired, questionTimers, questionExpired });
+            await saveExamSubmission({ id: submission.id, answers, sectionTimers, sectionExpired, questionTimers, questionExpired, timersSavedAt: new Date().toISOString(), lastActiveSectionIdx: nextIdx, lastActiveQuestionIdx: 0 });
         } catch (e) { console.error(e); }
-        setCurrentSectionIdx(prev => prev + 1);
+        setCurrentSectionIdx(nextIdx);
         if ((exam.timingMode || 'exam') === 'question') setCurrentQuestionIdx(0);
         setConfirmSubmitSection(false);
         window.scrollTo(0, 0);
     }
 
     async function handleSubmitAll(forced = false) {
+        // Guard: prevent multiple simultaneous calls from different timers
+        if (submitCalledRef.current) return;
+        submitCalledRef.current = true;
         setSubmitting(true);
         try {
-            // If a recording is currently active, stop it so the audio is captured before submit
-            if (recordingQuestionId && examMediaRecordersRef.current[recordingQuestionId]) {
-                const activeRecorder = examMediaRecordersRef.current[recordingQuestionId];
-                if (activeRecorder.state === 'recording' || activeRecorder.state === 'paused') {
-                    activeRecorder.stop(); // triggers onstop → starts processing promise
-                    setRecordingQuestionId(null);
-                    // Give onstop a moment to fire and register the processing promise
-                    await new Promise(resolve => setTimeout(resolve, 300));
-                }
-            }
+            setSubmitStatus('Đang xử lý bài ghi âm...');
+            await stopActiveRecording();
 
             // Wait for any in-flight audio processing to complete
             const pendingAudio = Object.values(audioProcessingRef.current);
             if (pendingAudio.length > 0) {
+                setSubmitStatus('Đang tải file thu âm lên...');
                 await Promise.allSettled(pendingAudio);
             }
+
+            // Retry loop: check for missing audioUrl and retry up to 3 times
+            const MAX_AUDIO_RETRIES = 3;
+            const RETRY_DELAY_MS = 5000;
+            for (let retry = 0; retry < MAX_AUDIO_RETRIES; retry++) {
+                // Scan all answers for hasRecording without audioUrl
+                const currentAnswers = answersRef.current;
+                let missingAudioCount = 0;
+                for (const sectionId of Object.keys(currentAnswers)) {
+                    for (const questionId of Object.keys(currentAnswers[sectionId])) {
+                        const ans = currentAnswers[sectionId][questionId];
+                        if (ans?.answer?.hasRecording && !ans?.answer?.audioUrl) {
+                            missingAudioCount++;
+                        }
+                    }
+                }
+
+                if (missingAudioCount === 0) break; // All audio uploaded successfully
+
+                console.log(`[AudioRetry] Attempt ${retry + 1}/${MAX_AUDIO_RETRIES}: ${missingAudioCount} audio(s) missing URL`);
+                setSubmitStatus(`Đang tải lại ${missingAudioCount} file thu âm... (lần ${retry + 1}/${MAX_AUDIO_RETRIES})`);
+
+                // Wait before retrying to give network time to recover
+                if (retry > 0) {
+                    await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+                }
+
+                // Retry from IndexedDB cache
+                if (submission?.id) {
+                    try {
+                        await retryPendingUploads(submission.id, uploadAudioAnswer, async (questionId, audioUrl) => {
+                            const q = questions.find(qd => qd.id === questionId);
+                            const sectionId = q?.sectionId;
+                            if (sectionId) {
+                                const updated = {
+                                    ...answersRef.current,
+                                    [sectionId]: {
+                                        ...(answersRef.current[sectionId] || {}),
+                                        [questionId]: { answer: { audioUrl, hasRecording: true }, submittedAt: new Date().toISOString() }
+                                    }
+                                };
+                                answersRef.current = updated;
+                            }
+                        });
+                    } catch (e) { console.warn(`[AudioOffline] Retry ${retry + 1} failed:`, e); }
+                }
+
+                // Also re-wait for any new in-flight uploads
+                const newPending = Object.values(audioProcessingRef.current);
+                if (newPending.length > 0) {
+                    await Promise.allSettled(newPending);
+                }
+            }
+
+            setSubmitStatus('Đang lưu bài...');
 
             // Use ref to get the freshest answers (state might be stale after await)
             const freshAnswers = answersRef.current;
 
-            await saveExamSubmission({
-                id: submission.id, answers: freshAnswers,
-                status: 'submitted',
-                submittedAt: new Date().toISOString()
-            });
-            // Trigger AI grading in background
-            gradeExamSubmission(submission.id, { ...submission, answers: freshAnswers }, questions, exam?.sections || [], assignment?.teacherTitle || '', assignment?.studentTitle || '')
-                .catch(e => console.error('Grading error:', e));
-            // Notify group teachers about submission
+            // Attempt to save with retry
+            let saved = false;
+            let lastError = null;
+            for (let attempt = 0; attempt < 3; attempt++) {
+                try {
+                    await saveExamSubmission({
+                        id: submission.id, answers: freshAnswers,
+                        status: 'submitted',
+                        submittedAt: new Date().toISOString()
+                    });
+                    saved = true;
+                    break;
+                } catch (err) {
+                    lastError = err;
+                    console.error(`Submit attempt ${attempt + 1} failed:`, err);
+                    if (attempt < 2) {
+                        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1))); // Wait 1s, 2s
+                    }
+                }
+            }
+
+            if (!saved) {
+                throw lastError || new Error('Không thể nộp bài sau 3 lần thử');
+            }
+
+            // Clean up IndexedDB audio cache after successful submission
+            clearAllForSubmission(submission.id).catch(() => {});
+
+            // Notify group teachers about submission (fire-and-forget, OK to lose)
             if (assignment?.targetType === 'group' && assignment?.targetId) {
                 import('../services/notificationService').then(({ createNotificationForGroupTeachers }) => {
                     createNotificationForGroupTeachers(assignment.targetId, {
@@ -638,30 +1006,45 @@ export default function TakeExamPage() {
                         link: `/teacher/exam-submissions/${assignmentId}`
                     }).catch(e => console.error('Notification error:', e));
                 }).catch(console.error);
+
+                // Check 50% milestone and notify teachers (fire-and-forget)
+                // Only run for teacher/admin — students lack Firestore permissions to query other submissions
+                if (user?.role === 'teacher' || user?.role === 'admin') {
+                    import('../services/examService').then(({ checkAndNotifyHalfSubmitted }) => {
+                        checkAndNotifyHalfSubmitted(assignmentId, assignment.targetId, exam?.name || 'Bài tập và Kiểm tra', exam?.examType || 'exercise')
+                            .catch(e => console.error('Half-submitted check error:', e));
+                    }).catch(console.error);
+                }
             }
 
-            if (forced) {
-                setInfoModal({
-                    isOpen: true,
-                    title: '⏰ Hết giờ!',
-                    message: 'Thời gian làm bài đã hết. Bài của bạn đã được tự động nộp.',
-                    onConfirm: () => navigate(`/exam-result?assignmentId=${assignmentId}&studentId=${user?.uid}`)
-                });
-            } else {
-                navigate(`/exam-result?assignmentId=${assignmentId}&studentId=${user?.uid}`);
-            }
+            setConfirmSubmitAll(false);
+
+            // AI grading — fire-and-forget (runs in background after navigation)
+            // React Router SPA navigation does NOT abort in-flight JS promises
+            gradeExamSubmission(submission.id, { ...submission, answers: freshAnswers }, questions, exam?.sections || [], assignment?.teacherTitle || '', assignment?.studentTitle || '')
+                .catch(gradeErr => console.error('Grading error:', gradeErr));
+
+            // Navigate to result page immediately — don't wait for grading
+            navigate(`/exam-result?assignmentId=${assignmentId}&studentId=${user?.uid}`);
         } catch (error) {
             console.error('Submit error:', error);
+            // Show error to user — do NOT close the confirm modal silently
+            setInfoModal({
+                isOpen: true,
+                title: '❌ Lỗi nộp bài',
+                message: 'Không thể nộp bài lúc này. Vui lòng kiểm tra kết nối mạng và thử lại. Bài làm của bạn vẫn được lưu tự động.',
+                onConfirm: null
+            });
         }
         setSubmitting(false);
-        setConfirmSubmitAll(false);
+        submitCalledRef.current = false;
     }
 
     if (loading) return (
-        <div className="exam-loading"><div className="exam-loading-spinner"></div><p>Đang tải bài tập và kiểm tra...</p></div>
+        <div className="exam-loading"><div className="exam-loading-spinner"></div><p>Đang tải bài...</p></div>
     );
     if (!exam) return (
-        <div className="exam-loading"><p>Không tìm thấy bài tập và kiểm tra.</p></div>
+        <div className="exam-loading"><p>Không tìm thấy bài.</p></div>
     );
     if (showStartPopup) {
         return (
@@ -703,6 +1086,18 @@ export default function TakeExamPage() {
                             <span style={{ fontSize: '0.95rem' }}>🔒</span>
                             <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1e293b' }}>Chỉ có 1 lần làm bài duy nhất</span>
                         </div>
+
+                        {exam.examType === 'test' && (
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '8px 12px', borderRadius: '10px', background: '#fff7ed', border: '1px dashed #fdba74' }}>
+                                <span style={{ fontSize: '0.95rem', flexShrink: 0, marginTop: '1px' }}>🔕</span>
+                                <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#9a3412', lineHeight: 1.4 }}>Hãy chuyển điện thoại sang <strong>chế độ im lặng</strong> — các thông báo có thể bị ghi nhận như bạn đã rời khỏi trang làm bài và làm tăng chỉ số cảnh báo gian lận</span>
+                            </div>
+                        )}
+
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '8px 12px', borderRadius: '10px', background: '#eff6ff', border: '1px dashed #93c5fd' }}>
+                            <span style={{ fontSize: '0.95rem', flexShrink: 0, marginTop: '1px' }}>📶</span>
+                            <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#1e40af', lineHeight: 1.4 }}>Đảm bảo bạn có <strong>kết nối mạng ổn định</strong> trước khi bắt đầu làm bài</span>
+                        </div>
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -732,7 +1127,13 @@ export default function TakeExamPage() {
 
     const sections = exam.sections || [];
     const timingMode = exam.timingMode || 'exam';
-    const currentSection = sections[currentSectionIdx];
+    // Safety clamp: prevent out-of-bounds section index
+    const safeSectionIdx = Math.min(currentSectionIdx, Math.max(sections.length - 1, 0));
+    if (safeSectionIdx !== currentSectionIdx && sections.length > 0) {
+        // Index went out of bounds (e.g. stale closure advanced past last section)
+        setCurrentSectionIdx(safeSectionIdx);
+    }
+    const currentSection = sections[safeSectionIdx];
     const sectionQuestions = questions.filter(q => q.sectionId === currentSection?.id).sort((a, b) => (a.order || 0) - (b.order || 0));
     const isLastSection = currentSectionIdx === sections.length - 1;
     const currentSectionAnswers = answers[currentSection?.id] || {};
@@ -776,6 +1177,39 @@ export default function TakeExamPage() {
 
     return (
         <div className="exam-page">
+            {/* Submission overlay — blocks all interaction while submitting */}
+            {submitting && (
+                <div style={{
+                    position: 'fixed', inset: 0, zIndex: 99999,
+                    background: 'rgba(15, 23, 42, 0.85)',
+                    backdropFilter: 'blur(8px)',
+                    display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center',
+                    gap: '20px', padding: '24px'
+                }}>
+                    <div style={{
+                        width: '64px', height: '64px',
+                        border: '4px solid rgba(255,255,255,0.15)',
+                        borderTopColor: '#818cf8',
+                        borderRadius: '50%',
+                        animation: 'spin 0.8s linear infinite'
+                    }} />
+                    <div style={{ textAlign: 'center' }}>
+                        <p style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 700, margin: '0 0 8px' }}>
+                            Đang nộp bài...
+                        </p>
+                        {submitStatus && (
+                            <p style={{ color: '#c4b5fd', fontSize: '0.85rem', fontWeight: 500, margin: '0 0 8px', lineHeight: 1.4 }}>
+                                {submitStatus}
+                            </p>
+                        )}
+                        <p style={{ color: '#fbbf24', fontSize: '0.9rem', fontWeight: 600, margin: 0, lineHeight: 1.5 }}>
+                            ⚠️ Vui lòng không tắt ứng dụng<br />hoặc chuyển sang trang khác
+                        </p>
+                    </div>
+                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                </div>
+            )}
             {/* Toast notification */}
             {toastMessage && (
                 <div style={{ position: 'fixed', top: '70px', left: '50%', transform: 'translateX(-50%)', zIndex: 10000, padding: '12px 24px', borderRadius: '16px', background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: '#fff', fontWeight: 700, fontSize: '0.9rem', boxShadow: '0 8px 24px rgba(0,0,0,0.2)', animation: 'fadeIn 0.3s ease', maxWidth: '90vw', textAlign: 'center' }}>
@@ -804,7 +1238,7 @@ export default function TakeExamPage() {
                 </div>
             )}
             {/* Top bar with timer */}
-            <div className="exam-topbar">
+            <div className="exam-topbar" ref={topbarRef}>
                 <div className="exam-topbar-left">
                     <span className="exam-title">
                         <span style={{ flexShrink: 0 }}>{exam.icon || '📋'}</span>
@@ -828,6 +1262,13 @@ export default function TakeExamPage() {
                 </div>
             </div>
 
+            {/* Floating mini timer — visible when topbar is scrolled out of view */}
+            {displayTimer !== null && (
+                <div className={`exam-floating-timer ${showFloatingTimer ? 'visible' : ''} ${displayTimer < (timingMode === 'question' ? 10 : 300) ? 'warning' : ''}`}>
+                    {formatTime(displayTimer)}
+                </div>
+            )}
+
             {/* Section header */}
             <div className="exam-section-header">
                 <h2>{currentSection?.title || `Section ${currentSectionIdx + 1}`}</h2>
@@ -838,10 +1279,12 @@ export default function TakeExamPage() {
 
             {/* Context */}
             {hasContent(currentSection?.context) && (
-                <MemoizedContextRender htmlContent={parsedContext} />
+                <div ref={contextSectionRef}>
+                    <MemoizedContextRender htmlContent={parsedContext} />
+                </div>
             )}
             {currentSection?.contextAudioUrl && (
-                <div style={{ margin: '0 auto', maxWidth: '800px', padding: '12px 20px' }}>
+                <div ref={!hasContent(currentSection?.context) ? contextSectionRef : undefined} style={{ margin: '0 auto', maxWidth: '800px', padding: '12px 20px' }}>
                     <div style={{ padding: '12px 16px', background: '#f0fdf4', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                             <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#15803d' }}>🎵 Audio ngữ cảnh</span>
@@ -849,6 +1292,51 @@ export default function TakeExamPage() {
                         <audio controls src={currentSection.contextAudioUrl} style={{ width: '100%', height: '40px' }} controlsList="nodownload" preload="metadata" />
                     </div>
                 </div>
+            )}
+
+            {/* Floating Context FAB + Overlay Panel */}
+            {(hasContent(currentSection?.context) || currentSection?.contextAudioUrl) && (
+                <>
+                    {/* FAB button */}
+                    <button
+                        className={`exam-context-fab ${showContextFab || contextPanelOpen ? 'visible' : ''}`}
+                        onClick={() => setContextPanelOpen(prev => !prev)}
+                        aria-label="Xem ngữ cảnh"
+                    >
+                        {contextPanelOpen ? <X size={18} /> : <BookOpen size={18} />}
+                        <span className="exam-context-fab-label">{contextPanelOpen ? 'Đóng' : 'Ngữ cảnh'}</span>
+                    </button>
+
+                    {/* Overlay panel — always in DOM to preserve scroll position */}
+                    <div className={`exam-context-overlay ${contextPanelOpen ? 'open' : ''}`}>
+                        <div className="exam-context-overlay-header">
+                            <span>📖 Ngữ cảnh</span>
+                            <button className="exam-context-overlay-close" onClick={() => setContextPanelOpen(false)}>
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="exam-context-overlay-body">
+                            {hasContent(currentSection?.context) && (
+                                <div className="exam-context-content ql-editor" dangerouslySetInnerHTML={{ __html: sanitizeHtml(parsedContext) }} />
+                            )}
+                            {currentSection?.contextAudioUrl && (
+                                <div style={{ padding: '12px 0', marginTop: '8px' }}>
+                                    <div style={{ padding: '12px 16px', background: '#f0fdf4', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#15803d' }}>🎵 Audio ngữ cảnh</span>
+                                        </div>
+                                        <audio controls src={currentSection.contextAudioUrl} style={{ width: '100%', height: '40px' }} controlsList="nodownload" preload="metadata" />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Backdrop */}
+                    {contextPanelOpen && (
+                        <div className="exam-context-overlay-backdrop" onClick={() => setContextPanelOpen(false)} />
+                    )}
+                </>
             )}
 
 
@@ -868,7 +1356,18 @@ export default function TakeExamPage() {
                         <div key={q.id} className="exam-question-card">
                             <div className="exam-question-header">
                                 <span className="exam-question-number">Câu {realIdx + 1}</span>
-                                <span className="exam-question-points">{q.points || 1} điểm</span>
+                                <span className="exam-question-points">{(() => {
+                                    const perItem = q.points || 1;
+                                    let count = 1;
+                                    if (q.type === 'fill_in_blank' || q.type === 'fill_in_blanks' || q.type === 'fill_in_blank_typing') {
+                                        count = (variation?.text || '').match(/\{\{.+?\}\}/g)?.length || 1;
+                                    } else if (q.type === 'matching') {
+                                        count = (variation?.pairs || []).length || 1;
+                                    } else if (q.type === 'categorization') {
+                                        count = (variation?.items || []).length || 1;
+                                    }
+                                    return `${perItem * count} điểm`;
+                                })()}</span>
                                 {currentAnswer !== undefined && <Check size={16} strokeWidth={3} className="exam-question-done" />}
                             </div>
                             {!((q.type === 'fill_in_blank' || q.type === 'fill_in_blanks') && /\{\{.+?\}\}/.test(variation?.text || '')) && q.type !== 'fill_in_blank_typing' && (
@@ -916,14 +1415,14 @@ export default function TakeExamPage() {
                                 const correctAnswers = [];
                                 let m;
                                 while ((m = blankRegex.exec(rawText)) !== null) {
-                                    correctAnswers.push(m[1].replace(/&nbsp;/g, ' '));
+                                    correctAnswers.push(decodeHtmlEntities(m[1]));
                                 }
 
                                 // Parse text into parts: plain text and blank slots
                                 const parts = rawText.split(/(\{\{.+?\}\})/g);
 
                                 // Build word bank: correct answers + distractors, shuffled
-                                const distractors = (variation?.distractors || []).map(d => d.replace(/&nbsp;/g, ' '));
+                                const distractors = (variation?.distractors || []).map(d => decodeHtmlEntities(d));
                                 const allWords = [...correctAnswers, ...distractors];
                                 const shuffledPool = allWords.sort((a, b) => {
                                     const ha = (a + q.id).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
@@ -1098,7 +1597,14 @@ export default function TakeExamPage() {
                                         <input type="text" className="exam-input"
                                             placeholder="Nhập câu trả lời..."
                                             value={currentAnswer || ''}
-                                            onChange={e => setAnswer(currentSection.id, q.id, e.target.value)} />
+                                            autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+                                            onChange={e => setAnswer(currentSection.id, q.id, e.target.value)}
+                                            onBlur={() => {
+                                                if (submission?.id) {
+                                                    saveExamSubmission({ id: submission.id, answers: answersRef.current, sectionTimers, sectionExpired, questionTimers, questionExpired })
+                                                        .catch(() => {});
+                                                }
+                                            }} />
                                     );
                                 }
 
@@ -1106,7 +1612,7 @@ export default function TakeExamPage() {
                                 const correctAnswers = [];
                                 let m;
                                 while ((m = blankRegex.exec(rawText)) !== null) {
-                                    correctAnswers.push(m[1].replace(/&nbsp;/g, ' '));
+                                    correctAnswers.push(decodeHtmlEntities(m[1]));
                                 }
 
                                 const normalizedText = rawText
@@ -1130,21 +1636,23 @@ export default function TakeExamPage() {
                                                     const idx = slotCounter++;
                                                     const filled = filledAnswers[String(idx)] || '';
                                                     return (
-                                                        <span key={sIdx} style={{ display: 'inline-block', verticalAlign: 'middle', margin: '2px 4px' }}>
+                                                        <span key={sIdx} style={{ display: 'inline-block', verticalAlign: 'middle', margin: '2px 4px', maxWidth: '100%' }}>
                                                             <input
                                                                 type="text"
                                                                 value={filled}
                                                                 placeholder={`(${idx + 1})`}
+                                                                autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
                                                                 onChange={e => {
                                                                     const newAnswer = { ...filledAnswers, [String(idx)]: e.target.value };
                                                                     setAnswer(currentSection.id, q.id, newAnswer);
                                                                 }}
                                                                 style={{
                                                                     display: 'inline-block',
-                                                                    minWidth: '80px',
-                                                                    maxWidth: '180px',
-                                                                    width: `${Math.max(80, (filled.length + 2) * 12)}px`,
-                                                                    padding: '6px 12px',
+                                                                    boxSizing: 'border-box',
+                                                                    minWidth: '60px',
+                                                                    maxWidth: '100%',
+                                                                    width: `${Math.max(6, Math.ceil(filled.length * 0.8) + 1)}ch`,
+                                                                    padding: '6px 8px',
                                                                     fontSize: '1rem',
                                                                     fontWeight: 600,
                                                                     borderRadius: '8px',
@@ -1152,12 +1660,18 @@ export default function TakeExamPage() {
                                                                     background: '#fff',
                                                                     color: '#1e293b',
                                                                     outline: 'none',
-                                                                    textAlign: 'center',
+                                                                    textAlign: 'left',
                                                                     fontFamily: 'inherit',
                                                                     transition: 'all 0.2s ease'
                                                                 }}
                                                                 onFocus={e => { e.target.style.borderColor = '#6366f1'; }}
-                                                                onBlur={e => { e.target.style.borderColor = '#e2e8f0'; }}
+                                                                onBlur={e => {
+                                                                    e.target.style.borderColor = '#e2e8f0';
+                                                                    if (submission?.id) {
+                                                                        saveExamSubmission({ id: submission.id, answers: answersRef.current, sectionTimers, sectionExpired, questionTimers, questionExpired })
+                                                                            .catch(() => {});
+                                                                    }
+                                                                }}
                                                             />
                                                         </span>
                                                     );
@@ -1174,9 +1688,21 @@ export default function TakeExamPage() {
                             {q.type === 'essay' && (
                                 <textarea className="exam-textarea"
                                     placeholder="Viết câu trả lời..."
-                                    rows={4}
+                                    style={{ minHeight: '120px', resize: 'none', overflow: 'hidden' }}
                                     value={currentAnswer || ''}
-                                    onChange={e => setAnswer(currentSection.id, q.id, e.target.value)} />
+                                    autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+                                    onChange={e => {
+                                        setAnswer(currentSection.id, q.id, e.target.value);
+                                        e.target.style.height = 'auto';
+                                        e.target.style.height = e.target.scrollHeight + 'px';
+                                    }}
+                                    onBlur={() => {
+                                        if (submission?.id) {
+                                            saveExamSubmission({ id: submission.id, answers: answersRef.current, sectionTimers, sectionExpired, questionTimers, questionExpired })
+                                                .catch(() => {});
+                                        }
+                                    }}
+                                    ref={el => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }} />
                             )}
 
                             {/* Audio Recording */}
@@ -1184,7 +1710,7 @@ export default function TakeExamPage() {
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', padding: '4px 0' }}>
                                     <button
                                         type="button"
-                                        disabled={gradingAudioQuestionId === q.id}
+                                        disabled={currentAnswer?.hasRecording && recordingQuestionId !== q.id}
                                         onClick={async () => {
                                             const isRec = recordingQuestionId === q.id;
                                             if (isRec) {
@@ -1208,53 +1734,91 @@ export default function TakeExamPage() {
                                                         const blob = new Blob(examAudioChunksRef.current[q.id] || [], { type: mimeType });
                                                         examAudioBlobsRef.current[q.id] = blob;
                                                         stream.getTracks().forEach(t => t.stop());
-                                                        // Save answer immediately so it's not lost if student submits early
+                                                        // Save answer immediately so it's not lost
                                                         setAnswer(currentSection.id, q.id, {
-                                                            transcript: '(Đang xử lý...)',
                                                             hasRecording: true
                                                         });
-                                                        // Track async processing so handleSubmitAll can wait for it
+                                                        // Cache blob to IndexedDB first (offline safety net)
+                                                        if (submission?.id) {
+                                                            saveAudioToCache(submission.id, q.id, blob, mimeType).catch(() => {});
+                                                        }
+                                                        // Upload audio to Storage silently in background (AI grading happens later)
                                                         const processingPromise = (async () => {
-                                                            setGradingAudioQuestionId(q.id);
                                                             try {
-                                                                const [audioUrl, gradeResult] = await Promise.all([
-                                                                    submission?.id
-                                                                        ? uploadAudioAnswer(blob, submission.id, q.id)
-                                                                        : Promise.resolve(null),
-                                                                    evaluateAudioAnswer(
-                                                                        blob,
-                                                                        variation?.text || q.purpose || '',
-                                                                        q.purpose || '',
-                                                                        q.specialRequirement || '',
-                                                                        q.points || 10,
-                                                                        currentSection?.context || '',
-                                                                        assignment?.teacherTitle || '',
-                                                                        assignment?.studentTitle || ''
-                                                                    )
-                                                                ]);
+                                                                const audioUrl = submission?.id
+                                                                    ? await uploadAudioAnswer(blob, submission.id, q.id)
+                                                                    : null;
                                                                 setAnswer(currentSection.id, q.id, {
-                                                                    transcript: gradeResult.transcript || '',
-                                                                    aiScore: gradeResult.score,
-                                                                    aiFeedback: gradeResult.feedback || '',
                                                                     audioUrl: audioUrl || '',
                                                                     hasRecording: true
                                                                 });
+                                                                // Upload succeeded — remove from IndexedDB cache
+                                                                if (submission?.id) {
+                                                                    removeAudioFromCache(submission.id, q.id).catch(() => {});
+                                                                }
                                                             } catch (err) {
-                                                                console.error('Audio processing error:', err);
-                                                                let audioUrl = '';
-                                                                try {
-                                                                    if (submission?.id) audioUrl = await uploadAudioAnswer(blob, submission.id, q.id);
-                                                                } catch (_) { }
+                                                                console.error('Audio upload error (blob cached in IndexedDB for retry):', err);
                                                                 setAnswer(currentSection.id, q.id, {
-                                                                    transcript: '(Lỗi chấm bài)',
-                                                                    audioUrl,
+                                                                    audioUrl: '',
                                                                     hasRecording: true
                                                                 });
                                                             }
-                                                            setGradingAudioQuestionId(null);
                                                             delete audioProcessingRef.current[q.id];
                                                         })();
                                                         audioProcessingRef.current[q.id] = processingPromise;
+
+                                                        // Auto-advance after recording: wait for upload to complete, THEN advance
+                                                        // This prevents the race condition where exam submits before audio is uploaded
+                                                        // NOTE: Capture section index at recording time — only auto-advance if still on that section
+                                                        const capturedSectionId = currentSection?.id;
+                                                        const capturedSectionIdx = currentSectionIdx;
+                                                        const capturedSectionQuestions = sectionQuestions;
+                                                        const capturedTotalSections = sections.length;
+                                                        processingPromise.finally(() => {
+                                                            if (timingMode === 'question') {
+                                                                // Question mode: advance to next question in section
+                                                                const qIdx = capturedSectionQuestions.findIndex(sq => sq.id === q.id);
+                                                                if (qIdx < capturedSectionQuestions.length - 1) {
+                                                                    setCurrentQuestionIdx(qIdx + 1);
+                                                                    window.scrollTo(0, 0);
+                                                                } else {
+                                                                    // Last question in section — advance to next section or submit
+                                                                    setCurrentSectionIdx(prev => {
+                                                                        // Guard: only act if still on the section where recording was made
+                                                                        if (prev !== capturedSectionIdx) return prev; // Already moved past — no-op
+                                                                        if (prev >= capturedTotalSections - 1) {
+                                                                            // At last section — auto submit
+                                                                            handleSubmitAll(true);
+                                                                            return prev;
+                                                                        }
+                                                                        setCurrentQuestionIdx(0);
+                                                                        window.scrollTo(0, 0);
+                                                                        return prev + 1;
+                                                                    });
+                                                                }
+                                                            } else {
+                                                                // Section/Exam mode: check if all questions in current section are answered
+                                                                const allAnswered = capturedSectionQuestions.every(sq => {
+                                                                    const ans = answersRef.current[capturedSectionId]?.[sq.id];
+                                                                    if (sq.type === 'audio_recording') return ans?.answer?.hasRecording || (sq.id === q.id); // just recorded this one
+                                                                    if (sq.type === 'essay' || sq.type === 'fill_in_blank_typing') return ans?.answer && String(ans.answer).trim().length > 0;
+                                                                    return ans?.answer !== undefined && ans?.answer !== null && ans?.answer !== '';
+                                                                });
+                                                                if (allAnswered) {
+                                                                    setCurrentSectionIdx(prev => {
+                                                                        // Guard: only act if still on the section where recording was made
+                                                                        if (prev !== capturedSectionIdx) return prev; // Already moved past — no-op
+                                                                        if (prev >= capturedTotalSections - 1) {
+                                                                            // At last section — auto submit
+                                                                            handleSubmitAll(true);
+                                                                            return prev;
+                                                                        }
+                                                                        window.scrollTo(0, 0);
+                                                                        return prev + 1;
+                                                                    });
+                                                                }
+                                                            }
+                                                        });
                                                     };
                                                     examMediaRecordersRef.current[q.id] = recorder;
                                                     recorder.start();
@@ -1274,28 +1838,30 @@ export default function TakeExamPage() {
                                         }}
                                         style={{
                                             width: '64px', height: '64px', borderRadius: '50%',
-                                            border: 'none', cursor: gradingAudioQuestionId === q.id ? 'wait' : 'pointer',
+                                            border: 'none',
                                             background: recordingQuestionId === q.id
                                                 ? 'linear-gradient(135deg, #ef4444, #dc2626)'
-                                                : 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                                                : (currentAnswer?.hasRecording
+                                                    ? '#cbd5e1'
+                                                    : 'linear-gradient(135deg, #6366f1, #4f46e5)'),
                                             color: '#fff', fontSize: '1.5rem',
                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                                             boxShadow: recordingQuestionId === q.id
                                                 ? '0 0 0 6px rgba(239,68,68,0.2)'
-                                                : '0 4px 15px rgba(99,102,241,0.3)',
+                                                : (currentAnswer?.hasRecording ? 'none' : '0 4px 15px rgba(99,102,241,0.3)'),
                                             transition: 'all 0.3s ease',
-                                            animation: recordingQuestionId === q.id ? 'pulse 1.5s infinite' : 'none'
+                                            animation: recordingQuestionId === q.id ? 'pulse 1.5s infinite' : 'none',
+                                            cursor: (currentAnswer?.hasRecording && recordingQuestionId !== q.id) ? 'not-allowed' : 'pointer',
+                                            opacity: (currentAnswer?.hasRecording && recordingQuestionId !== q.id) ? 0.5 : 1
                                         }}
                                     >
-                                        {gradingAudioQuestionId === q.id ? '⏳' : (recordingQuestionId === q.id ? '⏹' : '🎤')}
+                                        {recordingQuestionId === q.id ? '⏹' : '🎤'}
                                     </button>
                                     <p style={{ color: '#64748b', fontSize: '0.85rem', textAlign: 'center', margin: 0 }}>
-                                        {gradingAudioQuestionId === q.id
-                                            ? 'Đang chấm bài...'
-                                            : recordingQuestionId === q.id
+                                        {recordingQuestionId === q.id
                                                 ? '🔴 Đang ghi âm... Bấm để dừng'
                                                 : currentAnswer?.hasRecording
-                                                    ? '✅ Đã ghi âm và chấm điểm. Bấm lại để ghi mới.'
+                                                    ? '✅ Đã ghi âm câu trả lời'
                                                     : 'Bấm nút micro để ghi âm câu trả lời'}
                                     </p>
                                     {currentAnswer?.transcript && (
@@ -1311,114 +1877,229 @@ export default function TakeExamPage() {
                                     )}
                                 </div>
                             )}
-
-                            {/* Matching - Drag and Drop */}
+                            {/* Matching - Drag to reorder right column */}
                             {q.type === 'matching' && (() => {
                                 const pairs = variation?.pairs || [];
-                                // Build the current matched answers: array of {text} indexed by pair
-                                const matched = currentAnswer || [];
-                                // Pool: right-side options not yet matched
                                 const allRights = pairs.map(p => p.right || '');
-                                const usedRights = matched.map(m => m?.text).filter(Boolean);
-                                // Shuffle pool once based on question id (stable across re-renders via sort)
-                                const pool = allRights.filter(r => !usedRights.includes(r))
-                                    .sort((a, b) => {
-                                        const ha = (a + q.id).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-                                        const hb = (b + q.id).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+
+                                // Initialize answer with shuffled rights if not yet set
+                                let currentSlots = Array.isArray(currentAnswer) && currentAnswer.length === pairs.length
+                                    ? currentAnswer
+                                    : null;
+
+                                if (!currentSlots) {
+                                    const shuffled = [...allRights].sort((a, b) => {
+                                        const ha = (a + q.id + 'salt').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+                                        const hb = (b + q.id + 'salt').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
                                         return ha - hb;
                                     });
+                                    currentSlots = shuffled.map(t => ({ text: t }));
+                                    setTimeout(() => setAnswer(currentSection.id, q.id, currentSlots), 0);
+                                }
 
-                                const handleDragStart = (e, text, source, sourceIdx) => {
-                                    e.dataTransfer.setData('text', text);
-                                    e.dataTransfer.setData('source', source); // 'pool' or 'slot'
-                                    e.dataTransfer.setData('sourceIdx', sourceIdx ?? '');
+                                // Helper: apply shift animations using actual row heights
+                                const applyShiftClasses = (qId, fromIdx, hoverIdx) => {
+                                    const allRows = document.querySelectorAll(`[data-match-q="${qId}"] .exam-match-swap-row`);
+                                    const chips = document.querySelectorAll(`[data-match-q="${qId}"] .exam-match-swap-right`);
+                                    chips.forEach((chip, idx) => {
+                                        chip.classList.remove('drag-hover');
+                                        chip.style.transition = 'transform 0.2s cubic-bezier(0.2, 0, 0, 1)';
+                                        if (hoverIdx === null || hoverIdx === fromIdx) {
+                                            chip.style.transform = '';
+                                            return;
+                                        }
+                                        if (idx === hoverIdx && idx !== fromIdx) {
+                                            chip.classList.add('drag-hover');
+                                        }
+                                        // Calculate shift distance = height of the source row + gap
+                                        const sourceRowH = allRows[fromIdx] ? allRows[fromIdx].getBoundingClientRect().height + 12 : 60;
+                                        if (fromIdx < hoverIdx && idx > fromIdx && idx <= hoverIdx) {
+                                            // Dragging down → items shift UP
+                                            chip.style.transform = `translateY(-${sourceRowH}px)`;
+                                        } else if (fromIdx > hoverIdx && idx >= hoverIdx && idx < fromIdx) {
+                                            // Dragging up → items shift DOWN
+                                            chip.style.transform = `translateY(${sourceRowH}px)`;
+                                        } else {
+                                            chip.style.transform = '';
+                                        }
+                                    });
                                 };
 
-                                const handleDropOnSlot = (e, pIdx) => {
-                                    e.preventDefault();
-                                    const text = e.dataTransfer.getData('text');
-                                    const source = e.dataTransfer.getData('source');
-                                    const sourceIdx = e.dataTransfer.getData('sourceIdx');
-                                    const newAnswer = [...(currentAnswer || [])];
-                                    while (newAnswer.length <= Math.max(pIdx, pairs.length - 1)) newAnswer.push({ text: '' });
-                                    // If dropped from another slot, clear that slot first
-                                    if (source === 'slot' && sourceIdx !== '') {
-                                        newAnswer[parseInt(sourceIdx)] = { text: '' };
+                                const clearShiftClasses = (qId) => {
+                                    const chips = document.querySelectorAll(`[data-match-q="${qId}"] .exam-match-swap-right`);
+                                    chips.forEach(r => {
+                                        r.classList.remove('drag-hover');
+                                        r.style.transform = '';
+                                        r.style.transition = '';
+                                    });
+                                };
+
+                                const addSettleAnimation = (qId, fromIdx, toIdx) => {
+                                    const rows = document.querySelectorAll(`[data-match-q="${qId}"] .exam-match-swap-right`);
+                                    const min = Math.min(fromIdx, toIdx);
+                                    const max = Math.max(fromIdx, toIdx);
+                                    for (let i = min; i <= max; i++) {
+                                        if (rows[i]) {
+                                            rows[i].classList.add('just-settled');
+                                            setTimeout(() => rows[i]?.classList.remove('just-settled'), 400);
+                                        }
                                     }
-                                    // If slot already has something, swap it back to pool (handled by re-render)
-                                    newAnswer[pIdx] = { text };
+                                };
+
+                                // Desktop HTML5 drag
+                                const handleDragStart = (e, pIdx) => {
+                                    e.dataTransfer.setData('fromIdx', String(pIdx));
+                                    e.dataTransfer.effectAllowed = 'move';
+                                    e.target.style.opacity = '0.4';
+                                    window._desktopDragFrom = pIdx;
+                                    window._desktopDragQId = q.id;
+                                };
+                                const handleDragEnd = (e) => {
+                                    e.target.style.opacity = '1';
+                                    clearShiftClasses(q.id);
+                                    window._desktopDragFrom = null;
+                                };
+                                const handleDragOver = (e) => {
+                                    e.preventDefault();
+                                    e.dataTransfer.dropEffect = 'move';
+                                };
+                                const handleDragEnter = (e, toIdx) => {
+                                    if (window._desktopDragFrom !== null && window._desktopDragQId === q.id) {
+                                        applyShiftClasses(q.id, window._desktopDragFrom, toIdx);
+                                    }
+                                };
+                                const handleDrop = (e, toIdx) => {
+                                    e.preventDefault();
+                                    const fromIdx = parseInt(e.dataTransfer.getData('fromIdx'));
+                                    if (isNaN(fromIdx) || fromIdx === toIdx) return;
+                                    clearShiftClasses(q.id);
+                                    const newAnswer = [...currentSlots];
+                                    const [moved] = newAnswer.splice(fromIdx, 1);
+                                    newAnswer.splice(toIdx, 0, moved);
                                     setAnswer(currentSection.id, q.id, newAnswer);
+                                    setTimeout(() => addSettleAnimation(q.id, fromIdx, toIdx), 50);
                                 };
 
-                                const handleDropOnPool = (e) => {
+
+                                const handleTouchStart = (e, pIdx) => {
+                                    const touch = e.touches[0];
+                                    const target = e.currentTarget;
+                                    const rect = target.getBoundingClientRect();
+
+                                    // Create floating clone
+                                    const clone = target.cloneNode(true);
+                                    clone.className = 'exam-match-drag-clone';
+                                    clone.style.cssText = `
+                                        position: fixed; z-index: 9999;
+                                        width: ${rect.width}px;
+                                        left: ${touch.clientX - rect.width / 2}px;
+                                        top: ${touch.clientY - 25}px;
+                                        pointer-events: none;
+                                        opacity: 0.9;
+                                        transform: scale(1.08);
+                                        transition: none;
+                                    `;
+                                    document.body.appendChild(clone);
+
+                                    // Mark source
+                                    target.classList.add('dragging-source');
+
+                                    window._matchDrag = {
+                                        fromIdx: pIdx,
+                                        clone,
+                                        sourceEl: target,
+                                        qId: q.id,
+                                        sectionId: currentSection.id,
+                                        slots: currentSlots,
+                                        hoverIdx: null
+                                    };
+
+                                    // Register non-passive listeners for preventDefault
+                                    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+                                    document.addEventListener('touchend', handleTouchEnd);
+                                };
+
+                                const handleTouchMove = (e) => {
+                                    const drag = window._matchDrag;
+                                    if (!drag) return;
                                     e.preventDefault();
-                                    const source = e.dataTransfer.getData('source');
-                                    const sourceIdx = e.dataTransfer.getData('sourceIdx');
-                                    if (source === 'slot' && sourceIdx !== '') {
-                                        const newAnswer = [...(currentAnswer || [])];
-                                        newAnswer[parseInt(sourceIdx)] = { text: '' };
-                                        setAnswer(currentSection.id, q.id, newAnswer);
+                                    const touch = e.touches[0];
+                                    const rect = drag.clone.getBoundingClientRect();
+                                    drag.clone.style.left = `${touch.clientX - rect.width / 2}px`;
+                                    drag.clone.style.top = `${touch.clientY - 25}px`;
+
+                                    // Find which row we're hovering over (use rows, not chips - chips are transformed)
+                                    const rows = document.querySelectorAll(`[data-match-q="${drag.qId}"] .exam-match-swap-row`);
+                                    let newHover = null;
+                                    rows.forEach((row, idx) => {
+                                        const r = row.getBoundingClientRect();
+                                        if (touch.clientY >= r.top && touch.clientY <= r.bottom) {
+                                            newHover = idx;
+                                        }
+                                    });
+
+                                    if (newHover !== drag.hoverIdx) {
+                                        drag.hoverIdx = newHover;
+                                        applyShiftClasses(drag.qId, drag.fromIdx, newHover);
                                     }
                                 };
 
-                                const handleDragOver = (e) => e.preventDefault();
+                                const handleTouchEnd = (e) => {
+                                    const drag = window._matchDrag;
+                                    if (!drag) return;
+
+                                    // Remove listeners
+                                    document.removeEventListener('touchmove', handleTouchMove);
+                                    document.removeEventListener('touchend', handleTouchEnd);
+
+                                    // Cleanup
+                                    drag.clone.remove();
+                                    drag.sourceEl.classList.remove('dragging-source');
+                                    clearShiftClasses(drag.qId);
+
+                                    // Insert at new position
+                                    if (drag.hoverIdx !== null && drag.hoverIdx !== drag.fromIdx) {
+                                        const newAnswer = [...drag.slots];
+                                        const [moved] = newAnswer.splice(drag.fromIdx, 1);
+                                        newAnswer.splice(drag.hoverIdx, 0, moved);
+                                        setAnswer(drag.sectionId, q.id, newAnswer);
+                                        setTimeout(() => addSettleAnimation(drag.qId, drag.fromIdx, drag.hoverIdx), 50);
+                                    }
+
+                                    window._matchDrag = null;
+                                };
 
                                 return (
-                                    <div className="exam-matching-modern">
-                                        <div className="exam-match-main">
-                                            <div className="exam-match-header">
-                                                <div className="exam-match-header-left">Từ khóa</div>
-                                                <div className="exam-match-header-right">Vị trí ghép</div>
-                                            </div>
+                                    <div className="exam-matching-swap" data-match-q={q.id}>
+                                        <div className="exam-match-swap-instruction">
+                                            Kéo thả đáp án bên phải để sắp xếp lại
+                                        </div>
+                                        <div className="exam-match-swap-pairs">
                                             {pairs.map((pair, pIdx) => {
-                                                const slotValue = matched[pIdx]?.text || '';
+                                                const slotValue = currentSlots[pIdx]?.text || '';
                                                 return (
-                                                    <div key={pIdx} className="exam-match-row">
-                                                        <div className="exam-match-term-box">
-                                                            <div className="exam-match-term">{pair.left}</div>
+                                                    <div key={pIdx} className="exam-match-swap-row"
+                                                        onDragOver={handleDragOver}
+                                                        onDragEnter={e => handleDragEnter(e, pIdx)}
+                                                        onDrop={e => handleDrop(e, pIdx)}>
+                                                        <div className="exam-match-swap-num">{pIdx + 1}</div>
+                                                        <div className="exam-match-swap-left">
+                                                            {pair.left}
                                                         </div>
-                                                        <div className="exam-match-connector">
-                                                            <div className="exam-match-line"></div>
-                                                        </div>
-                                                        <div className={`exam-match-slot ${slotValue ? 'filled' : 'empty'}`}
-                                                            onDrop={e => handleDropOnSlot(e, pIdx)}
-                                                            onDragOver={handleDragOver}>
-                                                            {slotValue ? (
-                                                                <span
-                                                                    draggable
-                                                                    className="exam-match-chip matched"
-                                                                    onDragStart={e => handleDragStart(e, slotValue, 'slot', pIdx)}>
-                                                                    {slotValue}
-                                                                </span>
-                                                            ) : (
-                                                                <span className="exam-match-slot-placeholder">Thả tại đây</span>
-                                                            )}
+                                                        <div className="exam-match-swap-divider">—</div>
+                                                        <div
+                                                            className="exam-match-swap-right"
+                                                            draggable
+                                                            onDragStart={e => handleDragStart(e, pIdx)}
+                                                            onDragEnd={handleDragEnd}
+                                                            onTouchStart={e => handleTouchStart(e, pIdx)}
+                                                        >
+                                                            <span className="exam-match-swap-grip">⠿</span>
+                                                            <span className="exam-match-swap-value">{slotValue}</span>
                                                         </div>
                                                     </div>
                                                 );
                                             })}
-                                        </div>
-
-                                        <div className="exam-match-pool-container">
-                                            <div className="exam-match-pool-title">Danh sách đáp án</div>
-                                            <div className="exam-match-pool"
-                                                onDrop={handleDropOnPool}
-                                                onDragOver={handleDragOver}>
-                                                {pool.length === 0 ? (
-                                                    <div className="exam-match-pool-empty">Đã ghép hết các mục</div>
-                                                ) : (
-                                                    <div className="exam-match-pool-items">
-                                                        {pool.map((opt, oIdx) => (
-                                                            <span key={oIdx}
-                                                                draggable
-                                                                className="exam-match-chip"
-                                                                onDragStart={e => handleDragStart(e, opt, 'pool', null)}>
-                                                                {opt}
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
                                         </div>
                                     </div>
                                 );
@@ -1507,15 +2188,33 @@ export default function TakeExamPage() {
                             {q.type === 'ordering' && (() => {
                                 const correctItems = variation?.items || [];
                                 // Shuffle items deterministically based on question id
-                                const shuffledItems = [...correctItems].sort((a, b) => {
-                                    const ha = (a + q.id).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-                                    const hb = (b + q.id).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+                                const shuffledItems = correctItems.map((item, i) => ({ item, i })).sort((a, b) => {
+                                    // Better hash: use a seed-based mixing function for proper distribution
+                                    const hashStr = (str) => {
+                                        let h = 0x811c9dc5;
+                                        for (let j = 0; j < str.length; j++) {
+                                            h ^= str.charCodeAt(j);
+                                            h = Math.imul(h, 0x01000193);
+                                        }
+                                        return h >>> 0;
+                                    };
+                                    const ha = hashStr(a.item + '|' + a.i + '|' + q.id);
+                                    const hb = hashStr(b.item + '|' + b.i + '|' + q.id);
                                     return ha - hb;
-                                });
+                                }).map(x => x.item);
                                 // Current answer: array of strings in the order the student picked
                                 const orderedAnswer = Array.isArray(currentAnswer) ? currentAnswer : [];
-                                const usedItems = new Set(orderedAnswer);
-                                const availableItems = shuffledItems.filter(item => !usedItems.has(item));
+                                // Count-based filtering to handle duplicate items (e.g. two "I"s)
+                                const usedCounts = {};
+                                orderedAnswer.forEach(item => { usedCounts[item] = (usedCounts[item] || 0) + 1; });
+                                const remainingCounts = { ...usedCounts };
+                                const availableItems = shuffledItems.filter(item => {
+                                    if ((remainingCounts[item] || 0) > 0) {
+                                        remainingCounts[item]--;
+                                        return false;
+                                    }
+                                    return true;
+                                });
 
                                 const handleSelectItem = (item) => {
                                     const newAnswer = [...orderedAnswer, item];
@@ -1624,7 +2323,8 @@ export default function TakeExamPage() {
                     <div className="exam-footer-left">
                         {timingMode === 'question' ? (
                             canGoPrevQuestion && (
-                                <button className="exam-btn exam-btn-secondary" onClick={() => {
+                                <button className="exam-btn exam-btn-secondary" onClick={async () => {
+                                    await stopActiveRecording();
                                     if (currentQuestionIdx > 0) {
                                         setCurrentQuestionIdx(prev => prev - 1);
                                     } else if (canGoPrevSection) {
@@ -1635,6 +2335,8 @@ export default function TakeExamPage() {
                                         while (lastAvail >= 0 && questionExpired[prevSQ[lastAvail].id]) lastAvail--;
                                         setCurrentSectionIdx(prev => prev - 1);
                                         setCurrentQuestionIdx(Math.max(0, lastAvail));
+                                        // Persist timer state for section switch
+                                        saveExamSubmission({ id: submission.id, sectionTimers: sectionTimersLatest.current, sectionExpired: sectionExpiredLatest.current, questionTimers: questionTimersLatest.current, questionExpired: questionExpiredLatest.current, timersSavedAt: new Date().toISOString(), lastActiveSectionIdx: currentSectionIdx - 1, lastActiveQuestionIdx: Math.max(0, lastAvail) }).catch(() => {});
                                     }
                                     window.scrollTo(0, 0);
                                 }}>
@@ -1643,7 +2345,7 @@ export default function TakeExamPage() {
                             )
                         ) : (
                             canGoPrevSection && (
-                                <button className="exam-btn exam-btn-secondary" onClick={() => { setCurrentSectionIdx(prev => prev - 1); window.scrollTo(0, 0); }}>
+                                <button className="exam-btn exam-btn-secondary" onClick={async () => { await stopActiveRecording(); const prevIdx = currentSectionIdx - 1; setCurrentSectionIdx(prevIdx); saveExamSubmission({ id: submission.id, sectionTimers: sectionTimersLatest.current, sectionExpired: sectionExpiredLatest.current, questionTimers: questionTimersLatest.current, questionExpired: questionExpiredLatest.current, timersSavedAt: new Date().toISOString(), lastActiveSectionIdx: prevIdx, lastActiveQuestionIdx: currentQuestionIdxRef.current }).catch(() => {}); window.scrollTo(0, 0); }}>
                                     <ChevronLeft size={16} /> Phần trước
                                 </button>
                             )
@@ -1664,7 +2366,8 @@ export default function TakeExamPage() {
                                 }
                                 if (!hasNext && !isLastSection) hasNext = true; // can go to next section
                                 return hasNext ? (
-                                    <button className="exam-btn exam-btn-primary" onClick={() => {
+                                    <button className="exam-btn exam-btn-primary" onClick={async () => {
+                                        await stopActiveRecording();
                                         let nextQIdx = -1;
                                         for (let i = currentQuestionIdx + 1; i < sectionQuestions.length; i++) {
                                             if (!questionExpired[sectionQuestions[i].id]) { nextQIdx = i; break; }
@@ -1692,37 +2395,98 @@ export default function TakeExamPage() {
             </div>
 
             {/* Confirm next section */}
-            {confirmSubmitSection && (
-                <div className="exam-modal-overlay">
-                    <div className="exam-modal">
-                        <h3>Chuyển section?</h3>
-                        <p>Bạn đã trả lời {Object.keys(currentSectionAnswers).length}/{sectionQuestions.length} câu. Chuyển sang section tiếp theo?</p>
-                        <div className="exam-modal-actions">
-                            <button className="exam-btn exam-btn-secondary" onClick={() => setConfirmSubmitSection(false)}>Quay lại</button>
-                            <button className="exam-btn exam-btn-primary" onClick={handleNextSection}>Tiếp tục</button>
+            {confirmSubmitSection && (() => {
+                const sectionTimeRemaining = timingMode === 'section' && currentSection ? sectionTimers[currentSection.id] : null;
+                const hasTimeLeft = sectionTimeRemaining !== null && sectionTimeRemaining > 0;
+                const formatTime = (s) => {
+                    const m = Math.floor(s / 60);
+                    const sec = s % 60;
+                    return `${m}:${sec < 10 ? '0' : ''}${sec}`;
+                };
+                return (
+                    <div className="exam-modal-overlay">
+                        <div className="exam-modal">
+                            <h3>Chuyển section?</h3>
+                            <p>Bạn đã trả lời {Object.keys(currentSectionAnswers).length}/{sectionQuestions.length} câu. Chuyển sang section tiếp theo?</p>
+                            {hasTimeLeft && (
+                                <div style={{
+                                    background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px',
+                                    padding: '10px 16px', marginBottom: '20px', textAlign: 'center'
+                                }}>
+                                    <div style={{ fontSize: '0.8rem', color: '#16a34a', fontWeight: 700, marginBottom: '4px' }}>
+                                        ⏱ Thời gian còn lại: <strong>{formatTime(sectionTimeRemaining)}</strong>
+                                    </div>
+                                    <div style={{ fontSize: '0.75rem', color: '#15803d' }}>
+                                        Bạn vẫn có thể quay lại section này vì còn thời gian
+                                    </div>
+                                </div>
+                            )}
+                            <div className="exam-modal-actions">
+                                <button className="exam-btn exam-btn-secondary" onClick={() => setConfirmSubmitSection(false)}>Quay lại</button>
+                                <button className="exam-btn exam-btn-primary" onClick={handleNextSection}>Tiếp tục</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                );
+            })()}
 
             {/* Confirm submit all */}
-            {confirmSubmitAll && (
-                <div className="exam-modal-overlay">
-                    <div className="exam-modal">
-                        <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-                            <AlertTriangle size={40} color="#f59e0b" />
-                        </div>
-                        <h3>Nộp bài tập và kiểm tra?</h3>
-                        <p>Sau khi nộp, bạn không thể sửa câu trả lời.</p>
-                        <div className="exam-modal-actions">
-                            <button className="exam-btn exam-btn-secondary" onClick={() => setConfirmSubmitAll(false)}>Quay lại</button>
-                            <button className="exam-btn exam-btn-primary exam-btn-submit" onClick={() => handleSubmitAll(false)} disabled={submitting}>
-                                {submitting ? 'Đang nộp...' : 'Xác nhận nộp bài'}
-                            </button>
+            {confirmSubmitAll && (() => {
+                // Compute unanswered count across ALL sections
+                const allSections = exam?.sections || [];
+                let totalQuestions = 0;
+                let answeredQuestions = 0;
+                allSections.forEach(s => {
+                    const sQs = questions.filter(q => q.sectionId === s.id);
+                    totalQuestions += sQs.length;
+                    const sAns = answers[s.id] || {};
+                    sQs.forEach(q => { if (sAns[q.id]) answeredQuestions++; });
+                });
+                const unansweredCount = totalQuestions - answeredQuestions;
+
+                // Format remaining time
+                const fmtTime = (s) => {
+                    if (s === null || s === undefined) return null;
+                    const m = Math.floor(s / 60);
+                    const sec = s % 60;
+                    return `${m} phút ${sec < 10 ? '0' : ''}${sec} giây`;
+                };
+                const timeStr = fmtTime(displayTimer);
+
+                return (
+                    <div className="exam-modal-overlay">
+                        <div className="exam-modal">
+                            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+                                <AlertTriangle size={40} color="#f59e0b" />
+                            </div>
+                            <h3>Nộp {exam?.examType === 'test' ? 'bài kiểm tra' : 'bài tập'}?</h3>
+                            {timeStr && (
+                                <div style={{
+                                    background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px',
+                                    padding: '12px 16px', marginBottom: '12px', textAlign: 'center'
+                                }}>
+                                    <div style={{ fontSize: '0.85rem', color: '#92400e', fontWeight: 700 }}>
+                                        ⏱ Bạn còn <strong>{timeStr}</strong>
+                                    </div>
+                                </div>
+                            )}
+                            {unansweredCount > 0 ? (
+                                <p style={{ color: '#dc2626', fontWeight: 600 }}>
+                                    ⚠️ Bạn chưa hoàn thành <strong>{unansweredCount}/{totalQuestions}</strong> câu. Bạn có chắc muốn nộp bài?
+                                </p>
+                            ) : (
+                                <p>Bạn đã hoàn thành tất cả {totalQuestions} câu. Sau khi nộp, bạn không thể sửa câu trả lời.</p>
+                            )}
+                            <div className="exam-modal-actions">
+                                <button className="exam-btn exam-btn-secondary" onClick={() => setConfirmSubmitAll(false)}>Quay lại</button>
+                                <button className="exam-btn exam-btn-primary exam-btn-submit" onClick={() => handleSubmitAll(false)} disabled={submitting}>
+                                    {submitting ? 'Đang nộp...' : 'Xác nhận nộp bài'}
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                );
+            })()}
             {/* Info Modal */}
             <ConfirmModal
                 isOpen={infoModal.isOpen}

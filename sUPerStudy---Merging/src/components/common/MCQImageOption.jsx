@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
-import { uploadOptionImage, deleteOptionImage } from '../../services/examService';
-import { ImagePlus, X, Loader } from 'lucide-react';
+import { uploadOptionImage, deleteOptionImage, generateAndUploadOptionImage } from '../../services/examService';
+import { ImagePlus, X, Loader, Sparkles } from 'lucide-react';
 
 /**
  * Check if an MCQ option string is an image URL (Firebase Storage).
@@ -38,9 +38,10 @@ export function OptionContent({ opt, size = 120 }) {
 /**
  * Image upload button for teacher editor — sits next to the text input.
  * When an image is uploaded, it replaces the text option with the image URL.
- * @param {{ value: string, onChange: (url: string) => void, disabled?: boolean }} props
+ * Deletion is deferred via onScheduleDelete instead of deleting immediately.
+ * @param {{ value: string, onChange: (url: string) => void, onScheduleDelete?: (url: string) => void, onTrackUpload?: (url: string) => void, onSaveOriginalText?: (text: string) => void, restoreValue?: string, disabled?: boolean }} props
  */
-export function ImageOptionUploader({ value, onChange, disabled }) {
+export function ImageOptionUploader({ value, onChange, onScheduleDelete, onTrackUpload, onSaveOriginalText, restoreValue, disabled }) {
     const [uploading, setUploading] = useState(false);
     const fileRef = useRef(null);
 
@@ -50,8 +51,13 @@ export function ImageOptionUploader({ value, onChange, disabled }) {
         setUploading(true);
         try {
             const url = await uploadOptionImage(file);
+            // Track newly uploaded image for cleanup if modal is closed without saving
+            if (onTrackUpload) onTrackUpload(url);
+            // Save current text before replacing with image
+            if (!isImageOption(value) && value && onSaveOriginalText) onSaveOriginalText(value);
+            // If replacing an existing image, schedule old one for deletion
             if (isImageOption(value)) {
-                deleteOptionImage(value).catch(console.error);
+                if (onScheduleDelete) onScheduleDelete(value);
             }
             onChange(url);
         } catch (err) {
@@ -83,8 +89,10 @@ export function ImageOptionUploader({ value, onChange, disabled }) {
                     <button
                         type="button"
                         onClick={() => {
-                            deleteOptionImage(value).catch(console.error);
-                            onChange('');
+                            // Schedule for deletion instead of deleting immediately
+                            if (onScheduleDelete) onScheduleDelete(value);
+                            // Restore original text instead of clearing
+                            onChange(restoreValue || '');
                         }}
                         title="Xóa hình"
                         style={{
@@ -146,3 +154,66 @@ export function ImageOptionUploader({ value, onChange, disabled }) {
         </>
     );
 }
+
+/**
+ * AI image generation button for MCQ options.
+ * Generates an image using the option text as prompt, then replaces the text with the image URL.
+ * Deletion is deferred via onScheduleDelete instead of deleting immediately.
+ * @param {{ optionText: string, onChange: (url: string) => void, currentValue: string, onScheduleDelete?: (url: string) => void, onTrackUpload?: (url: string) => void, onSaveOriginalText?: (text: string) => void, disabled?: boolean }} props
+ */
+export function AIImageGenerateButton({ optionText, onChange, currentValue, onScheduleDelete, onTrackUpload, onSaveOriginalText, disabled }) {
+    const [generating, setGenerating] = useState(false);
+
+    const handleGenerate = async () => {
+        if (!optionText || optionText.trim().length === 0) return;
+        setGenerating(true);
+        try {
+            // Save original text before replacing with image
+            if (optionText && onSaveOriginalText) onSaveOriginalText(optionText);
+            // Schedule existing image for deletion instead of deleting immediately
+            if (isImageOption(currentValue)) {
+                if (onScheduleDelete) onScheduleDelete(currentValue);
+            }
+            const url = await generateAndUploadOptionImage(optionText.trim());
+            // Track newly uploaded image for cleanup if modal is closed without saving
+            if (onTrackUpload) onTrackUpload(url);
+            onChange(url);
+        } catch (err) {
+            console.error('AI image generation failed:', err);
+            alert('Tạo ảnh AI thất bại. Vui lòng thử lại.');
+        }
+        setGenerating(false);
+    };
+
+    const isEmpty = !optionText || optionText.trim().length === 0;
+    const isDisabled = disabled || generating || isEmpty || isImageOption(currentValue);
+
+    return (
+        <button
+            type="button"
+            onClick={handleGenerate}
+            disabled={isDisabled}
+            title={isEmpty ? 'Nhập text đáp án trước để tạo ảnh AI' : 'Tạo ảnh AI từ nội dung đáp án'}
+            style={{
+                background: 'none',
+                border: '1px dashed #a78bfa',
+                borderRadius: 8,
+                padding: '6px 8px',
+                cursor: isDisabled ? 'not-allowed' : 'pointer',
+                color: isDisabled ? '#cbd5e1' : '#7c3aed',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                fontSize: '0.8rem',
+                flexShrink: 0,
+                opacity: isDisabled ? 0.5 : 1,
+                transition: 'all 0.2s'
+            }}
+        >
+            {generating ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={14} />}
+        </button>
+    );
+}
+
+/** Re-export deleteOptionImage for direct use when saving */
+export { deleteOptionImage };

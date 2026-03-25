@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Harness - Kéo Co Trí Tuệ</title>
+    <style>
+        body { margin: 0; padding: 0; background: #0f172a; }
+        iframe { width: 100vw; height: 100vh; border: none; }
+    </style>
+</head>
+<body>
+    <iframe id="game" src="index.html"></iframe>
+    <script>
+        // Auto-inject test data when iframe loads
+        document.getElementById('game').addEventListener('load', function() {
+            setTimeout(function() {
+                document.getElementById('game').contentWindow.postMessage({
+                    type: 'GAME_DATA',
+                    dataType: 'vocabulary',
+                    words: [
+                        { word: 'apple', meaning: 'quả táo', phonetic: '/ˈæp.əl/', example: 'I eat an apple every day.' },
+                        { word: 'banana', meaning: 'quả chuối', phonetic: '/bəˈnæn.ə/' },
+                        { word: 'cat', meaning: 'con mèo', example: 'The cat is sleeping.' },
+                        { word: 'dog', meaning: 'con chó', example: 'I have a dog.' },
+                        { word: 'elephant', meaning: 'con voi', phonetic: '/ˈel.ɪ.fənt/' },
+                        { word: 'fish', meaning: 'con cá', example: 'Fish can swim.' },
+                        { word: 'guitar', meaning: 'đàn ghi-ta' },
+                        { word: 'house', meaning: 'ngôi nhà', example: 'My house is big.' },
+                        { word: 'ice cream', meaning: 'kem' },
+                        { word: 'juice', meaning: 'nước ép', example: 'I drink orange juice.' }
+                    ]
+                }, '*');
+            }, 300);
+        });
+    </script>
+</body>
+</html>

@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, BookOpen, Users, LogOut, Home, Menu, X, Layers, User as UserIcon, FileText, ClipboardCheck, Settings, Mail, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Users, LogOut, Home, Menu, X, Layers, User as UserIcon, FileText, ClipboardCheck, Settings, Mail, MessageSquare, Gift, MessageSquareText, Gamepad2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../config/firebase';
 import { doc, getDoc, setDoc, collection, getCountFromServer, query, where, getDocs } from 'firebase/firestore';
+import { getUnreadFeedbackCount } from '../../services/feedbackService';
+import { getPendingGamesCount } from '../../services/miniGameService';
 import Avatar from '../../components/common/Avatar';
 import BrandLogo from '../../components/common/BrandLogo';
 import NotificationBell from '../../components/common/NotificationBell';
@@ -21,6 +23,8 @@ export default function AdminLayout() {
     const isStaff = user?.role === 'staff';
     const [sidebarCounts, setSidebarCounts] = useState(null);
     const [emailPreferences, setEmailPreferences] = useState({});
+    const [unreadFeedbackCount, setUnreadFeedbackCount] = useState(0);
+    const [pendingGamesCount, setPendingGamesCount] = useState(0);
 
     useEffect(() => {
         document.body.classList.add('admin-body');
@@ -38,6 +42,12 @@ export default function AdminLayout() {
             }).catch(err => console.warn('Could not load user settings:', err));
         }
 
+        // Load unread feedback count
+        getUnreadFeedbackCount().then(setUnreadFeedbackCount).catch(() => {});
+
+        // Load pending mini games count
+        if (!isStaff) getPendingGamesCount().then(setPendingGamesCount).catch(() => {});
+
         return () => {
             document.body.classList.remove('admin-body');
         };
@@ -50,22 +60,26 @@ export default function AdminLayout() {
             try {
                 const [topicsSnap, teacherTopicsSnap, grammarSnap, usersSnap, groupsSnap, systemExamsSnap, teacherExamsSnap] = await Promise.all([
                     getCountFromServer(collection(db, 'topics')),
-                    getCountFromServer(collection(db, 'teacher_topics')),
+                    getDocs(collection(db, 'teacher_topics')),
                     getDocs(collection(db, 'grammar_exercises')),
                     getCountFromServer(query(collection(db, 'users'), where('status', '==', 'approved'))),
                     getCountFromServer(collection(db, 'user_groups')),
                     getCountFromServer(query(collection(db, 'exams'), where('createdByRole', '==', 'admin'))),
-                    getCountFromServer(query(collection(db, 'exams'), where('createdByRole', '==', 'teacher'))),
+                    getDocs(query(collection(db, 'exams'), where('createdByRole', '==', 'teacher'))),
                 ]);
+                let tchTopics = 0;
+                teacherTopicsSnap.forEach(d => { if (!d.data().isDeleted) tchTopics++; });
                 let sysGrammar = 0, tchGrammar = 0;
-                grammarSnap.forEach(d => { if (d.data().teacherId) tchGrammar++; else sysGrammar++; });
+                grammarSnap.forEach(d => { const data = d.data(); if (data.isDeleted) return; if (data.teacherId) tchGrammar++; else sysGrammar++; });
+                let tchExams = 0;
+                teacherExamsSnap.forEach(d => { if (!d.data().isDeleted) tchExams++; });
                 setSidebarCounts({
                     topics: topicsSnap.data().count,
-                    teacherTopics: teacherTopicsSnap.data().count,
+                    teacherTopics: tchTopics,
                     grammar: sysGrammar,
                     teacherGrammar: tchGrammar,
                     systemExams: systemExamsSnap.data().count,
-                    teacherExams: teacherExamsSnap.data().count,
+                    teacherExams: tchExams,
                     users: usersSnap.data().count,
                     groups: groupsSnap.data().count,
                 });
@@ -90,6 +104,7 @@ export default function AdminLayout() {
     const ADMIN_EMAIL_TYPES = [
         { key: 'accounts_expiring', label: 'Tài khoản sắp hết hạn', emoji: '⚠️' },
         { key: 'new_user_pending', label: 'User mới cần duyệt', emoji: '👤' },
+        { key: 'half_submitted', label: '50% học viên đã nộp bài', emoji: '📊' },
         { key: 'content_proposal', label: 'Đề xuất nội dung từ GV', emoji: '📩' },
     ];
 
@@ -154,15 +169,26 @@ export default function AdminLayout() {
                     <Link to="/admin/groups" className={`admin-nav-item ${pathname.includes('/admin/groups') ? 'active' : ''}`} onClick={() => setSidebarOpen(false)}>
                         <Layers size={20} /> Nhóm học viên {sidebarCounts && <span className="admin-nav-badge">{sidebarCounts.groups}</span>}
                     </Link>
+                    <Link to="/admin/reward-points" className={`admin-nav-item ${pathname.includes('/admin/reward-points') ? 'active' : ''}`} onClick={() => setSidebarOpen(false)}>
+                        <Gift size={20} /> Tích điểm đổi quà
+                    </Link>
+                    <Link to="/admin/report-periods" className={`admin-nav-item ${pathname.includes('/admin/report-periods') ? 'active' : ''}`} onClick={() => setSidebarOpen(false)}>
+                        <ClipboardCheck size={20} /> Báo cáo & Đánh giá
+                    </Link>
+                    <Link to="/admin/feedback" className={`admin-nav-item ${pathname.includes('/admin/feedback') ? 'active' : ''}`} onClick={() => setSidebarOpen(false)}>
+                        <MessageSquareText size={20} /> Góp ý ẩn danh
+                        {unreadFeedbackCount > 0 && <span className="admin-nav-badge" style={{ background: '#ef4444', color: '#fff' }}>{unreadFeedbackCount}</span>}
+                    </Link>
                     {!isStaff && (
-                        <>
-                            <Link to="/admin/report-periods" className={`admin-nav-item ${pathname.includes('/admin/report-periods') ? 'active' : ''}`} onClick={() => setSidebarOpen(false)}>
-                                <ClipboardCheck size={20} /> Kỳ báo cáo
-                            </Link>
-                            <Link to="/admin/prompts" className={`admin-nav-item ${pathname.includes('/admin/prompts') ? 'active' : ''}`} onClick={() => setSidebarOpen(false)}>
-                                <MessageSquare size={20} /> Quản lý Prompt
-                            </Link>
-                        </>
+                        <Link to="/admin/prompts" className={`admin-nav-item ${pathname.includes('/admin/prompts') ? 'active' : ''}`} onClick={() => setSidebarOpen(false)}>
+                            <MessageSquare size={20} /> Quản lý Prompt
+                        </Link>
+                    )}
+                    {!isStaff && (
+                        <Link to="/admin/mini-games" className={`admin-nav-item ${pathname.includes('/admin/mini-games') ? 'active' : ''}`} onClick={() => setSidebarOpen(false)}>
+                            <Gamepad2 size={20} /> Mini Games
+                            {pendingGamesCount > 0 && <span className="admin-nav-badge" style={{ background: '#f59e0b', color: '#78350f' }}>{pendingGamesCount}</span>}
+                        </Link>
                     )}
                     <button className="admin-nav-item" onClick={() => { setIsSettingsOpen(true); setSidebarOpen(false); }}>
                         <Settings size={20} /> Thiết lập

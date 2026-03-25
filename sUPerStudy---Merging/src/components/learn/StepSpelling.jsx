@@ -122,6 +122,7 @@ export default function StepSpelling({ wordData, onComplete, reviewData }) {
                             placeholder="..."
                             disabled={answered || isReview}
                             autoCapitalize="none"
+                            autoComplete="off"
                             autoCorrect="off"
                             spellCheck={false}
                         />

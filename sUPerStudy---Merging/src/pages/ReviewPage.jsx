@@ -12,7 +12,7 @@ import { Heart } from 'lucide-react';
 import './LearnPage.css';
 import './ReviewPage.css';
 import { useAntiCopy } from '../hooks/useAntiCopy';
-import { Sun, Moon } from 'lucide-react';
+
 
 import StepListening from '../components/learn/StepListening';
 import StepPronunciation from '../components/learn/StepPronunciation';
@@ -95,22 +95,7 @@ export default function ReviewPage() {
     const [isSaved, setIsSaved] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [fontSizeLevel, setFontSizeLevel] = useState(1); // 0: Small, 1: Medium, 2: Large
-    const [theme, setTheme] = useState(() => localStorage.getItem('appTheme') || 'light');
 
-    const toggleTheme = () => {
-        const streak = parseInt(localStorage.getItem('userStreak') || '0', 10);
-        const themes = ['light'];
-        if (streak >= 5) themes.push('dark');
-        if (streak >= 15) themes.push('silver');
-        if (streak >= 25) themes.push('gold');
-        if (streak >= 35) themes.push('diamond');
-        if (streak >= 50) themes.push('ruby');
-        const currentIdx = themes.indexOf(theme);
-        const next = themes[(currentIdx + 1) % themes.length];
-        setTheme(next);
-        document.documentElement.setAttribute('data-theme', next);
-        localStorage.setItem('appTheme', next);
-    };
 
     useEffect(() => {
         if (!user?.uid) return;
@@ -266,7 +251,7 @@ export default function ReviewPage() {
             <div className="loading-screen">
                 <h2 className="mb-4">🎉 Tuyệt vời!</h2>
                 <p className="text-muted mb-6">Bạn không có từ nào cần ôn tập hôm nay.</p>
-                <button className="btn btn-primary" onClick={() => navigate('/')}>Quay lại trang chủ</button>
+                <button className="btn btn-primary" onClick={() => navigate(-1)}>Quay lại trang chủ</button>
             </div>
         );
     }
@@ -421,14 +406,7 @@ export default function ReviewPage() {
                             A{fontSizeLevel === 0 ? '-' : fontSizeLevel === 2 ? '+' : ''}
                         </span>
                     </button>
-                    <button
-                        className="btn btn-ghost"
-                        onClick={toggleTheme}
-                        style={{ padding: '8px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
-                        title={theme === 'dark' ? 'Chuyển sang sáng' : 'Chuyển sang tối'}
-                    >
-                        {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-                    </button>
+
                     <button
                         className={`btn btn-ghost learn-topbar-bookmark ${isSaved ? 'is-saved' : ''} ${isSaving ? 'is-saving' : ''}`}
                         onClick={handleToggleSave}

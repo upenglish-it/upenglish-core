@@ -92,6 +92,7 @@ export default function StepPronunciation({ wordData, onComplete, reviewData }) 
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             let preFilterTranscript = '';
             let recognition = null;
+            let recognitionFailed = false;
 
             if (SpeechRecognition && !isMobile) {
                 recognition = new SpeechRecognition();
@@ -103,13 +104,26 @@ export default function StepPronunciation({ wordData, onComplete, reviewData }) 
                     for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript + ' ';
                     preFilterTranscript = t.trim().toLowerCase();
                 };
-                recognition.start();
+                recognition.onerror = (e) => {
+                    // SpeechRecognition failed (network issue, not allowed, etc.)
+                    // Mark as failed so we skip pre-filter and let AI handle it
+                    console.warn('SpeechRecognition error, will skip pre-filter:', e.error);
+                    recognitionFailed = true;
+                };
+                try {
+                    recognition.start();
+                } catch (recStartErr) {
+                    console.warn('SpeechRecognition.start() failed:', recStartErr);
+                    recognitionFailed = true;
+                    recognition = null;
+                }
             }
             mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) audioChunksRef.current.push(event.data);
             };
 
             mediaRecorder.onstop = async () => {
+              try {
                 const actualMimeType = options.mimeType || 'audio/webm';
                 const rawBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
                 stream.getTracks().forEach(track => track.stop());
@@ -137,9 +151,9 @@ export default function StepPronunciation({ wordData, onComplete, reviewData }) 
                     }
                     const rms = Math.sqrt(sumSquares / channelData.length);
 
-                    // Threshold: RMS < 0.01 is essentially silence/background noise
+                    // Threshold: RMS < 0.005 is essentially silence/background noise
                     // Typical speech RMS is 0.05-0.3
-                    if (rms < 0.01) {
+                    if (rms < 0.005) {
                         audioContext.close();
                         // Don't count as an attempt — let student retry
                         setEvalResult({
@@ -157,7 +171,8 @@ export default function StepPronunciation({ wordData, onComplete, reviewData }) 
                 }
 
                 // === DESKTOP SPEECH RECOGNITION PRE-FILTER ===
-                if (SpeechRecognition && !isMobile) {
+                // Skip pre-filter if SpeechRecognition errored (e.g. network issue on Windows)
+                if (SpeechRecognition && !isMobile && !recognitionFailed) {
                     const transcript = preFilterTranscript.trim();
                     if (transcript === '') {
                         // Don't count as an attempt — let student retry
@@ -185,6 +200,12 @@ export default function StepPronunciation({ wordData, onComplete, reviewData }) 
 
                 setAttempts(prev => prev + 1);
                 await handleEvaluateAudio(audioBlob);
+              } catch (onstopErr) {
+                // Catch-all: prevent silent failures (especially on Windows)
+                console.error('onstop handler error:', onstopErr);
+                setEvalResult({ score: 0, transcript: '', feedback: 'Đã xảy ra lỗi khi xử lý âm thanh. Vui lòng thử lại.' });
+                setStatus('done');
+              }
             };
 
             mediaRecorder.start();

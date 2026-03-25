@@ -91,7 +91,8 @@ export default function TeacherTopicWordsPage() {
                         // Determine if the user is the owner, a collaborator, or an admin
                         const isOwner = topicData.teacherId === user.uid;
                         const isCollaborator = topicData.collaboratorIds?.includes(user.uid) || false;
-                        if (!isOwner && !isCollaborator && !isAdminView) {
+                        const collabRole = (topicData.collaboratorRoles || {})[user.uid] || 'editor';
+                        if (!isOwner && !(isCollaborator && collabRole === 'editor') && !isAdminView) {
                             setIsReadOnly(true);
                         } else {
                             setIsReadOnly(false);

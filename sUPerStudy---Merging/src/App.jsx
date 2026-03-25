@@ -28,6 +28,9 @@ import AdminExamsPage from './pages/admin/AdminExamsPage';
 import AdminTeacherExamsPage from './pages/admin/AdminTeacherExamsPage';
 import AdminReportPeriodsPage from './pages/admin/AdminReportPeriodsPage';
 import AdminPromptsPage from './pages/admin/AdminPromptsPage';
+import AdminRewardPointsPage from './pages/admin/AdminRewardPointsPage';
+import AdminFeedbackPage from './pages/admin/AdminFeedbackPage';
+import AdminMiniGamesPage from './pages/admin/AdminMiniGamesPage';
 import ExamEditorPage from './pages/admin/ExamEditorPage';
 import TeacherRoute from './components/auth/TeacherRoute';
 import TeacherLayout from './pages/teacher/TeacherLayout';
@@ -41,7 +44,16 @@ import TeacherExamsPage from './pages/teacher/TeacherExamsPage';
 import ExamSubmissionsPage from './pages/teacher/ExamSubmissionsPage';
 import StudentProgressPage from './pages/teacher/StudentProgressPage';
 import TeacherPromptsPage from './pages/teacher/TeacherPromptsPage';
+import TeacherRatingResultsPage from './pages/teacher/TeacherRatingResultsPage';
+import TeacherReceivedFeedbackPage from './pages/teacher/TeacherReceivedFeedbackPage';
+import TeacherMiniGamesPage from './pages/teacher/TeacherMiniGamesPage';
+import ITRoute from './components/auth/ITRoute';
+import ITLayout from './pages/it/ITLayout';
+import ITDashboardPage from './pages/it/ITDashboardPage';
+import ITGamesPage from './pages/it/ITGamesPage';
 import TakeExamPage from './pages/TakeExamPage';
+
+import TeacherRatingFormPage from './pages/student/TeacherRatingFormPage';
 import ExamResultPage from './pages/ExamResultPage';
 
 import { AppSettingsProvider } from './contexts/AppSettingsContext';
@@ -106,12 +118,14 @@ function App() {
                         <Route path="/grammar-topics" element={<ProtectedRoute><GrammarSelectPage /></ProtectedRoute>} />
                         <Route path="/exam" element={<ProtectedRoute><TakeExamPage /></ProtectedRoute>} />
                         <Route path="/exam-result" element={<ProtectedRoute><ExamResultPage /></ProtectedRoute>} />
+                        <Route path="/rate-teacher" element={<ProtectedRoute><TeacherRatingFormPage /></ProtectedRoute>} />
                         <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
                             <Route index element={<AdminDashboardPage />} />
                             <Route path="topics" element={<AdminTopicsPage />} />
                             <Route path="topics/:topicId" element={<AdminTopicWordsPage />} />
                             <Route path="users" element={<AdminUsersPage />} />
                             <Route path="groups" element={<AdminGroupsPage />} />
+                            <Route path="reward-points" element={<AdminRewardPointsPage />} />
                             <Route path="groups/:groupId" element={<TeacherGroupDetailPage />} />
                             <Route path="teacher-topics" element={<AdminTeacherTopicsPage />} />
                             <Route path="teacher-topics/:topicId" element={<TeacherTopicWordsPage />} />
@@ -126,6 +140,8 @@ function App() {
                             <Route path="exam-submissions/:assignmentId/:studentId" element={<ExamSubmissionsPage />} />
                             <Route path="groups/:groupId/students/:studentId" element={<StudentProgressPage />} />
                             <Route path="report-periods" element={<AdminReportPeriodsPage />} />
+                            <Route path="feedback" element={<AdminFeedbackPage />} />
+                            <Route path="mini-games" element={<AdminMiniGamesPage />} />
                             <Route path="prompts" element={<AdminPromptsPage />} />
                         </Route>
                         <Route path="/teacher" element={<TeacherRoute><TeacherLayout /></TeacherRoute>}>
@@ -144,6 +160,14 @@ function App() {
                             <Route path="exam-submissions/:assignmentId/:studentId" element={<ExamSubmissionsPage />} />
                             <Route path="groups/:groupId/students/:studentId" element={<StudentProgressPage />} />
                             <Route path="prompts" element={<TeacherPromptsPage />} />
+                            <Route path="ratings" element={<TeacherRatingResultsPage />} />
+                            <Route path="reward-points" element={<AdminRewardPointsPage />} />
+                            <Route path="feedback" element={<TeacherReceivedFeedbackPage />} />
+                            <Route path="mini-games" element={<TeacherMiniGamesPage />} />
+                        </Route>
+                        <Route path="/it" element={<ITRoute><ITLayout /></ITRoute>}>
+                            <Route index element={<ITDashboardPage />} />
+                            <Route path="games" element={<ITGamesPage />} />
                         </Route>
                         <Route path="*" element={<Navigate to="/" replace />} />
                     </Routes>

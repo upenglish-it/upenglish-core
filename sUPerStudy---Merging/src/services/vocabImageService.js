@@ -112,7 +112,7 @@ export async function deleteVocabImage(url) {
  * Call HF API through the aiProxy Cloud Function (avoids CORS).
  * Returns a Blob of the generated image.
  */
-async function fetchHfImageFromProxy(prompt) {
+export async function fetchHfImageFromProxy(prompt) {
     let res;
     try {
         res = await fetch(HF_PROXY_URL, {

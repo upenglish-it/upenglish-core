@@ -4,7 +4,7 @@
  */
 
 import { db } from '../config/firebase';
-import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, updateDoc, query, where, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, updateDoc, deleteField, query, where, orderBy, serverTimestamp } from 'firebase/firestore';
 
 // ═══════════════════════════════════════════════
 // AUTO-CREATE DEFAULTS
@@ -113,6 +113,26 @@ export async function ensureCurrentPeriodExists() {
             const ded = defaults.dataEndDay || endDay;
             return clampDay(targetEnd.getFullYear(), targetEnd.getMonth(), ded).toISOString().slice(0, 10);
         })(),
+        // Rating period dates (independent from report dates)
+        ratingStartDate: (() => {
+            const rsd = defaults.ratingStartDay || 0;
+            if (!rsd) return ''; // 0 means no rating period
+            const rStart = clampDay(targetStart.getFullYear(), targetStart.getMonth(), rsd);
+            // If ratingStartDay > endDay, it likely starts in the same month as the period
+            // If ratingStartDay < startDay and ratingEndDay is set, it may be after the period
+            return rStart.toISOString().slice(0, 10);
+        })(),
+        ratingEndDate: (() => {
+            const red = defaults.ratingEndDay || 0;
+            if (!red) return '';
+            const rsd = defaults.ratingStartDay || 0;
+            const rEnd = clampDay(targetStart.getFullYear(), targetStart.getMonth(), red);
+            // If ratingEndDay < ratingStartDay, it spans to next month
+            if (rsd && red < rsd) {
+                rEnd.setMonth(rEnd.getMonth() + 1);
+            }
+            return rEnd.toISOString().slice(0, 10);
+        })(),
         autoCreated: true
     });
     return id;
@@ -199,10 +219,70 @@ export async function updateReportPeriod(periodId, data) {
 }
 
 /**
- * Delete a report period.
+ * Soft-delete a report period (move to trash).
+ * The period will be auto-purged after 30 days.
  */
 export async function deleteReportPeriod(periodId) {
+    const ref = doc(db, 'report_periods', periodId);
+    await updateDoc(ref, {
+        isDeleted: true,
+        deletedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+    });
+}
+
+/**
+ * Restore a soft-deleted report period from trash.
+ */
+export async function restoreReportPeriod(periodId) {
+    const ref = doc(db, 'report_periods', periodId);
+    await updateDoc(ref, {
+        isDeleted: deleteField(),
+        deletedAt: deleteField(),
+        updatedAt: serverTimestamp()
+    });
+}
+
+/**
+ * Permanently delete a report period (cannot be undone).
+ */
+export async function permanentlyDeleteReportPeriod(periodId) {
     await deleteDoc(doc(db, 'report_periods', periodId));
+}
+
+/**
+ * Get all soft-deleted report periods (trash), newest first.
+ */
+export async function getDeletedReportPeriods() {
+    const snap = await getDocs(collection(db, 'report_periods'));
+    const periods = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(p => p.isDeleted === true);
+    periods.sort((a, b) => {
+        const aTime = a.deletedAt?.toDate?.() || new Date(0);
+        const bTime = b.deletedAt?.toDate?.() || new Date(0);
+        return bTime - aTime;
+    });
+    return periods;
+}
+
+/**
+ * Permanently delete all soft-deleted periods older than 30 days.
+ * Call this on page load to auto-purge expired trash.
+ */
+export async function purgeExpiredDeletedPeriods() {
+    const deleted = await getDeletedReportPeriods();
+    const now = new Date();
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    let purgedCount = 0;
+    for (const period of deleted) {
+        const deletedAt = period.deletedAt?.toDate?.() || null;
+        if (deletedAt && (now - deletedAt) > THIRTY_DAYS_MS) {
+            await deleteDoc(doc(db, 'report_periods', period.id));
+            purgedCount++;
+        }
+    }
+    return purgedCount;
 }
 
 /**
@@ -210,7 +290,9 @@ export async function deleteReportPeriod(periodId) {
  */
 export async function getAllReportPeriods() {
     const snap = await getDocs(collection(db, 'report_periods'));
-    const periods = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const periods = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(p => !p.isDeleted); // Exclude soft-deleted
     // Sort newest first by startDate
     periods.sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
     return periods;

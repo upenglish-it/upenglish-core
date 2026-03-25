@@ -37,9 +37,8 @@ export default function LessonWelcomeScreen({
                     <button
                         className="btn btn-primary learn-welcome-start-btn"
                         onClick={onStart}
-                        style={{ background: color, color: '#1a1a1a' }}
                     >
-                        <Play size={20} fill="#1a1a1a" /> Bắt đầu bài học
+                        <Play size={20} fill="currentColor" /> Bắt đầu bài học
                     </button>
 
                     {onBack && (
@@ -152,9 +151,10 @@ export default function LessonWelcomeScreen({
                     align-items: center !important;
                     justify-content: center !important;
                     gap: 12px !important;
+                    background: var(--color-primary) !important;
+                    color: #fff !important;
                     box-shadow: 0 10px 20px -5px rgba(0,0,0,0.3);
                     transition: all 0.3s ease !important;
-                    color: #1a1a1a !important;
                 }
                 .learn-welcome-start-btn:hover {
                     transform: translateY(-2px);

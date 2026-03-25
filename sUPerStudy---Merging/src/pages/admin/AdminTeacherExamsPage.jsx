@@ -1,17 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { getExams, deleteExam, getAllTeacherExamFolders, saveTeacherExamFolder, deleteTeacherExamFolder, saveExam, createExamAssignment, getExamAssignmentsForExam, recalcExamQuestionCache } from '../../services/examService';
-import { getGroups, toggleResourcePublic, getResourceSharedEntities, shareResourceToEmail, unshareResourceFromUser, shareResourceToGroup, unshareResourceFromGroup } from '../../services/adminService';
+import { Link, useNavigate } from 'react-router-dom';
+import { getExams, deleteExam, getAllTeacherExamFolders, saveTeacherExamFolder, deleteTeacherExamFolder, saveExam, createExamAssignment, getExamAssignmentsForExam, recalcExamQuestionCache, getDeletedExams, getDeletedTeacherExamFolders, restoreExam, restoreTeacherExamFolder, permanentlyDeleteExam, permanentlyDeleteTeacherExamFolder } from '../../services/examService';
+import { getGroups, toggleResourcePublic, getResourceSharedEntities, shareResourceToEmail, unshareResourceFromUser, shareResourceToGroup, unshareResourceFromGroup, cleanupExpiredDeletedContent, restoreExamToAdmin } from '../../services/adminService';
+import { getStudentsInGroup } from '../../services/teacherService';
 import { useAuth } from '../../contexts/AuthContext';
 import { Timestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { BookOpen, Search, Trash2, Edit, AlertCircle, Globe, List, FolderOpen, X, ChevronDown, ChevronRight, AlertTriangle, User, Share2, Users, UsersRound, Mail, UserPlus, Lock, Send, FileText, CheckCircle, Clock } from 'lucide-react';
+import { BookOpen, Search, Trash2, Edit, AlertCircle, Globe, List, FolderOpen, X, ChevronDown, ChevronRight, AlertTriangle, User, Share2, Users, UsersRound, Mail, UserPlus, Lock, Send, FileText, CheckCircle, Clock, RotateCcw, ArrowRightLeft } from 'lucide-react';
+import { convertExamToGrammar } from '../../services/conversionService';
 import CustomSelect from '../../components/common/CustomSelect';
 import EmailAutocomplete from '../../components/common/EmailAutocomplete';
 
 export default function AdminTeacherExamsPage() {
     const { user } = useAuth();
+    const navigate = useNavigate();
     const [exams, setExams] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -31,9 +34,14 @@ export default function AdminTeacherExamsPage() {
     const [teacherManagedGroups, setTeacherManagedGroups] = useState([]);
     const [quickAssignGroupId, setQuickAssignGroupId] = useState('');
     const [quickAssignDueDate, setQuickAssignDueDate] = useState('');
+    const [quickAssignScheduledStart, setQuickAssignScheduledStart] = useState('');
     const [isQuickAssigning, setIsQuickAssigning] = useState(false);
     const [quickAssignSuccess, setQuickAssignSuccess] = useState('');
     const [existingAssignments, setExistingAssignments] = useState([]);
+    const [quickAssignStudents, setQuickAssignStudents] = useState([]);
+    const [quickAssignSelectedStudentIds, setQuickAssignSelectedStudentIds] = useState([]);
+    const [quickAssignStudentsLoading, setQuickAssignStudentsLoading] = useState(false);
+    const [studentDropdownOpen, setStudentDropdownOpen] = useState(false);
 
     // UI state
     const [expandedTeachers, setExpandedTeachers] = useState(new Set());
@@ -51,11 +59,21 @@ export default function AdminTeacherExamsPage() {
     const [isDeleting, setIsDeleting] = useState(false);
     const [alertMessage, setAlertMessage] = useState(null);
 
+    // Conversion state
+    const [examToConvert, setExamToConvert] = useState(null);
+    const [isConvertingToGrammar, setIsConvertingToGrammar] = useState(false);
+
     // Exam Edit State
     const [examFormOpen, setExamFormOpen] = useState(false);
     const [examFormData, setExamFormData] = useState({ id: '', name: '', title: '', description: '', durationMinutes: 60, isPublic: false, timingMode: 'exam' });
     const [isSavingExam, setIsSavingExam] = useState(false);
     const [originalTimingMode, setOriginalTimingMode] = useState('exam');
+
+    // Trash state
+    const [deletedExams, setDeletedExams] = useState([]);
+    const [deletedFolders2, setDeletedFolders2] = useState([]);
+    const [trashExpanded, setTrashExpanded] = useState(false);
+    const [trashActionLoading, setTrashActionLoading] = useState(null);
 
     useEffect(() => {
         loadData();
@@ -79,18 +97,28 @@ export default function AdminTeacherExamsPage() {
     async function loadData() {
         setLoading(true);
         try {
-            const [examsData, foldersData] = await Promise.all([
+            const [examsData, foldersData, delExams, delFolders] = await Promise.all([
                 getExams('teacher'),
-                getAllTeacherExamFolders()
+                getAllTeacherExamFolders(),
+                getDeletedExams(),
+                getDeletedTeacherExamFolders()
             ]);
             setExams(examsData);
             setFolders(foldersData);
+            // Filter deleted exams to only teacher-created ones
+            setDeletedExams(delExams.filter(ex => ex.createdByRole === 'teacher'));
+            setDeletedFolders2(delFolders);
+
+            // Fire-and-forget auto-purge
+            cleanupExpiredDeletedContent().catch(() => {});
 
             const tempTeacherMap = { ...teacherMap };
             const allTeacherIds = new Set([
                 ...examsData.map(ex => ex.createdBy),
                 ...foldersData.map(f => f.teacherId),
-                ...examsData.flatMap(ex => ex.collaboratorIds || [])
+                ...examsData.flatMap(ex => ex.collaboratorIds || []),
+                ...delExams.map(ex => ex.createdBy),
+                ...delFolders.map(f => f.teacherId)
             ]);
             await Promise.all([...allTeacherIds].map(id => fetchTeacherInfo(id, tempTeacherMap)));
 
@@ -207,6 +235,21 @@ export default function AdminTeacherExamsPage() {
     }
 
     // --- SHARE HANDLERS ---
+
+    async function handleConfirmConvertToGrammar() {
+        if (!examToConvert) return;
+        setIsConvertingToGrammar(true);
+        try {
+            const newExerciseId = await convertExamToGrammar(examToConvert.id, user.uid, { createdByRole: 'admin' });
+            setExamToConvert(null);
+            setAlertMessage({ type: 'success', text: `Đã chuyển đổi "${examToConvert.name || examToConvert.title}" thành Bài kỹ năng (Admin)!` });
+            navigate(`/admin/grammar/${newExerciseId}`);
+        } catch (error) {
+            setAlertMessage({ type: 'error', text: 'Lỗi chuyển đổi: ' + error.message });
+        }
+        setIsConvertingToGrammar(false);
+    }
+
     async function openShareModal(resource, type) {
         setResourceToShare({ ...resource, type });
         setShareModalOpen(true);
@@ -215,6 +258,7 @@ export default function AdminTeacherExamsPage() {
         setShareEmail('');
         setQuickAssignGroupId('');
         setQuickAssignDueDate('');
+        setQuickAssignScheduledStart('');
         setQuickAssignSuccess('');
         try {
             const [entities, groupsData, assignments] = await Promise.all([
@@ -304,7 +348,7 @@ export default function AdminTeacherExamsPage() {
             setAlertMessage({ type: 'error', text: `Bài "${examName}" có section chưa đặt thời gian. Vui lòng hoàn thành thiết lập thời gian trước khi giao bài.` });
             return;
         }
-        if (resourceToShare.timingMode === 'question') {
+        if (resourceToShare.timingMode === 'question' && resourceToShare.cachedQuestionTimeMissingCount > 0) {
             setAlertMessage({ type: 'error', text: `Bài "${examName}" chưa hoàn thành thiết lập thời gian theo từng câu hỏi. Vui lòng kiểm tra thời gian từng câu trước khi giao bài.` });
             return;
         }
@@ -313,7 +357,7 @@ export default function AdminTeacherExamsPage() {
         setQuickAssignSuccess('');
         try {
             const selectedGroup = teacherManagedGroups.find(g => g.id === quickAssignGroupId);
-            await createExamAssignment({
+            const assignPayload = {
                 examId: resourceToShare.id,
                 examName: resourceToShare.name || resourceToShare.title,
                 examTitle: resourceToShare.name || resourceToShare.title,
@@ -323,10 +367,21 @@ export default function AdminTeacherExamsPage() {
                 targetName: selectedGroup?.name || '',
                 dueDate: Timestamp.fromDate(new Date(quickAssignDueDate)),
                 createdBy: user.uid,
-            });
+            };
+            if (quickAssignScheduledStart && quickAssignScheduledStart !== 'pending') {
+                assignPayload.scheduledStart = Timestamp.fromDate(new Date(quickAssignScheduledStart));
+            }
+            if (quickAssignSelectedStudentIds.length > 0) {
+                assignPayload.assignedStudentIds = quickAssignSelectedStudentIds;
+            }
+            await createExamAssignment(assignPayload);
             setQuickAssignSuccess(`Đã giao thành công cho lớp ${selectedGroup?.name}!`);
             setQuickAssignGroupId('');
             setQuickAssignDueDate('');
+            setQuickAssignScheduledStart('');
+            setQuickAssignSelectedStudentIds([]);
+            setQuickAssignStudents([]);
+            setStudentDropdownOpen(false);
             const updated = await getExamAssignmentsForExam(resourceToShare.id);
             setExistingAssignments(updated.map(a => ({
                 ...a,
@@ -380,7 +435,7 @@ export default function AdminTeacherExamsPage() {
             <div className="admin-page-header">
                 <div>
                     <h1 className="admin-page-title">Bài thi GV tạo</h1>
-                    <p className="admin-page-desc">Quản lý các đề thi do giáo viên tải lên</p>
+                    <p className="admin-page-subtitle">Quản lý các đề thi do giáo viên tải lên</p>
                 </div>
             </div>
 
@@ -519,10 +574,13 @@ export default function AdminTeacherExamsPage() {
                                                                 {/* Level 3: Exams inside Folder */}
                                                                 {isFolderExpanded && (
                                                                     folderExams.length === 0 ? (
-                                                                        <tr>
+                                                                        <tr className="admin-empty-nested-row">
                                                                             <td></td>
-                                                                            <td colSpan="3" style={{ paddingLeft: '76px', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>
-                                                                                Folder này chưa có đề thi nào.
+                                                                            <td colSpan="3">
+                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', color: '#64748b' }}>
+                                                                                    <AlertTriangle size={14} style={{ opacity: 0.7 }} />
+                                                                                    <span style={{ fontSize: '0.85rem' }}>Folder này chưa có đề thi nào.</span>
+                                                                                </div>
                                                                             </td>
                                                                         </tr>
                                                                     ) : (
@@ -531,7 +589,7 @@ export default function AdminTeacherExamsPage() {
                                                                                 <td></td>
                                                                                 <td data-label="Tên đề thi">
                                                                                     <div className="admin-topic-cell">
-                                                                                        <div className="admin-topic-icon" style={{ background: '#fce7f3', color: '#db2777', fontSize: '0.8rem' }}>📋</div>
+                                                                                        <div className="admin-topic-icon" style={{ background: '#fce7f3', color: '#db2777', fontSize: '0.8rem' }}>{exam.icon || '📋'}</div>
                                                                                         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: '6px' }}>
                                                                                             <div className="admin-topic-name" style={{ fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                                                                                 {exam.name || exam.title}
@@ -568,6 +626,7 @@ export default function AdminTeacherExamsPage() {
                                                                                         <Link to={`/admin/teacher-exams/${exam.id}`} className="admin-action-btn" title="Chỉnh sửa đề thi">
                                                                                             <List size={14} />
                                                                                         </Link>
+                                                                                        <button className="admin-action-btn" onClick={() => setExamToConvert(exam)} title="Chuyển thành Bài kỹ năng"><ArrowRightLeft size={14} /></button>
                                                                                         <button className="admin-action-btn" onClick={() => openShareModal(exam, 'exam')} title="Chia sẻ">
                                                                                             <Share2 size={14} />
                                                                                         </button>
@@ -604,7 +663,7 @@ export default function AdminTeacherExamsPage() {
                                                                     <td></td>
                                                                     <td>
                                                                         <div className="admin-topic-cell">
-                                                                            <div className="admin-topic-icon" style={{ background: '#fce7f3', color: '#db2777', fontSize: '0.8rem' }}>📋</div>
+                                                                            <div className="admin-topic-icon" style={{ background: '#fce7f3', color: '#db2777', fontSize: '0.8rem' }}>{exam.icon || '📋'}</div>
                                                                             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: '6px' }}>
                                                                                 <div className="admin-topic-name" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', flexWrap: 'wrap' }}>
                                                                                     {exam.name || exam.title}
@@ -643,6 +702,7 @@ export default function AdminTeacherExamsPage() {
                                                                             <Link to={`/admin/teacher-exams/${exam.id}`} className="admin-action-btn" title="Chỉnh sửa đề thi">
                                                                                 <List size={14} />
                                                                             </Link>
+                                                                            <button className="admin-action-btn" onClick={() => setExamToConvert(exam)} title="Chuyển thành Bài kỹ năng"><ArrowRightLeft size={14} /></button>
                                                                             <button className="admin-action-btn" onClick={() => openShareModal(exam, 'exam')} title="Chia sẻ">
                                                                                 <Share2 size={14} />
                                                                             </button>
@@ -668,6 +728,104 @@ export default function AdminTeacherExamsPage() {
                     </div>
                 )}
             </div>
+
+            {/* TRASH SECTION */}
+            {(deletedExams.length > 0 || deletedFolders2.length > 0) && (
+                <div className="admin-card" style={{ marginTop: '24px', border: '1px solid #fecaca' }}>
+                    <div
+                        style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '16px 20px', userSelect: 'none' }}
+                        onClick={() => setTrashExpanded(!trashExpanded)}
+                    >
+                        {trashExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                        <Trash2 size={18} style={{ color: '#ef4444' }} />
+                        <span style={{ fontWeight: 600, fontSize: '1rem', color: '#dc2626' }}>Thùng rác</span>
+                        <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 'normal' }}>({deletedExams.length + deletedFolders2.length} mục · Tự xóa sau 30 ngày)</span>
+                    </div>
+                    {trashExpanded && (
+                        <div style={{ padding: '0 20px 20px' }}>
+                            <div className="admin-table-container">
+                                <table className="admin-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Loại</th>
+                                            <th>Tên</th>
+                                            <th>Giáo viên</th>
+                                            <th>Còn lại</th>
+                                            <th className="text-right">Thao tác</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {deletedFolders2.map(folder => {
+                                            const daysLeft = folder.deletedAt ? Math.max(0, 30 - Math.floor((Date.now() - (folder.deletedAt.toMillis ? folder.deletedAt.toMillis() : new Date(folder.deletedAt).getTime())) / 86400000)) : '?';
+                                            const teacher = teacherMap[folder.teacherId] || {};
+                                            return (
+                                                <tr key={`df-${folder.id}`}>
+                                                    <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', color: '#6366f1' }}><FolderOpen size={14} /> Folder</span></td>
+                                                    <td style={{ fontWeight: 500 }}>{folder.name}</td>
+                                                    <td style={{ fontSize: '0.85rem', color: '#64748b' }}>{teacher.displayName || teacher.email || folder.teacherId}</td>
+                                                    <td><span style={{ fontSize: '0.8rem', color: daysLeft <= 7 ? '#ef4444' : '#f59e0b', fontWeight: 600 }}>{daysLeft} ngày</span></td>
+                                                    <td className="text-right">
+                                                        <div className="admin-table-actions">
+                                                            <button className="admin-action-btn" disabled={trashActionLoading === folder.id} title="Khôi phục cho GV" onClick={async () => {
+                                                                setTrashActionLoading(folder.id);
+                                                                try { await restoreTeacherExamFolder(folder.id); loadData(); setAlertMessage({ type: 'success', text: 'Đã khôi phục folder cho giáo viên!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
+                                                                setTrashActionLoading(null);
+                                                            }}><RotateCcw size={14} /></button>
+                                                            <button className="admin-action-btn danger" disabled={trashActionLoading === folder.id} title="Xóa vĩnh viễn" onClick={async () => {
+                                                                if (!window.confirm('Xóa vĩnh viễn folder này?')) return;
+                                                                setTrashActionLoading(folder.id);
+                                                                try { await permanentlyDeleteTeacherExamFolder(folder.id); loadData(); setAlertMessage({ type: 'success', text: 'Đã xóa vĩnh viễn!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
+                                                                setTrashActionLoading(null);
+                                                            }}><Trash2 size={14} /></button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {deletedExams.map(exam => {
+                                            const daysLeft = exam.deletedAt ? Math.max(0, 30 - Math.floor((Date.now() - (exam.deletedAt.toMillis ? exam.deletedAt.toMillis() : new Date(exam.deletedAt).getTime())) / 86400000)) : '?';
+                                            const teacher = teacherMap[exam.createdBy] || {};
+                                            return (
+                                                <tr key={`de-${exam.id}`}>
+                                                    <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', color: '#10b981' }}><FileText size={14} /> Đề thi</span></td>
+                                                    <td>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                            <span style={{ fontSize: '1rem' }}>📋</span>
+                                                            <span style={{ fontWeight: 500 }}>{exam.name || exam.title}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td style={{ fontSize: '0.85rem', color: '#64748b' }}>{teacher.displayName || teacher.email || exam.createdBy}</td>
+                                                    <td><span style={{ fontSize: '0.8rem', color: daysLeft <= 7 ? '#ef4444' : '#f59e0b', fontWeight: 600 }}>{daysLeft} ngày</span></td>
+                                                    <td className="text-right">
+                                                        <div className="admin-table-actions">
+                                                            <button className="admin-action-btn" disabled={trashActionLoading === exam.id} title="Khôi phục cho Giáo viên" onClick={async () => {
+                                                                setTrashActionLoading(exam.id);
+                                                                try { await restoreExam(exam.id); loadData(); setAlertMessage({ type: 'success', text: 'Đã khôi phục cho giáo viên!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
+                                                                setTrashActionLoading(null);
+                                                            }}><RotateCcw size={14} /><User size={12} style={{ marginLeft: '-4px' }} /></button>
+                                                            <button className="admin-action-btn" disabled={trashActionLoading === exam.id} title="Khôi phục cho Admin" style={{ color: '#7c3aed' }} onClick={async () => {
+                                                                setTrashActionLoading(exam.id);
+                                                                try { await restoreExamToAdmin(exam.id); loadData(); setAlertMessage({ type: 'success', text: 'Đã khôi phục cho Admin!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
+                                                                setTrashActionLoading(null);
+                                                            }}><RotateCcw size={14} /><UsersRound size={12} style={{ marginLeft: '-4px' }} /></button>
+                                                            <button className="admin-action-btn danger" disabled={trashActionLoading === exam.id} title="Xóa vĩnh viễn" onClick={async () => {
+                                                                if (!window.confirm('Xóa vĩnh viễn đề thi này? Tất cả câu hỏi và bài nộp bên trong sẽ bị xóa.')) return;
+                                                                setTrashActionLoading(exam.id);
+                                                                try { await permanentlyDeleteExam(exam.id); loadData(); setAlertMessage({ type: 'success', text: 'Đã xóa vĩnh viễn!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
+                                                                setTrashActionLoading(null);
+                                                            }}><Trash2 size={14} /></button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* FOLDER EDIT MODAL */}
             {folderFormOpen && (
@@ -939,8 +1097,10 @@ export default function AdminTeacherExamsPage() {
                                 <div style={{ marginBottom: '12px' }}>
                                     <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '6px', fontWeight: 600 }}>Đã giao cho:</p>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                        {existingAssignments.map(a => (
-                                            <span key={a.id} style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '20px', background: 'linear-gradient(135deg, #fef3c7, #fde68a)', color: '#92400e', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px solid #fcd34d' }}>✅ {a.groupName || a.targetName || 'Lớp'}</span>
+                                        {existingAssignments
+                                            .filter((a, i, arr) => arr.findIndex(x => x.targetId === a.targetId) === i)
+                                            .map(a => (
+                                            <span key={a.id} style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '20px', background: 'linear-gradient(135deg, #fef3c7, #fde68a)', color: '#92400e', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px solid #fcd34d' }}>✅ {a.groupName || a.targetName || allGroups.find(g => g.id === a.groupId)?.name || 'Lớp'}</span>
                                         ))}
                                     </div>
                                 </div>
@@ -949,13 +1109,118 @@ export default function AdminTeacherExamsPage() {
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                         <div style={{ flex: 1, minWidth: 0, position: 'relative', zIndex: 20 }}>
-                                            <CustomSelect value={quickAssignGroupId} onChange={v => setQuickAssignGroupId(v)} placeholder="-- Chọn lớp --" options={teacherManagedGroups.map(g => ({ value: g.id, label: g.name, icon: '🏫' }))} style={{ margin: 0 }} />
+                                            <CustomSelect value={quickAssignGroupId} onChange={v => {
+                                                setQuickAssignGroupId(v);
+                                                setQuickAssignSelectedStudentIds([]);
+                                                setStudentDropdownOpen(false);
+                                                if (v) {
+                                                    setQuickAssignStudentsLoading(true);
+                                                    getStudentsInGroup(v).then(students => {
+                                                        setQuickAssignStudents(students);
+                                                        setQuickAssignStudentsLoading(false);
+                                                    }).catch(() => setQuickAssignStudentsLoading(false));
+                                                } else {
+                                                    setQuickAssignStudents([]);
+                                                }
+                                            }} placeholder="-- Chọn lớp --" options={teacherManagedGroups.map(g => ({ value: g.id, label: g.name, icon: '🏫' }))} style={{ margin: 0 }} />
                                         </div>
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <input type="datetime-local" value={quickAssignDueDate} onChange={e => setQuickAssignDueDate(e.target.value)} style={{ width: '100%', padding: '6px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.88rem', color: '#1e293b', minHeight: '38px', boxSizing: 'border-box' }} />
                                         </div>
                                     </div>
-                                    <button type="button" onClick={handleQuickAssign} disabled={isQuickAssigning || !quickAssignGroupId || !quickAssignDueDate} className="admin-btn admin-btn-primary" style={{ width: '100%', padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: 'linear-gradient(135deg, #f59e0b, #d97706)', border: 'none', opacity: (isQuickAssigning || !quickAssignGroupId || !quickAssignDueDate) ? 0.6 : 1 }}>
+                                    {/* Scheduled Start Toggle */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                        <span style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 500 }}>⏰ Thời điểm bắt đầu:</span>
+                                        <div style={{ display: 'flex', borderRadius: '8px', overflow: 'hidden', border: '1.5px solid #e2e8f0' }}>
+                                            <button type="button" onClick={() => setQuickAssignScheduledStart('')} style={{ padding: '4px 12px', fontSize: '0.78rem', fontWeight: 600, border: 'none', cursor: 'pointer', background: !quickAssignScheduledStart ? 'linear-gradient(135deg, #10b981, #059669)' : '#f8fafc', color: !quickAssignScheduledStart ? '#fff' : '#64748b', transition: 'all 0.2s' }}>Bắt đầu ngay</button>
+                                            <button type="button" onClick={() => setQuickAssignScheduledStart('pending')} style={{ padding: '4px 12px', fontSize: '0.78rem', fontWeight: 600, border: 'none', borderLeft: '1px solid #e2e8f0', cursor: 'pointer', background: quickAssignScheduledStart ? 'linear-gradient(135deg, #f59e0b, #d97706)' : '#f8fafc', color: quickAssignScheduledStart ? '#fff' : '#64748b', transition: 'all 0.2s' }}>Hẹn ngày...</button>
+                                        </div>
+                                    </div>
+                                    {quickAssignScheduledStart && (
+                                        <div>
+                                            <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 500, marginBottom: '4px', display: 'block' }}>📅 Ngày giờ bắt đầu</label>
+                                            <input type="datetime-local" value={quickAssignScheduledStart === 'pending' ? '' : quickAssignScheduledStart} onChange={e => setQuickAssignScheduledStart(e.target.value)} style={{ width: '100%', padding: '6px 12px', borderRadius: '10px', border: '1.5px solid #f59e0b', fontSize: '0.88rem', color: '#1e293b', minHeight: '38px', boxSizing: 'border-box', background: '#fffbeb' }} />
+                                            {quickAssignScheduledStart && quickAssignScheduledStart !== 'pending' && quickAssignDueDate && new Date(quickAssignScheduledStart) >= new Date(quickAssignDueDate) && (
+                                                <p style={{ color: '#ef4444', fontSize: '0.75rem', margin: '4px 0 0' }}>⚠ Ngày bắt đầu phải trước hạn nộp!</p>
+                                            )}
+                                        </div>
+                                    )}
+                                    {/* Student selection dropdown */}
+                                    {quickAssignGroupId && (
+                                        <div style={{ position: 'relative', zIndex: 15 }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => setStudentDropdownOpen(!studentDropdownOpen)}
+                                                style={{
+                                                    width: '100%', padding: '8px 12px', borderRadius: '8px',
+                                                    border: `1.5px solid ${quickAssignSelectedStudentIds.length > 0 ? '#3b82f6' : '#e2e8f0'}`,
+                                                    background: quickAssignSelectedStudentIds.length > 0 ? '#eff6ff' : '#fff',
+                                                    textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                                    cursor: 'pointer', fontSize: '0.82rem', color: '#334155'
+                                                }}
+                                            >
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <Users size={14} color="#64748b" />
+                                                    {quickAssignStudentsLoading ? 'Đang tải...' :
+                                                        quickAssignSelectedStudentIds.length > 0
+                                                            ? `${quickAssignSelectedStudentIds.length} học viên được chọn`
+                                                            : 'Cả lớp (mặc định)'}
+                                                </span>
+                                                <ChevronDown size={14} color="#64748b" style={{ transform: studentDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                                            </button>
+                                            {studentDropdownOpen && !quickAssignStudentsLoading && quickAssignStudents.length > 0 && (
+                                                <div style={{
+                                                    marginTop: '4px',
+                                                    background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px',
+                                                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                                                    maxHeight: '200px', overflowY: 'auto'
+                                                }}>
+                                                    <div style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9' }}>
+                                                        <label style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', cursor: 'pointer', borderRadius: '6px', background: '#f8fafc', fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={quickAssignSelectedStudentIds.length === 0}
+                                                                onChange={() => setQuickAssignSelectedStudentIds([])}
+                                                                style={{ marginRight: '8px', cursor: 'pointer' }}
+                                                            />
+                                                            Cả lớp ({quickAssignStudents.length} học viên)
+                                                        </label>
+                                                    </div>
+                                                    <div style={{ padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                        {quickAssignStudents.map(s => {
+                                                            const isChecked = quickAssignSelectedStudentIds.includes(s.uid);
+                                                            return (
+                                                                <label key={s.uid} style={{
+                                                                    display: 'flex', alignItems: 'center', padding: '6px 8px',
+                                                                    cursor: 'pointer', borderRadius: '6px',
+                                                                    background: isChecked ? '#eff6ff' : 'transparent',
+                                                                    transition: 'background 0.15s'
+                                                                }}>
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={isChecked}
+                                                                        onChange={() => {
+                                                                            setQuickAssignSelectedStudentIds(prev =>
+                                                                                isChecked ? prev.filter(id => id !== s.uid) : [...prev, s.uid]
+                                                                            );
+                                                                        }}
+                                                                        style={{ marginRight: '8px', cursor: 'pointer', width: '15px', height: '15px' }}
+                                                                    />
+                                                                    <div>
+                                                                        <div style={{ fontSize: '0.82rem', color: isChecked ? '#1d4ed8' : '#334155', fontWeight: isChecked ? 500 : 400 }}>
+                                                                            {s.displayName || s.email?.split('@')[0] || 'Học viên'}
+                                                                        </div>
+                                                                        {s.email && <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{s.email}</div>}
+                                                                    </div>
+                                                                </label>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    <button type="button" onClick={handleQuickAssign} disabled={isQuickAssigning || !quickAssignGroupId || !quickAssignDueDate || (quickAssignScheduledStart === 'pending') || (quickAssignScheduledStart && quickAssignScheduledStart !== 'pending' && quickAssignDueDate && new Date(quickAssignScheduledStart) >= new Date(quickAssignDueDate))} className="admin-btn admin-btn-primary" style={{ width: '100%', padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: 'linear-gradient(135deg, #f59e0b, #d97706)', border: 'none', opacity: (isQuickAssigning || !quickAssignGroupId || !quickAssignDueDate || quickAssignScheduledStart === 'pending') ? 0.6 : 1 }}>
                                         <Send size={14} />
                                         {isQuickAssigning ? 'Đang giao...' : 'Giao bài'}
                                     </button>
@@ -986,6 +1251,33 @@ export default function AdminTeacherExamsPage() {
                         <p className="admin-modal-desc">{alertMessage.text}</p>
                         <div className="admin-modal-actions" style={{ flexDirection: 'row' }}>
                             <button className="admin-btn admin-btn-primary" style={{ flex: 1 }} onClick={() => setAlertMessage(null)}>Đóng</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* CONVERT TO GRAMMAR CONFIRM */}
+            {examToConvert && (
+                <div className="admin-modal-overlay">
+                    <div className="admin-modal" style={{ maxWidth: '480px' }}>
+                        <h2 className="admin-modal-title" style={{ color: '#7c3aed' }}><ArrowRightLeft size={24} /> Chuyển thành Bài kỹ năng</h2>
+                        <p className="admin-modal-desc">
+                            Chuyển <strong>{examToConvert.name || examToConvert.title}</strong> thành Bài kỹ năng. Bài gốc sẽ được giữ nguyên.
+                        </p>
+                        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '10px 14px', fontSize: '0.8rem', color: '#1e40af', marginBottom: '16px' }}>
+                            ℹ️ Tất cả câu hỏi từ mọi section sẽ được gom lại thành 1 bài duy nhất. Quản lý thời gian sẽ bị bỏ.
+                        </div>
+                        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '10px 14px', fontSize: '0.8rem', color: '#92400e', marginBottom: '16px' }}>
+                            💡 Sau khi chuyển đổi, hãy chọn <strong>Độ tuổi</strong> phù hợp để AI tạo variations chính xác hơn.
+                        </div>
+                        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '10px 14px', fontSize: '0.8rem', color: '#166534', marginBottom: '16px' }}>
+                            🔒 Bài mới sẽ được lưu vào mục <strong>Bài kỹ năng Admin</strong>.
+                        </div>
+                        <div className="admin-modal-actions">
+                            <button className="admin-btn admin-btn-secondary" onClick={() => setExamToConvert(null)} disabled={isConvertingToGrammar}>Hủy</button>
+                            <button className="admin-btn admin-btn-primary" onClick={handleConfirmConvertToGrammar} disabled={isConvertingToGrammar} style={{ background: '#7c3aed' }}>
+                                {isConvertingToGrammar ? 'Đang chuyển đổi...' : '🔄 Xác nhận chuyển đổi'}
+                            </button>
                         </div>
                     </div>
                 </div>

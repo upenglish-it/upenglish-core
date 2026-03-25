@@ -114,9 +114,9 @@ export default function RegisterPage() {
                     <p>
                         Đã có tài khoản? <Link to="/login" style={{ color: 'var(--color-primary-light)', fontWeight: 600 }}>Đăng nhập</Link>
                     </p>
-                    <Link to="/login" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '0.9rem', textDecoration: 'none' }}>
+                    <button onClick={() => navigate(-1)} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '0.9rem', textDecoration: 'none', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                         <ArrowLeft size={16} /> Quay lại trang đăng nhập
-                    </Link>
+                    </button>
                 </div>
             </div>
         </div>

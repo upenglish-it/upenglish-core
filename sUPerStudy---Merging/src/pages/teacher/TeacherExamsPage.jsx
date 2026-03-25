@@ -1,18 +1,22 @@
 import { useState, useEffect, Fragment } from 'react';
-import { Link } from 'react-router-dom';
-import { getExams, getSharedExams, saveExam, deleteExam, getExamFolders, getTeacherExamFolders, saveTeacherExamFolder, deleteTeacherExamFolder, createExamAssignment, getExamAssignmentsForExam } from '../../services/examService';
+import { Link, useNavigate } from 'react-router-dom';
+import { getExams, getSharedExams, saveExam, deleteExam, getExamFolders, getTeacherExamFolders, saveTeacherExamFolder, deleteTeacherExamFolder, createExamAssignment, getExamAssignmentsForExam, recalcExamQuestionCache, getExam, updateTeacherExamFoldersOrder } from '../../services/examService';
 import { submitProposal, getProposalForSource } from '../../services/contentProposalService';
 import { getUsersPublicInfo } from '../../services/userService';
-import { addCollaborator, removeCollaborator, transferOwnership, getCollaboratedResources, findTeacherByEmail, getTeacherGroups } from '../../services/teacherService';
+import { addCollaborator, removeCollaborator, transferOwnership, getCollaboratedResources, findTeacherByEmail, getTeacherGroups, getStudentsInGroup, updateCollaboratorRole } from '../../services/teacherService';
 import { useAuth } from '../../contexts/AuthContext';
 import { Timestamp } from 'firebase/firestore';
-import { Edit, Trash2, X, Plus, List, Search, Clock, ClipboardCheck, ClipboardList, FolderOpen, Globe, Lock, AlertTriangle, Share2, ChevronDown, ChevronRight, AlertCircle, Users, UserPlus, Landmark, Send, CheckCircle, XCircle, ArrowRightLeft, UsersRound, FileText, Calendar, Copy } from 'lucide-react';
+import { Edit, Trash2, X, Plus, List, Search, Clock, ClipboardCheck, ClipboardList, FolderOpen, Globe, Lock, AlertTriangle, Share2, ChevronDown, ChevronRight, AlertCircle, Users, UserPlus, Landmark, Send, CheckCircle, XCircle, ArrowRightLeft, UsersRound, FileText, Calendar, Copy, GripVertical } from 'lucide-react';
 import { duplicateExam } from '../../services/duplicateService';
+import { convertExamToGrammar } from '../../services/conversionService';
 import CustomSelect from '../../components/common/CustomSelect';
 import EmailAutocomplete from '../../components/common/EmailAutocomplete';
+import ShareModal from '../../components/common/ShareModal';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 export default function TeacherExamsPage() {
     const { user } = useAuth();
+    const navigate = useNavigate();
     const [mergedExams, setMergedExams] = useState([]);
     const [questionCounts, setQuestionCounts] = useState({});
     const [loading, setLoading] = useState(true);
@@ -38,6 +42,10 @@ export default function TeacherExamsPage() {
     const [examToDuplicate, setExamToDuplicate] = useState(null);
     const [isDuplicating, setIsDuplicating] = useState(false);
 
+    // Conversion state
+    const [examToConvert, setExamToConvert] = useState(null);
+    const [isConvertingToGrammar, setIsConvertingToGrammar] = useState(false);
+
     // Folder CRUD states
     const [folderFormOpen, setFolderFormOpen] = useState(false);
     const [folderFormData, setFolderFormData] = useState({ name: '', description: '', icon: '📁', color: '#6366f1', examIds: [] });
@@ -59,14 +67,21 @@ export default function TeacherExamsPage() {
     const [collabEmail, setCollabEmail] = useState('');
     const [isAddingCollab, setIsAddingCollab] = useState(false);
     const [transferTarget, setTransferTarget] = useState(null);
+    const [collabRole, setCollabRole] = useState('editor');
+    const [collabRolesMap, setCollabRolesMap] = useState({});
 
     // Quick Assign state
     const [teacherManagedGroups, setTeacherManagedGroups] = useState([]);
     const [quickAssignGroupId, setQuickAssignGroupId] = useState('');
     const [quickAssignDueDate, setQuickAssignDueDate] = useState('');
+    const [quickAssignScheduledStart, setQuickAssignScheduledStart] = useState('');
     const [isQuickAssigning, setIsQuickAssigning] = useState(false);
     const [quickAssignSuccess, setQuickAssignSuccess] = useState('');
     const [existingAssignments, setExistingAssignments] = useState([]);
+    const [quickAssignStudents, setQuickAssignStudents] = useState([]);
+    const [quickAssignSelectedStudentIds, setQuickAssignSelectedStudentIds] = useState([]);
+    const [quickAssignStudentsLoading, setQuickAssignStudentsLoading] = useState(false);
+    const [studentDropdownOpen, setStudentDropdownOpen] = useState(false);
 
     useEffect(() => {
         if (user?.uid) loadData();
@@ -92,15 +107,20 @@ export default function TeacherExamsPage() {
 
             const publicFolderExamIds = new Set();
             const folderExamIds = new Set();
+            const teacherSharedFolderExamIds = new Set();
 
             const visibleFolders = allFolders.filter(f => {
                 const folderExams = (f.examIds || []).map(eid => sharedExams.find(e => e.id === eid)).filter(Boolean);
                 const hasVisibleExam = folderExams.length > 0;
 
-                if (f.isPublic || folderAccess.includes(f.id) || hasVisibleExam) {
+                if (f.isPublic || f.teacherVisible || (f.sharedWithTeacherIds && f.sharedWithTeacherIds.includes(user.uid)) || folderAccess.includes(f.id) || hasVisibleExam) {
                     (f.examIds || []).forEach(eid => {
                         folderExamIds.add(eid);
-                        if (f.isPublic) publicFolderExamIds.add(eid);
+                        if (f.isPublic || f.teacherVisible) {
+                            publicFolderExamIds.add(eid);
+                        } else if (f.sharedWithTeacherIds && f.sharedWithTeacherIds.includes(user.uid)) {
+                            teacherSharedFolderExamIds.add(eid);
+                        }
                     });
                     return true;
                 }
@@ -120,7 +140,8 @@ export default function TeacherExamsPage() {
                         isPublic: e.isPublic !== false ? (e.isPublic || isInheritedPublic) : false,
                         isInPublicFolder: isInheritedPublic,
                         isOwner: false,
-                        isAdmin
+                        isAdmin,
+                        isTeacherSharedOnly: teacherSharedFolderExamIds.has(e.id) && !isInheritedPublic && !e.isPublic && !e.teacherVisible
                     });
                 }
             });
@@ -132,6 +153,7 @@ export default function TeacherExamsPage() {
                         isPublic: e.isPublic || false,
                         isOwner: false,
                         isCollaborator: true,
+                        collaboratorRole: (e.collaboratorRoles || {})[user.uid] || 'editor',
                         isAdmin: false
                     });
                 }
@@ -148,12 +170,43 @@ export default function TeacherExamsPage() {
 
             // Read cached question counts from exam documents
             const counts = {};
-            merged.forEach(e => { counts[e.id] = e.cachedQuestionCount ?? 0; });
+            const examsNeedingRecalc = [];
+            merged.forEach(e => {
+                if (e.cachedQuestionCount != null) {
+                    counts[e.id] = e.cachedQuestionCount;
+                } else {
+                    counts[e.id] = 0;
+                    examsNeedingRecalc.push(e.id);
+                }
+            });
             setQuestionCounts(counts);
 
-            // Fetch teacher's own exam folders
+            // Background recalc for exams missing cached count
+            if (examsNeedingRecalc.length > 0) {
+                Promise.all(examsNeedingRecalc.map(async (eid) => {
+                    try {
+                        await recalcExamQuestionCache(eid);
+                        const refreshed = await getExam(eid);
+                        if (refreshed) return { id: eid, count: refreshed.cachedQuestionCount ?? 0 };
+                    } catch (e) { /* ignore */ }
+                    return null;
+                })).then(results => {
+                    const updates = {};
+                    results.filter(Boolean).forEach(r => { updates[r.id] = r.count; });
+                    if (Object.keys(updates).length > 0) {
+                        setQuestionCounts(prev => ({ ...prev, ...updates }));
+                    }
+                });
+            }
+
+            // Fetch teacher's own exam folders + collaborated folders
             const ownFolders = await getTeacherExamFolders(user.uid);
-            setTeacherFolders(ownFolders);
+            const collabFolders = await getCollaboratedResources('teacher_exam_folders', user.uid);
+            const ownFolderIds = new Set(ownFolders.map(f => f.id));
+            const collabFoldersMarked = collabFolders
+                .filter(f => !f.isDeleted && !ownFolderIds.has(f.id))
+                .map(f => ({ ...f, _isCollab: true }));
+            setTeacherFolders([...ownFolders, ...collabFoldersMarked]);
 
             // Fetch teacher names for shared exams
             const sharedTeacherIds = [...new Set(merged.filter(e => !e.isOwner && !e.isAdmin && e.createdBy).map(e => e.createdBy))];
@@ -262,6 +315,20 @@ export default function TeacherExamsPage() {
         setExamToDuplicate(null);
     }
 
+    async function handleConfirmConvertToGrammar() {
+        if (!examToConvert) return;
+        setIsConvertingToGrammar(true);
+        try {
+            const newExerciseId = await convertExamToGrammar(examToConvert.id, user.uid);
+            setExamToConvert(null);
+            setAlertMessage({ type: 'success', text: `Đã chuyển đổi "${examToConvert.name}" thành Bài kỹ năng!` });
+            navigate(`/teacher/grammar/${newExerciseId}`);
+        } catch (error) {
+            setAlertMessage({ type: 'error', text: 'Lỗi chuyển đổi: ' + error.message });
+        }
+        setIsConvertingToGrammar(false);
+    }
+
     // --- PROPOSAL HANDLERS ---
     async function handleSubmitProposal() {
         if (!resourceToShare) return;
@@ -298,6 +365,7 @@ export default function TeacherExamsPage() {
         setTransferTarget(null);
         setQuickAssignGroupId('');
         setQuickAssignDueDate('');
+        setQuickAssignScheduledStart('');
         setQuickAssignSuccess('');
 
         const collabIds = exam.collaboratorIds || [];
@@ -312,6 +380,7 @@ export default function TeacherExamsPage() {
         } else {
             setCollaborators([]);
         }
+        setCollabRolesMap(exam.collaboratorRoles || {});
 
         setProposalLoading(true);
         try {
@@ -355,9 +424,12 @@ export default function TeacherExamsPage() {
                 setIsAddingCollab(false);
                 return;
             }
-            await addCollaborator('exams', resourceToShare.id, teacher.uid, teacher.displayName, resourceToShare.name);
+            const collectionName = resourceToShare.type?.includes('folder') ? 'teacher_exam_folders' : 'exams';
+            await addCollaborator(collectionName, resourceToShare.id, teacher.uid, teacher.displayName, resourceToShare.name, collabRole);
             setCollaborators(prev => [...prev, { uid: teacher.uid, displayName: teacher.displayName, email: teacher.email }]);
+            setCollabRolesMap(prev => ({ ...prev, [teacher.uid]: collabRole }));
             setCollabEmail('');
+            setCollabRole('editor');
             setAlertMessage({ type: 'success', text: `Đã thêm ${teacher.displayName} làm cộng tác viên!` });
         } catch (err) {
             setAlertMessage({ type: 'error', text: 'Lỗi thêm cộng tác viên: ' + err.message });
@@ -369,10 +441,26 @@ export default function TeacherExamsPage() {
         if (!resourceToShare) return;
         setIsAddingCollab(true);
         try {
-            await removeCollaborator('exams', resourceToShare.id, uid, resourceToShare.name);
+            const collectionName = resourceToShare.type?.includes('folder') ? 'teacher_exam_folders' : 'exams';
+            await removeCollaborator(collectionName, resourceToShare.id, uid, resourceToShare.name);
             setCollaborators(prev => prev.filter(c => c.uid !== uid));
+            setCollabRolesMap(prev => { const n = { ...prev }; delete n[uid]; return n; });
         } catch (err) {
             setAlertMessage({ type: 'error', text: 'Lỗi gỡ cộng tác viên: ' + err.message });
+        }
+        setIsAddingCollab(false);
+    }
+
+    async function handleUpdateCollaboratorRole(uid, newRole) {
+        if (!resourceToShare) return;
+        setIsAddingCollab(true);
+        try {
+            const collectionName = resourceToShare.type?.includes('folder') ? 'teacher_exam_folders' : 'exams';
+            await updateCollaboratorRole(collectionName, resourceToShare.id, uid, newRole);
+            setCollabRolesMap(prev => ({ ...prev, [uid]: newRole }));
+            setAlertMessage({ type: 'success', text: `Đã đổi quyền thành ${newRole === 'viewer' ? 'Chỉ sử dụng' : 'Chỉnh sửa'}!` });
+        } catch (err) {
+            setAlertMessage({ type: 'error', text: 'Lỗi đổi quyền: ' + err.message });
         }
         setIsAddingCollab(false);
     }
@@ -402,8 +490,9 @@ export default function TeacherExamsPage() {
         if (!transferTarget || !resourceToShare) return;
         setIsAddingCollab(true);
         try {
+            const collectionName = resourceToShare.type?.includes('folder') ? 'teacher_exam_folders' : 'exams';
             await transferOwnership(
-                'exams', resourceToShare.id,
+                collectionName, resourceToShare.id,
                 user.uid, user.displayName || user.email,
                 transferTarget.uid, transferTarget.displayName,
                 resourceToShare.name
@@ -449,7 +538,7 @@ export default function TeacherExamsPage() {
         if (!folderToDelete) return;
         try {
             await deleteTeacherExamFolder(folderToDelete.id);
-            setFolders(prev => prev.filter(f => f.id !== folderToDelete.id));
+            setTeacherFolders(prev => prev.filter(f => f.id !== folderToDelete.id));
             setAlertMessage({ type: 'success', text: 'Đã xóa Folder thành công!' });
         } catch (error) {
             setAlertMessage({ type: 'error', text: 'Lỗi xóa Folder: ' + error.message });
@@ -468,9 +557,49 @@ export default function TeacherExamsPage() {
         });
     }
 
+    // --- DRAG-AND-DROP (folders + exams) ---
+    async function handleDragEnd(result) {
+        if (!result.destination) return;
+
+        if (result.type === 'folder') {
+            // Folder reorder
+            const draggableFolders = allRenderableFolders.filter(f => !f.isAppSystemFolder);
+            const reordered = Array.from(draggableFolders);
+            const [moved] = reordered.splice(result.source.index, 1);
+            reordered.splice(result.destination.index, 0, moved);
+            setTeacherFolders(reordered.map((f, i) => ({ ...f, order: i })));
+            try {
+                await updateTeacherExamFoldersOrder(reordered);
+            } catch (error) {
+                setAlertMessage({ type: 'error', text: 'Lỗi sắp xếp folder: ' + error.message });
+                loadData();
+            }
+        } else if (result.type === 'exam') {
+            // Exam reorder within folder
+            const folderId = result.source.droppableId.replace('folder-exams-', '');
+            const folder = teacherFolders.find(f => f.id === folderId);
+            if (!folder) return;
+            const ids = [...(folder.examIds || [])];
+            const [movedId] = ids.splice(result.source.index, 1);
+            ids.splice(result.destination.index, 0, movedId);
+            setTeacherFolders(prev => prev.map(f => f.id === folderId ? { ...f, examIds: ids } : f));
+            try {
+                await saveTeacherExamFolder(user.uid, { ...folder, examIds: ids });
+            } catch (error) {
+                setAlertMessage({ type: 'error', text: 'Lỗi đổi vị trí bài: ' + error.message });
+                loadData();
+            }
+        }
+    }
+
     // Prepare data for UI
     const allRenderableFolders = [
-        ...teacherFolders.map(f => ({ ...f, isAppSystemFolder: false, isOwnFolder: true })),
+        ...teacherFolders.map(f => ({
+            ...f,
+            isAppSystemFolder: false,
+            isOwnFolder: !f._isCollab,
+            isCollabFolder: !!f._isCollab
+        })),
         ...folders.map(f => ({ ...f, isAppSystemFolder: true, isOwnFolder: false }))
     ];
 
@@ -497,7 +626,7 @@ export default function TeacherExamsPage() {
             <div className="admin-page-header">
                 <div>
                     <h1 className="admin-page-title" style={{ margin: 0 }}>Bài tập và Kiểm tra</h1>
-                    <p style={{ color: '#64748b', fontSize: '0.9rem', marginTop: '4px' }}>Tạo và quản lý đề thi (cấu trúc theo section).</p>
+                    <p className="admin-page-subtitle">Tạo và quản lý đề thi (cấu trúc theo section).</p>
                 </div>
                 <div className="admin-header-actions">
                     <button className="admin-btn admin-btn-secondary" onClick={openFolderAddForm}>
@@ -532,6 +661,7 @@ export default function TeacherExamsPage() {
                     </div>
                 ) : (
                     <div className="admin-table-container">
+                        <DragDropContext onDragEnd={handleDragEnd}>
                         <table className="admin-table">
                             <thead>
                                 <tr>
@@ -541,27 +671,46 @@ export default function TeacherExamsPage() {
                                     <th className="text-right">Hành động</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                {/* FOLDERS */}
-                                {filteredFolders.map(folder => {
+                            <Droppable droppableId="teacher-folders" type="folder">
+                            {(droppableProvided) => (
+                            <tbody ref={droppableProvided.innerRef} {...droppableProvided.droppableProps}>
+                                {/* TEACHER FOLDERS (draggable) */}
+                                {filteredFolders.filter(f => !f.isAppSystemFolder).map((folder, fIndex) => {
                                     const isExpanded = expandedFolders.has(folder.id) || searchTerm.length > 0;
-                                    const folderExams = filteredExams.filter(e => (folder.examIds || []).includes(e.id));
+                                    const folderExamIds = folder.examIds || [];
+                                    const folderExams = folderExamIds.map(id => filteredExams.find(e => e.id === id)).filter(Boolean);
 
                                     return (
                                         <Fragment key={folder.id}>
-                                            <tr className="table-row-folder">
+                                            <Draggable draggableId={folder.id} index={fIndex}>
+                                            {(draggableProvided, snapshot) => (
+                                            <tr
+                                                ref={draggableProvided.innerRef}
+                                                {...draggableProvided.draggableProps}
+                                                className="table-row-folder"
+                                                style={{
+                                                    ...draggableProvided.draggableProps.style,
+                                                    background: snapshot.isDragging ? '#eff6ff' : '#fff',
+                                                    boxShadow: snapshot.isDragging ? '0 5px 15px rgba(0,0,0,0.1)' : undefined
+                                                }}
+                                            >
                                                 <td>
-                                                    <button
-                                                        className="admin-expand-btn"
-                                                        onClick={() => {
-                                                            const newSet = new Set(expandedFolders);
-                                                            if (isExpanded) newSet.delete(folder.id);
-                                                            else newSet.add(folder.id);
-                                                            setExpandedFolders(newSet);
-                                                        }}
-                                                    >
-                                                        {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                                                    </button>
+                                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', height: '100%', minHeight: '44px' }}>
+                                                        <div {...draggableProvided.dragHandleProps} style={{ cursor: 'grab', color: '#94a3b8', display: 'flex', alignItems: 'center' }}>
+                                                            <GripVertical size={14} style={{ transform: 'translateY(-1px)' }} />
+                                                        </div>
+                                                        <button
+                                                            className="admin-expand-btn"
+                                                            onClick={() => {
+                                                                const newSet = new Set(expandedFolders);
+                                                                if (isExpanded) newSet.delete(folder.id);
+                                                                else newSet.add(folder.id);
+                                                                setExpandedFolders(newSet);
+                                                            }}
+                                                        >
+                                                            {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                                        </button>
+                                                    </div>
                                                 </td>
                                                 <td>
                                                     <div className="admin-topic-cell">
@@ -577,6 +726,10 @@ export default function TeacherExamsPage() {
                                                                     <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 'normal' }}>
                                                                         <Globe size={10} /> Public
                                                                     </span>
+                                                                ) : folder.isCollabFolder ? (
+                                                                    <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#faf5ff', color: '#7c3aed', border: '1px solid #ddd6fe', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 'normal' }}>
+                                                                        <UsersRound size={10} /> Cộng tác viên
+                                                                    </span>
                                                                 ) : null}
                                                             </div>
                                                             <div className="admin-text-muted" style={{ fontSize: '0.8rem', maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -588,34 +741,67 @@ export default function TeacherExamsPage() {
                                                 <td></td>
                                                 <td className="text-right">
                                                     <div className="admin-table-actions">
-                                                        {folder.isOwnFolder && (
+                                                        <button
+                                                            className="admin-action-btn"
+                                                            onClick={() => openShareModal({ ...folder, type: folder.isAppSystemFolder ? 'admin_exam_folder' : 'teacher_exam_folder' })}
+                                                            title="Chia sẻ"
+                                                        >
+                                                            <Share2 size={16} />
+                                                        </button>
+                                                        {(folder.isOwnFolder || folder.isCollabFolder) && (
                                                             <>
                                                                 <button className="admin-action-btn" onClick={() => openFolderEditForm(folder)} title="Sửa"><Edit size={16} /></button>
-                                                                <button className="admin-action-btn danger" onClick={() => setFolderToDelete(folder)} title="Xóa"><Trash2 size={16} /></button>
+                                                                {folder.isOwnFolder && (
+                                                                    <button className="admin-action-btn danger" onClick={() => setFolderToDelete(folder)} title="Xóa"><Trash2 size={16} /></button>
+                                                                )}
                                                             </>
                                                         )}
                                                     </div>
                                                 </td>
                                             </tr>
+                                            )}
+                                            </Draggable>
 
                                             {/* EXAMS IN FOLDER */}
                                             {isExpanded && (
                                                 folderExams.length === 0 ? (
-                                                    <tr>
+                                                    <tr className="admin-empty-nested-row">
                                                         <td></td>
-                                                        <td colSpan="3" style={{ paddingLeft: '40px', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>
-                                                            Folder này chưa có bài tập và kiểm tra nào.
+                                                        <td colSpan="3">
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', color: '#64748b' }}>
+                                                                <AlertTriangle size={14} style={{ opacity: 0.7 }} />
+                                                                <span style={{ fontSize: '0.85rem' }}>Folder này chưa có bài tập và kiểm tra nào.</span>
+                                                            </div>
                                                         </td>
                                                     </tr>
-                                                ) : (
-                                                    folderExams.map(exam => {
+                                                ) : (folder.isOwnFolder || folder.isCollabFolder) ? (
+                                                    <Droppable droppableId={`folder-exams-${folder.id}`} type="exam">
+                                                    {(examDropProvided) => (
+                                                    <>
+                                                    {folderExams.map((exam, examIdx) => {
                                                         const isOwn = exam.isOwner;
                                                         const isSystem = exam.isAdmin;
                                                         const isShared = !isOwn && !isSystem;
 
                                                         return (
-                                                            <tr key={exam.id} className="table-row-nested" style={{ backgroundColor: '#fafafa' }}>
-                                                                <td></td>
+                                                            <Draggable key={exam.id} draggableId={`exam-${exam.id}`} index={examIdx}>
+                                                            {(examDragProvided, examSnapshot) => (
+                                                            <tr
+                                                                ref={(node) => { examDragProvided.innerRef(node); if (examIdx === 0) examDropProvided.innerRef(node); }}
+                                                                {...examDragProvided.draggableProps}
+                                                                {...(examIdx === 0 ? examDropProvided.droppableProps : {})}
+                                                                className="table-row-nested"
+                                                                style={{
+                                                                    ...examDragProvided.draggableProps.style,
+                                                                    backgroundColor: examSnapshot.isDragging ? '#f0f9ff' : '#fafafa',
+                                                                    boxShadow: examSnapshot.isDragging ? '0 4px 12px rgba(0,0,0,0.08)' : undefined
+                                                                }}
+                                                            >
+                                                                <td>
+                                                                    <div {...examDragProvided.dragHandleProps} style={{ cursor: 'grab', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                        <GripVertical size={14} />
+                                                                    </div>
+                                                                </td>
                                                                 <td data-label="Đề thi">
                                                                     <div className="admin-topic-cell">
                                                                         <div className="admin-topic-icon" style={{ background: `${exam.color || '#6366f1'}20` }}>{exam.icon || '📋'}</div>
@@ -632,8 +818,8 @@ export default function TeacherExamsPage() {
                                                                                             <Globe size={10} /> Public
                                                                                         </span>
                                                                                     ) : exam.isCollaborator ? (
-                                                                                        <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#faf5ff', color: '#7c3aed', border: '1px solid #ddd6fe', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 'normal' }}>
-                                                                                            <UsersRound size={10} /> Cộng tác viên {exam.collaboratorNames && exam.collaboratorNames[user.uid] ? '' : (exam.creatorName ? `· Chủ: ${exam.creatorName}` : '')}
+                                                                                        <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: exam.collaboratorRole === 'viewer' ? '#e0f2fe' : '#faf5ff', color: exam.collaboratorRole === 'viewer' ? '#0284c7' : '#7c3aed', border: `1px solid ${exam.collaboratorRole === 'viewer' ? '#bae6fd' : '#ddd6fe'}`, display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 'normal' }}>
+                                                                                            <UsersRound size={10} /> {exam.collaboratorRole === 'viewer' ? 'Sử dụng' : 'Cộng tác'} {exam.collaboratorNames && exam.collaboratorNames[user.uid] ? '' : (exam.creatorName ? `· Chủ: ${exam.creatorName}` : '')}
                                                                                         </span>
                                                                                     ) : isShared ? (
                                                                                         <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 'normal' }}>
@@ -668,6 +854,7 @@ export default function TeacherExamsPage() {
                                                                         {isOwn && (
                                                                             <>
                                                                                 <button className="admin-action-btn" onClick={() => setExamToDuplicate(exam)} title="Nhân đôi"><Copy size={16} /></button>
+                                                                                <button className="admin-action-btn" onClick={() => setExamToConvert(exam)} title="Chuyển thành Bài kỹ năng"><ArrowRightLeft size={16} /></button>
                                                                                 <button className="admin-action-btn" onClick={() => openShareModal(exam)} title="Quản lý cộng tác viên / Đề xuất">
                                                                                     <Share2 size={16} />
                                                                                 </button>
@@ -675,7 +862,7 @@ export default function TeacherExamsPage() {
                                                                                 <button className="admin-action-btn danger" onClick={() => setExamToDelete(exam)} title="Xóa đề thi"><Trash2 size={16} /></button>
                                                                             </>
                                                                         )}
-                                                                        {exam.isCollaborator && (
+                                                                        {exam.isCollaborator && exam.collaboratorRole !== 'viewer' && (
                                                                             <>
                                                                                 <button className="admin-action-btn" onClick={() => openEditForm(exam)} title="Sửa thông tin"><Edit size={16} /></button>
                                                                             </>
@@ -689,6 +876,216 @@ export default function TeacherExamsPage() {
                                                                                 <Lock size={12} style={{ marginRight: '4px' }} /> Phân quyền
                                                                             </span>
                                                                         )}
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                            )}
+                                                            </Draggable>
+                                                        );
+                                                    })}
+                                                    {examDropProvided.placeholder}
+                                                    </>
+                                                    )}
+                                                    </Droppable>
+                                                ) : (
+                                                    folderExams.map(exam => {
+                                                        const isOwn = exam.isOwner;
+                                                        const isSystem = exam.isAdmin;
+                                                        const isShared = !isOwn && !isSystem;
+
+                                                        return (
+                                                            <tr key={exam.id} className="table-row-nested" style={{ backgroundColor: '#fafafa' }}>
+                                                                <td></td>
+                                                                <td data-label="Đề thi">
+                                                                    <div className="admin-topic-cell">
+                                                                        <div className="admin-topic-icon" style={{ background: `${exam.color || '#6366f1'}20` }}>{exam.icon || '📋'}</div>
+                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
+                                                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                                                                <div className="admin-topic-name" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>{exam.name} <span style={{ fontSize: '0.6rem', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, background: exam.examType === 'test' ? '#fef2f2' : '#f5f3ff', color: exam.examType === 'test' ? '#dc2626' : '#7c3aed', border: `1px solid ${exam.examType === 'test' ? '#fecaca' : '#ddd6fe'}` }}>{exam.examType === 'test' ? 'Kiểm tra' : 'Bài tập'}</span></div>
+                                                                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                                                                    {isSystem ? (
+                                                                                        <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 'normal' }}>
+                                                                                            <Globe size={10} /> Chính thức
+                                                                                        </span>
+                                                                                    ) : exam.isPublic ? (
+                                                                                        <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 'normal' }}>
+                                                                                            <Globe size={10} /> Public
+                                                                                        </span>
+                                                                                    ) : exam.isCollaborator ? (
+                                                                                        <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: exam.collaboratorRole === 'viewer' ? '#e0f2fe' : '#faf5ff', color: exam.collaboratorRole === 'viewer' ? '#0284c7' : '#7c3aed', border: `1px solid ${exam.collaboratorRole === 'viewer' ? '#bae6fd' : '#ddd6fe'}`, display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 'normal' }}>
+                                                                                            <UsersRound size={10} /> {exam.collaboratorRole === 'viewer' ? 'Sử dụng' : 'Cộng tác'} {exam.collaboratorNames && exam.collaboratorNames[user.uid] ? '' : (exam.creatorName ? `· Chủ: ${exam.creatorName}` : '')}
+                                                                                        </span>
+                                                                                    ) : isShared ? (
+                                                                                        <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 'normal' }}>
+                                                                                            <Lock size={10} /> Được chia sẻ {exam.creatorName ? `bởi ${exam.creatorName}` : ''}
+                                                                                        </span>
+                                                                                    ) : null}
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="admin-text-muted" style={{ fontSize: '0.75rem', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '2px' }}>{exam.description || 'Không có mô tả'}</div>
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+                                                                <td data-label="Thông tin">
+                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '0.8rem', color: '#64748b' }}>
+                                                                        <span><List size={12} /> {questionCounts[exam.id] || 0} câu</span>
+                                                                        <span><Clock size={12} /> {exam.timingMode === 'section' ? `Theo section (${(exam.sections || []).reduce((s, sec) => s + (sec.timeLimitMinutes || 0), 0)} phút)` : exam.timingMode === 'question' ? `Theo câu (${Math.round((exam.cachedQuestionTimeTotalSeconds || 0) / 60)} phút)` : `Theo bài (${exam.timeLimitMinutes || 60} phút)`}</span>
+                                                                        {exam.timingMode === 'section' && (exam.sections || []).some(s => !s.timeLimitMinutes || s.timeLimitMinutes <= 0) && (
+                                                                            <span style={{ fontSize: '0.7rem', color: '#dc2626', fontWeight: 700 }}>⚠ {(exam.sections || []).filter(s => !s.timeLimitMinutes || s.timeLimitMinutes <= 0).length} section chưa hẹn giờ</span>
+                                                                        )}
+                                                                        {exam.timingMode === 'question' && (exam.cachedQuestionTimeMissingCount > 0) && (
+                                                                            <span style={{ fontSize: '0.7rem', color: '#ea580c', fontWeight: 700 }}>⚠ {exam.cachedQuestionTimeMissingCount} câu hỏi chưa hẹn giờ</span>
+                                                                        )}
+                                                                        <span><ClipboardCheck size={12} /> {exam.sections?.length || 0} sections</span>
+                                                                        {exam.cefrLevel && <span style={{ color: '#6366f1', fontWeight: 600 }}>{exam.cefrLevel}</span>}
+                                                                    </div>
+                                                                </td>
+                                                                <td data-label="Hành động" className="text-right">
+                                                                    <div className="admin-table-actions">
+                                                                        <Link to={isSystem ? `/teacher/system-exams/${exam.id}` : `/teacher/exams/${exam.id}`} className="admin-action-btn" title="Xem/Quản lý câu hỏi">
+                                                                            <List size={16} />
+                                                                        </Link>
+                                                                        {isOwn && (
+                                                                            <>
+                                                                                <button className="admin-action-btn" onClick={() => setExamToDuplicate(exam)} title="Nhân đôi"><Copy size={16} /></button>
+                                                                                <button className="admin-action-btn" onClick={() => setExamToConvert(exam)} title="Chuyển thành Bài kỹ năng"><ArrowRightLeft size={16} /></button>
+                                                                                <button className="admin-action-btn" onClick={() => openShareModal(exam)} title="Quản lý cộng tác viên / Đề xuất">
+                                                                                    <Share2 size={16} />
+                                                                                </button>
+                                                                                <button className="admin-action-btn" onClick={() => openEditForm(exam)} title="Sửa thông tin"><Edit size={16} /></button>
+                                                                                <button className="admin-action-btn danger" onClick={() => setExamToDelete(exam)} title="Xóa đề thi"><Trash2 size={16} /></button>
+                                                                            </>
+                                                                        )}
+                                                                        {exam.isCollaborator && exam.collaboratorRole !== 'viewer' && (
+                                                                            <>
+                                                                                <button className="admin-action-btn" onClick={() => openEditForm(exam)} title="Sửa thông tin"><Edit size={16} /></button>
+                                                                            </>
+                                                                        )}
+                                                                        {isSystem ? (
+                                                                            <span style={{ fontSize: '0.8rem', color: '#3b82f6', fontStyle: 'italic', display: 'flex', alignItems: 'center' }}>
+                                                                                <Lock size={12} style={{ marginRight: '4px' }} /> Chính thức
+                                                                            </span>
+                                                                        ) : isShared && (
+                                                                            <span style={{ fontSize: '0.8rem', color: '#64748b', fontStyle: 'italic', display: 'flex', alignItems: 'center' }}>
+                                                                                <Lock size={12} style={{ marginRight: '4px' }} /> Phân quyền
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })
+                                                )
+                                            )}
+                                        </Fragment>
+                                    );
+                                })}
+                                {droppableProvided.placeholder}
+
+                                {/* SYSTEM FOLDERS (non-draggable) */}
+                                {filteredFolders.filter(f => f.isAppSystemFolder).map(folder => {
+                                    const isExpanded = expandedFolders.has(folder.id) || searchTerm.length > 0;
+                                    const folderExams = filteredExams.filter(e => (folder.examIds || []).includes(e.id));
+
+                                    return (
+                                        <Fragment key={folder.id}>
+                                            <tr className="table-row-folder">
+                                                <td>
+                                                    <button
+                                                        className="admin-expand-btn"
+                                                        onClick={() => {
+                                                            const newSet = new Set(expandedFolders);
+                                                            if (isExpanded) newSet.delete(folder.id);
+                                                            else newSet.add(folder.id);
+                                                            setExpandedFolders(newSet);
+                                                        }}
+                                                    >
+                                                        {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                                    </button>
+                                                </td>
+                                                <td>
+                                                    <div className="admin-topic-cell">
+                                                        <div className="admin-topic-icon" style={{ background: '#fef9c3' }}>📁</div>
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                            <div className="admin-topic-name" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                <span style={{ fontWeight: 600, color: '#1e293b' }}>{folder.name}</span>
+                                                                <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 'normal' }}>
+                                                                    <Globe size={10} /> Chính thức
+                                                                </span>
+                                                            </div>
+                                                            <div className="admin-text-muted" style={{ fontSize: '0.8rem', maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                                {folder.description || <span style={{ fontStyle: 'italic', color: '#cbd5e1' }}>Không có mô tả</span>}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td></td>
+                                                <td className="text-right">
+                                                    <div className="admin-table-actions">
+                                                        <button
+                                                            className="admin-action-btn"
+                                                            onClick={() => openShareModal({ ...folder, type: 'admin_exam_folder' })}
+                                                            title="Chia sẻ"
+                                                        >
+                                                            <Share2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+
+                                            {/* EXAMS IN SYSTEM FOLDER */}
+                                            {isExpanded && (
+                                                folderExams.length === 0 ? (
+                                                    <tr className="admin-empty-nested-row">
+                                                        <td></td>
+                                                        <td colSpan="3">
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', color: '#64748b' }}>
+                                                                <AlertTriangle size={14} style={{ opacity: 0.7 }} />
+                                                                <span style={{ fontSize: '0.85rem' }}>Folder này chưa có bài tập và kiểm tra nào.</span>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ) : (
+                                                    folderExams.map(exam => {
+                                                        const isOwn2 = exam.isOwner;
+                                                        const isSystem2 = exam.isAdmin;
+                                                        const isShared2 = !isOwn2 && !isSystem2;
+
+                                                        return (
+                                                            <tr key={exam.id} className="table-row-nested" style={{ backgroundColor: '#fafafa' }}>
+                                                                <td></td>
+                                                                <td data-label="Đề thi">
+                                                                    <div className="admin-topic-cell">
+                                                                        <div className="admin-topic-icon" style={{ background: `${exam.color || '#6366f1'}20` }}>{exam.icon || '📋'}</div>
+                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
+                                                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                                                                <div className="admin-topic-name" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>{exam.name} <span style={{ fontSize: '0.6rem', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, background: exam.examType === 'test' ? '#fef2f2' : '#f5f3ff', color: exam.examType === 'test' ? '#dc2626' : '#7c3aed', border: `1px solid ${exam.examType === 'test' ? '#fecaca' : '#ddd6fe'}` }}>{exam.examType === 'test' ? 'Kiểm tra' : 'Bài tập'}</span></div>
+                                                                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                                                                    <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 'normal' }}>
+                                                                                        <Globe size={10} /> Chính thức
+                                                                                    </span>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="admin-text-muted" style={{ fontSize: '0.75rem', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '2px' }}>{exam.description || 'Không có mô tả'}</div>
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+                                                                <td data-label="Thông tin">
+                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '0.8rem', color: '#64748b' }}>
+                                                                        <span><List size={12} /> {questionCounts[exam.id] || 0} câu</span>
+                                                                        <span><Clock size={12} /> {exam.timingMode === 'section' ? `Theo section (${(exam.sections || []).reduce((s, sec) => s + (sec.timeLimitMinutes || 0), 0)} phút)` : exam.timingMode === 'question' ? `Theo câu (${Math.round((exam.cachedQuestionTimeTotalSeconds || 0) / 60)} phút)` : `Theo bài (${exam.timeLimitMinutes || 60} phút)`}</span>
+                                                                        <span><ClipboardCheck size={12} /> {exam.sections?.length || 0} sections</span>
+                                                                        {exam.cefrLevel && <span style={{ color: '#6366f1', fontWeight: 600 }}>{exam.cefrLevel}</span>}
+                                                                    </div>
+                                                                </td>
+                                                                <td data-label="Hành động" className="text-right">
+                                                                    <div className="admin-table-actions">
+                                                                        <Link to={`/teacher/system-exams/${exam.id}`} className="admin-action-btn" title="Xem/Quản lý câu hỏi">
+                                                                            <List size={16} />
+                                                                        </Link>
+                                                                        <span style={{ fontSize: '0.8rem', color: '#3b82f6', fontStyle: 'italic', display: 'flex', alignItems: 'center' }}>
+                                                                            <Lock size={12} style={{ marginRight: '4px' }} /> Chính thức
+                                                                        </span>
                                                                     </div>
                                                                 </td>
                                                             </tr>
@@ -736,8 +1133,8 @@ export default function TeacherExamsPage() {
                                                                                 <Globe size={10} /> Public
                                                                             </span>
                                                                         ) : exam.isCollaborator ? (
-                                                                            <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#faf5ff', color: '#7c3aed', border: '1px solid #ddd6fe', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 'normal' }}>
-                                                                                <UsersRound size={10} /> Cộng tác viên {exam.collaboratorNames && exam.collaboratorNames[user.uid] ? '' : (exam.creatorName ? `· Chủ: ${exam.creatorName}` : '')}
+                                                                            <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: exam.collaboratorRole === 'viewer' ? '#e0f2fe' : '#faf5ff', color: exam.collaboratorRole === 'viewer' ? '#0284c7' : '#7c3aed', border: `1px solid ${exam.collaboratorRole === 'viewer' ? '#bae6fd' : '#ddd6fe'}`, display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 'normal' }}>
+                                                                                <UsersRound size={10} /> {exam.collaboratorRole === 'viewer' ? 'Sử dụng' : 'Cộng tác'} {exam.collaboratorNames && exam.collaboratorNames[user.uid] ? '' : (exam.creatorName ? `· Chủ: ${exam.creatorName}` : '')}
                                                                             </span>
                                                                         ) : isShared ? (
                                                                             <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 'normal' }}>
@@ -772,6 +1169,7 @@ export default function TeacherExamsPage() {
                                                             {isOwn && (
                                                                 <>
                                                                     <button className="admin-action-btn" onClick={() => setExamToDuplicate(exam)} title="Nhân đôi"><Copy size={16} /></button>
+                                                                    <button className="admin-action-btn" onClick={() => setExamToConvert(exam)} title="Chuyển thành Bài kỹ năng"><ArrowRightLeft size={16} /></button>
                                                                     <button className="admin-action-btn" onClick={() => openShareModal(exam)} title="Quản lý cộng tác viên / Đề xuất">
                                                                         <Share2 size={16} />
                                                                     </button>
@@ -779,7 +1177,7 @@ export default function TeacherExamsPage() {
                                                                     <button className="admin-action-btn danger" onClick={() => setExamToDelete(exam)} title="Xóa đề thi"><Trash2 size={16} /></button>
                                                                 </>
                                                             )}
-                                                            {exam.isCollaborator && (
+                                                            {exam.isCollaborator && exam.collaboratorRole !== 'viewer' && (
                                                                 <>
                                                                     <button className="admin-action-btn" onClick={() => openEditForm(exam)} title="Sửa thông tin"><Edit size={16} /></button>
                                                                 </>
@@ -801,7 +1199,10 @@ export default function TeacherExamsPage() {
                                     </>
                                 )}
                             </tbody>
+                            )}
+                            </Droppable>
                         </table>
+                        </DragDropContext>
                     </div>
                 )}
             </div>
@@ -1014,257 +1415,122 @@ export default function TeacherExamsPage() {
 
 
 
-            {/* SHARE MODAL */}
             {shareModalOpen && resourceToShare && (
-                <div className="teacher-modal-overlay">
-                    <div className="teacher-modal wide" style={{ maxWidth: '550px', overflow: 'auto' }}>
-                        <div style={{ position: 'sticky', top: '0px', zIndex: 100, display: 'flex', justifyContent: 'flex-end', height: 0, overflow: 'visible', pointerEvents: 'none' }}>
-                            <button className="teacher-modal-close" onClick={() => setShareModalOpen(false)} style={{ pointerEvents: 'auto', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, background: 'rgba(241, 245, 249, 0.95)', backdropFilter: 'blur(4px)', border: 'none', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
-                                <X size={20} />
-                            </button>
-                        </div>
-                        <h2 className="admin-modal-title" style={{ justifyContent: 'flex-start', marginBottom: '24px', paddingRight: '40px' }}>
-                            Cộng tác viên - {resourceToShare.type?.includes('folder') ? 'Folder' : 'Đề thi'}
-                        </h2>
-
-                        <div style={{ marginBottom: '20px', padding: '12px', background: '#f8fafc', borderRadius: '8px', display: 'flex', gap: '12px', alignItems: 'center' }}>
-                            <div className="admin-topic-icon" style={{ background: `${resourceToShare.color || '#3b82f6'}20`, width: '40px', height: '40px', fontSize: '1.2rem' }}>
-                                {resourceToShare.icon || (resourceToShare.type?.includes('folder') ? '📁' : '📋')}
-                            </div>
-                            <div>
-                                <h3 style={{ margin: 0, fontSize: '1rem', color: '#0f172a' }}>{resourceToShare.name || resourceToShare.title}</h3>
-                                <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>
-                                    {resourceToShare.isAdmin ? 'Nội dung chính thức (chỉ xem)' : 'Do bạn quản lý'}
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Quick Assign to Class (for all exam resources) */}
-                        {(
-                            <div style={{ marginBottom: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
-                                <h4 style={{ fontSize: '0.9rem', color: '#0f172a', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}><FileText size={16} color="#f59e0b" /> Giao bài cho lớp</h4>
-                                <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '12px' }}>Giao nhanh Bài tập/Kiểm tra này cho 1 lớp mà bạn đang chủ nhiệm.</p>
-
-                                {/* Existing assignment tags */}
-                                {existingAssignments.length > 0 && (
-                                    <div style={{ marginBottom: '12px' }}>
-                                        <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '6px', fontWeight: 600 }}>Đã giao cho:</p>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                            {existingAssignments.map(a => (
-                                                <span key={a.id} style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '20px', background: 'linear-gradient(135deg, #fef3c7, #fde68a)', color: '#92400e', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px solid #fcd34d' }}>
-                                                    ✅ {a.groupName || a.targetName || 'Lớp'}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {teacherManagedGroups.length > 0 ? (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                            <div style={{ flex: 1, minWidth: 0, position: 'relative', zIndex: 20 }}>
-                                                <CustomSelect
-                                                    value={quickAssignGroupId}
-                                                    onChange={v => setQuickAssignGroupId(v)}
-                                                    placeholder="-- Chọn lớp --"
-                                                    options={teacherManagedGroups.map(g => ({ value: g.id, label: g.name, icon: '🏫' }))}
-                                                    style={{ margin: 0 }}
-                                                />
-                                            </div>
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <input
-                                                    type="datetime-local"
-                                                    value={quickAssignDueDate}
-                                                    onChange={e => setQuickAssignDueDate(e.target.value)}
-                                                    style={{ width: '100%', padding: '6px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.88rem', color: '#1e293b', minHeight: '38px', boxSizing: 'border-box' }}
-                                                />
-                                            </div>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={async () => {
-                                                if (!quickAssignGroupId || !quickAssignDueDate || !resourceToShare) return;
-
-                                                // Block if time setup is incomplete
-                                                if (resourceToShare.timingMode === 'section' && (resourceToShare.sections || []).some(s => !s.timeLimitMinutes || s.timeLimitMinutes <= 0)) {
-                                                    setToast({ message: `Bài "${resourceToShare.name}" có section chưa đặt thời gian. Vui lòng hoàn thành thiết lập thời gian trước khi giao bài.`, type: 'error' });
-                                                    return;
-                                                }
-                                                if (resourceToShare.timingMode === 'question') {
-                                                    setToast({ message: `Bài "${resourceToShare.name}" chưa hoàn thành thiết lập thời gian theo từng câu hỏi. Vui lòng kiểm tra thời gian từng câu trước khi giao bài.`, type: 'error' });
-                                                    return;
-                                                }
-
-                                                setIsQuickAssigning(true);
-                                                setQuickAssignSuccess('');
-                                                try {
-                                                    const dueDateTimestamp = Timestamp.fromDate(new Date(quickAssignDueDate));
-                                                    await createExamAssignment({
-                                                        examId: resourceToShare.id,
-                                                        examName: resourceToShare.name,
-                                                        examTitle: resourceToShare.name,
-                                                        examType: resourceToShare.examType || 'homework',
-                                                        targetType: 'group',
-                                                        targetId: quickAssignGroupId,
-                                                        dueDate: dueDateTimestamp,
-                                                        createdBy: user?.uid,
-                                                        teacherTitle: user?.teacherTitle || '',
-                                                        studentTitle: user?.studentTitle || ''
-                                                    });
-                                                    const groupName = teacherManagedGroups.find(g => g.id === quickAssignGroupId)?.name || '';
-                                                    setQuickAssignSuccess(`Đã giao "${resourceToShare.name}" cho lớp ${groupName}!`);
-                                                    setQuickAssignGroupId('');
-                                                    setQuickAssignDueDate('');
-                                                    // Refresh existing assignments
-                                                    const updatedAssignments = await getExamAssignmentsForExam(resourceToShare.id);
-                                                    setExistingAssignments(updatedAssignments.map(a => ({
-                                                        ...a,
-                                                        groupName: teacherManagedGroups.find(g => g.id === a.targetId)?.name || a.targetName || a.groupName || a.targetId || ''
-                                                    })));
-                                                } catch (err) {
-                                                    setAlertMessage({ type: 'error', text: 'Lỗi giao bài: ' + err.message });
-                                                }
-                                                setIsQuickAssigning(false);
-                                            }}
-                                            disabled={isQuickAssigning || !quickAssignGroupId || !quickAssignDueDate}
-                                            className="admin-btn admin-btn-primary"
-                                            style={{ width: '100%', padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: 'linear-gradient(135deg, #f59e0b, #d97706)', border: 'none', opacity: (isQuickAssigning || !quickAssignGroupId || !quickAssignDueDate) ? 0.6 : 1 }}
-                                        >
-                                            <Send size={14} />
-                                            {isQuickAssigning ? 'Đang giao...' : 'Giao bài'}
-                                        </button>
-                                        {quickAssignSuccess && (
-                                            <div style={{ padding: '10px 14px', borderRadius: '8px', background: '#ecfdf5', border: '1px solid #a7f3d0', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: '#059669', fontWeight: 500 }}>
-                                                <CheckCircle size={16} /> {quickAssignSuccess}
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <p style={{ fontSize: '0.85rem', color: '#94a3b8', fontStyle: 'italic' }}>Bạn chưa quản lý lớp nào. Liên hệ Admin để được thêm vào lớp.</p>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Collaborators Section (Only for owners) */}
-                        {resourceToShare.isOwner === false && resourceToShare.teacherId !== user?.uid ? (
-                            <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginBottom: '20px', background: '#f8fafc' }}>
-                                <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <AlertCircle size={14} /> Bạn đang xem chia sẻ của tài nguyên này, không thể thay đổi người được chia sẻ.
-                                </p>
-                            </div>
-                        ) : !resourceToShare.isAdmin && !resourceToShare.type?.includes('admin') && (
-                            <div style={{ marginBottom: '20px' }}>
-                                <h4 style={{ fontSize: '0.9rem', color: '#0f172a', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}><UsersRound size={16} color="#8b5cf6" /> Chia sẻ nội bộ</h4>
-                                <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '12px' }}>Thêm giáo viên khác cùng hợp tác quản lý hoặc chuyển quyền sở hữu hoàn toàn.</p>
-
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
-                                    <div style={{ width: '100%' }}>
-                                        <EmailAutocomplete
-                                            value={collabEmail}
-                                            onChange={setCollabEmail}
-                                            onSelect={(email) => { }}
-                                            placeholder="Email hệ thống của giáo viên..."
-                                        />
-                                    </div>
-                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                        <button
-                                            className="admin-btn admin-btn-primary"
-                                            onClick={handleAddCollaborator}
-                                            disabled={isAddingCollab || !collabEmail}
-                                            style={{ flex: 1, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', border: 'none', padding: '8px', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                        >
-                                            Thêm
-                                        </button>
-                                        <button
-                                            className="admin-btn admin-btn-secondary"
-                                            onClick={() => handlePreTransferOwnership(collabEmail)}
-                                            disabled={isAddingCollab || !collabEmail}
-                                            style={{ flex: 1, padding: '8px', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', borderColor: '#8b5cf6', color: '#8b5cf6', whiteSpace: 'nowrap' }}
-                                        >
-                                            <ArrowRightLeft size={14} /> Chuyển quyền
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {collaborators.length > 0 && (
-                                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
-                                        {collaborators.map((c, i) => (
-                                            <div key={c.uid} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderBottom: i < collaborators.length - 1 ? '1px solid #e2e8f0' : 'none', background: '#faf5ff' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#ede9fe', color: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                                                        {(c.displayName || 'G').charAt(0).toUpperCase()}
-                                                    </div>
-                                                    <div>
-                                                        <div style={{ fontSize: '0.85rem', fontWeight: 500, color: '#0f172a' }}>{c.displayName || 'Giáo viên'}</div>
-                                                        {c.email && <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{c.email}</div>}
-                                                    </div>
-                                                </div>
-                                                <div style={{ display: 'flex', gap: '4px' }}>
-                                                    <button
-                                                        onClick={() => setTransferTarget(c)}
-                                                        disabled={isAddingCollab}
-                                                        style={{ background: 'none', border: '1px solid #e2e8f0', color: '#8b5cf6', cursor: 'pointer', padding: '4px 8px', borderRadius: '6px', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                                                        title="Chuyển quyền sở hữu"
-                                                    >
-                                                        <ArrowRightLeft size={12} /> Chuyển quyền
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleRemoveCollaborator(c.uid)}
-                                                        disabled={isAddingCollab}
-                                                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
-                                                        title="Gỡ cộng tác viên"
-                                                    >
-                                                        <X size={16} />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Proposal Section */}
-                        {(resourceToShare.isOwner || resourceToShare.teacherId === user?.uid) && !resourceToShare.isAdmin && !resourceToShare.type?.includes('admin') && (
-                            <div style={{ marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
-                                <h4 style={{ fontSize: '0.9rem', color: '#0f172a', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <Landmark size={16} /> Đề xuất thành nội dung chính thức
-                                </h4>
-                                <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '12px' }}>
-                                    Gửi {resourceToShare.type?.includes('folder') ? 'folder' : 'đề thi'} này cho Admin duyệt để đưa lên kho đề thi chính thức.
-                                </p>
-                                {currentProposal ? (
-                                    <div style={{ padding: '12px 16px', borderRadius: '8px', background: currentProposal.status === 'approved' ? '#ecfdf5' : currentProposal.status === 'rejected' ? '#fef2f2' : '#fffbeb', border: `1px solid ${currentProposal.status === 'approved' ? '#a7f3d0' : currentProposal.status === 'rejected' ? '#fecaca' : '#fde68a'}` }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                            {currentProposal.status === 'pending' && <Clock size={16} color="#d97706" />}
-                                            {currentProposal.status === 'approved' && <CheckCircle size={16} color="#10b981" />}
-                                            {currentProposal.status === 'rejected' && <XCircle size={16} color="#ef4444" />}
-                                            <span style={{ fontWeight: 600, fontSize: '0.85rem', color: currentProposal.status === 'approved' ? '#059669' : currentProposal.status === 'rejected' ? '#dc2626' : '#d97706' }}>
-                                                {currentProposal.status === 'pending' && 'Đang chờ Admin duyệt'}
-                                                {currentProposal.status === 'approved' && 'Đã được duyệt ✓'}
-                                                {currentProposal.status === 'rejected' && 'Đã bị từ chối'}
-                                            </span>
-                                        </div>
-                                        {currentProposal.status === 'rejected' && currentProposal.adminNote && (
-                                            <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '8px 0 0', fontStyle: 'italic' }}>Lý do: {currentProposal.adminNote}</p>
-                                        )}
-                                        {currentProposal.status === 'rejected' && (
-                                            <button onClick={() => handleSubmitProposal()} disabled={isSubmittingProposal} className="admin-btn admin-btn-primary" style={{ marginTop: '10px', fontSize: '0.8rem' }}>
-                                                <Send size={14} /> Gửi lại đề xuất
-                                            </button>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <button onClick={() => handleSubmitProposal()} disabled={isSubmittingProposal} className="admin-btn" style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 20px', borderRadius: '8px', fontSize: '0.85rem', cursor: isSubmittingProposal ? 'not-allowed' : 'pointer', opacity: isSubmittingProposal ? 0.6 : 1 }}>
-                                        <Send size={14} /> {isSubmittingProposal ? 'Đang gửi...' : 'Gửi đề xuất chính thức'}
-                                    </button>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </div>
+                <ShareModal
+                    resourceToShare={resourceToShare}
+                    onClose={() => setShareModalOpen(false)}
+                    user={user}
+                    resourceLabel="Đề thi"
+                    defaultIcon="📋"
+                    // Student-facing: no public toggle, group share, or individual share for exams
+                    showPublicToggle={false}
+                    showGroupShare={false}
+                    showIndividualShare={false}
+                    // Quick assign
+                    teacherManagedGroups={teacherManagedGroups}
+                    quickAssignGroupId={quickAssignGroupId}
+                    onQuickAssignGroupChange={v => {
+                        setQuickAssignGroupId(v);
+                        setQuickAssignSelectedStudentIds([]);
+                        setStudentDropdownOpen(false);
+                        if (v) {
+                            setQuickAssignStudentsLoading(true);
+                            getStudentsInGroup(v).then(students => {
+                                setQuickAssignStudents(students);
+                                setQuickAssignStudentsLoading(false);
+                            }).catch(() => setQuickAssignStudentsLoading(false));
+                        } else {
+                            setQuickAssignStudents([]);
+                        }
+                    }}
+                    quickAssignDueDate={quickAssignDueDate}
+                    onQuickAssignDueDateChange={setQuickAssignDueDate}
+                    quickAssignScheduledStart={quickAssignScheduledStart}
+                    onQuickAssignScheduledStartChange={setQuickAssignScheduledStart}
+                    onQuickAssign={async () => {
+                        if (!quickAssignGroupId || !quickAssignDueDate || !resourceToShare) return;
+                        if (resourceToShare.timingMode === 'section' && (resourceToShare.sections || []).some(s => !s.timeLimitMinutes || s.timeLimitMinutes <= 0)) {
+                            setToast({ message: `Bài "${resourceToShare.name}" có section chưa đặt thời gian. Vui lòng hoàn thành thiết lập thời gian trước khi giao bài.`, type: 'error' });
+                            return;
+                        }
+                        if (resourceToShare.timingMode === 'question' && resourceToShare.cachedQuestionTimeMissingCount > 0) {
+                            setToast({ message: `Bài "${resourceToShare.name}" chưa hoàn thành thiết lập thời gian theo từng câu hỏi. Vui lòng kiểm tra thời gian từng câu trước khi giao bài.`, type: 'error' });
+                            return;
+                        }
+                        setIsQuickAssigning(true);
+                        setQuickAssignSuccess('');
+                        try {
+                            const dueDateTimestamp = Timestamp.fromDate(new Date(quickAssignDueDate));
+                            const assignPayload = {
+                                examId: resourceToShare.id,
+                                examName: resourceToShare.name,
+                                examTitle: resourceToShare.name,
+                                examType: resourceToShare.examType || 'homework',
+                                targetType: 'group',
+                                targetId: quickAssignGroupId,
+                                dueDate: dueDateTimestamp,
+                                createdBy: user?.uid,
+                                teacherTitle: user?.teacherTitle || '',
+                                studentTitle: user?.studentTitle || ''
+                            };
+                            if (quickAssignScheduledStart && quickAssignScheduledStart !== 'pending') {
+                                assignPayload.scheduledStart = Timestamp.fromDate(new Date(quickAssignScheduledStart));
+                            }
+                            if (quickAssignSelectedStudentIds.length > 0) {
+                                assignPayload.assignedStudentIds = quickAssignSelectedStudentIds;
+                            }
+                            await createExamAssignment(assignPayload);
+                            const groupName = teacherManagedGroups.find(g => g.id === quickAssignGroupId)?.name || '';
+                            setQuickAssignSuccess(`Đã giao "${resourceToShare.name}" cho lớp ${groupName}!`);
+                            setQuickAssignGroupId('');
+                            setQuickAssignDueDate('');
+                            setQuickAssignScheduledStart('');
+                            setQuickAssignSelectedStudentIds([]);
+                            setQuickAssignStudents([]);
+                            setStudentDropdownOpen(false);
+                            const updatedAssignments = await getExamAssignmentsForExam(resourceToShare.id);
+                            setExistingAssignments(updatedAssignments.map(a => ({
+                                ...a,
+                                groupName: teacherManagedGroups.find(g => g.id === a.targetId)?.name || a.targetName || a.groupName || a.targetId || ''
+                            })));
+                        } catch (err) {
+                            setAlertMessage({ type: 'error', text: 'Lỗi giao bài: ' + err.message });
+                        }
+                        setIsQuickAssigning(false);
+                    }}
+                    isQuickAssigning={isQuickAssigning}
+                    quickAssignSuccess={quickAssignSuccess}
+                    existingAssignments={existingAssignments}
+                    quickAssignStudents={quickAssignStudents}
+                    quickAssignSelectedStudentIds={quickAssignSelectedStudentIds}
+                    onQuickAssignStudentToggle={uid => setQuickAssignSelectedStudentIds(prev => prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid])}
+                    onQuickAssignSelectAll={() => setQuickAssignSelectedStudentIds([])}
+                    quickAssignStudentsLoading={quickAssignStudentsLoading}
+                    studentDropdownOpen={studentDropdownOpen}
+                    onStudentDropdownToggle={() => setStudentDropdownOpen(!studentDropdownOpen)}
+                    quickAssignLabel="Bài tập/Kiểm tra"
+                    // Internal
+                    collabEmail={collabEmail}
+                    onCollabEmailChange={setCollabEmail}
+                    onAddCollaborator={handleAddCollaborator}
+                    onRemoveCollaborator={handleRemoveCollaborator}
+                    collaborators={collaborators}
+                    isAddingCollab={isAddingCollab}
+                    onPreTransferOwnership={handlePreTransferOwnership}
+                    onSetTransferTarget={setTransferTarget}
+                    collabRole={collabRole}
+                    onCollabRoleChange={setCollabRole}
+                    onUpdateCollaboratorRole={handleUpdateCollaboratorRole}
+                    collaboratorRoles={collabRolesMap}
+                    // Proposal
+                    onSubmitProposal={() => handleSubmitProposal()}
+                    isSubmittingProposal={isSubmittingProposal}
+                    currentProposal={currentProposal}
+                    proposalLabel="đề thi"
+                />
             )
             }
+
 
             {/* TRANSFER OWNERSHIP CONFIRM MODAL */}
             {
@@ -1301,6 +1567,32 @@ export default function TeacherExamsPage() {
                                 <button className="admin-btn admin-btn-secondary" onClick={() => setExamToDuplicate(null)} disabled={isDuplicating}>Hủy</button>
                                 <button className="admin-btn admin-btn-primary" onClick={handleConfirmDuplicate} disabled={isDuplicating}>
                                     {isDuplicating ? 'Đang nhân đôi...' : 'Xác nhận nhân đôi'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            {/* CONVERT TO GRAMMAR CONFIRM */}
+            {
+                examToConvert && (
+                    <div className="admin-modal-overlay">
+                        <div className="admin-modal" style={{ maxWidth: '480px' }}>
+                            <h2 className="admin-modal-title" style={{ color: '#7c3aed' }}><ArrowRightLeft size={24} /> Chuyển thành Bài kỹ năng</h2>
+                            <p className="admin-modal-desc">
+                                Chuyển <strong>{examToConvert.name}</strong> thành Bài kỹ năng. Bài gốc sẽ được giữ nguyên.
+                            </p>
+                            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '10px 14px', fontSize: '0.8rem', color: '#1e40af', marginBottom: '16px' }}>
+                                ℹ️ Tất cả câu hỏi từ mọi section sẽ được gom lại thành 1 bài duy nhất. Quản lý thời gian sẽ bị bỏ.
+                            </div>
+                            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '10px 14px', fontSize: '0.8rem', color: '#92400e', marginBottom: '16px' }}>
+                                💡 Sau khi chuyển đổi, hãy chọn <strong>Độ tuổi</strong> phù hợp để AI tạo variations chính xác hơn.
+                            </div>
+                            <div className="admin-modal-actions">
+                                <button className="admin-btn admin-btn-secondary" onClick={() => setExamToConvert(null)} disabled={isConvertingToGrammar}>Hủy</button>
+                                <button className="admin-btn admin-btn-primary" onClick={handleConfirmConvertToGrammar} disabled={isConvertingToGrammar} style={{ background: '#7c3aed' }}>
+                                    {isConvertingToGrammar ? 'Đang chuyển đổi...' : '🔄 Xác nhận chuyển đổi'}
                                 </button>
                             </div>
                         </div>

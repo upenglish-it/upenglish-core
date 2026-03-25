@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { getAllPrompts, deletePrompt } from '../../services/promptService';
 import { db } from '../../config/firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
-import { Search, ChevronDown, ChevronRight, PenTool, Mic, Trash2, FolderOpen, User as UserIcon, MessageSquare, AlertCircle } from 'lucide-react';
+import { Search, ChevronDown, ChevronRight, PenTool, Mic, Trash2, FolderOpen, User as UserIcon, MessageSquare, AlertCircle, Eye, EyeOff, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
 
 const SKILL_META = {
     writing: { label: 'Viết', icon: PenTool, color: '#3b82f6', bg: '#eff6ff' },
@@ -15,6 +15,7 @@ export default function AdminPromptsPage() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [expandedTeachers, setExpandedTeachers] = useState({});
+    const [expandedPrompts, setExpandedPrompts] = useState({});
     const [deleteConfirm, setDeleteConfirm] = useState(null);
 
     useEffect(() => { loadData(); }, []);
@@ -68,6 +69,22 @@ export default function AdminPromptsPage() {
         }
     }
 
+    function togglePrompt(promptId) {
+        setExpandedPrompts(prev => ({ ...prev, [promptId]: !prev[promptId] }));
+    }
+
+    function toggleAllPrompts() {
+        const allIds = prompts.map(p => p.id);
+        const allExpanded = allIds.every(id => expandedPrompts[id]);
+        if (allExpanded) {
+            setExpandedPrompts({});
+        } else {
+            const newState = {};
+            allIds.forEach(id => { newState[id] = true; });
+            setExpandedPrompts(newState);
+        }
+    }
+
     // Group prompts by teacher
     const grouped = {};
     prompts.forEach(p => {
@@ -107,12 +124,16 @@ export default function AdminPromptsPage() {
                     <MessageSquare size={28} color="#4f46e5" /> Quản lý Prompt AI
                 </h1>
                 <p style={{ color: '#64748b', fontSize: '0.9rem', marginTop: '4px' }}>
-                    Tất cả prompt chấm bài AI của giáo viên • {totalTeachers} giáo viên • {totalPrompts} prompt
+                    Tất cả prompt chấm bài AI của giáo viên
                 </p>
+                <p style={{ color: '#94a3b8', fontSize: '0.82rem', marginTop: '2px', fontWeight: 600 }}>
+                    {totalTeachers} giáo viên • {totalPrompts} prompt
+                </p>
+
             </div>
 
             {/* Search */}
-            <div style={{ maxWidth: '500px', margin: '0 auto 24px', position: 'relative' }}>
+            <div style={{ maxWidth: '800px', margin: '0 auto 24px', position: 'relative' }}>
                 <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                 <input
                     type="text"
@@ -148,7 +169,7 @@ export default function AdminPromptsPage() {
                     {sortedTeacherUids.map(uid => {
                         const teacher = teachers[uid] || { displayName: uid };
                         const teacherPrompts = filteredGrouped[uid];
-                        const isExpanded = expandedTeachers[uid];
+                        const isExpanded = search ? true : expandedTeachers[uid];
                         const writingCount = teacherPrompts.filter(p => p.skill === 'writing').length;
                         const speakingCount = teacherPrompts.filter(p => p.skill === 'speaking').length;
 
@@ -239,13 +260,39 @@ export default function AdminPromptsPage() {
                                                             <Trash2 size={15} />
                                                         </button>
                                                     </div>
-                                                    <div style={{
-                                                        fontSize: '0.82rem', color: '#64748b', lineHeight: 1.6,
-                                                        display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
-                                                        overflow: 'hidden', whiteSpace: 'pre-wrap',
-                                                    }}>
+                                                    <div
+                                                        onClick={() => togglePrompt(p.id)}
+                                                        style={{
+                                                            fontSize: '0.82rem', color: '#64748b', lineHeight: 1.6,
+                                                            ...(expandedPrompts[p.id]
+                                                                ? { whiteSpace: 'pre-wrap' }
+                                                                : { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', whiteSpace: 'pre-wrap' }
+                                                            ),
+                                                            cursor: 'pointer', borderRadius: '8px', padding: '6px 8px', margin: '-6px -8px',
+                                                            transition: 'background 0.15s',
+                                                        }}
+                                                        onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                                        title={expandedPrompts[p.id] ? 'Thu gọn' : 'Bấm để xem toàn bộ prompt'}
+                                                    >
                                                         {p.content}
                                                     </div>
+                                                    {p.content && p.content.length > 150 && (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); togglePrompt(p.id); }}
+                                                            style={{
+                                                                background: 'none', border: 'none', cursor: 'pointer',
+                                                                color: '#4f46e5', fontSize: '0.75rem', fontWeight: 600,
+                                                                padding: '4px 0', marginTop: '4px',
+                                                                display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                                            }}
+                                                        >
+                                                            {expandedPrompts[p.id]
+                                                                ? <><EyeOff size={12} /> Thu gọn</>
+                                                                : <><Eye size={12} /> Xem toàn bộ prompt</>
+                                                            }
+                                                        </button>
+                                                    )}
                                                     {p.createdAt && (
                                                         <div style={{ fontSize: '0.7rem', color: '#cbd5e1', marginTop: '6px' }}>
                                                             {p.createdAt.toDate?.().toLocaleDateString('vi-VN')}

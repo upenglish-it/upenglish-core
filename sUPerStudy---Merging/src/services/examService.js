@@ -1,8 +1,10 @@
 import { db, storage } from '../config/firebase';
 import { collection, doc, getDocs, getDoc, setDoc, deleteDoc, updateDoc, writeBatch, serverTimestamp, query, where, orderBy, documentId, getCountFromServer, deleteField } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
-import { gradeGrammarSubmissionWithAI } from './aiGrammarService';
-import { evaluateAudioAnswer } from './aiService';
+import { gradeGrammarSubmissionWithAI, gradeFillInBlankBlanksWithAI } from './aiGrammarService';
+import { getPromptById } from './promptService';
+import { normalizeForComparison } from '../utils/textNormalization';
+import { evaluateAudioAnswer, chatCompletion, isSilentAudio } from './aiService';
 import { deleteContextAudio } from './contextAudioService';
 
 /**
@@ -34,6 +36,49 @@ export async function uploadOptionImage(file) {
     const ctx = canvas.getContext('2d');
 
     // Center-crop: take the largest centered square from the source
+    const side = Math.min(bitmap.width, bitmap.height);
+    const sx = (bitmap.width - side) / 2;
+    const sy = (bitmap.height - side) / 2;
+    ctx.drawImage(bitmap, sx, sy, side, side, 0, 0, SIZE, SIZE);
+
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.85));
+    const timestamp = Date.now();
+    const rand = Math.random().toString(36).substring(2, 8);
+    const storageRef = ref(storage, `option_images/${timestamp}_${rand}.webp`);
+    await uploadBytes(storageRef, blob, { contentType: 'image/webp' });
+    return getDownloadURL(storageRef);
+}
+
+/**
+ * Generate an AI image for an MCQ option using FLUX.1-schnell,
+ * center-crop to 480×480, upload to Firebase Storage.
+ * @param {string} prompt Text description for the image (usually the option text)
+ * @returns {Promise<string>} The download URL
+ */
+export async function generateAndUploadOptionImage(prompt) {
+    const { fetchHfImageFromProxy } = await import('./vocabImageService');
+
+    // Random seed ensures different images for the same prompt on regeneration
+    const randomSeed = Math.floor(Math.random() * 99999);
+    const noTextRule = 'absolutely NO text, NO words, NO letters, NO labels, NO writing of any kind';
+
+    // If teacher wrote a detailed prompt (contains style/composition keywords), use it directly
+    const styleKeywords = /\b(style|cartoon|watercolor|realistic|3d|pixel|anime|sketch|drawing|painting|illustration|minimalist|vintage|retro|pastel|neon|chibi|isometric|vector|flat design|cute|photo)\b/i;
+    let fullPrompt;
+    if (styleKeywords.test(prompt)) {
+        fullPrompt = `${prompt}. ${noTextRule}. seed:${randomSeed}`;
+    } else {
+        fullPrompt = `A clear, simple illustration of: "${prompt}". Flat design style, educational illustration, clean white background, ${noTextRule}, vibrant colors, centered composition. seed:${randomSeed}`;
+    }
+    const imageBlob = await fetchHfImageFromProxy(fullPrompt);
+
+    // Center-crop to 480×480 (matching uploadOptionImage)
+    const SIZE = 480;
+    const bitmap = await createImageBitmap(imageBlob);
+    const canvas = document.createElement('canvas');
+    canvas.width = SIZE;
+    canvas.height = SIZE;
+    const ctx = canvas.getContext('2d');
     const side = Math.min(bitmap.width, bitmap.height);
     const sx = (bitmap.width - side) / 2;
     const sy = (bitmap.height - side) / 2;
@@ -144,7 +189,10 @@ export async function getExams(createdByRole = null) {
     }
     const snapshot = await getDocs(q);
     const exams = [];
-    snapshot.forEach(docSnap => exams.push({ id: docSnap.id, ...docSnap.data() }));
+    snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        if (!data.isDeleted) exams.push({ id: docSnap.id, ...data });
+    });
     return exams.sort((a, b) => {
         const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
         const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
@@ -169,6 +217,16 @@ export async function getSharedExams(examAccessIds = []) {
         publicSnap.forEach(docSnap => {
             exams.push({ id: docSnap.id, ...docSnap.data() });
             addedIds.add(docSnap.id);
+        });
+
+        // 1b. Get all teacher-visible exams
+        const tvQ = query(collection(db, 'exams'), where('teacherVisible', '==', true));
+        const tvSnap = await getDocs(tvQ);
+        tvSnap.forEach(docSnap => {
+            if (!addedIds.has(docSnap.id)) {
+                exams.push({ id: docSnap.id, ...docSnap.data() });
+                addedIds.add(docSnap.id);
+            }
         });
 
         // 2. Get explicitly shared exams
@@ -211,6 +269,21 @@ export async function saveExam(examData) {
 }
 
 export async function deleteExam(id) {
+    // Soft delete: mark as deleted instead of removing
+    await updateDoc(doc(db, 'exams', id), {
+        isDeleted: true,
+        deletedAt: serverTimestamp()
+    });
+}
+
+export async function restoreExam(id) {
+    await updateDoc(doc(db, 'exams', id), {
+        isDeleted: deleteField(),
+        deletedAt: deleteField()
+    });
+}
+
+export async function permanentlyDeleteExam(id) {
     // Delete questions first
     const questions = await getExamQuestions(id);
     const batch = writeBatch(db);
@@ -231,10 +304,8 @@ export async function deleteExam(id) {
     const submissionsQ = query(collection(db, 'exam_submissions'), where('examId', '==', id));
     const subsSnap = await getDocs(submissionsQ);
 
-    // We handle storage deletion separately for each submission
     for (const subDoc of subsSnap.docs) {
         batch.delete(subDoc.ref);
-        // Background cleanup for each submission's audio folder
         const folderRef = ref(storage, `audio_answers/${subDoc.id}`);
         listAll(folderRef).then(listRes => {
             listRes.items.forEach(fileRef => deleteObject(fileRef).catch(() => { }));
@@ -251,6 +322,23 @@ export async function deleteExam(id) {
 
     batch.delete(doc(db, 'exams', id));
     await batch.commit();
+}
+
+export async function getDeletedExams() {
+    try {
+        const q = query(collection(db, 'exams'), where('isDeleted', '==', true));
+        const snapshot = await getDocs(q);
+        const exams = [];
+        snapshot.forEach(docSnap => exams.push({ id: docSnap.id, ...docSnap.data() }));
+        return exams.sort((a, b) => {
+            const tA = a.deletedAt?.toMillis ? a.deletedAt.toMillis() : 0;
+            const tB = b.deletedAt?.toMillis ? b.deletedAt.toMillis() : 0;
+            return tB - tA;
+        });
+    } catch (error) {
+        console.error("Error fetching deleted exams:", error);
+        return [];
+    }
 }
 
 // ========== EXAM QUESTIONS ==========
@@ -422,6 +510,19 @@ export async function createExamAssignment(assignmentData) {
     const assignmentRef = doc(collection(db, 'exam_assignments'));
     // Generate a random seed for variation selection
     const variationSeed = Math.floor(Math.random() * 100000);
+
+    // Resolve targetName for group assignments if not already provided
+    if (data.targetType === 'group' && data.targetId && !data.targetName) {
+        try {
+            const groupSnap = await getDoc(doc(db, 'groups', data.targetId));
+            if (groupSnap.exists()) {
+                data.targetName = groupSnap.data().name || '';
+            }
+        } catch (e) {
+            console.warn('Could not resolve group name for assignment:', e);
+        }
+    }
+
     await setDoc(assignmentRef, {
         ...data,
         variationSeed,
@@ -429,6 +530,12 @@ export async function createExamAssignment(assignmentData) {
     });
 
     // Notifications for group assignments
+    // Check if scheduledStart is in the future — if so, skip student notifications
+    const scheduledStartDate = data.scheduledStart
+        ? (data.scheduledStart.toDate ? data.scheduledStart.toDate() : new Date(data.scheduledStart))
+        : null;
+    const shouldNotifyStudents = !scheduledStartDate || scheduledStartDate <= new Date();
+
     if (data.targetType === 'group' && data.targetId) {
         const examName = data.examName || data.examTitle || 'Không tên';
         const examType = data.examType;
@@ -436,12 +543,12 @@ export async function createExamAssignment(assignmentData) {
         const typeEmoji = examType === 'test' ? '📝' : '📋';
         const dueDate = data.dueDate;
         const dueDateStr = dueDate ? (dueDate.toDate ? dueDate.toDate() : new Date(dueDate)).toLocaleString('vi-VN') : '';
-        const appUrl = 'https://upenglishvietnam.com';
+        const appUrl = 'https://upenglishvietnam.com/preview/superstudy';
 
         try {
             const { createNotificationForGroupTeachers, createNotificationForGroupStudents, queueEmailForGroupStudents, buildEmailHtml } = await import('./notificationService');
 
-            // Notify group teachers (existing)
+            // Notify group teachers (always, even for scheduled assignments)
             await createNotificationForGroupTeachers(data.targetId, {
                 type: 'exam_assigned',
                 title: `${typeEmoji} ${typeLabel === 'bài kiểm tra' ? 'Kiểm tra' : 'Bài tập'} mới được giao`,
@@ -449,28 +556,31 @@ export async function createExamAssignment(assignmentData) {
                 link: `/teacher/groups/${data.targetId}`
             });
 
-            // Notify students (in-app)
-            await createNotificationForGroupStudents(data.targetId, {
-                type: 'exam_assignment_new',
-                title: `${typeEmoji} ${typeLabel === 'bài kiểm tra' ? 'Kiểm tra' : 'Bài tập'} mới`,
-                message: `Bạn có ${typeLabel} mới: "${examName}".${dueDateStr ? ` Hạn: ${dueDateStr}` : ''}`,
-                link: '/'
-            });
+            // Only notify students if not scheduled for the future
+            if (shouldNotifyStudents) {
+                // Notify students (in-app)
+                await createNotificationForGroupStudents(data.targetId, {
+                    type: 'exam_assignment_new',
+                    title: `${typeEmoji} ${typeLabel === 'bài kiểm tra' ? 'Kiểm tra' : 'Bài tập'} mới`,
+                    message: `Bạn có ${typeLabel} mới: "${examName}".${dueDateStr ? ` Hạn: ${dueDateStr}` : ''}`,
+                    link: '/dashboard?tab=exams'
+                });
 
-            // Email to students
-            const accentColor = examType === 'test' ? '#ef4444' : '#8b5cf6';
-            const accentColor2 = examType === 'test' ? '#f87171' : '#a78bfa';
-            await queueEmailForGroupStudents(data.targetId, {
-                subject: `${typeLabel === 'bài kiểm tra' ? 'Kiểm tra' : 'Bài tập'} mới: ${examName}`,
-                html: buildEmailHtml({
-                    emoji: typeEmoji, heading: `${typeLabel === 'bài kiểm tra' ? 'Bài kiểm tra' : 'Bài tập'} mới`, headingColor: accentColor,
-                    greeting: 'Chào bạn 👋',
-                    body: `<p>Thầy/cô vừa giao cho bạn ${typeLabel} mới. Cố gắng hoàn thành đúng hạn nhé!</p>`,
-                    highlight: `<strong style="font-size:1.05rem;">${examName}</strong>${dueDateStr ? `<br><span style="color:#ef4444;font-size:0.9rem;">⏰ Hạn: ${dueDateStr}</span>` : ''}`,
-                    highlightBg: '#f8fafc', highlightBorder: accentColor,
-                    ctaText: 'Vào làm bài ngay', ctaColor: accentColor, ctaColor2: accentColor2
-                })
-            });
+                // Email to students
+                const accentColor = examType === 'test' ? '#ef4444' : '#8b5cf6';
+                const accentColor2 = examType === 'test' ? '#f87171' : '#a78bfa';
+                await queueEmailForGroupStudents(data.targetId, {
+                    subject: `${typeLabel === 'bài kiểm tra' ? 'Kiểm tra' : 'Bài tập'} mới: ${examName}`,
+                    html: buildEmailHtml({
+                        emoji: typeEmoji, heading: `${typeLabel === 'bài kiểm tra' ? 'Bài kiểm tra' : 'Bài tập'} mới`, headingColor: accentColor,
+                        greeting: 'Chào bạn 👋',
+                        body: `<p>Thầy/cô vừa giao cho bạn ${typeLabel} mới. Cố gắng hoàn thành đúng hạn nhé!</p>`,
+                        highlight: `<strong style="font-size:1.05rem;">${examName}</strong>${dueDateStr ? `<br><span style="color:#ef4444;font-size:0.9rem;">⏰ Hạn: ${dueDateStr}</span>` : ''}`,
+                        highlightBg: '#f8fafc', highlightBorder: accentColor,
+                        ctaText: 'Vào làm bài ngay', ctaLink: `${appUrl}/dashboard?tab=exams`, ctaColor: accentColor, ctaColor2: accentColor2
+                    })
+                });
+            }
         } catch (e) {
             console.error('Error sending exam assignment notification:', e);
         }
@@ -490,7 +600,7 @@ export async function getExamAssignmentsForExam(examId) {
     try {
         const q = query(collection(db, 'exam_assignments'), where('examId', '==', examId));
         const snapshot = await getDocs(q);
-        return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        return snapshot.docs.map(d => ({ id: d.id, ...d.data() })).filter(a => !a.isDeleted);
     } catch (error) {
         console.error('Error fetching exam assignments for exam:', error);
         return [];
@@ -543,7 +653,18 @@ export async function getExamAssignmentsForStudent(studentId, groupIds = []) {
         }
     }
 
-    return assignments.filter(a => !a.isDeleted).sort((a, b) => {
+    // Filter out deleted and filter by assignedStudentIds
+    let filtered = assignments.filter(a => !a.isDeleted);
+    
+    // If assignment has assignedStudentIds, only show to those students
+    filtered = filtered.filter(a => {
+        if (a.assignedStudentIds && Array.isArray(a.assignedStudentIds) && a.assignedStudentIds.length > 0) {
+            return a.assignedStudentIds.includes(studentId);
+        }
+        return true; // whole-class assignment
+    });
+
+    return filtered.sort((a, b) => {
         const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
         const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
         return timeB - timeA;
@@ -679,7 +800,8 @@ export async function updateExamAssignmentDueDate(assignmentId, newDueDate) {
             if (targetId) {
                 try {
                     const { createNotificationForGroupStudents, queueEmailForGroupStudents, buildEmailHtml } = await import('./notificationService');
-                    await createNotificationForGroupStudents(targetId, { type: 'deadline_extended', title: '⏰ Gia hạn deadline', message: `Bài "${examName}" được gia hạn đến ${dueDateStr}.`, link: '/' });
+                    const appUrl = 'https://upenglishvietnam.com/preview/superstudy';
+                    await createNotificationForGroupStudents(targetId, { type: 'deadline_extended', title: '⏰ Gia hạn deadline', message: `Bài "${examName}" được gia hạn đến ${dueDateStr}.`, link: '/dashboard?tab=exams' });
                     await queueEmailForGroupStudents(targetId, {
                         subject: `Gia hạn: ${examName}`,
                         html: buildEmailHtml({
@@ -688,7 +810,7 @@ export async function updateExamAssignmentDueDate(assignmentId, newDueDate) {
                             body: `<p>Bài <strong>"${examName}"</strong> đã được thầy/cô gia hạn thêm thời gian làm bài. Tranh thủ hoàn thành nhé!</p>`,
                             highlight: `<strong>📅 Hạn mới: ${dueDateStr}</strong>`,
                             highlightBg: '#fffbeb', highlightBorder: '#f59e0b',
-                            ctaText: 'Vào làm bài', ctaColor: '#f59e0b', ctaColor2: '#fbbf24'
+                            ctaText: 'Vào làm bài', ctaLink: `${appUrl}/dashboard?tab=exams`, ctaColor: '#f59e0b', ctaColor2: '#fbbf24'
                         })
                     });
                 } catch (e) { console.error('Error sending exam deadline extension notification:', e); }
@@ -717,7 +839,8 @@ export async function updateExamAssignmentStudentDeadline(assignmentId, studentI
             try {
                 const { createNotification, queueEmail, buildEmailHtml } = await import('./notificationService');
                 const studentSnap = await getDoc(doc(db, 'users', studentId));
-                await createNotification({ userId: studentId, type: 'deadline_extended', title: '⏰ Gia hạn deadline', message: `Bài "${examName}" được gia hạn cho bạn đến ${dueDateStr}.`, link: '/' });
+                const appUrl = 'https://upenglishvietnam.com/preview/superstudy';
+                await createNotification({ userId: studentId, type: 'deadline_extended', title: '⏰ Gia hạn deadline', message: `Bài "${examName}" được gia hạn cho bạn đến ${dueDateStr}.`, link: '/dashboard?tab=exams' });
                 if (studentSnap.exists() && studentSnap.data().email) {
                     await queueEmail(studentSnap.data().email, {
                         subject: `Gia hạn: ${examName}`,
@@ -727,7 +850,7 @@ export async function updateExamAssignmentStudentDeadline(assignmentId, studentI
                             body: `<p>Bài <strong>"${examName}"</strong> đã được thầy/cô gia hạn riêng cho bạn, thêm thời gian làm bài. Cố gắng hoàn thành nhé!</p>`,
                             highlight: `<strong>📅 Hạn mới: ${dueDateStr}</strong>`,
                             highlightBg: '#fffbeb', highlightBorder: '#f59e0b',
-                            ctaText: 'Vào làm bài', ctaColor: '#f59e0b', ctaColor2: '#fbbf24'
+                            ctaText: 'Vào làm bài', ctaLink: `${appUrl}/dashboard?tab=exams`, ctaColor: '#f59e0b', ctaColor2: '#fbbf24'
                         })
                     });
                 }
@@ -847,6 +970,163 @@ export async function deleteExamSubmission(submissionId) {
     }
 }
 
+/**
+ * Generate a concise AI summary after all exam questions have been graded.
+ * @param {Object} params
+ * @param {Object[]} params.summaryItems - Pre-collected summary data per question
+ * @param {number} params.totalScore
+ * @param {number} params.maxTotalScore
+ * @param {string} params.teacherTitle
+ * @param {string} params.studentTitle
+ * @param {string} params.cefrLevel
+ * @returns {Promise<string>}
+ */
+async function generateExamSummary({ summaryItems, totalScore, maxTotalScore, teacherTitle = 'thầy/cô', studentTitle = 'em', cefrLevel = '' }) {
+    // Build compact summary of all question results from pre-collected items
+    const questionSummaries = summaryItems.map(item => {
+        let line = `Câu ${item.num} (${item.typeName}${item.purpose ? ' - ' + item.purpose : ''}): ${item.isCorrect ? 'ĐÚNG' : 'SAI'} — ${item.score}/${item.maxScore}`;
+        if (item.detectedErrors && item.detectedErrors.length > 0) {
+            line += ` [Lỗi: ${item.detectedErrors.join(', ')}]`;
+        }
+        if (item.feedback) {
+            line += `\n  Nhận xét: ${item.feedback}`;
+        }
+        if (item.followUpRequested) {
+            line += `\n  ➡️ Giáo viên yêu cầu làm lại câu này`;
+            if (item.followUpResult) {
+                line += ` → Kết quả làm lại: ${item.followUpResult.score}/${item.followUpResult.maxScore}`;
+                if (item.followUpResult.feedback) line += `\n  Nhận xét bài sửa: ${item.followUpResult.feedback}`;
+            } else {
+                line += ` (chưa làm lại)`;
+            }
+        }
+        if (!item.isCorrect && item.questionText) {
+            line += `\n  Đề: "${item.questionText}"`;
+            if (item.studentAnswer) line += `\n  Trả lời: "${item.studentAnswer}"`;
+            if (item.correctAnswer) line += `\n  Đáp án: "${item.correctAnswer}"`;
+        }
+        return line;
+    }).join('\n');
+
+    const scorePercent = maxTotalScore > 0 ? Math.round((totalScore / maxTotalScore) * 100) : 0;
+
+    const systemPrompt = `Bạn là giáo viên tiếng Anh viết NHẬN XÉT TỔNG KẾT cho một bài kiểm tra. Gọi học viên bằng "${studentTitle}". Có thể xưng "${teacherTitle}" nhưng không bắt buộc.
+${cefrLevel ? `Trình độ mục tiêu: ${cefrLevel}.` : ''}
+
+Dựa trên kết quả dưới đây, hãy viết nhận xét tổng kết bằng TIẾNG VIỆT. TẬP TRUNG VÀO KỸ NĂNG, KHÔNG liệt kê từng câu.
+
+Cấu trúc:
+1. **Điểm mạnh**: Những kỹ năng học viên thể hiện tốt (ví dụ: phát âm rõ ràng, ngữ pháp chắc, từ vựng phong phú, triển khai ý tưởng logic...).
+2. **Điểm cần cải thiện**: Những kỹ năng còn yếu, phân tích pattern lỗi nếu có (ví dụ: hay sai thì động từ, thiếu từ nối, ý tưởng chưa phát triển đủ...). CHỈ nêu kỹ năng/pattern, KHÔNG nói "ở Câu 3" hay "Câu 5".
+
+LƯU Ý:
+- Viết tự nhiên, đi thẳng vào nội dung. KHÔNG mở đầu bằng tiêu đề.
+- KHÔNG đề cập số câu hỏi cụ thể (Câu 1, Câu 2...). Chỉ nói về kỹ năng.
+- NGOẠI TRỪ: Nếu có câu được giáo viên yêu cầu làm lại, hãy ghi rõ số câu cần làm lại (ví dụ: "Giáo viên yêu cầu em làm lại Câu 2, Câu 4 và Câu 6 vì chưa đạt yêu cầu"). Nếu học viên chưa làm lại, nhắc nhở luôn.
+- Dùng **in đậm** để nhấn mạnh. Không dùng heading (#).
+- Sử dụng dấu gạch ngang (- ) để liệt kê.
+- Nếu bài đạt điểm cao (≥80%), vẫn chỉ ra kỹ năng có thể nâng cấp.
+- Nếu bài đạt điểm thấp (<50%), động viên nhẹ nhàng.
+- CHỈ trả về text nhận xét, KHÔNG trả về JSON.`;
+
+    const userContent = `TỔNG ĐIỂM: ${totalScore}/${maxTotalScore} (${scorePercent}%)
+
+KẾT QUẢ TỪNG CÂU:
+${questionSummaries}`;
+
+    try {
+        const response = await chatCompletion({
+            systemPrompt,
+            userContent
+        });
+
+        return typeof response === 'string' ? response.trim() : (response?.text || response?.content || '');
+    } catch (err) {
+        console.error('generateExamSummary error:', err);
+        return '';
+    }
+}
+
+/**
+ * Manually (re)generate exam summary for a submission.
+ * Used when teacher wants to generate/regenerate after fixing grading errors.
+ * @param {string} submissionId
+ * @param {Object[]} questions - All exam questions for this exam
+ * @param {string} teacherTitle
+ * @param {string} studentTitle
+ * @returns {Promise<string>} The generated summary
+ */
+export async function regenerateExamSummaryForSubmission(submissionId, questions, teacherTitle = '', studentTitle = '') {
+    const snap = await getDoc(doc(db, 'exam_submissions', submissionId));
+    if (!snap.exists()) throw new Error('Submission not found');
+    const submission = snap.data();
+    const results = submission.results || {};
+
+    const TYPE_LABELS = {
+        multiple_choice: 'Trắc nghiệm', matching: 'Ghép nối', categorization: 'Phân loại',
+        fill_in_blank: 'Điền từ', fill_in_blanks: 'Điền từ', fill_in_blank_typing: 'Điền từ (nhập)',
+        essay: 'Tự luận', audio_recording: 'Thu âm', ordering: 'Sắp xếp thứ tự'
+    };
+
+    // Build summaryItems from stored results
+    const summaryItems = [];
+    let counter = 0;
+    for (const q of questions) {
+        const r = results[q.id];
+        if (!r) continue;
+        counter++;
+        const item = {
+            num: counter,
+            typeName: TYPE_LABELS[q.type] || q.type,
+            purpose: q.purpose || '',
+            isCorrect: r.isCorrect,
+            score: r.score,
+            maxScore: r.maxScore,
+            detectedErrors: r.detectedErrors || [],
+            feedback: r.feedback || '',
+            followUpRequested: !!submission.followUpRequested?.[q.id],
+            followUpResult: submission.followUpResults?.[q.id] || null
+        };
+        if (!r.isCorrect) {
+            // For wrong answers, add question text (we don't have variation here, just use purpose)
+            item.questionText = q.purpose || q.type;
+        }
+        summaryItems.push(item);
+    }
+
+    const totalScore = submission.totalScore || 0;
+    const maxTotalScore = submission.maxTotalScore || 0;
+
+    // Determine CEFR level from exam
+    let cefrLevel = '';
+    if (submission.examId) {
+        try {
+            const examSnap = await getDoc(doc(db, 'exams', submission.examId));
+            if (examSnap.exists()) cefrLevel = examSnap.data().cefrLevel || '';
+        } catch (e) { /* ignore */ }
+    }
+
+    const finalTeacherTitle = teacherTitle || 'thầy/cô';
+    const finalStudentTitle = studentTitle || 'em';
+
+    const summary = await generateExamSummary({
+        summaryItems,
+        totalScore,
+        maxTotalScore,
+        teacherTitle: finalTeacherTitle,
+        studentTitle: finalStudentTitle,
+        cefrLevel
+    });
+
+    // Save to Firestore
+    await updateDoc(doc(db, 'exam_submissions', submissionId), {
+        examSummary: summary,
+        updatedAt: serverTimestamp()
+    });
+
+    return summary;
+}
+
 // ========== AI GRADING ==========
 
 /**
@@ -858,6 +1138,22 @@ export async function deleteExamSubmission(submissionId) {
  * @returns {Promise<Object>} The grading results
  */
 export async function gradeExamSubmission(submissionId, submission, questions, sections = [], teacherTitle = '', studentTitle = '') {
+    // Re-read the latest submission data from Firestore to avoid race conditions
+    // (e.g., audioUrl saved after grading was triggered but before it actually grades that question)
+    try {
+        const freshSnap = await getDoc(doc(db, 'exam_submissions', submissionId));
+        if (freshSnap.exists()) {
+            const freshData = freshSnap.data();
+            // Merge: use fresh answers from Firestore (they are the most up-to-date)
+            submission = { ...submission, ...freshData, answers: freshData.answers || submission.answers };
+        }
+    } catch (e) {
+        console.warn('Could not re-read submission from Firestore, using passed-in data:', e);
+    }
+
+    // Preserve existing results (e.g. teacherOverride) from previous grading
+    const existingResults = submission.results || {};
+
     const results = {};
     let totalScore = 0;
 
@@ -910,21 +1206,30 @@ export async function gradeExamSubmission(submissionId, submission, questions, s
         questions = questions.filter(q => q.sectionId && validSectionIds.has(q.sectionId));
     }
 
-    // ── maxTotalScore = sum of ALL question points (regardless of whether answered) ──
-    const maxTotalScore = questions.reduce((sum, q) => sum + (q.points || 1), 0);
+    // ── Helper: get total max score for a question (perItem × itemCount) ──
+    function getQuestionMaxScore(q) {
+        const perItem = q.points || 1;
+        const varIdx = submission.variationMap?.[q.id] || 0;
+        const v = q.variations?.[varIdx] || q.variations?.[0];
+        if (!v) return perItem;
+        if (q.type === 'fill_in_blank' || q.type === 'fill_in_blanks' || q.type === 'fill_in_blank_typing') {
+            const count = (v.text || '').match(/\{\{.+?\}\}/g)?.length || 1;
+            return perItem * count;
+        }
+        if (q.type === 'matching') return perItem * ((v.pairs || []).length || 1);
+        if (q.type === 'categorization') return perItem * ((v.items || []).length || 1);
+        if (q.type === 'ordering') return perItem; // All-or-nothing
+        return perItem;
+    }
+
+    // ── maxTotalScore = sum of ALL question points (perItem × itemCount) ──
+    const maxTotalScore = questions.reduce((sum, q) => sum + getQuestionMaxScore(q), 0);
 
     // Track index of AI-graded questions (essay/audio) to avoid repeated greetings
     let essayAudioIndex = 0;
     let usedAI = false; // Track whether AI was called during grading
-
-    // Track all graded results to provide context for AI grading
-    const previousResults = [];
+    const summaryItems = []; // Collect data for exam summary
     let questionCounter = 0;
-    const TYPE_LABELS = {
-        multiple_choice: 'Trắc nghiệm', matching: 'Ghép nối', categorization: 'Phân loại',
-        fill_in_blank: 'Điền từ', fill_in_blanks: 'Điền từ', fill_in_blank_typing: 'Điền từ (nhập)',
-        essay: 'Tự luận', audio_recording: 'Thu âm', ordering: 'Sắp xếp thứ tự'
-    };
 
     // ── Build ordered list of (sectionId, questionId) pairs based on section & question order ──
     const sectionOrder = (sections || []).map(s => s.id);
@@ -942,6 +1247,9 @@ export async function gradeExamSubmission(submissionId, submission, questions, s
         }
     }
 
+    // Track answer updates (e.g. AI transcript for audio recordings)
+    const answerUpdates = {};
+
     // ── Grade each answered question in correct order ──
     for (const { sectionId, questionId, answerData } of orderedGradingPairs) {
             const question = questionsMap[questionId];
@@ -955,12 +1263,16 @@ export async function gradeExamSubmission(submissionId, submission, questions, s
             }
             if (!variation) continue;
 
-            const maxScore = question.points || 1;
+            const perItemPoints = question.points || 1;
+            // For multi-item types, actual maxScore = perItemPoints × itemCount
+            // We'll calculate this per type below; default is perItemPoints (for single-answer types)
+            let maxScore = perItemPoints;
 
             try {
                 let isCorrect = false;
                 let score = 0;
                 let feedback = '';
+                let savedAiVerdicts = null;
 
                 if (question.type === 'multiple_choice') {
                     const correctAnswerText = variation.options[variation.correctAnswer];
@@ -973,20 +1285,55 @@ export async function gradeExamSubmission(submissionId, submission, questions, s
                     const correctWords = [];
                     let mm;
                     while ((mm = markerRegex.exec(variation.text || '')) !== null) {
-                        correctWords.push(mm[1]);
+                        correctWords.push(mm[1].replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' '));
                     }
+                    maxScore = perItemPoints * correctWords.length; // Total = per-blank × blanks
                     if (correctWords.length > 0 && typeof answerData.answer === 'object' && answerData.answer !== null) {
                         let correctCount = 0;
                         correctWords.forEach((cw, idx) => {
                             const studentWord = answerData.answer[String(idx)];
-                            if (typeof studentWord === 'string' && studentWord.trim().toLowerCase() === cw.trim().toLowerCase()) {
+                            if (typeof studentWord === 'string' && normalizeForComparison(studentWord) === normalizeForComparison(cw)) {
                                 correctCount++;
                             }
                         });
-                        score = correctWords.length > 0 ? (correctCount / correctWords.length) * maxScore : 0;
+                        score = correctCount * perItemPoints;
                         score = Math.round(score * 10) / 10;
                         isCorrect = correctCount === correctWords.length && correctWords.length > 0;
                         feedback = isCorrect ? 'Chính xác!' : `Bạn đã điền đúng ${correctCount}/${correctWords.length} chỗ trống.`;
+
+                        // AI fallback: if exact match failed and teacher enabled AI grading
+                        if (!isCorrect && question.useAIGrading && question.type === 'fill_in_blank_typing' && correctWords.length > 0) {
+                            try {
+                                usedAI = true;
+                                const blanksData = correctWords.map((cw, idx) => {
+                                    const sw = answerData.answer[String(idx)] || '';
+                                    const exactOk = normalizeForComparison(sw) === normalizeForComparison(cw);
+                                    return { idx, expected: cw, studentAnswer: sw, exactMatch: exactOk };
+                                });
+                                // Skip if all exact match (shouldn't happen since !isCorrect)
+                                if (blanksData.every(b => b.exactMatch)) continue;
+
+                                const sectionContext = sectionsMap[sectionId] || '';
+                                const cleanText = (variation.text || '').replace(/<[^>]*>/g, ' ').replace(/\{\{.+?\}\}/g, '___');
+                                const aiVerdicts = await gradeFillInBlankBlanksWithAI(cleanText, blanksData, sectionContext);
+
+                                if (aiVerdicts && aiVerdicts.length === correctWords.length) {
+                                    savedAiVerdicts = aiVerdicts;
+                                    let aiCorrectCount = 0;
+                                    correctWords.forEach((cw, idx) => {
+                                        const sw = answerData.answer[String(idx)] || '';
+                                        const exactOk = normalizeForComparison(sw) === normalizeForComparison(cw);
+                                        if (exactOk || aiVerdicts[idx] === true) aiCorrectCount++;
+                                    });
+                                    score = aiCorrectCount * perItemPoints;
+                                    score = Math.round(score * 10) / 10;
+                                    isCorrect = aiCorrectCount === correctWords.length;
+                                    feedback = isCorrect ? 'Chính xác!' : `Bạn đã điền đúng ${aiCorrectCount}/${correctWords.length} chỗ trống.`;
+                                }
+                            } catch (aiErr) {
+                                console.error(`AI fallback grading failed for question ${questionId}:`, aiErr);
+                            }
+                        }
                     } else {
                         isCorrect = typeof answerData.answer === 'string' &&
                             answerData.answer.trim().toLowerCase() === variation.correctAnswer?.trim().toLowerCase();
@@ -996,60 +1343,71 @@ export async function gradeExamSubmission(submissionId, submission, questions, s
                 } else if (question.type === 'matching') {
                     const pairs = variation.pairs || [];
                     const total = pairs.length;
+                    maxScore = perItemPoints * total; // Total = per-pair × pairs
                     let correctCount = 0;
                     pairs.forEach((pair, i) => {
                         if (answerData.answer?.[i]?.text === pair.right) correctCount++;
                     });
-                    score = total > 0 ? (correctCount / total) * maxScore : 0;
+                    score = correctCount * perItemPoints;
                     score = Math.round(score * 10) / 10;
                     isCorrect = correctCount === total && total > 0;
                     feedback = isCorrect ? 'Chính xác!' : `Bạn đã ghép đúng ${correctCount}/${total} cặp.`;
                 } else if (question.type === 'categorization') {
                     const items = variation.items || [];
                     const total = items.length;
+                    maxScore = perItemPoints * total; // Total = per-item × items
                     let correctCount = 0;
                     const studentAnswers = answerData.answer || {};
                     items.forEach(item => {
                         if (studentAnswers[item.text] === item.group) correctCount++;
                     });
-                    score = total > 0 ? (correctCount / total) * maxScore : 0;
+                    score = correctCount * perItemPoints;
                     score = Math.round(score * 10) / 10;
                     isCorrect = correctCount === total && total > 0;
                     feedback = isCorrect ? 'Chính xác!' : `Bạn đã phân loại đúng ${correctCount}/${total} mục.`;
                 } else if (question.type === 'ordering') {
                     const correctItems = variation.items || [];
                     const total = correctItems.length;
-                    let correctCount = 0;
+                    maxScore = perItemPoints; // All-or-nothing: single score for the whole question
                     const studentOrder = Array.isArray(answerData.answer) ? answerData.answer : [];
-                    correctItems.forEach((item, i) => {
-                        if (studentOrder[i] === item) correctCount++;
-                    });
-                    score = total > 0 ? (correctCount / total) * maxScore : 0;
-                    score = Math.round(score * 10) / 10;
-                    isCorrect = correctCount === total && total > 0;
-                    feedback = isCorrect ? 'Chính xác!' : `Bạn đã xếp đúng vị trí ${correctCount}/${total} mục.`;
+                    isCorrect = total > 0 && correctItems.every((item, i) => studentOrder[i] === item);
+                    score = isCorrect ? maxScore : 0;
+                    feedback = isCorrect ? 'Chính xác!' : 'Thứ tự chưa đúng.';
                 } else if (question.type === 'essay') {
                     try {
                         usedAI = true;
                         const sectionContext = sectionsMap[sectionId] || '';
+                        // Resolve prompt content from linked prompt if available, combine with specialRequirement
+                        let resolvedSpecialReq = question.specialRequirement || '';
+                        if (question.promptId) {
+                            try {
+                                const linkedPrompt = await getPromptById(question.promptId);
+                                if (linkedPrompt) {
+                                    resolvedSpecialReq = resolvedSpecialReq
+                                        ? `${linkedPrompt.content}\n\nYÊU CẦU BỔ SUNG:\n${resolvedSpecialReq}`
+                                        : linkedPrompt.content;
+                                }
+                            } catch (e) { console.warn('Could not resolve linked prompt:', e); }
+                        }
                         const gradeResult = await gradeGrammarSubmissionWithAI(
                             variation.text || variation.content,
                             answerData.answer,
                             question.purpose,
                             question.type,
-                            question.specialRequirement || '',
+                            resolvedSpecialReq,
                             sectionContext,
                             finalTeacherTitle,
                             finalStudentTitle,
                             essayAudioIndex,
-                            previousResults,
                             questions.length,
-                            cefrLevel
+                            cefrLevel,
+                            maxScore,
+                            question.useDefaultGradingCriteria !== false
                         );
                         essayAudioIndex++;
-                        const numericScore = parseInt(gradeResult.score, 10);
-                        score = Math.round((numericScore / 10) * maxScore * 10) / 10;
-                        isCorrect = numericScore >= 8;
+                        const numericScore = parseFloat(gradeResult.score) || 0;
+                        score = Math.min(Math.round(numericScore * 10) / 10, maxScore);
+                        isCorrect = score >= (maxScore * 0.8);
                         feedback = gradeResult.feedback || '';
                         // Store extra AI data for skill analysis
                         var teacherNote = gradeResult.teacherNote || '';
@@ -1061,34 +1419,100 @@ export async function gradeExamSubmission(submissionId, submission, questions, s
                     }
                 } else if (question.type === 'audio_recording') {
                     usedAI = true;
-                    const audioAnswer = answerData.answer || {};
-                    if (audioAnswer.audioUrl) {
-                        // Re-grade audio with full context (previousResults)
+                    let audioAnswer = answerData.answer || {};
+                    // Resolve prompt content from linked prompt if available, combine with specialRequirement
+                    let resolvedAudioSpecialReq = question.specialRequirement || '';
+                    if (question.promptId) {
                         try {
-                            const audioResp = await fetch(audioAnswer.audioUrl);
-                            const audioBlob = await audioResp.blob();
-                            const sectionContext = sectionsMap[sectionId] || '';
-                            const audioResult = await evaluateAudioAnswer(
-                                audioBlob,
-                                variation.text || variation.content || '',
-                                question.purpose || '',
-                                question.specialRequirement || '',
-                                maxScore,
-                                sectionContext,
-                                finalTeacherTitle,
-                                finalStudentTitle,
-                                essayAudioIndex,
-                                previousResults,
-                                questions.length,
-                                cefrLevel
-                            );
-                            essayAudioIndex++;
-                            score = parseFloat(audioResult.score) || 0;
-                            isCorrect = score >= (maxScore * 0.8);
-                            feedback = audioResult.feedback || '';
-                        } catch (audioErr) {
-                            console.error(`Audio re-grading failed for ${questionId}, using existing score:`, audioErr);
-                            // Fallback to existing score
+                            const linkedPrompt = await getPromptById(question.promptId);
+                            if (linkedPrompt) {
+                                resolvedAudioSpecialReq = resolvedAudioSpecialReq
+                                    ? `${linkedPrompt.content}\n\nYÊU CẦU BỔ SUNG:\n${resolvedAudioSpecialReq}`
+                                    : linkedPrompt.content;
+                            }
+                        } catch (e) { console.warn('Could not resolve linked prompt for audio:', e); }
+                    }
+
+                    // Poll for audioUrl if student recorded but upload hasn't completed yet
+                    if (audioAnswer.hasRecording && !audioAnswer.audioUrl) {
+                        for (let poll = 0; poll < 3; poll++) {
+                            await new Promise(r => setTimeout(r, 3000)); // wait 3s between polls
+                            try {
+                                const pollSnap = await getDoc(doc(db, 'exam_submissions', submissionId));
+                                if (pollSnap.exists()) {
+                                    const pollData = pollSnap.data();
+                                    const pollAnswer = pollData.answers?.[sectionId]?.[questionId]?.answer;
+                                    if (pollAnswer?.audioUrl) {
+                                        audioAnswer = pollAnswer;
+                                        console.log(`[AudioPoll] Got audioUrl for ${questionId} after ${poll + 1} polls`);
+                                        break;
+                                    }
+                                }
+                            } catch (e) { console.warn('[AudioPoll] Poll failed:', e); }
+                        }
+                    }
+
+                    if (audioAnswer.audioUrl) {
+                        // Silence detection: skip AI if audio is silent (saves tokens)
+                        let detectedSilent = false;
+                        try {
+                            const silenceCheckResp = await fetch(audioAnswer.audioUrl);
+                            const silenceCheckBlob = await silenceCheckResp.blob();
+                            detectedSilent = await isSilentAudio(silenceCheckBlob);
+                        } catch (e) {
+                            console.warn('[SilenceDetect] Pre-check failed, proceeding with AI grading:', e);
+                        }
+
+                        if (detectedSilent) {
+                            // Skip AI call entirely for silent audio
+                            console.log(`[SilenceDetect] Audio for question ${questionId} is silent — skipping AI, score: 0`);
+                            score = 0;
+                            isCorrect = false;
+                            feedback = 'Không phát hiện giọng nói trong bản thu âm. Vui lòng thu âm lại câu trả lời.';
+                        } else {
+                        // Grade audio with retry (1 retry on failure)
+                        let audioGraded = false;
+                        for (let attempt = 0; attempt < 2 && !audioGraded; attempt++) {
+                            try {
+                                const audioResp = await fetch(audioAnswer.audioUrl);
+                                const audioBlob = await audioResp.blob();
+                                const sectionContext = sectionsMap[sectionId] || '';
+                                const audioResult = await evaluateAudioAnswer(
+                                    audioBlob,
+                                    variation.text || variation.content || '',
+                                    question.purpose || '',
+                                    resolvedAudioSpecialReq,
+                                    maxScore,
+                                    sectionContext,
+                                    finalTeacherTitle,
+                                    finalStudentTitle,
+                                    essayAudioIndex,
+                                    questions.length,
+                                    cefrLevel,
+                                    question.useDefaultGradingCriteria !== false
+                                );
+                                essayAudioIndex++;
+                                score = parseFloat(audioResult.score) || 0;
+                                isCorrect = score >= (maxScore * 0.8);
+                                feedback = audioResult.feedback || '';
+                                // Save AI transcript back into answers for display
+                                if (audioResult.transcript) {
+                                    if (!answerUpdates[sectionId]) answerUpdates[sectionId] = {};
+                                    answerUpdates[sectionId][questionId] = {
+                                        ...answerData,
+                                        answer: { ...audioAnswer, transcript: audioResult.transcript }
+                                    };
+                                }
+                                audioGraded = true;
+                            } catch (audioErr) {
+                                console.error(`Audio grading attempt ${attempt + 1} failed for ${questionId}:`, audioErr);
+                                if (attempt < 1) {
+                                    await new Promise(r => setTimeout(r, 2000)); // wait 2s before retry
+                                }
+                            }
+                        }
+                        if (!audioGraded) {
+                            // Both attempts failed — fallback
                             if (audioAnswer.aiScore !== undefined) {
                                 score = parseFloat(audioAnswer.aiScore);
                                 isCorrect = score >= (maxScore * 0.8);
@@ -1098,6 +1522,7 @@ export async function gradeExamSubmission(submissionId, submission, questions, s
                                 feedback = 'Lỗi khi chấm bài thu âm. Giáo viên sẽ chấm thủ công.';
                             }
                         }
+                        } // end of !detectedSilent block
                     } else if (audioAnswer.aiScore !== undefined) {
                         const numericScore = parseFloat(audioAnswer.aiScore);
                         score = numericScore;
@@ -1105,80 +1530,77 @@ export async function gradeExamSubmission(submissionId, submission, questions, s
                         feedback = audioAnswer.aiFeedback || '';
                     } else {
                         score = 0;
-                        feedback = audioAnswer.transcript
+                        feedback = audioAnswer.hasRecording
                             ? 'Bài thu âm chưa được AI chấm điểm. Giáo viên sẽ chấm thủ công.'
                             : 'Học viên chưa thu âm câu trả lời.';
                     }
                 }
 
                 totalScore += score;
-                questionCounter++;
-                const resultEntry = { score, maxScore, isCorrect, feedback, teacherOverride: null };
+                // Preserve existing teacherOverride from previous grading (e.g. when teacher re-grades)
+                const existingOverride = existingResults[questionId]?.teacherOverride || null;
+                const resultEntry = { score, maxScore, isCorrect, feedback, teacherOverride: existingOverride };
                 // Attach AI metadata for essay questions (used by skill analysis)
                 if (typeof teacherNote === 'string' && teacherNote) resultEntry.teacherNote = teacherNote;
                 if (Array.isArray(detectedErrors) && detectedErrors.length > 0) resultEntry.detectedErrors = detectedErrors;
+                if (savedAiVerdicts) resultEntry.aiVerdicts = savedAiVerdicts;
+                // If teacher already overrode the score, use the overridden score for totalScore calculation
+                if (existingOverride && existingOverride.score !== undefined && existingOverride.score !== null) {
+                    totalScore -= score; // remove the AI score we just added
+                    totalScore += parseFloat(existingOverride.score) || 0;
+                }
                 results[questionId] = resultEntry;
 
-                // Track result for AI context in subsequent questions
-                // Build detailed info for AI to detect error patterns
-                let prevQuestionText = '';
-                let prevStudentAnswer = '';
-                let prevCorrectAnswer = '';
-
-                if (question.type === 'multiple_choice') {
-                    prevQuestionText = (variation.text || variation.content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
-                    prevStudentAnswer = answerData.answer || '(không trả lời)';
-                    const correctIdx = variation.correctAnswer;
-                    prevCorrectAnswer = variation.options?.[correctIdx] || '';
-                    // Truncate image URLs
-                    if (typeof prevStudentAnswer === 'string' && prevStudentAnswer.startsWith('http')) prevStudentAnswer = `(Đáp án hình ảnh)`;
-                    if (typeof prevCorrectAnswer === 'string' && prevCorrectAnswer.startsWith('http')) prevCorrectAnswer = `(Đáp án hình ảnh)`;
-                } else if (question.type === 'fill_in_blank' || question.type === 'fill_in_blanks' || question.type === 'fill_in_blank_typing') {
-                    prevQuestionText = (variation.text || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
-                    const markerRegex2 = /\{\{(.+?)\}\}/g;
-                    const cw2 = [];
-                    let m2;
-                    while ((m2 = markerRegex2.exec(variation.text || '')) !== null) cw2.push(m2[1]);
-                    prevCorrectAnswer = cw2.join(', ');
-                    if (typeof answerData.answer === 'object' && answerData.answer !== null) {
-                        prevStudentAnswer = Object.entries(answerData.answer).map(([k, v]) => `[${parseInt(k) + 1}]: "${v}"`).join(', ');
-                    } else {
-                        prevStudentAnswer = answerData.answer || '(không trả lời)';
-                    }
-                } else if (question.type === 'matching') {
-                    prevQuestionText = 'Ghép nối các cặp';
-                    const wrongPairs = (variation.pairs || []).filter((pair, i) => answerData.answer?.[i]?.text !== pair.right);
-                    prevStudentAnswer = wrongPairs.length > 0 ? wrongPairs.map(p => `"${p.left}" → học viên ghép sai`).join('; ') : 'Tất cả đúng';
-                    prevCorrectAnswer = (variation.pairs || []).map(p => `"${p.left}" ↔ "${p.right}"`).join('; ');
-                } else if (question.type === 'categorization') {
-                    prevQuestionText = 'Phân loại các mục';
-                    const wrongItems = (variation.items || []).filter(item => (answerData.answer || {})[item.text] !== item.group);
-                    prevStudentAnswer = wrongItems.length > 0 ? wrongItems.map(item => `"${item.text}" → xếp vào "${(answerData.answer || {})[item.text] || '?'}" (đúng: "${item.group}")`).join('; ') : 'Tất cả đúng';
-                    prevCorrectAnswer = (variation.items || []).map(item => `"${item.text}" → "${item.group}"`).join('; ');
-                } else if (question.type === 'ordering') {
-                    prevQuestionText = 'Sắp xếp thứ tự';
-                    prevStudentAnswer = (Array.isArray(answerData.answer) ? answerData.answer : []).join(' → ');
-                    prevCorrectAnswer = (variation.items || []).join(' → ');
-                } else if (question.type === 'essay') {
-                    prevQuestionText = (variation.text || variation.content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
-                    // Không gửi studentAnswer vì AI đã phân tích lỗi trong feedback rồi
-                } else if (question.type === 'audio_recording') {
-                    prevQuestionText = (variation.text || variation.content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
-                    // Không gửi transcript vì AI đã phân tích lỗi trong feedback rồi
-                }
-
-                previousResults.push({
-                    questionNumber: questionCounter,
+                // ── Collect summary item for exam summary ──
+                questionCounter++;
+                const TYPE_LABELS = {
+                    multiple_choice: 'Trắc nghiệm', matching: 'Ghép nối', categorization: 'Phân loại',
+                    fill_in_blank: 'Điền từ', fill_in_blanks: 'Điền từ', fill_in_blank_typing: 'Điền từ (nhập)',
+                    essay: 'Tự luận', audio_recording: 'Thu âm', ordering: 'Sắp xếp thứ tự'
+                };
+                const summaryItem = {
+                    num: questionCounter,
                     typeName: TYPE_LABELS[question.type] || question.type,
                     purpose: question.purpose || '',
                     isCorrect,
                     score,
                     maxScore,
-                    feedback: feedback || '',
-                    questionText: prevQuestionText,
-                    studentAnswer: prevStudentAnswer,
-                    correctAnswer: prevCorrectAnswer
-                });
+                    detectedErrors: resultEntry.detectedErrors || []
+                };
+                // Add context for wrong answers (truncated question text + answers)
+                if (!isCorrect) {
+                    const rawText = (variation.text || variation.content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+                    summaryItem.questionText = rawText.slice(0, 150);
+                    if (question.type === 'multiple_choice') {
+                        summaryItem.studentAnswer = typeof answerData.answer === 'string' && answerData.answer.startsWith('http') ? '(hình ảnh)' : String(answerData.answer || '');
+                        const correctOpt = variation.options?.[variation.correctAnswer];
+                        summaryItem.correctAnswer = typeof correctOpt === 'string' && correctOpt.startsWith('http') ? '(đáp án hình ảnh)' : (correctOpt || '');
+                    } else if (question.type === 'fill_in_blank' || question.type === 'fill_in_blanks' || question.type === 'fill_in_blank_typing') {
+                        const markers = [...(variation.text || '').matchAll(/\{\{(.+?)\}\}/g)].map(m => m[1].replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' '));
+                        summaryItem.correctAnswer = markers.join(', ');
+                        if (typeof answerData.answer === 'object' && answerData.answer !== null) {
+                            summaryItem.studentAnswer = Object.values(answerData.answer).join(', ');
+                        }
+                    } else if (question.type === 'ordering') {
+                        summaryItem.studentAnswer = (Array.isArray(answerData.answer) ? answerData.answer : []).join(' → ');
+                        summaryItem.correctAnswer = (variation.items || []).join(' → ');
+                    } else if (question.type === 'matching') {
+                        const wrongPairs = (variation.pairs || []).filter((pair, i) => answerData.answer?.[i]?.text !== pair.right);
+                        if (wrongPairs.length > 0) {
+                            summaryItem.studentAnswer = wrongPairs.map(p => `"${p.left}" → sai`).join('; ');
+                            summaryItem.correctAnswer = wrongPairs.map(p => `"${p.left}" ↔ "${p.right}"`).join('; ');
+                        }
+                    } else if (question.type === 'categorization') {
+                        const wrongItems = (variation.items || []).filter(item => (answerData.answer || {})[item.text] !== item.group);
+                        if (wrongItems.length > 0) {
+                            summaryItem.studentAnswer = wrongItems.map(item => `"${item.text}" → "${(answerData.answer || {})[item.text] || '?'}"`).join('; ');
+                            summaryItem.correctAnswer = wrongItems.map(item => `"${item.text}" → "${item.group}"`).join('; ');
+                        }
+                    }
+                    // essay/audio: questionText is enough, AI already has detectedErrors
+                }
+                summaryItems.push(summaryItem);
+
             } catch (err) {
                 console.error(`Error grading question ${questionId}:`, err);
                 results[questionId] = {
@@ -1194,12 +1616,28 @@ export async function gradeExamSubmission(submissionId, submission, questions, s
     // ── Mark all unanswered questions as score = 0 ──
     for (const question of questions) {
         if (!results[question.id]) {
+            // Check if there's an existing answer with hasRecording but no audioUrl
+            let unansweredFeedback = '';
+            if (question.type === 'audio_recording') {
+                // Check all sections for this question's answer
+                for (const sec of (sections || [])) {
+                    const qAnswer = submission.answers?.[sec.id]?.[question.id]?.answer;
+                    if (qAnswer?.hasRecording) {
+                        unansweredFeedback = 'Bài thu âm chưa được AI chấm điểm. Giáo viên sẽ chấm thủ công.';
+                        break;
+                    }
+                }
+            }
+            // Preserve existing teacherOverride for unanswered questions too
+            const existingOverride = existingResults[question.id]?.teacherOverride || null;
+            const unansweredScore = existingOverride?.score !== undefined ? parseFloat(existingOverride.score) || 0 : 0;
+            if (existingOverride?.score !== undefined) totalScore += unansweredScore;
             results[question.id] = {
                 score: 0,
                 maxScore: question.points || 1,
                 isCorrect: false,
-                feedback: '',
-                teacherOverride: null
+                feedback: unansweredFeedback,
+                teacherOverride: existingOverride
             };
         }
     }
@@ -1211,13 +1649,24 @@ export async function gradeExamSubmission(submissionId, submission, questions, s
     const isFullyAutoGraded = !usedAI;
 
     // Update submission with results
+    // Merge AI transcript updates into submission answers
+    const updatedAnswers = { ...submission.answers };
+    for (const [secId, qUpdates] of Object.entries(answerUpdates)) {
+        updatedAnswers[secId] = { ...updatedAnswers[secId], ...qUpdates };
+    }
+
+    // Summary is NOT auto-generated — teachers create it manually after reviewing/adjusting scores
+    const examSummary = '';
+
     const updateData = {
         results,
         totalScore,
         maxTotalScore,
+        answers: updatedAnswers,
         status: 'graded',
         gradedAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
+        examSummary
     };
 
     // Auto-release if all questions are auto-graded
@@ -1270,6 +1719,7 @@ export async function gradeExamSubmission(submissionId, submission, questions, s
                 try {
                     const studentSnap = await getDoc(doc(db, 'users', studentId));
                     if (studentSnap.exists() && studentSnap.data().email) {
+                        const appUrl = 'https://upenglishvietnam.com/preview/superstudy';
                         await queueEmail(studentSnap.data().email, {
                             subject: `Bài "${examName}" đã có kết quả${scoreText ? ` — ${scoreText} điểm` : ''}`,
                             html: buildEmailHtml({
@@ -1278,7 +1728,7 @@ export async function gradeExamSubmission(submissionId, submission, questions, s
                                 body: `<p>Bài <strong>"${examName}"</strong> đã được chấm tự động.${scoreText ? ` Điểm: <strong style="color:#10b981;font-size:1.1rem;">${scoreText}</strong>.` : ''} Vào xem kết quả chi tiết ngay nhé!</p>`,
                                 highlight: `<strong style="color:#1e293b;font-size:1.05rem;">${examName}</strong>${scoreText ? `<br/><span style="font-size:1.3rem;font-weight:900;color:#10b981;">${scoreText}</span> <span style="color:#64748b;font-size:0.85rem;">điểm</span>` : ''}`,
                                 highlightBg: '#f0fdf4', highlightBorder: '#10b981',
-                                ctaText: 'Xem kết quả ngay', ctaColor: '#10b981', ctaColor2: '#34d399'
+                                ctaText: 'Xem kết quả ngay', ctaLink: `${appUrl}/exam-result?submissionId=${submissionId}`, ctaColor: '#10b981', ctaColor2: '#34d399'
                             })
                         });
                     }
@@ -1293,6 +1743,187 @@ export async function gradeExamSubmission(submissionId, submission, questions, s
 
     return { results, totalScore, maxTotalScore };
 }
+
+/**
+ * Re-grade a SINGLE question by AI (essay or audio_recording only).
+ * Updates the result for that question in Firestore without re-grading the entire exam.
+ */
+export async function gradeSingleQuestion(submissionId, questionId, question, sections = [], teacherTitle = '', studentTitle = '') {
+    // Read latest submission from Firestore
+    const subSnap = await getDoc(doc(db, 'exam_submissions', submissionId));
+    if (!subSnap.exists()) throw new Error('Submission not found');
+    const submission = subSnap.data();
+
+    // Find which section this question belongs to
+    let sectionId = null;
+    let answerData = null;
+    for (const [secId, secAnswers] of Object.entries(submission.answers || {})) {
+        if (secAnswers[questionId]) {
+            sectionId = secId;
+            answerData = secAnswers[questionId];
+            break;
+        }
+    }
+
+    if (!sectionId || !answerData) {
+        throw new Error('Không tìm thấy câu trả lời cho câu hỏi này.');
+    }
+
+    // Resolve teacher/student titles
+    let finalTeacherTitle = teacherTitle;
+    let finalStudentTitle = studentTitle;
+    let cefrLevel = '';
+    if (!finalTeacherTitle && submission.examId) {
+        try {
+            const examSnap = await getDoc(doc(db, 'exams', submission.examId));
+            if (examSnap.exists()) {
+                const examData = examSnap.data();
+                cefrLevel = examData.cefrLevel || '';
+                if (examData.teacherTitle) {
+                    finalTeacherTitle = examData.teacherTitle;
+                    if (examData.studentTitle) finalStudentTitle = examData.studentTitle;
+                }
+            }
+        } catch (err) { console.warn('Could not fetch teacher titles:', err); }
+    }
+
+    // Build section context map
+    const sectionsMap = {};
+    (sections || []).forEach(s => {
+        if (s?.id) {
+            let fullContext = s.context || '';
+            if (s.contextScript) fullContext += `\n\n[SCRIPT / TRANSCRIPT CỦA BÀI NGHE/VIDEO]:\n${s.contextScript}`;
+            sectionsMap[s.id] = fullContext;
+        }
+    });
+
+    // Resolve variation
+    const variationIndex = submission.variationMap?.[questionId] || 0;
+    let variation = question.variations?.[variationIndex];
+    if (!variation || (!variation.options && !variation.pairs && !variation.items && (!variation.text || variation.text.replace(/<[^>]*>/g, '').trim().length === 0))) {
+        variation = question.variations?.find(v => v && (Array.isArray(v.options) && v.options.some(o => o) || v.text?.replace(/<[^>]*>/g, '').trim().length > 0)) || question.variations?.[0];
+    }
+    if (!variation) throw new Error('Không tìm thấy nội dung câu hỏi.');
+
+    const maxScore = question.points || 1;
+    const sectionContext = sectionsMap[sectionId] || '';
+    let score = 0;
+    let isCorrect = false;
+    let feedback = '';
+    let teacherNote = '';
+    let detectedErrors = [];
+    let answerUpdates = null;
+
+    // Resolve prompt
+    let resolvedSpecialReq = question.specialRequirement || '';
+    if (question.promptId) {
+        try {
+            const linkedPrompt = await getPromptById(question.promptId);
+            if (linkedPrompt) {
+                resolvedSpecialReq = resolvedSpecialReq
+                    ? `${linkedPrompt.content}\n\nYÊU CẦU BỔ SUNG:\n${resolvedSpecialReq}`
+                    : linkedPrompt.content;
+            }
+        } catch (e) { console.warn('Could not resolve linked prompt:', e); }
+    }
+
+    if (question.type === 'essay') {
+        const gradeResult = await gradeGrammarSubmissionWithAI(
+            variation.text || variation.content,
+            answerData.answer,
+            question.purpose,
+            question.type,
+            resolvedSpecialReq,
+            sectionContext,
+            finalTeacherTitle, finalStudentTitle,
+            0, [], 1, cefrLevel, maxScore,
+            question.useDefaultGradingCriteria !== false
+        );
+        score = Math.min(Math.round((parseFloat(gradeResult.score) || 0) * 10) / 10, maxScore);
+        isCorrect = score >= (maxScore * 0.8);
+        feedback = gradeResult.feedback || '';
+        teacherNote = gradeResult.teacherNote || '';
+        detectedErrors = Array.isArray(gradeResult.detectedErrors) ? gradeResult.detectedErrors : [];
+    } else if (question.type === 'audio_recording') {
+        const audioAnswer = answerData.answer || {};
+        if (!audioAnswer.audioUrl) throw new Error('Không có file thu âm. Học viên chưa upload audio.');
+
+        const audioResp = await fetch(audioAnswer.audioUrl);
+        const audioBlob = await audioResp.blob();
+
+        // Silence detection: skip AI if audio is silent (saves tokens)
+        const detectedSilent = await isSilentAudio(audioBlob).catch(() => false);
+        if (detectedSilent) {
+            score = 0;
+            isCorrect = false;
+            feedback = 'Không phát hiện giọng nói trong bản thu âm. Vui lòng thu âm lại câu trả lời.';
+        } else {
+        const audioResult = await evaluateAudioAnswer(
+            audioBlob,
+            variation.text || variation.content || '',
+            question.purpose || '',
+            resolvedSpecialReq,
+            maxScore,
+            sectionContext,
+            finalTeacherTitle, finalStudentTitle,
+            0, [], 1, cefrLevel,
+            question.useDefaultGradingCriteria !== false
+        );
+        score = parseFloat(audioResult.score) || 0;
+        isCorrect = score >= (maxScore * 0.8);
+        feedback = audioResult.feedback || '';
+        if (audioResult.transcript) {
+            answerUpdates = {
+                ...answerData,
+                answer: { ...audioAnswer, transcript: audioResult.transcript }
+            };
+        }
+        } // end of !detectedSilent block
+    } else {
+        throw new Error('Chỉ hỗ trợ chấm lại câu tự luận và thu âm.');
+    }
+
+    // Build the updated result entry (preserve existing teacherOverride)
+    const existingResult = submission.results?.[questionId] || {};
+    const resultEntry = {
+        score, maxScore, isCorrect, feedback,
+        teacherOverride: existingResult.teacherOverride || null
+    };
+    if (teacherNote) resultEntry.teacherNote = teacherNote;
+    if (detectedErrors.length > 0) resultEntry.detectedErrors = detectedErrors;
+
+    // Recalculate totalScore
+    const allResults = { ...submission.results, [questionId]: resultEntry };
+    let newTotalScore = 0;
+    for (const [qId, r] of Object.entries(allResults)) {
+        const effectiveScore = r.teacherOverride?.score !== undefined && r.teacherOverride?.score !== null
+            ? parseFloat(r.teacherOverride.score) || 0
+            : (r.score || 0);
+        newTotalScore += effectiveScore;
+    }
+    newTotalScore = Math.round(newTotalScore * 10) / 10;
+
+    // Update Firestore atomically
+    const updateData = {
+        [`results.${questionId}`]: resultEntry,
+        totalScore: newTotalScore,
+        updatedAt: serverTimestamp()
+    };
+    // Save AI transcript if available
+    if (answerUpdates) {
+        updateData[`answers.${sectionId}.${questionId}`] = answerUpdates;
+    }
+    // Set status to graded if still submitted
+    if (submission.status === 'submitted') {
+        updateData.status = 'graded';
+        updateData.gradedAt = serverTimestamp();
+    }
+
+    await updateDoc(doc(db, 'exam_submissions', submissionId), updateData);
+
+    return resultEntry;
+}
+
 
 /**
  * Teacher overrides the AI score and/or feedback for a specific question in a submission.
@@ -1331,6 +1962,7 @@ export async function overrideExamQuestionScore(submissionId, questionId, newSco
     await updateDoc(submissionRef, {
         results,
         totalScore: newTotalScore,
+        examSummary: '',
         updatedAt: serverTimestamp()
     });
 
@@ -1390,6 +2022,7 @@ export async function releaseExamSubmissionResults(submissionId, releaserUid, re
                 if (studentSnap.exists() && studentSnap.data().email) {
                     const { queueEmail, buildEmailHtml } = await import('./notificationService');
                     const scoreText = subData.totalScore != null && subData.maxTotalScore ? `${Math.round(subData.totalScore * 10) / 10}/${subData.maxTotalScore}` : '';
+                    const appUrl = 'https://upenglishvietnam.com/preview/superstudy';
                     await queueEmail(studentSnap.data().email, {
                         subject: `Bài "${examName}" đã có kết quả${scoreText ? ` — ${scoreText} điểm` : ''}`,
                         html: buildEmailHtml({
@@ -1398,7 +2031,7 @@ export async function releaseExamSubmissionResults(submissionId, releaserUid, re
                             body: `<p>Tin vui nè! Thầy/cô <strong>${releaserName}</strong> đã chấm xong bài của bạn rồi.${scoreText ? ` Điểm: <strong style="color:#10b981;font-size:1.1rem;">${scoreText}</strong>.` : ''} Vào xem kết quả chi tiết ngay nhé!</p>`,
                             highlight: `<strong style="color:#1e293b;font-size:1.05rem;">${examName}</strong>${scoreText ? `<br/><span style="font-size:1.3rem;font-weight:900;color:#10b981;">${scoreText}</span> <span style="color:#64748b;font-size:0.85rem;">điểm</span>` : ''}`,
                             highlightBg: '#f0fdf4', highlightBorder: '#10b981',
-                            ctaText: 'Xem kết quả ngay', ctaColor: '#10b981', ctaColor2: '#34d399'
+                            ctaText: 'Xem kết quả ngay', ctaLink: `${appUrl}/exam-result?submissionId=${submissionId}`, ctaColor: '#10b981', ctaColor2: '#34d399'
                         })
                     });
                 }
@@ -1426,12 +2059,13 @@ export async function releaseExamSubmissionResults(submissionId, releaserUid, re
                 // Email to group teachers
                 try {
                     const { queueEmailForGroupTeachers, buildEmailHtml } = await import('./notificationService');
+                    const appUrl2 = 'https://upenglishvietnam.com/preview/superstudy';
                     await queueEmailForGroupTeachers(targetId, {
                         subject: `Bài "${examName}" đã được chấm`,
                         html: buildEmailHtml({
                             emoji: '📝', heading: 'Có bài vừa được chấm', headingColor: '#3b82f6',
                             body: `<p><strong>${releaserName}</strong> vừa chấm xong bài <strong>"${examName}"</strong> cho học viên <strong>${studentName}</strong>. Bạn có thể vào xem chi tiết kết quả.</p>`,
-                            ctaText: 'Xem chi tiết', ctaColor: '#3b82f6', ctaColor2: '#60a5fa'
+                            ctaText: 'Xem chi tiết', ctaLink: `${appUrl2}/teacher/exam-submissions/${assignmentId}/${studentId}`, ctaColor: '#3b82f6', ctaColor2: '#60a5fa'
                         })
                     }, 'exam_graded_by_other');
                 } catch (emailErr) {
@@ -1484,14 +2118,20 @@ export async function getTeacherExamFolders(teacherId) {
     const q = query(collection(db, 'teacher_exam_folders'), where('teacherId', '==', teacherId));
     const snapshot = await getDocs(q);
     const folders = [];
-    snapshot.forEach(docSnap => folders.push({ id: docSnap.id, ...docSnap.data() }));
+    snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        if (!data.isDeleted) folders.push({ id: docSnap.id, ...data });
+    });
     return folders.sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
 export async function getAllTeacherExamFolders() {
     const snapshot = await getDocs(collection(db, 'teacher_exam_folders'));
     const folders = [];
-    snapshot.forEach(docSnap => folders.push({ id: docSnap.id, ...docSnap.data() }));
+    snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        if (!data.isDeleted) folders.push({ id: docSnap.id, ...data });
+    });
     return folders.sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
@@ -1509,7 +2149,48 @@ export async function saveTeacherExamFolder(teacherId, folderData) {
 }
 
 export async function deleteTeacherExamFolder(folderId) {
+    // Soft delete
+    await updateDoc(doc(db, 'teacher_exam_folders', folderId), {
+        isDeleted: true,
+        deletedAt: serverTimestamp()
+    });
+}
+
+export async function updateTeacherExamFoldersOrder(orderedFolders) {
+    const batch = writeBatch(db);
+    orderedFolders.forEach((folder, index) => {
+        const ref = doc(db, 'teacher_exam_folders', folder.id);
+        batch.update(ref, { order: index });
+    });
+    await batch.commit();
+}
+
+export async function restoreTeacherExamFolder(folderId) {
+    await updateDoc(doc(db, 'teacher_exam_folders', folderId), {
+        isDeleted: deleteField(),
+        deletedAt: deleteField()
+    });
+}
+
+export async function permanentlyDeleteTeacherExamFolder(folderId) {
     await deleteDoc(doc(db, 'teacher_exam_folders', folderId));
+}
+
+export async function getDeletedTeacherExamFolders() {
+    try {
+        const q = query(collection(db, 'teacher_exam_folders'), where('isDeleted', '==', true));
+        const snapshot = await getDocs(q);
+        const folders = [];
+        snapshot.forEach(docSnap => folders.push({ id: docSnap.id, ...docSnap.data() }));
+        return folders.sort((a, b) => {
+            const tA = a.deletedAt?.toMillis ? a.deletedAt.toMillis() : 0;
+            const tB = b.deletedAt?.toMillis ? b.deletedAt.toMillis() : 0;
+            return tB - tA;
+        });
+    } catch (error) {
+        console.error("Error fetching deleted teacher exam folders:", error);
+        return [];
+    }
 }
 
 // ========== SHARING (Admin) ==========
@@ -1537,4 +2218,418 @@ export async function unshareExamFromTeacher(examId, teacherUid) {
 
     const sharedWith = (examSnap.data().sharedWith || []).filter(uid => uid !== teacherUid);
     await updateDoc(examRef, { sharedWith, updatedAt: serverTimestamp() });
+}
+
+/**
+ * Check if ≥50% of students have submitted for an exam assignment.
+ * If so (and not already notified), send a one-time in-app + email notification to group teachers.
+ * This is a fire-and-forget helper — errors are caught internally.
+ *
+ * @param {string} assignmentId
+ * @param {string} groupId
+ * @param {string} examName
+ * @param {string} examType  'test' | 'exercise'
+ */
+export async function checkAndNotifyHalfSubmitted(assignmentId, groupId, examName, examType) {
+    if (!assignmentId || !groupId) return;
+    try {
+        // 1. Read assignment to check flag + assignedStudentIds
+        const assignmentRef = doc(db, 'exam_assignments', assignmentId);
+        const assignmentSnap = await getDoc(assignmentRef);
+        if (!assignmentSnap.exists()) return;
+        const aData = assignmentSnap.data();
+        if (aData.halfSubmittedNotified) return; // already notified
+
+        // 2. Count finished submissions (submitted or graded)
+        const subsQ = query(
+            collection(db, 'exam_submissions'),
+            where('assignmentId', '==', assignmentId)
+        );
+        const subsSnap = await getDocs(subsQ);
+        const submittedCount = subsSnap.docs.filter(d => {
+            const s = d.data().status;
+            return s === 'submitted' || s === 'graded';
+        }).length;
+
+        // 3. Count total expected students
+        let totalStudents = 0;
+        if (aData.assignedStudentIds && Array.isArray(aData.assignedStudentIds) && aData.assignedStudentIds.length > 0) {
+            totalStudents = aData.assignedStudentIds.length;
+        } else {
+            // Count all students in the group
+            const usersQ = query(
+                collection(db, 'users'),
+                where('groupIds', 'array-contains', groupId),
+                where('role', '==', 'user')
+            );
+            const usersSnap = await getDocs(usersQ);
+            totalStudents = usersSnap.size;
+        }
+
+        if (totalStudents <= 0) return;
+
+        // 4. Check if threshold reached (≥50%)
+        const threshold = Math.ceil(totalStudents * 0.5);
+        if (submittedCount < threshold) return;
+
+        // 5. Set flag first to prevent race conditions
+        await updateDoc(assignmentRef, { halfSubmittedNotified: true });
+
+        // 6. Send notifications
+        const typeLabel = examType === 'test' ? 'bài kiểm tra' : 'bài tập';
+        const { createNotificationForGroupTeachers, queueEmailForGroupTeachers, buildEmailHtml } =
+            await import('./notificationService');
+
+        // In-app
+        await createNotificationForGroupTeachers(groupId, {
+            type: 'half_submitted',
+            title: '📊 50% học viên đã nộp bài',
+            message: `Đã có ${submittedCount}/${totalStudents} học viên nộp ${typeLabel} "${examName}".`,
+            link: `/teacher/exam-submissions/${assignmentId}`
+        });
+
+        // Email
+        const appUrl = 'https://upenglishvietnam.com/preview/superstudy';
+        await queueEmailForGroupTeachers(groupId, {
+            subject: `📊 50% học viên đã nộp: ${examName}`,
+            html: buildEmailHtml({
+                emoji: '📊',
+                heading: '50% học viên đã nộp bài',
+                headingColor: '#059669',
+                body: `<p>Đã có <strong>${submittedCount}/${totalStudents}</strong> học viên nộp ${typeLabel} <strong>"${examName}"</strong>. Bạn có thể bắt đầu chấm bài ngay! 🎯</p>`,
+                highlight: `<strong style="font-size:1.05rem;">📋 ${submittedCount}/${totalStudents} bài đã nộp</strong>`,
+                highlightBg: '#ecfdf5',
+                highlightBorder: '#059669',
+                ctaText: 'Xem bài nộp',
+                ctaLink: `${appUrl}/teacher/exam-submissions/${assignmentId}`,
+                ctaColor: '#059669',
+                ctaColor2: '#10b981'
+            })
+        }, 'half_submitted');
+
+        console.log(`[HalfSubmitted] Notified teachers: ${submittedCount}/${totalStudents} for assignment ${assignmentId}`);
+    } catch (error) {
+        console.error('Error in checkAndNotifyHalfSubmitted:', error);
+    }
+}
+
+// ========== FOLLOW-UP ANSWERS ==========
+
+/**
+ * Toggle follow-up request for a specific question.
+ * Teacher requests the student to re-answer a question.
+ */
+export async function toggleFollowUpRequest(submissionId, questionId, teacherUid, teacherName, enable = true) {
+    const submissionRef = doc(db, 'exam_submissions', submissionId);
+    if (enable) {
+        await updateDoc(submissionRef, {
+            [`followUpRequested.${questionId}`]: {
+                requestedAt: new Date().toISOString(),
+                requestedBy: teacherUid,
+                requestedByName: teacherName
+            },
+            updatedAt: serverTimestamp()
+        });
+    } else {
+        await updateDoc(submissionRef, {
+            [`followUpRequested.${questionId}`]: deleteField(),
+            updatedAt: serverTimestamp()
+        });
+    }
+}
+
+/**
+ * Save a follow-up answer from the student.
+ */
+export async function saveFollowUpAnswer(submissionId, sectionId, questionId, answer) {
+    const submissionRef = doc(db, 'exam_submissions', submissionId);
+    await updateDoc(submissionRef, {
+        [`followUpAnswers.${sectionId}.${questionId}`]: {
+            answer,
+            submittedAt: new Date().toISOString()
+        },
+        updatedAt: serverTimestamp()
+    });
+}
+
+/**
+ * Save ALL follow-up answers at once (batch submit).
+ * @param {string} submissionId
+ * @param {Array<{sectionId, questionId, answer}>} answers
+ */
+export async function saveAllFollowUpAnswers(submissionId, answers) {
+    const submissionRef = doc(db, 'exam_submissions', submissionId);
+    const updates = { updatedAt: serverTimestamp() };
+    const now = new Date().toISOString();
+    for (const { sectionId, questionId, answer } of answers) {
+        updates[`followUpAnswers.${sectionId}.${questionId}`] = {
+            answer,
+            submittedAt: now
+        };
+    }
+    await updateDoc(submissionRef, updates);
+}
+
+/**
+ * Grade a follow-up answer using AI.
+ * References the original answer, score, and feedback for better contextual grading.
+ */
+export async function gradeFollowUpAnswer(submissionId, questionId, question, sections = [], teacherTitle = 'thầy/cô', studentTitle = 'em') {
+    const submissionRef = doc(db, 'exam_submissions', submissionId);
+    const snap = await getDoc(submissionRef);
+    if (!snap.exists()) throw new Error('Submission not found');
+    const submission = snap.data();
+
+    const originalResult = submission.results?.[questionId];
+    const sectionId = question.sectionId;
+    const followUpAnswerData = submission.followUpAnswers?.[sectionId]?.[questionId];
+    if (!followUpAnswerData) throw new Error('No follow-up answer found');
+
+    const varIdx = submission.variationMap?.[questionId] || 0;
+    let variation = question.variations?.[varIdx] || question.variations?.[0];
+    if (!variation) throw new Error('No variation found');
+
+    // Build section context
+    let sectionContext = '';
+    (sections || []).forEach(s => {
+        if (s.id === sectionId) {
+            sectionContext = s.context || '';
+            if (s.contextScript) sectionContext += `\n\n[SCRIPT]:\n${s.contextScript}`;
+        }
+    });
+
+    // Use the original result's maxScore as the canonical total, so the follow-up
+    // score matches the original grading scale.  Fall back to question.points for
+    // question types that don't inflate (MC, ordering, essay).
+    const originalMaxScore = originalResult?.maxScore ?? (question.points || 1);
+    let maxScore = originalMaxScore;
+
+    // For objective question types, auto-grade without AI
+    const answer = followUpAnswerData.answer;
+    let score = 0;
+    let isCorrect = false;
+    let feedback = '';
+
+    if (question.type === 'multiple_choice') {
+        const correctAnswerText = variation.options?.[variation.correctAnswer];
+        isCorrect = answer === correctAnswerText;
+        score = isCorrect ? maxScore : 0;
+        feedback = isCorrect ? 'Chính xác! Bạn đã sửa đúng rồi! 🎉' : `Vẫn chưa đúng. Đáp án đúng là: ${correctAnswerText}`;
+    } else if (question.type === 'fill_in_blank' || question.type === 'fill_in_blanks' || question.type === 'fill_in_blank_typing') {
+        const markerRegex = /\{\{(.+?)\}\}/g;
+        const correctWords = [];
+        let mm;
+        while ((mm = markerRegex.exec(variation.text || '')) !== null) {
+            correctWords.push(mm[1].replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' '));
+        }
+        const numBlanks = correctWords.length || 1;
+        const perBlankScore = maxScore / numBlanks;
+        if (correctWords.length > 0 && typeof answer === 'object' && answer !== null) {
+            let correctCount = 0;
+            correctWords.forEach((cw, idx) => {
+                const sw = answer[String(idx)];
+                if (typeof sw === 'string' && normalizeForComparison(sw) === normalizeForComparison(cw)) correctCount++;
+            });
+            score = Math.round(correctCount * perBlankScore * 10) / 10;
+            isCorrect = correctCount === correctWords.length;
+            feedback = isCorrect ? 'Tuyệt vời! Bạn đã sửa đúng tất cả! 🎉' : `Bạn đã điền đúng ${correctCount}/${correctWords.length} chỗ trống.`;
+        } else {
+            isCorrect = typeof answer === 'string' && answer.trim().toLowerCase() === variation.correctAnswer?.trim().toLowerCase();
+            score = isCorrect ? maxScore : 0;
+            feedback = isCorrect ? 'Chính xác! 🎉' : `Đáp án đúng: ${variation.correctAnswer}`;
+        }
+    } else if (question.type === 'matching') {
+        const pairs = variation.pairs || [];
+        const numPairs = pairs.length || 1;
+        const perPairScore = maxScore / numPairs;
+        let correctCount = 0;
+        pairs.forEach((pair, i) => { if (answer?.[i]?.text === pair.right) correctCount++; });
+        score = Math.round(correctCount * perPairScore * 10) / 10;
+        isCorrect = correctCount === pairs.length;
+        feedback = isCorrect ? 'Tuyệt vời! Ghép đúng tất cả! 🎉' : `Bạn đã ghép đúng ${correctCount}/${pairs.length} cặp.`;
+    } else if (question.type === 'categorization') {
+        const items = variation.items || [];
+        const numItems = items.length || 1;
+        const perItemScore = maxScore / numItems;
+        let correctCount = 0;
+        items.forEach(item => { if (answer?.[item.text] === item.group) correctCount++; });
+        score = Math.round(correctCount * perItemScore * 10) / 10;
+        isCorrect = correctCount === items.length;
+        feedback = isCorrect ? 'Phân loại chính xác! 🎉' : `Bạn đã phân loại đúng ${correctCount}/${items.length} mục.`;
+    } else if (question.type === 'ordering') {
+        const correctItems = variation.items || [];
+        const isAllCorrect = Array.isArray(answer) && correctItems.every((item, i) => answer[i] === item);
+        isCorrect = isAllCorrect;
+        score = isCorrect ? maxScore : 0;
+        feedback = isCorrect ? 'Sắp xếp chính xác! 🎉' : 'Thứ tự vẫn chưa đúng.';
+    } else if (question.type === 'essay' || question.type === 'short_answer' || question.type === 'audio_recording') {
+        // AI grading for subjective types — reference original mistakes
+        const TYPE_LABELS = {
+            essay: 'Tự luận', short_answer: 'Trả lời ngắn', audio_recording: 'Thu âm'
+        };
+
+        const originalScore = originalResult?.teacherOverride?.score ?? originalResult?.score ?? 0;
+        const originalMaxScore = originalResult?.maxScore ?? maxScore;
+        const originalFeedback = originalResult?.feedback || '';
+        const originalAnswer = (() => {
+            const origAns = submission.answers?.[sectionId]?.[questionId]?.answer;
+            if (typeof origAns === 'string') return origAns;
+            if (typeof origAns === 'object' && origAns?.transcript) return origAns.transcript;
+            return JSON.stringify(origAns || '');
+        })();
+
+        // Resolve grading criteria from specialRequirement + linked prompt
+        let gradingCriteria = question.specialRequirement || '';
+        if (question.promptId) {
+            try {
+                const linkedPrompt = await getPromptById(question.promptId);
+                if (linkedPrompt) {
+                    gradingCriteria = gradingCriteria
+                        ? `${linkedPrompt.content}\n\nYÊU CẦU BỔ SUNG:\n${gradingCriteria}`
+                        : linkedPrompt.content;
+                }
+            } catch (e) { console.warn('Could not resolve linked prompt for follow-up:', e); }
+        }
+
+        const questionText = (variation.text || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim();
+        const followUpText = typeof answer === 'string' ? answer : (answer?.transcript || JSON.stringify(answer || ''));
+
+        const systemPrompt = `Bạn là giáo viên tiếng Anh đang chấm BÀI SỬA (lần 2) của học viên. Gọi học viên bằng "${studentTitle}".
+
+Học viên đã làm bài lần 1 và bị sai/mất điểm. Sau khi xem nhận xét, học viên đã sửa lại câu trả lời. Nhiệm vụ của bạn:
+
+1. Đánh giá bài sửa DỰA TRÊN CÙNG TIÊU CHÍ CHẤM BÀI GỐC (xem phần TIÊU CHÍ CHẤM ĐIỂM bên dưới)
+2. So sánh bài sửa với bài gốc — học viên đã khắc phục được lỗi cũ chưa?
+3. Chấm điểm bài sửa trên thang ${maxScore} điểm
+4. Nhận xét cụ thể: điểm cải thiện, lỗi còn tồn tại (nếu có)
+5. Động viên nếu có tiến bộ
+
+Trả về JSON duy nhất (không markdown, không code block):
+{"score": number, "feedback": "nhận xét bằng tiếng Việt", "isCorrect": boolean}`;
+
+        // Gather teacher's correction notes (only what student actually saw)
+        const teacherOverrideNote = originalResult?.teacherOverride?.note || '';
+        const teacherOverrideFeedback = originalResult?.teacherOverride?.feedback || '';
+        const teacherCorrections = [
+            teacherOverrideNote && `GV: ${teacherOverrideNote}`,
+            teacherOverrideFeedback && `Nhận xét GV: ${teacherOverrideFeedback}`
+        ].filter(Boolean).join('\n');
+
+        const userContent = `CÂU HỎI (${TYPE_LABELS[question.type] || question.type}): ${questionText}
+${question.purpose ? `MỤC ĐÍCH: ${question.purpose}` : ''}
+${sectionContext ? `NGỮ CẢNH: ${sectionContext.replace(/<[^>]*>/g, ' ')}` : ''}
+${gradingCriteria ? `\nTIÊU CHÍ CHẤM:\n${gradingCriteria}` : ''}
+
+LẦN 1: ${originalScore}/${originalMaxScore}
+Nhận xét: "${originalFeedback}"
+${teacherCorrections ? `${teacherCorrections}` : ''}
+
+BÀI SỬA: "${followUpText}"
+
+Điểm tối đa: ${maxScore}`;
+
+        try {
+            const response = await chatCompletion({ systemPrompt, userContent });
+            const text = typeof response === 'string' ? response : (response?.text || response?.content || '');
+            const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+            const parsed = JSON.parse(cleaned);
+            score = Math.min(Math.max(0, parsed.score || 0), maxScore);
+            score = Math.round(score * 10) / 10;
+            feedback = parsed.feedback || '';
+            isCorrect = parsed.isCorrect || score >= maxScore;
+        } catch (err) {
+            console.error('AI follow-up grading error:', err);
+            feedback = 'Lỗi khi AI chấm bài sửa. Giáo viên sẽ chấm thủ công.';
+            score = 0;
+        }
+    }
+
+    // Save follow-up results (does NOT affect original totalScore)
+    await updateDoc(submissionRef, {
+        [`followUpResults.${questionId}`]: {
+            score,
+            maxScore,
+            feedback,
+            isCorrect,
+            gradedAt: new Date().toISOString()
+        },
+        updatedAt: serverTimestamp()
+    });
+
+    return { score, maxScore, feedback, isCorrect };
+}
+
+/**
+ * Teacher overrides a follow-up question score/feedback.
+ */
+export async function overrideFollowUpScore(submissionId, questionId, newScore, note, newFeedback, teacherUid, overriderName = 'Giáo viên') {
+    const submissionRef = doc(db, 'exam_submissions', submissionId);
+    const snap = await getDoc(submissionRef);
+    if (!snap.exists()) throw new Error('Submission not found');
+
+    const data = snap.data();
+    const currentResult = data.followUpResults?.[questionId];
+    if (!currentResult) throw new Error('Follow-up result not found');
+
+    const updatedResult = {
+        ...currentResult,
+        teacherOverride: {
+            score: newScore,
+            note,
+            overriddenBy: teacherUid,
+            overriddenByName: overriderName,
+            overriddenAt: new Date().toISOString()
+        }
+    };
+    if (newFeedback !== undefined) {
+        updatedResult.feedback = newFeedback;
+    }
+
+    await updateDoc(submissionRef, {
+        [`followUpResults.${questionId}`]: updatedResult,
+        updatedAt: serverTimestamp()
+    });
+
+    return updatedResult;
+}
+
+/**
+ * Release follow-up results so the student can see them.
+ */
+export async function releaseFollowUpResults(submissionId, releaserUid, releaserName = 'Giáo viên') {
+    const submissionRef = doc(db, 'exam_submissions', submissionId);
+    await updateDoc(submissionRef, {
+        followUpResultsReleased: true,
+        followUpReleasedAt: serverTimestamp(),
+        followUpReleasedBy: releaserUid,
+        followUpReleasedByName: releaserName,
+        updatedAt: serverTimestamp()
+    });
+
+    // Notify student
+    try {
+        const subSnap = await getDoc(submissionRef);
+        if (subSnap.exists()) {
+            const subData = subSnap.data();
+            const studentId = subData.studentId;
+            const assignmentId = subData.assignmentId;
+
+            let examName = 'Bài tập và Kiểm tra';
+            if (assignmentId) {
+                const asgnSnap = await getDoc(doc(db, 'exam_assignments', assignmentId));
+                if (asgnSnap.exists()) examName = asgnSnap.data().examTitle || examName;
+            }
+
+            const { createNotification } = await import('./notificationService');
+            await createNotification({
+                userId: studentId,
+                type: 'follow_up_graded',
+                title: '📝 Bài sửa đã có kết quả!',
+                message: `Bài sửa cho "${examName}" đã được ${releaserName} chấm xong. Vào xem nhé!`,
+                link: `/exam-result?assignmentId=${assignmentId}&studentId=${studentId}`
+            });
+        }
+    } catch (e) {
+        console.error('Error sending follow-up release notification:', e);
+    }
 }

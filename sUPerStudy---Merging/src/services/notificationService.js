@@ -352,7 +352,7 @@ export async function queueEmailForGroupStudents(groupId, emailData, excludeUser
 export function buildEmailHtml({
     emoji = '📬', heading, headingColor = '#4f46e5', body,
     highlight, highlightBg = '#eef2ff', highlightBorder = '#4f46e5',
-    ctaText, ctaColor = '#4f46e5', ctaColor2 = '#3b82f6',
+    ctaText, ctaLink, ctaColor = '#4f46e5', ctaColor2 = '#3b82f6',
     greeting
 }) {
     const logoUrl = 'https://upenglishvietnam.com/logo.png';
@@ -366,9 +366,10 @@ export function buildEmailHtml({
     const greetingBlock = greeting ? `
         <p style="color:#334155;font-size:1.05rem;line-height:1.6;margin-bottom:4px;">${greeting}</p>` : '';
 
+    const finalCtaUrl = ctaLink || appUrl;
     const ctaBlock = ctaText ? `
         <div style="text-align:center;margin-top:28px;">
-            <a href="${appUrl}" style="display:inline-block;background:linear-gradient(135deg,${ctaColor},${ctaColor2});color:white;padding:13px 36px;border-radius:12px;text-decoration:none;font-weight:700;font-size:0.95rem;box-shadow:0 4px 14px rgba(0,0,0,0.1);">${ctaText}</a>
+            <a href="${finalCtaUrl}" style="display:inline-block;background:linear-gradient(135deg,${ctaColor},${ctaColor2});color:white;padding:13px 36px;border-radius:12px;text-decoration:none;font-weight:700;font-size:0.95rem;box-shadow:0 4px 14px rgba(0,0,0,0.1);">${ctaText}</a>
         </div>` : '';
 
     return `
@@ -428,7 +429,7 @@ export async function queueEmailForAdmins(emailData, notificationType = null) {
     if (!emailData?.subject) return;
     try {
         const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('role', 'in', ['admin', 'staff']));
+        const q = query(usersRef, where('role', '==', 'admin'));
         const snapshot = await getDocs(q);
 
         const admins = [];

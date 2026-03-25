@@ -1,18 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { getExam, getExamQuestions, saveExamQuestion, deleteExamQuestion, saveExam, updateExamQuestionsOrder, recalcExamQuestionCache } from '../../services/examService';
-import { generateGrammarVariations, generateSingleGrammarVariation } from '../../services/aiGrammarService';
+import { generateGrammarVariations, generateSingleGrammarVariation, generateVariationExplanation } from '../../services/aiGrammarService';
 import { getTeacherTopics, getTeacherTopicWords } from '../../services/teacherService';
 import { getAdminTopics, getAdminTopicWords } from '../../services/adminService';
 import { extractQuestionsFromText, extractQuestionsFromPDF } from '../../services/aiDocumentImportService';
 import { useAuth } from '../../contexts/AuthContext';
-import { ArrowLeft, Plus, Edit, Trash2, X, Wand2, RefreshCw, Save, GripVertical, ChevronDown, Check, AlertCircle, Info, CheckCircle, Clock, List, Trophy, Layers, BookOpen, Award, Copy, FileText, Upload } from 'lucide-react';
+import { ArrowLeft, Plus, Edit, Trash2, X, Wand2, RefreshCw, Save, GripVertical, ChevronDown, Check, AlertCircle, Info, CheckCircle, Clock, List, Trophy, Layers, BookOpen, Award, Copy, FileText, Upload, ArrowRightLeft } from 'lucide-react';
 import '../teacher/TeacherGrammarEditorPage.css';
 
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { ImageOptionUploader, isImageOption } from '../../components/common/MCQImageOption';
+import { ImageOptionUploader, AIImageGenerateButton, isImageOption, deleteOptionImage } from '../../components/common/MCQImageOption';
 import AudioContextUploader from '../../components/common/AudioContextUploader';
 import { deleteContextAudio } from '../../services/contextAudioService';
 import { uploadContextImage, deleteContextImages } from '../../services/examService';
@@ -177,7 +178,7 @@ import { renderFormattedText, applyFormatToSelection } from '../../utils/textFor
  * Minimal WYSIWYG rich-text input using ReactQuill.
  * Only provides Bold, Italic, Underline buttons.
  */
-function RichTextInput({ value, onChange, disabled, placeholder, minHeight = '100px' }) {
+function RichTextInput({ value, onChange, disabled, placeholder, minHeight = '100px', wrapperClassName = '' }) {
     const quillRef = React.useRef(null);
 
     const modules = {
@@ -191,7 +192,7 @@ function RichTextInput({ value, onChange, disabled, placeholder, minHeight = '10
         <div style={{ position: 'relative' }}>
             <div
                 style={{ background: disabled ? '#f8fafc' : '#fff', borderRadius: '8px', opacity: disabled ? 0.7 : 1 }}
-                className="grammar-rich-text-input"
+                className={`grammar-rich-text-input ${wrapperClassName}`}
             >
                 <ReactQuill
                     ref={quillRef}
@@ -252,32 +253,71 @@ const parseContextHtml = (html) => {
     return parsed.replace(/&nbsp;/g, ' ');
 };
 
-function CustomDropdown({ value, options, onChange, placeholder = "Chọn..." }) {
+function CustomDropdown({ value, options, onChange, placeholder = "Chọn...", className = '' }) {
     const [isOpen, setIsOpen] = useState(false);
     const [hoverIdx, setHoverIdx] = useState(null);
-    const dropdownRef = React.useRef(null);
+    const triggerRef = React.useRef(null);
+    const menuRef = React.useRef(null);
     const selectedOption = options.find(opt => opt.value === value);
 
     useEffect(() => {
+        if (!isOpen) return;
         function handleClickOutside(event) {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+            if (
+                triggerRef.current && !triggerRef.current.contains(event.target) &&
+                menuRef.current && !menuRef.current.contains(event.target)
+            ) {
                 setIsOpen(false);
             }
         }
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [isOpen]);
+
+    const [menuStyle, setMenuStyle] = useState({});
+
+    const updatePosition = React.useCallback(() => {
+        if (!triggerRef.current) return;
+        const rect = triggerRef.current.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom - 10;
+        const maxHeight = Math.min(250, Math.max(spaceBelow, 120));
+        setMenuStyle({
+            position: 'fixed',
+            left: rect.left,
+            width: rect.width,
+            top: rect.bottom + 4,
+            maxHeight: `${maxHeight}px`,
+            zIndex: 99999,
+        });
     }, []);
 
+    useEffect(() => {
+        if (!isOpen) return;
+        updatePosition();
+        const handler = () => updatePosition();
+        window.addEventListener('scroll', handler, true);
+        window.addEventListener('resize', handler);
+        return () => {
+            window.removeEventListener('scroll', handler, true);
+            window.removeEventListener('resize', handler);
+        };
+    }, [isOpen, updatePosition]);
+
     return (
-        <div ref={dropdownRef} style={{ position: 'relative', width: '100%' }}>
-            <div className="admin-form-input" onClick={() => setIsOpen(!isOpen)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '10px 14px', background: '#fff' }}>
+        <div style={{ position: 'relative', width: '100%' }} className={className}>
+            <div ref={triggerRef} className={`admin-form-input custom-dropdown-trigger`} onClick={() => setIsOpen(!isOpen)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '10px 14px', background: '#fff' }}>
                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {selectedOption ? selectedOption.label : placeholder}
                 </span>
                 <ChevronDown size={14} style={{ transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />
             </div>
-            {isOpen && (
-                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', marginTop: '4px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 1000 }}>
+            {isOpen && ReactDOM.createPortal(
+                <div ref={menuRef} style={{
+                    ...menuStyle,
+                    background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    overflowY: 'auto'
+                }}>
                     {options.map((opt, idx) => (
                         <div key={idx}
                             onMouseEnter={() => setHoverIdx(idx)}
@@ -296,7 +336,8 @@ function CustomDropdown({ value, options, onChange, placeholder = "Chọn..." })
                             }}
                         >{opt.label}</div>
                     ))}
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
@@ -416,6 +457,7 @@ function getQuestionItemCount(q) {
 // Helper to get actual total points for a question (points × item count)
 function getQuestionTotalPoints(q) {
     const perItem = q.points || 1;
+    if (q.type === 'ordering') return perItem; // All-or-nothing
     const count = getQuestionItemCount(q);
     return perItem * count;
 }
@@ -432,7 +474,7 @@ function getScoreLabel(type) {
         return 'Điểm / từ phân loại đúng';
     }
     if (type === 'ordering') {
-        return 'Điểm / mục xếp đúng';
+        return 'Điểm';
     }
     return 'Điểm';
 }
@@ -442,7 +484,6 @@ function getItemUnitName(type) {
     if (type === 'fill_in_blank' || type === 'fill_in_blanks' || type === 'fill_in_blank_typing') return 'chỗ trống';
     if (type === 'matching') return 'cặp ghép';
     if (type === 'categorization') return 'mục';
-    if (type === 'ordering') return 'mục';
     return null;
 }
 
@@ -502,7 +543,7 @@ function FillInBlankEditor({ variation, vIdx, isReadOnly, updateVariation, hideD
                 </label>
                 <textarea
                     ref={textareaRef}
-                    className="admin-form-input"
+                    className={`admin-form-input ${vIdx === 0 ? `required-field${text.trim() ? ' filled' : ''}` : ''}`}
                     rows={3}
                     disabled={isReadOnly}
                     placeholder="Ví dụ: I have been to Paris twice."
@@ -556,7 +597,7 @@ function FillInBlankEditor({ variation, vIdx, isReadOnly, updateVariation, hideD
                         })}
                     </div>
                     <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b' }}>Đáp án:</span>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b' }}>Đáp án{hideDistractors && <span style={{ color: '#ef4444' }}> gợi ý</span>}:</span>
                         {blanks.map((b, i) => (
                             <span key={i} style={{
                                 fontSize: '0.75rem', padding: '2px 8px', background: '#d1fae5',
@@ -656,9 +697,14 @@ export default function ExamEditorPage() {
     });
     const [isEditingQuestion, setIsEditingQuestion] = useState(false);
     const [questionToDelete, setQuestionToDelete] = useState(null);
+    const [questionToMove, setQuestionToMove] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
+    const pendingImageDeletionsRef = useRef([]);
+    const newlyUploadedImagesRef = useRef([]);
+    const originalOptionTextsRef = useRef({});
     const [isGeneratingAI, setIsGeneratingAI] = useState(false);
     const [generatingVariationIdx, setGeneratingVariationIdx] = useState(null);
+    const [generatingExplanationIdx, setGeneratingExplanationIdx] = useState(null);
     const [isVietnameseQuestion, setIsVietnameseQuestion] = useState(false);
 
     // Vocabulary topic selector state
@@ -784,7 +830,8 @@ export default function ExamEditorPage() {
                 const isOwner = (examData?.createdBy && examData.createdBy === user?.uid)
                     || (examData?.teacherId && examData.teacherId === user?.uid);
                 const isCollaborator = examData?.collaboratorIds?.includes(user?.uid) || false;
-                setIsReadOnly(!(isOwner || isCollaborator));
+                const collabRole = (examData?.collaboratorRoles || {})[user?.uid] || 'editor';
+                setIsReadOnly(!(isOwner || (isCollaborator && collabRole === 'editor')));
             } else {
                 setIsReadOnly(false);
             }
@@ -808,6 +855,8 @@ export default function ExamEditorPage() {
     }
 
     function openAddForm() {
+        pendingImageDeletionsRef.current = [];
+        newlyUploadedImagesRef.current = [];
         setFormData({
             type: 'multiple_choice', purpose: '', targetSkill: '', points: '',
             hasContext: true, sectionId: activeSectionId, examId: examId,
@@ -819,9 +868,34 @@ export default function ExamEditorPage() {
     }
 
     function openEditForm(q) {
-        setFormData(q);
+        pendingImageDeletionsRef.current = [];
+        newlyUploadedImagesRef.current = [];
+        const deepCopy = JSON.parse(JSON.stringify(q));
+        // Ensure there are always 5 variations (old questions may have fewer)
+        const variations = deepCopy.variations || [];
+        while (variations.length < 5) {
+            variations.push(getInitialVariation(deepCopy.type || 'multiple_choice'));
+        }
+        deepCopy.variations = variations;
+        setFormData(deepCopy);
         setIsEditingQuestion(true);
         setFormOpen(true);
+    }
+
+    function handleCloseForm() {
+        // Clean up images that were uploaded during this session but never saved
+        for (const url of newlyUploadedImagesRef.current) {
+            // Only delete if this URL is NOT currently used in the form data
+            const isStillUsed = formData.variations?.some(v =>
+                v.options?.some(opt => opt === url)
+            );
+            if (!isStillUsed) {
+                deleteOptionImage(url).catch(console.error);
+            }
+        }
+        newlyUploadedImagesRef.current = [];
+        pendingImageDeletionsRef.current = [];
+        setFormOpen(false);
     }
 
     async function handleSubmit(e) {
@@ -830,8 +904,8 @@ export default function ExamEditorPage() {
             setToast({ message: 'Vui lòng chọn Kỹ năng mục tiêu cho câu hỏi.', type: 'error' });
             return;
         }
-        if (!formData.points || formData.points < 1) {
-            setToast({ message: 'Vui lòng nhập Điểm cho câu hỏi.', type: 'error' });
+        if (!formData.points || formData.points < 0.25) {
+            setToast({ message: 'Vui lòng nhập Điểm cho câu hỏi (tối thiểu 0.25đ).', type: 'error' });
             return;
         }
         if (exam.timingMode === 'question' && (!formData.timeLimitSeconds || formData.timeLimitSeconds < 5)) {
@@ -841,6 +915,12 @@ export default function ExamEditorPage() {
         setIsSaving(true);
         try {
             await saveExamQuestion(formData);
+            // Delete images that were scheduled for deletion during editing
+            for (const url of pendingImageDeletionsRef.current) {
+                deleteOptionImage(url).catch(console.error);
+            }
+            pendingImageDeletionsRef.current = [];
+            newlyUploadedImagesRef.current = [];
             setFormOpen(false);
             setToast({ message: isEditingQuestion ? 'Cập nhật câu hỏi thành công!' : 'Thêm câu hỏi mới thành công!', type: 'success' });
             loadData();
@@ -877,6 +957,19 @@ export default function ExamEditorPage() {
         }
     }
 
+    async function handleMoveToSection(question, targetSectionId) {
+        if (!question || !targetSectionId || question.sectionId === targetSectionId) return;
+        try {
+            await saveExamQuestion({ ...question, sectionId: targetSectionId });
+            const targetSection = (exam?.sections || []).find(s => s.id === targetSectionId);
+            setToast({ message: `Đã chuyển câu hỏi sang "${targetSection?.title || 'Section'}"!`, type: 'success' });
+            setQuestionToMove(null);
+            loadData();
+        } catch (error) {
+            setToast({ message: 'Lỗi chuyển câu hỏi: ' + error.message, type: 'error' });
+        }
+    }
+
     async function handleGenerateAI() {
         if (!formData.purpose || !formData.variations?.[0]?.text) {
             setToast({ message: "Vui lòng điền 'Mục tiêu kiểm tra' và 'Nội dung câu hỏi gốc (Variation 1)' trước khi dùng AI.", type: 'error' });
@@ -899,7 +992,14 @@ export default function ExamEditorPage() {
                 const newVariations = [result.improved_original, ...(result.variations || [])];
                 setFormData(prev => ({ ...prev, variations: newVariations.slice(0, 5) }));
             }
-            setToast({ message: 'AI đã tạo các biến thể thành công!', type: 'success' });
+            // Check if V1 had image options — remind teacher to generate images for variations
+            const v1HasImages = formData.type === 'multiple_choice' &&
+                (formData.variations?.[0]?.options || []).some(opt => isImageOption(opt));
+            if (v1HasImages) {
+                setToast({ message: 'AI đã tạo đáp án dạng text. Hãy bấm ✨ bên cạnh mỗi đáp án để tạo ảnh tương ứng.', type: 'success' });
+            } else {
+                setToast({ message: 'AI đã tạo các biến thể thành công!', type: 'success' });
+            }
         } catch (error) {
             setToast({ message: 'Lỗi tạo AI: ' + error.message, type: 'error' });
         }
@@ -934,6 +1034,32 @@ export default function ExamEditorPage() {
         setGeneratingVariationIdx(null);
     }
 
+    async function handleGenerateExplanation(vIdx) {
+        const targetVariation = formData.variations?.[vIdx];
+        if (!targetVariation?.text) {
+            setToast({ message: 'Vui lòng nhập nội dung câu hỏi trước khi tạo giải thích.', type: 'error' });
+            return;
+        }
+        setGeneratingExplanationIdx(vIdx);
+        try {
+            const v1Data = formData.variations[0];
+            const explanation = await generateVariationExplanation(v1Data, targetVariation, formData.purpose, formData.type);
+            if (explanation) {
+                setFormData(prev => {
+                    const newVars = [...prev.variations];
+                    newVars[vIdx] = { ...newVars[vIdx], explanation };
+                    return { ...prev, variations: newVars };
+                });
+                setToast({ message: `Đã tạo giải thích cho Variation ${vIdx + 1}!`, type: 'success' });
+            } else {
+                setToast({ message: 'AI không trả về giải thích hợp lệ.', type: 'error' });
+            }
+        } catch (error) {
+            setToast({ message: 'Lỗi tạo giải thích: ' + error.message, type: 'error' });
+        }
+        setGeneratingExplanationIdx(null);
+    }
+
     function updateVariation(index, field, value) {
         setFormData(prev => {
             const newVars = [...prev.variations];
@@ -948,6 +1074,30 @@ export default function ExamEditorPage() {
             const newOpts = [...(newVars[varIndex].options || [])];
             newOpts[optIndex] = value;
             newVars[varIndex] = { ...newVars[varIndex], options: newOpts };
+            return { ...prev, variations: newVars };
+        });
+    }
+
+    function addOption(varIndex) {
+        setFormData(prev => {
+            const newVars = [...prev.variations];
+            const newOpts = [...(newVars[varIndex].options || [])];
+            newOpts.push('');
+            newVars[varIndex] = { ...newVars[varIndex], options: newOpts };
+            return { ...prev, variations: newVars };
+        });
+    }
+
+    function removeOption(varIndex, optIndex) {
+        setFormData(prev => {
+            const newVars = [...prev.variations];
+            const newOpts = [...(newVars[varIndex].options || [])];
+            if (newOpts.length <= 2) return prev;
+            newOpts.splice(optIndex, 1);
+            let correctAnswer = newVars[varIndex].correctAnswer || 0;
+            if (optIndex === correctAnswer) correctAnswer = 0;
+            else if (optIndex < correctAnswer) correctAnswer--;
+            newVars[varIndex] = { ...newVars[varIndex], options: newOpts, correctAnswer };
             return { ...prev, variations: newVars };
         });
     }
@@ -1335,6 +1485,15 @@ export default function ExamEditorPage() {
                     <h1 className="admin-page-title" style={{ flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                         <span style={{ fontSize: '2rem', lineHeight: 1 }}>{exam.icon || '📋'}</span>
                         {exam.name}
+                        <span style={{
+                            fontSize: '0.75rem', fontWeight: 700,
+                            padding: '3px 12px', borderRadius: '12px',
+                            background: exam.examType === 'test' ? '#fef2f2' : '#eff6ff',
+                            color: exam.examType === 'test' ? '#dc2626' : '#2563eb',
+                            border: `1px solid ${exam.examType === 'test' ? '#fecaca' : '#bfdbfe'}`
+                        }}>
+                            {exam.examType === 'test' ? '📋 Kiểm tra' : '📝 Bài tập'}
+                        </span>
                     </h1>
                     <div className="admin-header-actions" style={{ padding: '0 12px', justifyContent: 'center', flexWrap: 'wrap' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={16} /> {(exam.timingMode || 'exam') === 'exam' ? `${exam.timeLimitMinutes} phút` : (exam.timingMode === 'section' ? 'Theo section' : 'Theo câu hỏi')}</span>
@@ -1707,6 +1866,15 @@ export default function ExamEditorPage() {
                                                                             {exam.timingMode === 'question' && (!q.timeLimitSeconds || q.timeLimitSeconds < 5) && (
                                                                                 <span style={{ fontSize: '0.65rem', color: '#dc2626', background: '#fef2f2', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, border: '1px solid #fecaca' }}>⚠ Chưa hẹn giờ</span>
                                                                             )}
+                                                                            {(() => {
+                                                                                const filledCount = (q.variations || []).filter(v => v && ((v.text && v.text.replace(/<[^>]*>/g, '').trim().length > 0) || v.options?.some(o => o && o.toString().trim()) || v.pairs?.some(p => p.left?.trim() || p.right?.trim()) || v.items?.some(i => typeof i === 'string' ? i.trim() : i?.text?.trim()))).length;
+                                                                                const totalCount = (q.variations || []).length;
+                                                                                return totalCount > 0 ? (
+                                                                                    <span style={{ fontSize: '0.65rem', padding: '2px 6px', background: filledCount >= 2 ? '#ecfdf5' : '#fff7ed', color: filledCount >= 2 ? '#059669' : '#d97706', borderRadius: '4px', fontWeight: 600, border: `1px solid ${filledCount >= 2 ? '#a7f3d0' : '#fed7aa'}` }}>
+                                                                                        {filledCount}/{totalCount} V
+                                                                                    </span>
+                                                                                ) : null;
+                                                                            })()}
                                                                         </div>
                                                                     </td>
                                                                     <td data-label="Nội dung">
@@ -1729,6 +1897,9 @@ export default function ExamEditorPage() {
                                                                                 <>
                                                                                     <button className="admin-action-btn" onClick={() => openEditForm(q)} title="Sửa"><Edit size={16} /></button>
                                                                                     <button className="admin-action-btn" onClick={() => handleDuplicate(q)} title="Nhân bản"><Copy size={16} /></button>
+                                                                                    {(exam?.sections || []).length > 1 && (
+                                                                                        <button className="admin-action-btn" onClick={() => setQuestionToMove(q)} title="Chuyển section" style={{ color: '#7c3aed' }}><ArrowRightLeft size={16} /></button>
+                                                                                    )}
                                                                                     <button className="admin-action-btn danger" onClick={() => setQuestionToDelete(q)} title="Xóa"><Trash2 size={16} /></button>
                                                                                 </>
                                                                             ) : (
@@ -1772,6 +1943,15 @@ export default function ExamEditorPage() {
                                                     {exam.timingMode === 'question' && (!q.timeLimitSeconds || q.timeLimitSeconds < 5) && (
                                                         <span style={{ fontSize: '0.65rem', color: '#dc2626', background: '#fef2f2', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, border: '1px solid #fecaca' }}>⚠ Chưa hẹn giờ</span>
                                                     )}
+                                                    {(() => {
+                                                        const filledCount = (q.variations || []).filter(v => v && ((v.text && v.text.replace(/<[^>]*>/g, '').trim().length > 0) || v.options?.some(o => o && o.toString().trim()) || v.pairs?.some(p => p.left?.trim() || p.right?.trim()) || v.items?.some(i => typeof i === 'string' ? i.trim() : i?.text?.trim()))).length;
+                                                        const totalCount = (q.variations || []).length;
+                                                        return totalCount > 0 ? (
+                                                            <span style={{ fontSize: '0.65rem', padding: '2px 6px', background: filledCount >= 2 ? '#ecfdf5' : '#fff7ed', color: filledCount >= 2 ? '#059669' : '#d97706', borderRadius: '4px', fontWeight: 600, border: `1px solid ${filledCount >= 2 ? '#a7f3d0' : '#fed7aa'}` }}>
+                                                                {filledCount}/{totalCount} V
+                                                            </span>
+                                                        ) : null;
+                                                    })()}
                                                 </div>
                                             </div>
                                             <div style={{ marginBottom: '12px' }}>
@@ -1797,6 +1977,11 @@ export default function ExamEditorPage() {
                                                         <button className="admin-action-btn" onClick={() => handleDuplicate(q)} title="Nhân bản" style={{ color: '#15803d' }}>
                                                             <Copy size={16} />
                                                         </button>
+                                                        {(exam?.sections || []).length > 1 && (
+                                                            <button className="admin-action-btn" onClick={() => setQuestionToMove(q)} title="Chuyển section" style={{ color: '#7c3aed' }}>
+                                                                <ArrowRightLeft size={16} />
+                                                            </button>
+                                                        )}
                                                         <button className="admin-action-btn" onClick={() => setQuestionToDelete(q)} title="Xóa" style={{ color: '#ef4444' }}>
                                                             <Trash2 size={16} />
                                                         </button>
@@ -1823,14 +2008,14 @@ export default function ExamEditorPage() {
                                 <h2 className="admin-modal-title" style={{ margin: 0 }}>
                                     {isEditingQuestion ? (isReadOnly ? 'Chi tiết câu hỏi' : 'Sửa câu hỏi') : 'Thêm câu hỏi mới'}
                                 </h2>
-                                <button className="admin-modal-close" onClick={() => setFormOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>
+                                <button className="admin-modal-close" onClick={() => handleCloseForm()} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>
                                     <X size={24} />
                                 </button>
                             </div>
                             <div style={{ padding: '20px', overflowY: 'auto', flex: 1, scrollbarGutter: 'stable' }}>
                                 <form onSubmit={handleSubmit}>
                                     <div className="admin-form-row" style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
-                                        <div className="admin-form-group" style={{ flex: 2 }}>
+                                        <div className="admin-form-group" style={{ flex: 1.8 }}>
                                             <label>Loại câu hỏi</label>
                                             <CustomDropdown
                                                 value={formData.type}
@@ -1856,6 +2041,7 @@ export default function ExamEditorPage() {
                                             <CustomDropdown
                                                 value={formData.targetSkill || ''}
                                                 disabled={isReadOnly}
+                                                className={`required-dropdown${formData.targetSkill ? ' filled' : ''}`}
                                                 options={[
                                                     { value: '', label: '— Chọn —' },
                                                     { value: 'listening', label: '🎧 Listening' },
@@ -1868,9 +2054,9 @@ export default function ExamEditorPage() {
                                                 onChange={(val) => setFormData({ ...formData, targetSkill: val })}
                                             />
                                         </div>
-                                        <div className="admin-form-group" style={{ flex: 1 }}>
+                                        <div className="admin-form-group" style={{ flex: 1.2 }}>
                                             <label>{getScoreLabel(formData.type)} <span style={{ color: '#ef4444', fontWeight: 700 }}>*</span></label>
-                                            <input type="number" className="admin-form-input" min={1} max={100} value={formData.points} disabled={isReadOnly} onChange={e => setFormData({ ...formData, points: parseInt(e.target.value) || '' })} placeholder="Nhập điểm" />
+                                            <input type="number" className={`admin-form-input required-field${formData.points ? ' filled' : ''}`} min={0.25} max={100} step={0.25} value={formData.points} disabled={isReadOnly} onChange={e => setFormData({ ...formData, points: parseFloat(e.target.value) || '' })} placeholder="Nhập điểm" />
                                             {(() => {
                                                 const unitName = getItemUnitName(formData.type);
                                                 if (!unitName) return null;
@@ -1893,19 +2079,44 @@ export default function ExamEditorPage() {
                                         {(exam.timingMode === 'question') && (
                                             <div className="admin-form-group" style={{ flex: 1 }}>
                                                 <label>⏱ Thời gian (giây) <span style={{ color: '#ef4444', fontWeight: 700 }}>*</span></label>
-                                                <input type="number" className="admin-form-input" required min={5} max={3600} value={formData.timeLimitSeconds || ''} disabled={isReadOnly} onChange={e => setFormData({ ...formData, timeLimitSeconds: parseInt(e.target.value) || '' })} placeholder="Nhập" />
+                                                <input type="number" className={`admin-form-input required-field${formData.timeLimitSeconds ? ' filled' : ''}`} required min={5} max={3600} value={formData.timeLimitSeconds || ''} disabled={isReadOnly} onChange={e => setFormData({ ...formData, timeLimitSeconds: parseInt(e.target.value) || '' })} placeholder="Nhập" />
                                             </div>
                                         )}
                                     </div>
+                                    {formData.type === 'fill_in_blank_typing' && (
+                                        <div style={{
+                                            display: 'flex', alignItems: 'flex-start', gap: '10px',
+                                            padding: '10px 14px', marginTop: '-4px', marginBottom: '8px',
+                                            background: '#fffbeb', border: '1px solid #fde68a',
+                                            borderRadius: '10px', fontSize: '0.82rem', color: '#92400e',
+                                            lineHeight: 1.5
+                                        }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', flexShrink: 0, fontWeight: 600, marginTop: '1px' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={!!formData.useAIGrading}
+                                                    onChange={e => setFormData(prev => ({ ...prev, useAIGrading: e.target.checked }))}
+                                                    disabled={isReadOnly}
+                                                    style={{ accentColor: '#d97706', width: '15px', height: '15px', cursor: 'pointer' }}
+                                                />
+                                                <span>🤖 Nhờ AI kiểm tra</span>
+                                            </label>
+                                            <span style={{ color: '#78350f', opacity: 0.8 }}>— Đáp án bạn cung cấp là <strong>đáp án gợi ý</strong>. Nếu câu trả lời của học viên gần nghĩa và vẫn đúng ngữ cảnh, AI sẽ chấp nhận là đúng. Tuy nhiên, học viên sẽ phải chờ AI chấm điểm.</span>
+                                        </div>
+                                    )}
                                     <div className="admin-form-group">
-                                        <label>Mục tiêu kiểm tra chính của câu hỏi <span style={{ color: '#ef4444', fontWeight: 700 }}>*</span></label>
-                                        <input type="text" className="admin-form-input" required value={formData.purpose} disabled={isReadOnly} onChange={e => setFormData({ ...formData, purpose: e.target.value })} placeholder="Ví dụ: Kiểm tra khả năng sử dụng thì hiện tại hoàn thành" />
-                                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', lineHeight: 1.4 }}>⚡ Bắt buộc nhập — AI sử dụng mục tiêu này để tạo variations chính xác và phù hợp.</div>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>Mục tiêu kiểm tra chính của câu hỏi <span style={{ color: '#ef4444', fontWeight: 700 }}>*</span> <span title="AI sử dụng mục tiêu này để tạo variations chính xác và phù hợp" style={{ cursor: 'help', color: '#94a3b8', fontSize: '0.8rem', fontWeight: 700, width: '16px', height: '16px', borderRadius: '50%', border: '1.5px solid #cbd5e1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>i</span></label>
+                                        <textarea className={`admin-form-input required-field${formData.purpose ? ' filled' : ''}`} required value={formData.purpose} disabled={isReadOnly} onChange={e => setFormData({ ...formData, purpose: e.target.value })} placeholder="Ví dụ: Kiểm tra khả năng sử dụng thì hiện tại hoàn thành"
+                                            rows={1}
+                                            style={{ resize: 'none', overflow: 'hidden', minHeight: '40px', lineHeight: '1.5' }}
+                                            onInput={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
+                                        />
                                     </div>
 
+                                    <hr className="form-section-divider" />
                                     {/* Vocabulary topic selector */}
-                                    <div className="admin-form-group">
-                                        <label>📚 Chủ đề từ vựng (tùy chọn)</label>
+                                    <div className="admin-form-group optional-field">
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>📚 Chủ đề từ vựng (tùy chọn) <span title="AI sẽ ưu tiên sử dụng từ vựng trong chủ đề này để tạo câu hỏi" style={{ cursor: 'help', color: '#94a3b8', fontSize: '0.8rem', fontWeight: 700, width: '16px', height: '16px', borderRadius: '50%', border: '1.5px solid #cbd5e1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>i</span></label>
                                         <div style={{ position: 'relative' }}>
                                             <input
                                                 type="text"
@@ -1978,32 +2189,147 @@ export default function ExamEditorPage() {
                                                 {loadingVocabWords ? '⏳ Đang tải từ vựng...' : `✅ ${vocabWords.length} từ vựng sẽ được AI ưu tiên sử dụng`}
                                             </div>
                                         )}
+
                                     </div>
 
                                     {['essay', 'audio_recording'].includes(formData.type) && (
-                                        <div className="admin-form-group">
-                                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                                <Award size={18} className="text-primary" /> Yêu cầu đặc biệt khi chấm điểm bằng AI (Tùy chọn)
+                                        <div style={{
+                                            border: '1.5px solid #c7d2fe', borderRadius: '14px',
+                                            padding: '16px', background: '#fafbff',
+                                            marginTop: '4px'
+                                        }}>
+                                            <div style={{
+                                                display: 'flex', alignItems: 'center', gap: '8px',
+                                                marginBottom: '14px', paddingBottom: '10px',
+                                                borderBottom: '1px solid #e0e7ff'
+                                            }}>
+                                                <span style={{ fontSize: '1.15rem' }}>🧑‍🏫</span>
+                                                <span style={{ fontWeight: 700, fontSize: '0.92rem', color: '#3730a3' }}>
+                                                    Thiết lập chấm điểm AI
+                                                </span>
+                                                <span style={{
+                                                    fontSize: '0.7rem', padding: '2px 8px',
+                                                    background: '#e0e7ff', color: '#4f46e5',
+                                                    borderRadius: '6px', fontWeight: 600
+                                                }}>
+                                                    Tùy chọn
+                                                </span>
+                                            </div>
+                                        {/* Section 1: Default criteria toggle */}
+                                        <div className="admin-form-group optional-field" style={{ marginBottom: '0' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: isReadOnly ? 'default' : 'pointer', userSelect: 'none' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={formData.useDefaultGradingCriteria !== false}
+                                                    disabled={isReadOnly}
+                                                    onChange={e => setFormData(prev => ({ ...prev, useDefaultGradingCriteria: e.target.checked, ...(e.target.checked ? { promptId: '', promptTitle: '' } : {}) }))}
+                                                    style={{ accentColor: '#6366f1', width: '16px', height: '16px', cursor: isReadOnly ? 'default' : 'pointer' }}
+                                                />
+                                                <span style={{ fontWeight: 600, fontSize: '0.88rem', color: '#334155' }}>
+                                                    📏 Sử dụng tiêu chí chấm mặc định của hệ thống
+                                                </span>
+                                                <span title={formData.useDefaultGradingCriteria !== false ? 'AI sẽ áp dụng tiêu chí chấm mặc định bên dưới, kết hợp với prompt/yêu cầu đặc biệt (nếu có).' : 'AI sẽ chỉ chấm theo prompt/yêu cầu đặc biệt của bạn. Không áp dụng tiêu chí mặc định.'}
+                                                    style={{ cursor: 'help', color: '#94a3b8', fontSize: '0.8rem', fontWeight: 700, width: '16px', height: '16px', borderRadius: '50%', border: '1.5px solid #cbd5e1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>i</span>
                                             </label>
-                                            <p className="admin-form-hint" style={{ marginTop: '-4px', marginBottom: '8px', color: '#64748b', fontSize: '0.85rem' }}>
-                                                Hướng dẫn AI chấm theo tiêu chí riêng của bạn (VD: Phải dùng ít nhất 3 từ vựng chủ đề môi trường, phát âm rõ âm cuối...)
-                                            </p>
-                                            {!isReadOnly && (
-                                                <div style={{ marginBottom: '8px' }}>
-                                                    <SavedPromptPicker
-                                                        uid={user?.uid}
-                                                        onSelect={(content) => setFormData(prev => ({ ...prev, specialRequirement: content }))}
-                                                    />
+                                            {formData.useDefaultGradingCriteria !== false && (
+                                                <div style={{
+                                                    marginTop: '8px', padding: '12px 16px',
+                                                    background: '#fff', border: '1px solid #e2e8f0',
+                                                    borderRadius: '10px', fontSize: '0.8rem', color: '#475569',
+                                                    lineHeight: 1.6
+                                                }}>
+                                                    <div style={{ fontWeight: 700, color: '#334155', marginBottom: '6px', fontSize: '0.82rem' }}>
+                                                        📋 Tiêu chí chấm mặc định:
+                                                    </div>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                        <div>• Thiếu thông tin quan trọng → tối đa <strong>55-60%</strong> điểm tối đa</div>
+                                                        <div>• Chỉ đề cập một phần nhỏ → tối đa <strong>30-40%</strong> điểm tối đa</div>
+                                                        <div>• Bổ sung thêm chi tiết liên quan → <strong>thưởng thêm điểm</strong></div>
+                                                    </div>
+                                                    {formData.type === 'audio_recording' && (
+                                                        <>
+                                                            <div style={{ fontWeight: 700, color: '#334155', marginTop: '8px', marginBottom: '4px', fontSize: '0.82rem' }}>
+                                                                📊 Thang điểm tham khảo:
+                                                            </div>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                                <div>• <strong>90-100%</strong>: Xuất sắc — đúng, đầy đủ, phát âm rõ</div>
+                                                                <div>• <strong>70-80%</strong>: Tốt — đúng, khá đầy đủ, lỗi nhỏ</div>
+                                                                <div>• <strong>50-60%</strong>: Trung bình — hiểu được, thiếu hoặc nhiều lỗi</div>
+                                                                <div>• <strong>30-40%</strong>: Yếu — thiếu nhiều, khó hiểu</div>
+                                                                <div>• <strong>0-20%</strong>: Rất yếu — không liên quan</div>
+                                                            </div>
+                                                        </>
+                                                    )}
                                                 </div>
                                             )}
+                                        </div>
+
+                                        {formData.useDefaultGradingCriteria === false && (
+                                        <>
+                                        <hr style={{ border: 'none', borderTop: '1px solid #e0e7ff', margin: '12px 0' }} />
+
+                                        {/* Prompt picker — only when default criteria is OFF */}
+                                        <div className="admin-form-group optional-field" style={{ marginBottom: '8px' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>📝 Chọn/nhập tiêu chí chấm điểm cá nhân từ prompt bank của bạn (nếu có) <span title="Hướng dẫn AI chấm theo tiêu chí riêng của bạn." style={{ cursor: 'help', color: '#94a3b8', fontSize: '0.8rem', fontWeight: 700, width: '16px', height: '16px', borderRadius: '50%', border: '1.5px solid #cbd5e1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>i</span></label>
+                                            {isReadOnly ? (
+                                                (formData.promptId || formData.specialRequirement) && (
+                                                    <div style={{
+                                                        display: 'flex', alignItems: 'center', gap: '8px',
+                                                        padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0',
+                                                        borderRadius: '10px', fontSize: '0.85rem', color: '#64748b', fontWeight: 500
+                                                    }}>
+                                                        <span style={{ fontSize: '1rem' }}>🔒</span>
+                                                        <span>Đã thiết lập yêu cầu chấm bài bởi giáo viên chủ sở hữu</span>
+                                                    </div>
+                                                )
+                                            ) : (
+                                                <>
+                                                    {!formData.promptId && (
+                                                        <div style={{ marginBottom: '8px' }}>
+                                                            <SavedPromptPicker
+                                                                uid={user?.uid}
+                                                                onSelect={({ id, title }) => setFormData(prev => ({
+                                                                    ...prev,
+                                                                    promptId: id,
+                                                                    promptTitle: title
+                                                                }))}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                    {formData.promptId && (
+                                                        <div style={{
+                                                            display: 'flex', alignItems: 'center', gap: '10px',
+                                                            padding: '10px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0',
+                                                            borderRadius: '10px', fontSize: '0.85rem', color: '#15803d', fontWeight: 600,
+                                                        }}>
+                                                            <span style={{ fontSize: '1rem' }}>📎</span>
+                                                            <span style={{ flex: 1 }}>Đang sử dụng prompt: "<strong>{formData.promptTitle || 'Prompt đã lưu'}</strong>"</span>
+                                                            <button type="button" onClick={() => setFormData(prev => ({ ...prev, promptId: '', promptTitle: '' }))}
+                                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: '2px', display: 'flex', fontSize: '0.8rem', fontWeight: 700 }}
+                                                                title="Gỡ prompt đã liên kết">
+                                                                ✕ Gỡ
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
+                                        </>
+                                        )}
+
+                                        {/* Special requirement textarea — always visible */}
+                                        {!isReadOnly && (
+                                        <div className="admin-form-group optional-field" style={{ marginBottom: 0, marginTop: '8px' }}>
                                             <textarea
                                                 className="admin-form-input"
-                                                placeholder="VD: Học viên cần sử dụng đúng thì quá khứ đơn và cấu trúc câu điều kiện loại 2..."
+                                                placeholder="Nhập yêu cầu bổ sung cho AI khi chấm (nếu có)..."
                                                 rows={3}
                                                 value={formData.specialRequirement || ''}
                                                 onChange={e => setFormData({ ...formData, specialRequirement: e.target.value })}
-                                                disabled={isReadOnly}
+                                                style={{ resize: 'vertical' }}
                                             />
+                                        </div>
+                                        )}
                                         </div>
                                     )}
 
@@ -2017,12 +2343,12 @@ export default function ExamEditorPage() {
                                                     <div style={{
                                                         display: 'flex', alignItems: 'center', gap: '8px',
                                                         padding: '10px 14px', margin: '12px 0 4px',
-                                                        background: '#fef3c7', border: '1px solid #fde68a',
-                                                        borderRadius: '10px', fontSize: '0.82rem', color: '#92400e',
+                                                        background: '#dbeafe', border: '1px solid #93c5fd',
+                                                        borderRadius: '10px', fontSize: '0.82rem', color: '#1e40af',
                                                         lineHeight: 1.5
                                                     }}>
-                                                        <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>⚠️</span>
-                                                        <span>Đáp án có chứa <b>hình ảnh</b> — AI không thể tự tạo variations cho câu hỏi này. Vui lòng tạo các variations thủ công.</span>
+                                                        <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>💡</span>
+                                                        <span>Đáp án có chứa <b>hình ảnh</b> — AI sẽ tạo đáp án dạng <b>text</b> cho các variations. Sau khi AI tạo xong, hãy bấm <b>✨</b> bên cạnh mỗi đáp án để tạo ảnh.</span>
                                                     </div>
                                                 )}
                                                 <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', margin: '16px 0', flexWrap: 'wrap', gap: '16px' }}>
@@ -2035,11 +2361,13 @@ export default function ExamEditorPage() {
                                                         />
                                                         Hỏi bằng TV
                                                     </label>
-                                                    <button type="button" className="admin-btn admin-btn-outline" onClick={handleGenerateAI} disabled={isGeneratingAI || hasImageOptions}
-                                                        style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', opacity: hasImageOptions ? 0.5 : 1 }}
-                                                        title={hasImageOptions ? 'Không hỗ trợ AI cho đáp án hình ảnh' : ''}>
-                                                        {isGeneratingAI ? <RefreshCw size={14} className="spin" /> : <Wand2 size={14} />}
-                                                        {isGeneratingAI ? 'Đang tạo...' : 'Quét lỗi và tạo variations'}
+                                                    <button type="button" className="admin-btn admin-btn-outline" onClick={handleGenerateAI} disabled={isGeneratingAI}
+                                                        style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px' }}
+                                                        title=''>
+                                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                                            {isGeneratingAI ? <RefreshCw size={14} className="spin" /> : <Wand2 size={14} />}
+                                                            <span>{isGeneratingAI ? 'Đang tạo...' : 'Quét lỗi và tạo variations'}</span>
+                                                        </span>
                                                     </button>
                                                 </div>
                                             </>
@@ -2069,14 +2397,16 @@ export default function ExamEditorPage() {
                                                                     onClick={() => handleGenerateSingleAI(vIdx)}
                                                                     disabled={generatingVariationIdx === vIdx || hasImgOpts}
                                                                     title={hasImgOpts ? 'Không hỗ trợ AI cho đáp án hình ảnh' : ''}>
-                                                                    {generatingVariationIdx === vIdx ? <RefreshCw size={12} className="spin" /> : <Wand2 size={12} />}
-                                                                    AI tạo
+                                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                                        {generatingVariationIdx === vIdx ? <RefreshCw size={12} className="spin" /> : <Wand2 size={12} />}
+                                                                        <span>AI tạo</span>
+                                                                    </span>
                                                                 </button>
                                                             );
                                                         })()}
                                                     </div>
                                                     {vIdx === 0 && (
-                                                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '8px', lineHeight: 1.4 }}>⚡ Bắt buộc nhập — Đây là câu mẫu để AI bắt chước và tạo ra các variations tương tự.</div>
+                                                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '8px', lineHeight: 1.4 }}>⚡ Đây là câu mẫu để AI bắt chước và tạo ra các variations tương tự.</div>
                                                     )}
                                                     {/* Question text - different UI for fill_in_blank vs others */}
                                                     {(formData.type === 'fill_in_blank' || formData.type === 'fill_in_blanks') ? (
@@ -2098,12 +2428,13 @@ export default function ExamEditorPage() {
                                                         <>
                                                             <div className="admin-form-group" style={{ marginBottom: '8px' }}>
                                                                 <RichTextInput
-                                                                    key={`text-${formData.type}-${vIdx}`}
+                                                                    key={`text-${formData.id || 'new'}-${formData.type}-${vIdx}`}
                                                                     value={variation?.text || ''}
                                                                     onChange={val => updateVariation(vIdx, 'text', val)}
                                                                     disabled={isReadOnly}
                                                                     placeholder="Nội dung câu hỏi..."
                                                                     minHeight="60px"
+                                                                    wrapperClassName={vIdx === 0 ? `required-field${variation?.text?.replace(/<[^>]*>?/gm, '').trim() ? ' filled' : ''}` : ''}
                                                                 />
                                                             </div>
 
@@ -2119,6 +2450,10 @@ export default function ExamEditorPage() {
                                                                                 <ImageOptionUploader
                                                                                     value={opt}
                                                                                     onChange={url => updateOption(vIdx, oIdx, url)}
+                                                                                    onScheduleDelete={url => pendingImageDeletionsRef.current.push(url)}
+                                                                                    onTrackUpload={url => newlyUploadedImagesRef.current.push(url)}
+                                                                                    onSaveOriginalText={text => { originalOptionTextsRef.current[`${vIdx}-${oIdx}`] = text; }}
+                                                                                    restoreValue={originalOptionTextsRef.current[`${vIdx}-${oIdx}`] || ''}
                                                                                     disabled={isReadOnly}
                                                                                 />
                                                                             ) : (
@@ -2129,12 +2464,34 @@ export default function ExamEditorPage() {
                                                                                     <ImageOptionUploader
                                                                                         value={opt}
                                                                                         onChange={url => updateOption(vIdx, oIdx, url)}
+                                                                                        onScheduleDelete={url => pendingImageDeletionsRef.current.push(url)}
+                                                                                        onTrackUpload={url => newlyUploadedImagesRef.current.push(url)}
+                                                                                        onSaveOriginalText={text => { originalOptionTextsRef.current[`${vIdx}-${oIdx}`] = text; }}
+                                                                                        disabled={isReadOnly}
+                                                                                    />
+                                                                                    <AIImageGenerateButton
+                                                                                        optionText={opt}
+                                                                                        onChange={url => updateOption(vIdx, oIdx, url)}
+                                                                                        currentValue={opt}
+                                                                                        onScheduleDelete={url => pendingImageDeletionsRef.current.push(url)}
+                                                                                        onTrackUpload={url => newlyUploadedImagesRef.current.push(url)}
+                                                                                        onSaveOriginalText={text => { originalOptionTextsRef.current[`${vIdx}-${oIdx}`] = text; }}
                                                                                         disabled={isReadOnly}
                                                                                     />
                                                                                 </>
                                                                             )}
+                                                                            {!isReadOnly && (variation?.options || []).length > 2 && (
+                                                                                <button type="button" onClick={() => removeOption(vIdx, oIdx)} title="Xóa đáp án" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '4px', borderRadius: '4px', display: 'flex', alignItems: 'center', flexShrink: 0, opacity: 0.6 }} onMouseOver={e => e.currentTarget.style.opacity = 1} onMouseOut={e => e.currentTarget.style.opacity = 0.6}>
+                                                                                    <X size={14} />
+                                                                                </button>
+                                                                            )}
                                                                         </div>
                                                                     ))}
+                                                                    {!isReadOnly && (variation?.options || []).length < 6 && (
+                                                                        <button type="button" onClick={() => addOption(vIdx)} style={{ marginTop: '8px', background: 'none', border: '1px dashed #cbd5e1', borderRadius: '8px', padding: '6px 12px', color: '#64748b', fontSize: '0.8rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                                            <Plus size={14} /> Thêm đáp án
+                                                                        </button>
+                                                                    )}
                                                                 </div>
                                                             )}
                                                         </>
@@ -2417,9 +2774,27 @@ export default function ExamEditorPage() {
 
                                                     {/* Explanation */}
                                                     <div className="admin-form-group" style={{ marginTop: '8px', marginBottom: 0 }}>
-                                                        <input type="text" className="admin-form-input" placeholder="Giải thích đáp án (tùy chọn)"
+                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                            <label style={{ margin: 0, fontSize: '0.85rem' }}>Giải thích đáp án (tùy chọn)</label>
+                                                            {!isReadOnly && (
+                                                                <button type="button" className="admin-btn admin-btn-outline"
+                                                                    style={{ padding: '4px 8px', fontSize: '0.7rem', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                                                    onClick={() => handleGenerateExplanation(vIdx)}
+                                                                    disabled={generatingExplanationIdx === vIdx}
+                                                                    title="AI tạo giải thích bắt chước style V1">
+                                                                    {generatingExplanationIdx === vIdx ? <RefreshCw size={11} className="spin" /> : <Wand2 size={11} />}
+                                                                    <span>AI</span>
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                        <RichTextInput
+                                                            key={`expl-${formData.id || 'new'}-${formData.type}-${vIdx}`}
+                                                            value={variation?.explanation || ''}
+                                                            onChange={val => updateVariation(vIdx, 'explanation', val)}
                                                             disabled={isReadOnly}
-                                                            value={variation?.explanation || ''} onChange={e => updateVariation(vIdx, 'explanation', e.target.value)} />
+                                                            placeholder="Giải thích đáp án..."
+                                                            minHeight="50px"
+                                                        />
                                                     </div>
                                                 </div>
                                             );
@@ -2427,7 +2802,7 @@ export default function ExamEditorPage() {
                                     </div>
 
                                     <div className="admin-modal-actions" style={{ marginTop: '24px', position: 'sticky', bottom: '-20px', background: '#fff', padding: '16px 20px 20px 20px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                                        <button type="button" className="admin-btn admin-btn-secondary" onClick={() => setFormOpen(false)} disabled={isSaving}>Đóng</button>
+                                        <button type="button" className="admin-btn admin-btn-secondary" onClick={() => handleCloseForm()} disabled={isSaving}>Đóng</button>
                                         {!isReadOnly && (
                                             <button type="submit" className="admin-btn admin-btn-primary" disabled={isSaving}>
                                                 {isSaving ? 'Đang lưu...' : (isEditingQuestion ? 'Cập nhật' : 'Thêm')}
@@ -2449,6 +2824,42 @@ export default function ExamEditorPage() {
                             <div className="admin-modal-actions">
                                 <button className="admin-btn admin-btn-secondary" onClick={() => setQuestionToDelete(null)}>Hủy</button>
                                 <button className="admin-btn admin-btn-primary" style={{ backgroundColor: '#ef4444' }} onClick={handleConfirmDelete}>Xóa</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* --- MOVE TO SECTION MODAL --- */}
+                {questionToMove && (
+                    <div className="admin-modal-overlay">
+                        <div className="admin-modal" style={{ maxWidth: '420px' }}>
+                            <h2 className="admin-modal-title" style={{ color: '#7c3aed' }}><ArrowRightLeft size={24} /> Chuyển sang Section khác</h2>
+                            <p className="admin-modal-desc" style={{ marginBottom: '16px' }}>
+                                Chọn section đích cho câu hỏi này:
+                            </p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                                {(exam?.sections || []).filter(s => s.id !== questionToMove.sectionId).map(section => (
+                                    <button
+                                        key={section.id}
+                                        onClick={() => handleMoveToSection(questionToMove, section.id)}
+                                        style={{
+                                            padding: '12px 16px', borderRadius: '12px', border: '2px solid #e2e8f0',
+                                            background: '#f8fafc', cursor: 'pointer', textAlign: 'left',
+                                            fontWeight: 600, fontSize: '0.88rem', color: '#334155',
+                                            transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: '8px'
+                                        }}
+                                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#7c3aed'; e.currentTarget.style.background = '#f5f3ff'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f8fafc'; }}
+                                    >
+                                        📑 {section.title}
+                                        <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: '#94a3b8', fontWeight: 400 }}>
+                                            {(questions || []).filter(q => q.sectionId === section.id).length} câu
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="admin-modal-actions">
+                                <button className="admin-btn admin-btn-secondary" onClick={() => setQuestionToMove(null)}>Hủy</button>
                             </div>
                         </div>
                     </div>

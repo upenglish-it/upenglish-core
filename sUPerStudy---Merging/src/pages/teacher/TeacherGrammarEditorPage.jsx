@@ -1,16 +1,24 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, Link, useLocation } from 'react-router-dom';
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { getGrammarExercise, getGrammarQuestions, saveGrammarQuestion, deleteGrammarQuestion } from '../../services/grammarService';
 import { getTeacherTopics, getTeacherTopicWords } from '../../services/teacherService';
 import { getAdminTopics, getAdminTopicWords } from '../../services/adminService';
-import { generateGrammarVariations, generateSingleGrammarVariation } from '../../services/aiGrammarService';
+import { generateGrammarVariations, generateSingleGrammarVariation, generateVariationExplanation } from '../../services/aiGrammarService';
 import { extractQuestionsFromText, extractQuestionsFromPDF } from '../../services/aiDocumentImportService';
 import { useAuth } from '../../contexts/AuthContext';
+
+// Decode ALL HTML entities (&#39; → ', &amp; → &, &nbsp; → space, etc.)
+function decodeHtmlEntities(str) {
+    if (!str) return str;
+    const ta = document.createElement('textarea');
+    ta.innerHTML = str;
+    return ta.value.replace(/\u00a0/g, ' ');
+}
 import { ArrowLeft, Plus, Edit, Trash2, X, Wand2, RefreshCw, Save, GripVertical, ChevronDown, Check, AlertCircle, Info, CheckCircle, Sparkles, Award, Copy, FileText, Upload } from 'lucide-react';
 import './TeacherGrammarEditorPage.css';
 
 import { renderFormattedText } from '../../utils/textFormatting';
-import { ImageOptionUploader, isImageOption } from '../../components/common/MCQImageOption';
+import { ImageOptionUploader, AIImageGenerateButton, isImageOption, deleteOptionImage } from '../../components/common/MCQImageOption';
 import AudioContextUploader from '../../components/common/AudioContextUploader';
 import { deleteContextAudio } from '../../services/contextAudioService';
 import { uploadContextImage } from '../../services/examService';
@@ -21,7 +29,7 @@ import SavedPromptPicker from '../../components/SavedPromptPicker';
  * Only provides Bold, Italic, Underline buttons.
  * For fill_in_blank type, also provides a "Tạo chỗ trống" button.
  */
-function RichTextInput({ value, onChange, disabled, placeholder, minHeight = '100px', isFillInBlank = false }) {
+function RichTextInput({ value, onChange, disabled, placeholder, minHeight = '100px', isFillInBlank = false, wrapperClassName = '' }) {
     const quillRef = useRef(null);
 
     const handleMakeBlank = useCallback(() => {
@@ -36,8 +44,8 @@ function RichTextInput({ value, onChange, disabled, placeholder, minHeight = '10
         quill.insertText(selection.index, `{{${selectedText}}}`);
         // Re-get value after change
         const newHtml = quillRef.current.getEditor().root.innerHTML;
-        // Clean &nbsp; inside {{...}} markers so word bank/answers use plain spaces
-        const cleanedHtml = newHtml.replace(/\{\{(.+?)\}\}/g, (match, word) => `{{${word.replace(/&nbsp;/g, ' ').replace(/\u00a0/g, ' ')}}}`);
+        // Clean &nbsp; and HTML entities inside {{...}} markers so word bank/answers use plain characters
+        const cleanedHtml = newHtml.replace(/\{\{(.+?)\}\}/g, (match, word) => `{{${decodeHtmlEntities(word)}}}`);
         onChange(cleanedHtml);
     }, [onChange]);
 
@@ -64,7 +72,7 @@ function RichTextInput({ value, onChange, disabled, placeholder, minHeight = '10
             )}
             <div
                 style={{ background: disabled ? '#f8fafc' : '#fff', borderRadius: '8px', opacity: disabled ? 0.7 : 1 }}
-                className="grammar-rich-text-input"
+                className={`grammar-rich-text-input ${wrapperClassName}`}
             >
                 <ReactQuill
                     ref={quillRef}
@@ -158,7 +166,7 @@ function renderFillInBlankText(text) {
     if (/<[a-zA-Z][^>]*>/.test(text)) {
         // Replace {{word}} in the HTML with a placeholder, then dangerouslySetInnerHTML
         const processed = text.replace(/\{\{(.+?)\}\}/g, (_, word) => {
-            const cleanWord = word.replace(/&nbsp;/g, ' ');
+            const cleanWord = decodeHtmlEntities(word);
             return `<span style="display:inline-flex;align-items:center;gap:3px;background:#eef2ff;border:1.5px dashed #818cf8;border-radius:5px;padding:0px 7px;color:#4f46e5;font-weight:700;font-size:0.85em;white-space:nowrap;line-height:1.6;margin:0 2px;vertical-align:middle;">✎ ${cleanWord}</span>`;
         });
         return <span dangerouslySetInnerHTML={{ __html: processed.replace(/&nbsp;/g, ' ') }} />;
@@ -185,12 +193,12 @@ function renderFillInBlankText(text) {
     ));
 }
 
-function CustomDropdown({ value, options, onChange, placeholder = "Chọn...", disabled = false }) {
+function CustomDropdown({ value, options, onChange, placeholder = "Chọn...", disabled = false, className = "" }) {
     const [isOpen, setIsOpen] = useState(false);
     const selectedOption = options.find(o => o.value === value);
 
     return (
-        <div className="custom-dropdown-container">
+        <div className={`custom-dropdown-container ${className}`}>
             <div
                 className={`custom-dropdown-header ${isOpen ? 'open' : ''} ${disabled ? 'disabled' : ''}`}
                 onClick={() => !disabled && setIsOpen(!isOpen)}
@@ -419,7 +427,7 @@ function parseFillBlanks(text) {
     const regex = /\{\{(.+?)\}\}/g;
     const blanks = [];
     let m;
-    while ((m = regex.exec(text)) !== null) { blanks.push(m[1].replace(/&nbsp;/g, ' ').replace(/\u00a0/g, ' ')); }
+    while ((m = regex.exec(text)) !== null) { blanks.push(decodeHtmlEntities(m[1])); }
     return blanks;
 }
 
@@ -456,6 +464,7 @@ function GrammarFillInBlankEditor({ variation, vIdx, isReadOnly, updateVariation
                     placeholder='Ví dụ: She is a talented doctor at the local hospital.'
                     isFillInBlank={true}
                     minHeight='80px'
+                    wrapperClassName={vIdx === 0 ? `required-field${text?.replace(/<[^>]*>?/gm, '').trim() ? ' filled' : ''}` : ''}
                 />
             </div>
 
@@ -507,7 +516,7 @@ function GrammarFillInBlankEditor({ variation, vIdx, isReadOnly, updateVariation
                 <div style={{ background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '14px 16px', marginTop: '8px' }}>
                     <div style={{ fontSize: '0.8rem', color: '#475569' }}>
                         <div style={{ marginBottom: '8px' }}>
-                            <div style={{ marginBottom: '4px', fontWeight: 600 }}>Đáp án:</div>
+                            <div style={{ marginBottom: '4px', fontWeight: 600 }}>Đáp án{hideDistractors && <span style={{ color: '#ef4444' }}> gợi ý</span>}:</div>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
                                 {blanks.map((b, i) => <span key={i} style={{ background: '#d1fae5', color: '#065f46', padding: '2px 8px', borderRadius: '6px', fontWeight: 700, whiteSpace: 'nowrap', display: 'inline-block' }}>({i + 1}) {b}</span>)}
                             </div>
@@ -531,6 +540,7 @@ export default function TeacherGrammarEditorPage() {
     const { id } = useParams();
     const { user } = useAuth();
     const location = useLocation();
+    const navigate = useNavigate();
     const isAdminContext = location.pathname.startsWith('/admin/');
     const isSystemGrammar = location.pathname.includes('/system-grammar/');
     const backLink = isAdminContext
@@ -551,8 +561,12 @@ export default function TeacherGrammarEditorPage() {
     const [isSaving, setIsSaving] = useState(false);
     const [isGeneratingAI, setIsGeneratingAI] = useState(false);
     const [isGeneratingSingleAI, setIsGeneratingSingleAI] = useState(false);
+    const [isGeneratingExplanation, setIsGeneratingExplanation] = useState(false);
     const [questionToDelete, setQuestionToDelete] = useState(null);
     const [aiRefreshKey, setAiRefreshKey] = useState(0);
+    const pendingImageDeletionsRef = useRef([]);
+    const newlyUploadedImagesRef = useRef([]);
+    const originalOptionTextsRef = useRef({});
 
     // Document import state
     const [showImportModal, setShowImportModal] = useState(false);
@@ -661,7 +675,8 @@ export default function TeacherGrammarEditorPage() {
             if (!isAdminContext) {
                 const isOwner = exData?.teacherId && exData.teacherId === user?.uid;
                 const isCollaborator = exData?.collaboratorIds?.includes(user?.uid) || false;
-                setIsReadOnly(!(isOwner || isCollaborator));
+                const collabRole = (exData?.collaboratorRoles || {})[user?.uid] || 'editor';
+                setIsReadOnly(!(isOwner || (isCollaborator && collabRole === 'editor')));
             } else {
                 setIsReadOnly(false);
             }
@@ -702,15 +717,41 @@ export default function TeacherGrammarEditorPage() {
         setOriginalAudioUrl('');
         setIsEditing(false);
         setActiveVariationTab(0);
+        pendingImageDeletionsRef.current = [];
+        newlyUploadedImagesRef.current = [];
         setFormOpen(true);
     }
 
     function openEditForm(q) {
-        setCurrentQuestion(JSON.parse(JSON.stringify(q))); // Deep copy
+        const deepCopy = JSON.parse(JSON.stringify(q)); // Deep copy
+        // Ensure there are always 5 variations (old questions may have fewer)
+        const variations = deepCopy.variations || [];
+        while (variations.length < 5) {
+            variations.push(getInitialVariation(deepCopy.type || 'multiple_choice'));
+        }
+        deepCopy.variations = variations;
+        setCurrentQuestion(deepCopy);
         setOriginalAudioUrl(q.contextAudioUrl || '');
         setIsEditing(true);
         setActiveVariationTab(0);
+        pendingImageDeletionsRef.current = [];
+        newlyUploadedImagesRef.current = [];
         setFormOpen(true);
+    }
+
+    function handleCloseForm() {
+        // Clean up images that were uploaded during this session but never saved
+        for (const url of newlyUploadedImagesRef.current) {
+            const isStillUsed = currentQuestion.variations?.some(v =>
+                v.options?.some(opt => opt === url)
+            );
+            if (!isStillUsed) {
+                deleteOptionImage(url).catch(console.error);
+            }
+        }
+        newlyUploadedImagesRef.current = [];
+        pendingImageDeletionsRef.current = [];
+        setFormOpen(false);
     }
 
     async function handleSubmit(e) {
@@ -730,6 +771,12 @@ export default function TeacherGrammarEditorPage() {
                 exerciseId: id,
                 ...(!isEditing && { teacherId: user.uid })
             });
+            // Delete images that were scheduled for deletion during editing
+            for (const url of pendingImageDeletionsRef.current) {
+                deleteOptionImage(url).catch(console.error);
+            }
+            pendingImageDeletionsRef.current = [];
+            newlyUploadedImagesRef.current = [];
             setFormOpen(false);
             setAlertMessage({ type: 'success', text: isEditing ? "Cập nhật câu hỏi thành công!" : "Tạo câu hỏi mới thành công!" });
             loadData();
@@ -879,18 +926,26 @@ export default function TeacherGrammarEditorPage() {
             const resultVars = await generateGrammarVariations(originalV1, currentQuestion.purpose, currentQuestion.type, settings);
 
             if (resultVars && resultVars.improved_original && resultVars.variations && resultVars.variations.length >= 4) {
-                const updatedVariations = [...currentQuestion.variations];
-                // Variation 0 is the improved version
-                updatedVariations[0] = { ...originalV1, ...resultVars.improved_original };
-                // Variation 1 to 4 are the newly generated ones
-                updatedVariations[1] = { ...originalV1, ...resultVars.variations[0] };
-                updatedVariations[2] = { ...originalV1, ...resultVars.variations[1] };
-                updatedVariations[3] = { ...originalV1, ...resultVars.variations[2] };
-                updatedVariations[4] = { ...originalV1, ...resultVars.variations[3] };
-
-                setCurrentQuestion({ ...currentQuestion, variations: updatedVariations });
+                setCurrentQuestion(prev => {
+                    const updatedVariations = [...prev.variations];
+                    // Variation 0 is the improved version
+                    updatedVariations[0] = { ...prev.variations[0], ...resultVars.improved_original };
+                    // Variation 1 to 4 are the newly generated ones
+                    updatedVariations[1] = { ...prev.variations[0], ...resultVars.variations[0] };
+                    updatedVariations[2] = { ...prev.variations[0], ...resultVars.variations[1] };
+                    updatedVariations[3] = { ...prev.variations[0], ...resultVars.variations[2] };
+                    updatedVariations[4] = { ...prev.variations[0], ...resultVars.variations[3] };
+                    return { ...prev, variations: updatedVariations };
+                });
                 setAiRefreshKey(prev => prev + 1);
-                setAlertMessage({ type: 'success', text: "AI đã sửa lỗi câu gốc và tạo thành công thêm 4 variations!" });
+                // Check if V1 had image options — remind teacher to generate images
+                const v1HasImages = currentQuestion.type === 'multiple_choice' &&
+                    (currentQuestion.variations?.[0]?.options || []).some(opt => isImageOption(opt));
+                if (v1HasImages) {
+                    setAlertMessage({ type: 'success', text: "AI đã tạo đáp án dạng text. Hãy bấm ✨ bên cạnh mỗi đáp án để tạo ảnh tương ứng." });
+                } else {
+                    setAlertMessage({ type: 'success', text: "AI đã sửa lỗi câu gốc và tạo thành công thêm 4 variations!" });
+                }
             } else {
                 setAlertMessage({ type: 'error', text: "AI không trả về đủ variations hợp lệ." });
             }
@@ -922,9 +977,11 @@ export default function TeacherGrammarEditorPage() {
             const resultVar = await generateSingleGrammarVariation(originalV1, currentQuestion.purpose, currentQuestion.type, settings);
 
             if (resultVar && resultVar.text) {
-                const updatedVariations = [...currentQuestion.variations];
-                updatedVariations[idx] = { ...originalV1, ...resultVar };
-                setCurrentQuestion({ ...currentQuestion, variations: updatedVariations });
+                setCurrentQuestion(prev => {
+                    const updatedVariations = [...prev.variations];
+                    updatedVariations[idx] = { ...prev.variations[0], ...resultVar };
+                    return { ...prev, variations: updatedVariations };
+                });
                 setAiRefreshKey(prev => prev + 1);
                 setAlertMessage({ type: 'success', text: `Tạo lại Variation ${idx + 1} thành công!` });
             } else {
@@ -934,6 +991,32 @@ export default function TeacherGrammarEditorPage() {
             setAlertMessage({ type: 'error', text: "Lỗi khi gọi AI: " + error.message });
         }
         setIsGeneratingSingleAI(false);
+    }
+
+    async function handleGenerateExplanation(vIdx) {
+        const targetVariation = currentQuestion.variations[vIdx];
+        if (!targetVariation?.text) {
+            setAlertMessage({ type: 'error', text: 'Vui lòng nhập nội dung câu hỏi trước khi tạo giải thích.' });
+            return;
+        }
+        setIsGeneratingExplanation(true);
+        try {
+            const v1Data = currentQuestion.variations[0];
+            const explanation = await generateVariationExplanation(v1Data, targetVariation, currentQuestion.purpose, currentQuestion.type);
+            if (explanation) {
+                setCurrentQuestion(prev => {
+                    const newVars = [...prev.variations];
+                    newVars[vIdx] = { ...newVars[vIdx], explanation };
+                    return { ...prev, variations: newVars };
+                });
+                setAlertMessage({ type: 'success', text: `Đã tạo giải thích cho Variation ${vIdx + 1}!` });
+            } else {
+                setAlertMessage({ type: 'error', text: 'AI không trả về giải thích hợp lệ.' });
+            }
+        } catch (error) {
+            setAlertMessage({ type: 'error', text: 'Lỗi tạo giải thích: ' + error.message });
+        }
+        setIsGeneratingExplanation(false);
     }
 
     function updateVariation(index, field, value) {
@@ -950,6 +1033,31 @@ export default function TeacherGrammarEditorPage() {
             const newOptions = [...(newVars[varIndex].options || [])];
             newOptions[optIndex] = value;
             newVars[varIndex] = { ...newVars[varIndex], options: newOptions };
+            return { ...prev, variations: newVars };
+        });
+    }
+
+    function addOption(varIndex) {
+        setCurrentQuestion(prev => {
+            const newVars = [...prev.variations];
+            const newOptions = [...(newVars[varIndex].options || [])];
+            newOptions.push('');
+            newVars[varIndex] = { ...newVars[varIndex], options: newOptions };
+            return { ...prev, variations: newVars };
+        });
+    }
+
+    function removeOption(varIndex, optIndex) {
+        setCurrentQuestion(prev => {
+            const newVars = [...prev.variations];
+            const newOptions = [...(newVars[varIndex].options || [])];
+            if (newOptions.length <= 2) return prev; // Minimum 2 options
+            newOptions.splice(optIndex, 1);
+            // Adjust correctAnswer if needed
+            let correctAnswer = newVars[varIndex].correctAnswer || 0;
+            if (optIndex === correctAnswer) correctAnswer = 0;
+            else if (optIndex < correctAnswer) correctAnswer--;
+            newVars[varIndex] = { ...newVars[varIndex], options: newOptions, correctAnswer };
             return { ...prev, variations: newVars };
         });
     }
@@ -1091,9 +1199,9 @@ export default function TeacherGrammarEditorPage() {
 
     return (
         <div className="admin-page teacher-grammar-editor-page relative pb-20">
-            <Link to={backLink} className="admin-back-link" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#64748b', textDecoration: 'none', marginBottom: '16px', fontSize: '0.9rem', width: 'fit-content' }}>
+            <button onClick={() => navigate(-1)} className="admin-back-link" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#64748b', textDecoration: 'none', marginBottom: '16px', fontSize: '0.9rem', width: 'fit-content', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                 <ArrowLeft size={16} /> Quay lại danh sách
-            </Link>
+            </button>
 
             <div className="admin-page-header">
                 <div>
@@ -1101,7 +1209,7 @@ export default function TeacherGrammarEditorPage() {
                         {exercise?.name}
                         {isReadOnly && !isAdminContext && <span style={{ fontSize: '0.8rem', background: '#eff6ff', color: '#3b82f6', padding: '4px 8px', borderRadius: '4px', fontWeight: 600, border: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', gap: '4px' }}><Sparkles size={14} /> {exercise?.teacherId ? 'Chỉ xem' : 'Chính thức'}</span>}
                     </h1>
-                    <p style={{ color: '#64748b', fontSize: '0.9rem', marginTop: '4px' }}>{exercise?.description}</p>
+                    <p className="admin-page-subtitle">{exercise?.description}</p>
                 </div>
                 {!isReadOnly && (
                     <div className="admin-header-actions">
@@ -1180,6 +1288,15 @@ export default function TeacherGrammarEditorPage() {
                                                                             const skillMap = { listening: { l: '🎧 Listening', c: '#7c3aed' }, speaking: { l: '🗣️ Speaking', c: '#2563eb' }, reading: { l: '📖 Reading', c: '#0f766e' }, writing: { l: '✍️ Writing', c: '#b45309' }, grammar: { l: '📝 Grammar', c: '#059669' }, vocabulary: { l: '📚 Vocabulary', c: '#dc2626' } };
                                                                             const sk = skillMap[q.targetSkill];
                                                                             return sk ? <span style={{ fontSize: '0.7rem', padding: '2px 6px', background: '#f0fdfa', color: sk.c, borderRadius: '4px', fontWeight: 600 }}>{sk.l}</span> : null;
+                                                                        })()}
+                                                                        {(() => {
+                                                                            const filledCount = (q.variations || []).filter(v => v && ((v.text && v.text.replace(/<[^>]*>/g, '').trim().length > 0) || v.options?.some(o => o && o.toString().trim()) || v.pairs?.some(p => p.left?.trim() || p.right?.trim()) || v.items?.some(i => typeof i === 'string' ? i.trim() : i?.text?.trim()))).length;
+                                                                            const totalCount = (q.variations || []).length;
+                                                                            return totalCount > 0 ? (
+                                                                                <span style={{ fontSize: '0.65rem', padding: '2px 6px', background: filledCount >= 2 ? '#ecfdf5' : '#fff7ed', color: filledCount >= 2 ? '#059669' : '#d97706', borderRadius: '4px', fontWeight: 600, border: `1px solid ${filledCount >= 2 ? '#a7f3d0' : '#fed7aa'}` }}>
+                                                                                    {filledCount}/{totalCount} V
+                                                                                </span>
+                                                                            ) : null;
                                                                         })()}
                                                                     </div>
                                                                 </td>
@@ -1271,7 +1388,7 @@ export default function TeacherGrammarEditorPage() {
                 <div className="teacher-modal-overlay" style={{ padding: '20px' }}>
                     <div className="teacher-modal wide" style={{ width: '100%', maxWidth: '900px', height: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                         <div style={{ position: 'sticky', top: '0px', zIndex: 100, display: 'flex', justifyContent: 'flex-end', height: 0, overflow: 'visible', pointerEvents: 'none' }}>
-                            <button type="button" className="teacher-modal-close" onClick={() => setFormOpen(false)} style={{ pointerEvents: 'auto', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, background: 'rgba(241, 245, 249, 0.95)', backdropFilter: 'blur(4px)', border: 'none', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                            <button type="button" className="teacher-modal-close" onClick={() => handleCloseForm()} style={{ pointerEvents: 'auto', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, background: 'rgba(241, 245, 249, 0.95)', backdropFilter: 'blur(4px)', border: 'none', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                                 <X size={20} />
                             </button>
                         </div>
@@ -1281,7 +1398,7 @@ export default function TeacherGrammarEditorPage() {
 
                         <div className="teacher-modal-body" style={{ flex: 1, overflowY: 'auto', padding: '0 20px', scrollbarGutter: 'stable' }}>
                             {/* General Settings */}
-                            <div className="modal-grid-config" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: '16px', marginBottom: '24px' }}>
+                            <div className="modal-grid-config" style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr 1.7fr', gap: '16px', marginBottom: '24px' }}>
                                 <div className="admin-form-group">
                                     <label>Loại câu hỏi</label>
                                     <CustomDropdown
@@ -1310,6 +1427,7 @@ export default function TeacherGrammarEditorPage() {
                                     <CustomDropdown
                                         value={currentQuestion.targetSkill || ''}
                                         disabled={isReadOnly}
+                                        className={`required-dropdown${currentQuestion.targetSkill ? ' filled' : ''}`}
                                         options={[
                                             { value: '', label: '— Chọn —' },
                                             { value: 'listening', label: '🎧 Listening' },
@@ -1323,24 +1441,47 @@ export default function TeacherGrammarEditorPage() {
                                     />
                                 </div>
                                 <div className="admin-form-group">
-                                    <label>Mục đích kiểm tra chính của câu hỏi <span style={{ color: '#ef4444', fontWeight: 700 }}>*</span></label>
-                                    <input
-                                        type="text"
-                                        className="admin-form-input"
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>Mục đích kiểm tra chính của câu hỏi <span style={{ color: '#ef4444', fontWeight: 700 }}>*</span> <span title="AI sử dụng mục đích này để tạo variations chính xác và phù hợp" style={{ cursor: 'help', color: '#94a3b8', fontSize: '0.8rem', fontWeight: 700, width: '16px', height: '16px', borderRadius: '50%', border: '1.5px solid #cbd5e1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>i</span></label>
+                                    <textarea
+                                        className={`admin-form-input required-field${currentQuestion.purpose ? ' filled' : ''}`}
                                         required
                                         placeholder="VD: Kiểm tra khả năng phân biệt quá khứ đơn và quá khứ hoàn thành"
                                         value={currentQuestion.purpose}
                                         onChange={e => setCurrentQuestion({ ...currentQuestion, purpose: e.target.value })}
                                         disabled={isReadOnly}
+                                        rows={1}
+                                        style={{ resize: 'none', overflow: 'hidden', minHeight: '40px', lineHeight: '1.5' }}
+                                        onInput={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
                                     />
-                                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', lineHeight: 1.4 }}>⚡ Bắt buộc nhập — AI sử dụng mục đích này để tạo variations chính xác và phù hợp.</div>
                                 </div>
                             </div>
+                            {currentQuestion.type === 'fill_in_blank_typing' && (
+                                <div style={{
+                                    display: 'flex', alignItems: 'flex-start', gap: '10px',
+                                    padding: '10px 14px', marginTop: '-16px', marginBottom: '16px',
+                                    background: '#fffbeb', border: '1px solid #fde68a',
+                                    borderRadius: '10px', fontSize: '0.82rem', color: '#92400e',
+                                    lineHeight: 1.5
+                                }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', flexShrink: 0, fontWeight: 600, marginTop: '1px' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={!!currentQuestion.useAIGrading}
+                                            onChange={e => setCurrentQuestion(prev => ({ ...prev, useAIGrading: e.target.checked }))}
+                                            disabled={isReadOnly}
+                                            style={{ accentColor: '#d97706', width: '15px', height: '15px', cursor: 'pointer' }}
+                                        />
+                                        <span>🤖 Nhờ AI kiểm tra</span>
+                                    </label>
+                                    <span style={{ color: '#78350f', opacity: 0.8 }}>— Đáp án bạn cung cấp là <strong>đáp án gợi ý</strong>. Nếu câu trả lời của học viên gần nghĩa và vẫn đúng ngữ cảnh, AI sẽ chấp nhận là đúng. Tuy nhiên, học viên sẽ phải chờ AI chấm điểm.</span>
+                                </div>
+                            )}
 
+                            <hr className="form-section-divider" />
                             {/* Vocabulary topic selector */}
                             {!isReadOnly && (
-                                <div className="admin-form-group" style={{ marginBottom: '24px' }}>
-                                    <label>📚 Chủ đề từ vựng (tùy chọn)</label>
+                                <div className="admin-form-group optional-field" style={{ marginBottom: '24px' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>📚 Chủ đề từ vựng (tùy chọn) <span title="AI sẽ ưu tiên sử dụng từ vựng trong chủ đề này để tạo câu hỏi" style={{ cursor: 'help', color: '#94a3b8', fontSize: '0.8rem', fontWeight: 700, width: '16px', height: '16px', borderRadius: '50%', border: '1.5px solid #cbd5e1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>i</span></label>
                                     <div style={{ position: 'relative' }}>
                                         <input
                                             type="text"
@@ -1413,31 +1554,148 @@ export default function TeacherGrammarEditorPage() {
                                             {loadingVocabWords ? '⏳ Đang tải từ vựng...' : `✅ ${vocabWords.length} từ vựng sẽ được AI ưu tiên sử dụng`}
                                         </div>
                                     )}
+
                                 </div>
                             )}
 
                             {['essay', 'audio_recording'].includes(currentQuestion.type) && (
-                                <div className="admin-form-group animate-slide-up" style={{ animationDelay: '0.1s', marginBottom: '24px' }}>
-                                    <label className="admin-form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                        <Award size={18} className="text-primary" /> Yêu cầu đặc biệt cho AI khi chấm (Tùy chọn)
-                                    </label>
-                                    <p className="admin-form-hint" style={{ marginTop: '-4px', marginBottom: '8px' }}>Hướng dẫn AI chấm theo tiêu chí riêng của bạn (VD: Phải dùng ít nhất 3 từ vựng chủ đề môi trường, phát âm rõ âm cuối...)</p>
-                                    {!isReadOnly && (
-                                        <div style={{ marginBottom: '8px' }}>
-                                            <SavedPromptPicker
-                                                uid={user?.uid}
-                                                onSelect={(content) => setCurrentQuestion(prev => ({ ...prev, specialRequirement: content }))}
+                                <div style={{
+                                    border: '1.5px solid #c7d2fe', borderRadius: '14px',
+                                    padding: '16px', background: '#fafbff',
+                                    marginTop: '4px', marginBottom: '24px'
+                                }}>
+                                    <div style={{
+                                        display: 'flex', alignItems: 'center', gap: '8px',
+                                        marginBottom: '14px', paddingBottom: '10px',
+                                        borderBottom: '1px solid #e0e7ff'
+                                    }}>
+                                        <span style={{ fontSize: '1.15rem' }}>🧑‍🏫</span>
+                                        <span style={{ fontWeight: 700, fontSize: '0.92rem', color: '#3730a3' }}>
+                                            Thiết lập chấm điểm AI
+                                        </span>
+                                        <span style={{
+                                            fontSize: '0.7rem', padding: '2px 8px',
+                                            background: '#e0e7ff', color: '#4f46e5',
+                                            borderRadius: '6px', fontWeight: 600
+                                        }}>
+                                            Tùy chọn
+                                        </span>
+                                    </div>
+                                    {/* Section 1: Default criteria toggle */}
+                                    <div className="admin-form-group optional-field" style={{ marginBottom: '0' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: isReadOnly ? 'default' : 'pointer', userSelect: 'none' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={currentQuestion.useDefaultGradingCriteria !== false}
+                                                disabled={isReadOnly}
+                                                onChange={e => setCurrentQuestion(prev => ({ ...prev, useDefaultGradingCriteria: e.target.checked, ...(e.target.checked ? { promptId: '', promptTitle: '' } : {}) }))}
+                                                style={{ accentColor: '#6366f1', width: '16px', height: '16px', cursor: isReadOnly ? 'default' : 'pointer' }}
                                             />
-                                        </div>
+                                            <span style={{ fontWeight: 600, fontSize: '0.88rem', color: '#334155' }}>
+                                                📏 Sử dụng tiêu chí chấm mặc định của hệ thống
+                                            </span>
+                                            <span title={currentQuestion.useDefaultGradingCriteria !== false ? 'AI sẽ áp dụng tiêu chí chấm mặc định bên dưới, kết hợp với prompt/yêu cầu đặc biệt (nếu có).' : 'AI sẽ chỉ chấm theo prompt/yêu cầu đặc biệt của bạn. Không áp dụng tiêu chí mặc định.'}
+                                                style={{ cursor: 'help', color: '#94a3b8', fontSize: '0.8rem', fontWeight: 700, width: '16px', height: '16px', borderRadius: '50%', border: '1.5px solid #cbd5e1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>i</span>
+                                        </label>
+                                        {currentQuestion.useDefaultGradingCriteria !== false && (
+                                            <div style={{
+                                                marginTop: '8px', padding: '12px 16px',
+                                                background: '#fff', border: '1px solid #e2e8f0',
+                                                borderRadius: '10px', fontSize: '0.8rem', color: '#475569',
+                                                lineHeight: 1.6
+                                            }}>
+                                                <div style={{ fontWeight: 700, color: '#334155', marginBottom: '6px', fontSize: '0.82rem' }}>
+                                                    📋 Tiêu chí chấm mặc định:
+                                                </div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                    <div>• Thiếu thông tin quan trọng → tối đa <strong>55-60%</strong> điểm tối đa</div>
+                                                    <div>• Chỉ đề cập một phần nhỏ → tối đa <strong>30-40%</strong> điểm tối đa</div>
+                                                    <div>• Bổ sung thêm chi tiết liên quan → <strong>thưởng thêm điểm</strong></div>
+                                                </div>
+                                                {currentQuestion.type === 'audio_recording' && (
+                                                    <>
+                                                        <div style={{ fontWeight: 700, color: '#334155', marginTop: '8px', marginBottom: '4px', fontSize: '0.82rem' }}>
+                                                            📊 Thang điểm tham khảo:
+                                                        </div>
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                            <div>• <strong>90-100%</strong>: Xuất sắc — đúng, đầy đủ, phát âm rõ</div>
+                                                            <div>• <strong>70-80%</strong>: Tốt — đúng, khá đầy đủ, lỗi nhỏ</div>
+                                                            <div>• <strong>50-60%</strong>: Trung bình — hiểu được, thiếu hoặc nhiều lỗi</div>
+                                                            <div>• <strong>30-40%</strong>: Yếu — thiếu nhiều, khó hiểu</div>
+                                                            <div>• <strong>0-20%</strong>: Rất yếu — không liên quan</div>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {currentQuestion.useDefaultGradingCriteria === false && (
+                                    <>
+                                    <hr style={{ border: 'none', borderTop: '1px solid #e0e7ff', margin: '12px 0' }} />
+
+                                    {/* Prompt picker — only when default criteria is OFF */}
+                                    <div className="admin-form-group optional-field" style={{ marginBottom: '8px' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>📝 Chọn/nhập tiêu chí chấm điểm cá nhân từ prompt bank của bạn (nếu có) <span title="Hướng dẫn AI chấm theo tiêu chí riêng của bạn." style={{ cursor: 'help', color: '#94a3b8', fontSize: '0.8rem', fontWeight: 700, width: '16px', height: '16px', borderRadius: '50%', border: '1.5px solid #cbd5e1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>i</span></label>
+                                        {isReadOnly ? (
+                                            (currentQuestion.promptId || currentQuestion.specialRequirement) && (
+                                                <div style={{
+                                                    display: 'flex', alignItems: 'center', gap: '8px',
+                                                    padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0',
+                                                    borderRadius: '10px', fontSize: '0.85rem', color: '#64748b', fontWeight: 500
+                                                }}>
+                                                    <span style={{ fontSize: '1rem' }}>🔒</span>
+                                                    <span>Đã thiết lập yêu cầu chấm bài bởi giáo viên chủ sở hữu</span>
+                                                </div>
+                                            )
+                                        ) : (
+                                            <>
+                                                {!currentQuestion.promptId && (
+                                                    <div style={{ marginBottom: '8px' }}>
+                                                        <SavedPromptPicker
+                                                            uid={user?.uid}
+                                                            onSelect={({ id, title }) => setCurrentQuestion(prev => ({
+                                                                ...prev,
+                                                                promptId: id,
+                                                                promptTitle: title
+                                                            }))}
+                                                        />
+                                                    </div>
+                                                )}
+                                                {currentQuestion.promptId && (
+                                                    <div style={{
+                                                        display: 'flex', alignItems: 'center', gap: '10px',
+                                                        padding: '10px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0',
+                                                        borderRadius: '10px', fontSize: '0.85rem', color: '#15803d', fontWeight: 600,
+                                                    }}>
+                                                        <span style={{ fontSize: '1rem' }}>📎</span>
+                                                        <span style={{ flex: 1 }}>Đang sử dụng prompt: "<strong>{currentQuestion.promptTitle || 'Prompt đã lưu'}</strong>"</span>
+                                                        <button type="button" onClick={() => setCurrentQuestion(prev => ({ ...prev, promptId: '', promptTitle: '' }))}
+                                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: '2px', display: 'flex', fontSize: '0.8rem', fontWeight: 700 }}
+                                                            title="Gỡ prompt đã liên kết">
+                                                            ✕ Gỡ
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                    </>
                                     )}
-                                    <textarea
-                                        className="admin-form-input"
-                                        placeholder="Ví dụ: Học viên cần sử dụng đúng thì quá khứ đơn và cấu trúc câu điều kiện loại 2..."
-                                        rows={3}
-                                        value={currentQuestion.specialRequirement || ''}
-                                        onChange={e => setCurrentQuestion({ ...currentQuestion, specialRequirement: e.target.value })}
-                                        disabled={isReadOnly}
-                                    />
+
+                                    {/* Special requirement textarea — always visible */}
+                                    {!isReadOnly && (
+                                    <div className="admin-form-group optional-field" style={{ marginBottom: 0, marginTop: '8px' }}>
+                                        <textarea
+                                            className="admin-form-input"
+                                            placeholder="Nhập yêu cầu bổ sung cho AI khi chấm (nếu có)..."
+                                            rows={3}
+                                            value={currentQuestion.specialRequirement || ''}
+                                            onChange={e => setCurrentQuestion({ ...currentQuestion, specialRequirement: e.target.value })}
+                                            style={{ resize: 'vertical' }}
+                                        />
+                                    </div>
+                                    )}
                                 </div>
                             )}
 
@@ -1525,6 +1783,19 @@ export default function TeacherGrammarEditorPage() {
                                                     Hỏi bằng TV
                                                 </label>
                                             )}
+                                            {!isReadOnly && currentQuestion.type === 'multiple_choice' &&
+                                                (currentQuestion.variations?.[0]?.options || []).some(opt => isImageOption(opt)) && (
+                                                <div style={{
+                                                    display: 'flex', alignItems: 'center', gap: '8px',
+                                                    padding: '10px 14px',
+                                                    background: '#dbeafe', border: '1px solid #93c5fd',
+                                                    borderRadius: '10px', fontSize: '0.82rem', color: '#1e40af',
+                                                    lineHeight: 1.5, width: '100%'
+                                                }}>
+                                                    <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>💡</span>
+                                                    <span>Đáp án có chứa <b>hình ảnh</b> — AI sẽ tạo đáp án dạng <b>text</b> cho các variations. Sau khi AI tạo xong, hãy bấm <b>✨</b> bên cạnh mỗi đáp án để tạo ảnh.</span>
+                                                </div>
+                                            )}
                                             {!isReadOnly && (activeVariationTab === 0 ? (
                                                 <button
                                                     type="button"
@@ -1551,7 +1822,7 @@ export default function TeacherGrammarEditorPage() {
                                         </div>
                                     </div>
                                     {activeVariationTab === 0 && (
-                                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '12px', lineHeight: 1.4 }}>⚡ Bắt buộc nhập — Đây là câu mẫu để AI bắt chước và tạo ra các variations tương tự.</div>
+                                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '12px', lineHeight: 1.4 }}>⚡ Đây là câu mẫu để AI bắt chước và tạo ra các variations tương tự.</div>
                                     )}
 
 
@@ -1566,6 +1837,7 @@ export default function TeacherGrammarEditorPage() {
                                                 disabled={isReadOnly}
                                                 placeholder="Nhập nội dung câu hỏi..."
                                                 minHeight='80px'
+                                                wrapperClassName={activeVariationTab === 0 ? `required-field${currentQuestion.variations[activeVariationTab].text?.replace(/<[^>]*>?/gm, '').trim() ? ' filled' : ''}` : ''}
                                             />
                                         </div>
                                     )}
@@ -1574,8 +1846,7 @@ export default function TeacherGrammarEditorPage() {
                                         <div style={{ marginTop: '16px' }}>
                                             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#475569', marginBottom: '8px' }}>Các đáp án (Chọn đáp án đúng)</label>
                                             <div className="options-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                                                {[0, 1, 2, 3].map(optIdx => {
-                                                    const optVal = currentQuestion.variations[activeVariationTab].options[optIdx] || '';
+                                                {(currentQuestion.variations[activeVariationTab].options || []).map((optVal, optIdx) => {
                                                     return (
                                                         <div key={optIdx} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                             <input
@@ -1590,6 +1861,10 @@ export default function TeacherGrammarEditorPage() {
                                                                 <ImageOptionUploader
                                                                     value={optVal}
                                                                     onChange={url => updateOption(activeVariationTab, optIdx, url)}
+                                                                    onScheduleDelete={url => pendingImageDeletionsRef.current.push(url)}
+                                                                    onTrackUpload={url => newlyUploadedImagesRef.current.push(url)}
+                                                                    onSaveOriginalText={text => { originalOptionTextsRef.current[`${activeVariationTab}-${optIdx}`] = text; }}
+                                                                    restoreValue={originalOptionTextsRef.current[`${activeVariationTab}-${optIdx}`] || ''}
                                                                     disabled={isReadOnly}
                                                                 />
                                                             ) : (
@@ -1605,14 +1880,36 @@ export default function TeacherGrammarEditorPage() {
                                                                     <ImageOptionUploader
                                                                         value={optVal}
                                                                         onChange={url => updateOption(activeVariationTab, optIdx, url)}
+                                                                        onScheduleDelete={url => pendingImageDeletionsRef.current.push(url)}
+                                                                        onTrackUpload={url => newlyUploadedImagesRef.current.push(url)}
+                                                                        onSaveOriginalText={text => { originalOptionTextsRef.current[`${activeVariationTab}-${optIdx}`] = text; }}
+                                                                        disabled={isReadOnly}
+                                                                    />
+                                                                    <AIImageGenerateButton
+                                                                        optionText={optVal}
+                                                                        onChange={url => updateOption(activeVariationTab, optIdx, url)}
+                                                                        currentValue={optVal}
+                                                                        onScheduleDelete={url => pendingImageDeletionsRef.current.push(url)}
+                                                                        onTrackUpload={url => newlyUploadedImagesRef.current.push(url)}
+                                                                        onSaveOriginalText={text => { originalOptionTextsRef.current[`${activeVariationTab}-${optIdx}`] = text; }}
                                                                         disabled={isReadOnly}
                                                                     />
                                                                 </>
+                                                            )}
+                                                            {!isReadOnly && (currentQuestion.variations[activeVariationTab].options || []).length > 2 && (
+                                                                <button type="button" onClick={() => removeOption(activeVariationTab, optIdx)} title="Xóa đáp án" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '4px', borderRadius: '4px', display: 'flex', alignItems: 'center', flexShrink: 0, opacity: 0.6 }} onMouseOver={e => e.currentTarget.style.opacity = 1} onMouseOut={e => e.currentTarget.style.opacity = 0.6}>
+                                                                    <X size={14} />
+                                                                </button>
                                                             )}
                                                         </div>
                                                     );
                                                 })}
                                             </div>
+                                            {!isReadOnly && (currentQuestion.variations[activeVariationTab].options || []).length < 6 && (
+                                                <button type="button" onClick={() => addOption(activeVariationTab)} style={{ marginTop: '8px', background: 'none', border: '1px dashed #cbd5e1', borderRadius: '8px', padding: '6px 12px', color: '#64748b', fontSize: '0.8rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                    <Plus size={14} /> Thêm đáp án
+                                                </button>
+                                            )}
                                         </div>
                                     )}
 
@@ -1638,6 +1935,7 @@ export default function TeacherGrammarEditorPage() {
                                             updateVariation={updateVariation}
                                             hideDistractors={true}
                                         />
+
                                     )}
 
                                     {currentQuestion.type === 'matching' && (
@@ -1926,13 +2224,29 @@ export default function TeacherGrammarEditorPage() {
                                     )}
 
                                     <div className="admin-form-group" style={{ marginTop: '16px' }}>
-                                        <label>Giải thích / Lời khuyên (Hiển thị khi học sinh làm xong)</label>
-                                        <textarea
-                                            className="admin-form-input admin-form-textarea"
-                                            placeholder="Giải thích vì sao lại chọn đáp án này..."
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                            <label style={{ margin: 0 }}>Giải thích / Lời khuyên (Hiển thị khi học sinh làm xong)</label>
+                                            {!isReadOnly && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleGenerateExplanation(activeVariationTab)}
+                                                    disabled={isGeneratingExplanation}
+                                                    className="admin-btn admin-btn-outline"
+                                                    style={{ padding: '2px 10px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                                    title="AI tạo giải thích bắt chước style Variation 1"
+                                                >
+                                                    {isGeneratingExplanation ? <RefreshCw size={12} className="animate-spin" /> : <Wand2 size={12} />}
+                                                    <span>AI giải thích</span>
+                                                </button>
+                                            )}
+                                        </div>
+                                        <RichTextInput
+                                            key={`expl-${currentQuestion.type}-${activeVariationTab}-${aiRefreshKey}`}
                                             value={currentQuestion.variations[activeVariationTab].explanation}
-                                            onChange={e => updateVariation(activeVariationTab, 'explanation', e.target.value)}
+                                            onChange={val => updateVariation(activeVariationTab, 'explanation', val)}
                                             disabled={isReadOnly}
+                                            placeholder="Giải thích vì sao lại chọn đáp án này..."
+                                            minHeight="60px"
                                         />
                                     </div>
 
@@ -1942,7 +2256,7 @@ export default function TeacherGrammarEditorPage() {
                         </div>
 
                         <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px', marginTop: '16px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                            <button type="button" className="admin-btn admin-btn-secondary" onClick={() => setFormOpen(false)} disabled={isSaving}>Đóng</button>
+                            <button type="button" className="admin-btn admin-btn-secondary" onClick={() => handleCloseForm()} disabled={isSaving}>Đóng</button>
                             {!isReadOnly && (
                                 <button type="button" className="admin-btn admin-btn-primary" onClick={handleSubmit} disabled={isSaving}>
                                     <Save size={16} /> {isSaving ? 'Đang lưu...' : (isEditing ? 'Cập nhật Câu hỏi' : 'Lưu Câu hỏi')}
@@ -1977,7 +2291,7 @@ export default function TeacherGrammarEditorPage() {
             {/* --- DOCUMENT IMPORT MODAL --- */}
             {showImportModal && (
                 <div className="teacher-modal-overlay" style={{ zIndex: 1100 }}>
-                    <div className="teacher-modal" style={{ maxWidth: showImportPreview ? '800px' : '600px', maxHeight: '90vh', overflow: 'auto' }}>
+                <div className="teacher-modal" style={{ maxWidth: showImportPreview ? '800px' : '600px', maxHeight: '90vh', overflow: showImportPreview ? 'hidden' : 'auto', display: showImportPreview ? 'flex' : 'block', flexDirection: 'column' }}>
                         {!showImportPreview ? (
                             /* === STEP 1: Input === */
                             <>
@@ -2124,7 +2438,7 @@ export default function TeacherGrammarEditorPage() {
                                 </div>
 
                                 {/* Question list */}
-                                <div style={{ maxHeight: '50vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
+                                <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
                                     {importedQuestions.map((q, idx) => {
                                         const v = q.variations?.[0];
                                         return (
@@ -2158,25 +2472,7 @@ export default function TeacherGrammarEditorPage() {
                                                                 value={q.targetSkill || 'grammar'}
                                                                 onChange={val => setImportedQuestions(prev => prev.map((pq, pi) => pi === idx ? { ...pq, targetSkill: val } : pq))}
                                                             />
-                                                            {/* Editable Points Input */}
-                                                            <div onClick={e => e.stopPropagation()} style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', fontSize: '0.72rem', fontWeight: 600, color: '#d97706', background: '#fffbeb', padding: '2px 8px', borderRadius: '6px', border: '1px solid #fde68a' }}>
-                                                                <input
-                                                                    type="number"
-                                                                    min={1}
-                                                                    max={100}
-                                                                    value={q.points || 1}
-                                                                    onChange={e => {
-                                                                        const val = parseInt(e.target.value) || 1;
-                                                                        setImportedQuestions(prev => prev.map((pq, pi) => pi === idx ? { ...pq, points: val } : pq));
-                                                                    }}
-                                                                    style={{
-                                                                        width: '32px', border: 'none', background: 'transparent', color: '#d97706',
-                                                                        fontWeight: 700, fontSize: '0.72rem', textAlign: 'center', outline: 'none',
-                                                                        padding: 0, margin: 0
-                                                                    }}
-                                                                />
-                                                                <span>đ</span>
-                                                            </div>
+
                                                         </div>
                                                         <div style={{ fontSize: '0.85rem', color: '#1e293b', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                                                             {v?.text || '(Không có nội dung)'}
@@ -2233,7 +2529,7 @@ export default function TeacherGrammarEditorPage() {
                                 </div>
 
                                 {/* Actions */}
-                                <div className="admin-modal-actions" style={{ marginTop: '16px' }}>
+                                <div className="admin-modal-actions" style={{ marginTop: '16px', flexShrink: 0 }}>
                                     <button className="admin-btn admin-btn-secondary" onClick={() => setShowImportPreview(false)} disabled={isSavingImport}>
                                         ← Quay lại
                                     </button>

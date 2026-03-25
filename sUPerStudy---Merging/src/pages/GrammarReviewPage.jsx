@@ -4,9 +4,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { useAppSettings } from '../contexts/AppSettingsContext';
 import { getGrammarQuestionsByIds } from '../services/grammarService';
 import { getDueGrammarReviewIds, updateGrammarProgress } from '../services/grammarSpacedRepetition';
-import { gradeGrammarSubmissionWithAI } from '../services/aiGrammarService';
+import { gradeGrammarSubmissionWithAI, gradeFillInBlankBlanksWithAI } from '../services/aiGrammarService';
 import { evaluateAudioAnswer } from '../services/aiService';
-import { ArrowLeft, CheckCircle, XCircle, BrainCircuit, PlayCircle, Award, Sparkles, BookOpen, Sun, Moon } from 'lucide-react';
+import { getPromptById } from '../services/promptService';
+import { ArrowLeft, CheckCircle, XCircle, BrainCircuit, PlayCircle, Award, Sparkles, BookOpen } from 'lucide-react';
 import { useScrollToContent } from '../hooks/useScrollToContent';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { OptionContent, isImageOption } from '../components/common/MCQImageOption';
@@ -15,11 +16,23 @@ import 'react-quill-new/dist/quill.snow.css';
 import './LearnPage.css'; // Reusing LearnPage styles for consistency
 import MarkdownText from '../components/common/MarkdownText';
 import { useAntiCopy } from '../hooks/useAntiCopy';
+import { normalizeForComparison } from '../utils/textNormalization';
+
+// Decode HTML entities (&#39; → ', &amp; → &, &nbsp; → space, etc.) and strip HTML tags
+const decodeHtmlEntities = (str) => {
+    if (!str) return '';
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = str;
+    return textarea.value
+        .replace(/<[^>]*>/g, '')   // strip HTML tags (e.g. <strong> from Quill)
+        .replace(/\u00a0/g, ' '); // non-breaking space → regular space
+};
 
 export default function GrammarReviewPage() {
     const { user } = useAuth();
     const { settings } = useAppSettings();
     const navigate = useNavigate();
+    const location = useLocation();
     useAntiCopy();
 
     const [questions, setQuestions] = useState([]);
@@ -27,23 +40,7 @@ export default function GrammarReviewPage() {
     const [progressMap, setProgressMap] = useState({});
     const [currentIndex, setCurrentIndex] = useState(0);
     const [loading, setLoading] = useState(true);
-    const [theme, setTheme] = useState(() => localStorage.getItem('appTheme') || 'light');
     const [fontSizeLevel, setFontSizeLevel] = useState(1); // 0: Small, 1: Medium, 2: Large
-
-    const toggleTheme = () => {
-        const streak = parseInt(localStorage.getItem('userStreak') || '0', 10);
-        const themes = ['light'];
-        if (streak >= 5) themes.push('dark');
-        if (streak >= 15) themes.push('silver');
-        if (streak >= 25) themes.push('gold');
-        if (streak >= 35) themes.push('diamond');
-        if (streak >= 50) themes.push('ruby');
-        const currentIdx = themes.indexOf(theme);
-        const next = themes[(currentIdx + 1) % themes.length];
-        setTheme(next);
-        document.documentElement.setAttribute('data-theme', next);
-        localStorage.setItem('appTheme', next);
-    };
 
     const [currentAnswer, setCurrentAnswer] = useState('');
     const [isChecking, setIsChecking] = useState(false);
@@ -168,15 +165,23 @@ export default function GrammarReviewPage() {
             });
             initialAnswer = cols;
         } else if (q.type === 'ordering') {
-            const shuffledItems = [...(variation.items || [])].sort(() => Math.random() - 0.5);
+            // Shuffle items deterministically based on question id
+            const fnvHash = (str) => {
+                let h = 0x811c9dc5;
+                for (let j = 0; j < str.length; j++) { h ^= str.charCodeAt(j); h = Math.imul(h, 0x01000193); }
+                return h >>> 0;
+            };
+            const shuffledItems = (variation.items || []).map((item, i) => ({ item, i }))
+                .sort((a, b) => fnvHash(a.item + '|' + a.i + '|' + q.id) - fnvHash(b.item + '|' + b.i + '|' + q.id))
+                .map(x => x.item);
             initialAnswer = { pool: shuffledItems, answer: [] };
         } else if ((q.type === 'fill_in_blank' || q.type === 'fill_in_blanks') && /\{\{.+?\}\}/.test(variation.text || '')) {
             initialAnswer = {};
             const blankRegex = /\{\{(.+?)\}\}/g;
             const correctWords = [];
             let bm;
-            while ((bm = blankRegex.exec(variation.text || '')) !== null) { correctWords.push(bm[1].replace(/&nbsp;/g, ' ')); }
-            const distractors = (variation.distractors || []).map(d => d.replace(/&nbsp;/g, ' '));
+            while ((bm = blankRegex.exec(variation.text || '')) !== null) { correctWords.push(decodeHtmlEntities(bm[1])); }
+            const distractors = (variation.distractors || []).map(d => decodeHtmlEntities(d));
             const shuffled = [...correctWords, ...distractors].sort(() => Math.random() - 0.5);
             extraData.wordBank = shuffled;
             extraData.correctWords = correctWords;
@@ -185,7 +190,7 @@ export default function GrammarReviewPage() {
             const blankRegex = /\{\{(.+?)\}\}/g;
             const correctWords = [];
             let bm;
-            while ((bm = blankRegex.exec(variation.text || '')) !== null) { correctWords.push(bm[1].replace(/&nbsp;/g, ' ')); }
+            while ((bm = blankRegex.exec(variation.text || '')) !== null) { correctWords.push(decodeHtmlEntities(bm[1])); }
             extraData.correctWords = correctWords;
         }
 
@@ -234,6 +239,7 @@ export default function GrammarReviewPage() {
         try {
             let isCorrect = false;
             let aiResponse = null;
+            let savedAiVerdicts = null;
 
             if (questionRef.type === 'multiple_choice') {
                 // correctAnswer is an index (0, 1, 2, 3) pointing to the options array
@@ -243,17 +249,44 @@ export default function GrammarReviewPage() {
                 const markerRegex = /\{\{(.+?)\}\}/g;
                 const cWords = [];
                 let cm;
-                while ((cm = markerRegex.exec(variation.text || '')) !== null) { cWords.push(cm[1].replace(/&nbsp;/g, ' ')); }
+                while ((cm = markerRegex.exec(variation.text || '')) !== null) { cWords.push(decodeHtmlEntities(cm[1])); }
 
                 if (cWords.length > 0 && typeof answerToCheck === 'object' && answerToCheck !== null) {
                     let correctCount = 0;
                     cWords.forEach((cw, idx) => {
                         const sw = answerToCheck[String(idx)];
-                        if (typeof sw === 'string' && sw.trim().toLowerCase() === cw.trim().toLowerCase()) {
+                        if (typeof sw === 'string' && normalizeForComparison(sw) === normalizeForComparison(cw)) {
                             correctCount++;
                         }
                     });
                     isCorrect = correctCount === cWords.length && cWords.length > 0;
+
+                    // AI fallback: if exact match failed and teacher enabled AI grading
+                    if (!isCorrect && questionRef.useAIGrading && questionRef.type === 'fill_in_blank_typing' && cWords.length > 0) {
+                        try {
+                            const blanksData = cWords.map((cw, idx) => {
+                                const sw = answerToCheck[String(idx)] || '';
+                                const exactOk = normalizeForComparison(sw) === normalizeForComparison(cw);
+                                return { idx, expected: cw, studentAnswer: sw, exactMatch: exactOk };
+                            });
+                            const cleanText = (variation.text || '').replace(/<[^>]*>/g, ' ').replace(/\{\{.+?\}\}/g, '___');
+                            const contextStr = (questionRef.context || '') + (questionRef.contextScript ? '\n\n[SCRIPT / TRANSCRIPT]:\n' + questionRef.contextScript : '');
+                            const aiVerdicts = await gradeFillInBlankBlanksWithAI(cleanText, blanksData, contextStr);
+
+                            if (aiVerdicts && aiVerdicts.length === cWords.length) {
+                                savedAiVerdicts = aiVerdicts;
+                                let aiCorrectCount = 0;
+                                cWords.forEach((cw, idx) => {
+                                    const sw = answerToCheck[String(idx)] || '';
+                                    const exactOk = normalizeForComparison(sw) === normalizeForComparison(cw);
+                                    if (exactOk || aiVerdicts[idx] === true) aiCorrectCount++;
+                                });
+                                isCorrect = aiCorrectCount === cWords.length;
+                            }
+                        } catch (aiErr) {
+                            console.error('AI fallback grading failed:', aiErr);
+                        }
+                    }
                 } else {
                     isCorrect = typeof answerToCheck === 'string' && answerToCheck.trim().toLowerCase() === variation.correctAnswer?.trim().toLowerCase();
                 }
@@ -278,12 +311,24 @@ export default function GrammarReviewPage() {
                 isCorrect = allCorrect;
             } else if (questionRef.type === 'essay') {
                 // Use AI for essay or complex checks
+                // Resolve prompt content from linked prompt if available, combine with specialRequirement
+                let resolvedSpecialReq = questionRef.specialRequirement || '';
+                if (questionRef.promptId) {
+                    try {
+                        const linkedPrompt = await getPromptById(questionRef.promptId);
+                        if (linkedPrompt) {
+                            resolvedSpecialReq = resolvedSpecialReq
+                                ? `${linkedPrompt.content}\n\nYÊU CẦU BỔ SUNG:\n${resolvedSpecialReq}`
+                                : linkedPrompt.content;
+                        }
+                    } catch (e) { console.warn('Could not resolve linked prompt:', e); }
+                }
                 const gradeResult = await gradeGrammarSubmissionWithAI(
                     variation.text,
                     answerToCheck,
                     questionRef.purpose,
                     questionRef.type,
-                    questionRef.specialRequirement || '',
+                    resolvedSpecialReq,
                     (questionRef.context || '') + (questionRef.contextScript ? '\n\n[SCRIPT / TRANSCRIPT CỦA BÀI NGHE/VIDEO]:\n' + questionRef.contextScript : ''),
                     location.state?.teacherTitle || '', // Pass teacherTitle if available
                     location.state?.studentTitle || '' // Pass studentTitle if available
@@ -296,11 +341,23 @@ export default function GrammarReviewPage() {
                 aiResponse = gradeResult.feedback;
             } else if (questionRef.type === 'audio_recording') {
                 // Use AI to grade audio answer
+                // Resolve prompt content from linked prompt if available, combine with specialRequirement
+                let resolvedAudioSpecialReq = questionRef.specialRequirement || '';
+                if (questionRef.promptId) {
+                    try {
+                        const linkedPrompt = await getPromptById(questionRef.promptId);
+                        if (linkedPrompt) {
+                            resolvedAudioSpecialReq = resolvedAudioSpecialReq
+                                ? `${linkedPrompt.content}\n\nYÊU CẦU BỔ SUNG:\n${resolvedAudioSpecialReq}`
+                                : linkedPrompt.content;
+                        }
+                    } catch (e) { console.warn('Could not resolve linked prompt for audio:', e); }
+                }
                 const gradeResult = await evaluateAudioAnswer(
                     audioBlob,
                     variation.text || questionRef.purpose,
                     questionRef.purpose,
-                    questionRef.specialRequirement || '',
+                    resolvedAudioSpecialReq,
                     10,
                     (questionRef.context || '') + (questionRef.contextScript ? '\n\n[SCRIPT / TRANSCRIPT CỦA BÀI NGHE/VIDEO]:\n' + questionRef.contextScript : ''),
                     location.state?.teacherTitle || '', // Pass teacherTitle if available
@@ -326,7 +383,8 @@ export default function GrammarReviewPage() {
             setFeedback({
                 isCorrect,
                 message: isCorrect ? 'Chính xác!' : 'Chưa đúng, thử lại sau nhé.',
-                aiFeedback: aiResponse || variation.explanation
+                aiFeedback: aiResponse || variation.explanation,
+                ...(savedAiVerdicts ? { aiVerdicts: savedAiVerdicts } : {})
             });
 
             // Update Progress in State
@@ -354,8 +412,8 @@ export default function GrammarReviewPage() {
             }
 
         } catch (error) {
-            console.error(error);
-            alert("Đã xảy ra lỗi khi chấm bài.");
+            console.error('Grading error for question:', questionRef?.id, 'type:', questionRef?.type, 'variationIndex:', variationIndex, error);
+            alert(`Đã xảy ra lỗi khi chấm bài: ${error?.message || error}`);
         }
         setIsChecking(false);
     }
@@ -609,13 +667,15 @@ export default function GrammarReviewPage() {
         if (!html) return '';
         let cleaned = html.replace(/&nbsp;/g, ' ').replace(/<p><\/p>/g, '');
         if (isFillInBlank) {
+            // Convert structural HTML to <br> for line breaks, but keep formatting tags (bold, italic, etc.)
             cleaned = cleaned
-                .replace(/<p><br><\/p>/gi, '\n')
-                .replace(/<\/p>/gi, '\n')
-                .replace(/<\/div>/gi, '\n')
-                .replace(/<br\s*\/?>/gi, '\n')
+                .replace(/<p><br><\/p>/gi, '<br>')
+                .replace(/<\/p>/gi, '<br>')
+                .replace(/<\/div>/gi, '<br>')
                 .replace(/<p[^>]*>/gi, '')
                 .replace(/<div[^>]*>/gi, '');
+            // Remove trailing <br> tags
+            cleaned = cleaned.replace(/(<br\s*\/?\s*>)+$/gi, '');
         }
         return cleaned.trim();
     };
@@ -647,14 +707,7 @@ export default function GrammarReviewPage() {
                             A{fontSizeLevel === 0 ? '-' : fontSizeLevel === 2 ? '+' : ''}
                         </span>
                     </button>
-                    <button
-                        className="btn btn-ghost"
-                        onClick={toggleTheme}
-                        style={{ padding: '8px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
-                        title={theme === 'dark' ? 'Chuyển sang sáng' : 'Chuyển sang tối'}
-                    >
-                        {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-                    </button>
+
                     {settings?.devBypassEnabled && (
                         <button
                             className="btn btn-ghost"
@@ -754,7 +807,7 @@ export default function GrammarReviewPage() {
                                     if (part.startsWith('{{') && part.endsWith('}}')) {
                                         const idx = blankCounter++;
                                         const filled = answer[String(idx)];
-                                        const isCorrect = feedback && filled && filled.trim().toLowerCase() === correctWords[idx]?.trim().toLowerCase();
+                                        const isCorrect = feedback && filled && normalizeForComparison(filled) === normalizeForComparison(correctWords[idx]);
                                         const isWrong = feedback && filled && !isCorrect;
 
                                         let classes = "learn-inline-blank";
@@ -864,7 +917,7 @@ export default function GrammarReviewPage() {
                             // NOTE: fill_in_blank_typing renders its own inputs block below
                             questionRef.type !== 'fill_in_blank_typing' ? (
                                 <div className="grammar-question-container">
-                                    <div className="grammar-question-text"
+                                    <div className="grammar-question-text ql-editor" style={{ padding: 0 }}
                                         dangerouslySetInnerHTML={{
                                             __html: sanitizeHtml(variation.text || '')
                                         }}
@@ -886,12 +939,13 @@ export default function GrammarReviewPage() {
                                     if (part.startsWith('{{') && part.endsWith('}}')) {
                                         const idx = blankCounter++;
                                         const filled = answer[String(idx)] || '';
-                                        const isCorrect = feedback && filled && filled.trim().toLowerCase() === correctWords[idx]?.trim().toLowerCase();
+                                        const isCorrect = feedback && filled && normalizeForComparison(filled) === normalizeForComparison(correctWords[idx]);
                                         const isWrong = feedback && filled && !isCorrect;
                                         const isEmpty = feedback && !filled;
+                                        const isAIAccepted = isWrong && feedback?.aiVerdicts?.[idx] === true;
 
                                         return (
-                                            <span key={`blank-${idx}`} style={{ display: 'inline-block', verticalAlign: 'middle', margin: '2px 4px' }}>
+                                            <span key={`blank-${idx}`} style={{ display: 'inline-block', verticalAlign: 'middle', margin: '2px 4px', maxWidth: '100%' }}>
                                                 <input
                                                     type="text"
                                                     value={filled}
@@ -901,34 +955,39 @@ export default function GrammarReviewPage() {
                                                         if (feedback) return;
                                                         setCurrentAnswer({ ...answer, [String(idx)]: e.target.value });
                                                     }}
+                                                    autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
                                                     style={{
                                                         display: 'inline-block',
-                                                        minWidth: '80px',
-                                                        maxWidth: '180px',
-                                                        width: `${Math.max(80, (filled.length + 2) * 12)}px`,
-                                                        padding: '6px 12px',
+                                                        boxSizing: 'border-box',
+                                                        minWidth: '60px',
+                                                        maxWidth: '100%',
+                                                        width: `${Math.max(6, Math.ceil(filled.length * 0.8) + 1)}ch`,
+                                                        padding: '6px 8px',
                                                         fontSize: '1rem',
                                                         fontWeight: 600,
                                                         borderRadius: '8px',
                                                         border: feedback
-                                                            ? (isCorrect ? '2px solid #10b981' : '2px solid #ef4444')
+                                                            ? (isCorrect ? '2px solid #10b981' : isAIAccepted ? '2px solid #f59e0b' : '2px solid #ef4444')
                                                             : '2px solid var(--border-color)',
                                                         background: feedback
-                                                            ? (isCorrect ? '#ecfdf5' : '#fef2f2')
+                                                            ? (isCorrect ? '#ecfdf5' : isAIAccepted ? '#fef3c7' : '#fef2f2')
                                                             : 'var(--bg-input, #fff)',
                                                         color: feedback
-                                                            ? (isCorrect ? '#065f46' : '#991b1b')
+                                                            ? (isCorrect ? '#065f46' : isAIAccepted ? '#92400e' : '#991b1b')
                                                             : 'var(--text-primary)',
                                                         outline: 'none',
-                                                        textAlign: 'center',
+                                                        textAlign: 'left',
                                                         fontFamily: 'inherit',
                                                         transition: 'all 0.2s ease'
                                                     }}
                                                 />
-                                                {isWrong && (
+                                                {isWrong && !isAIAccepted && (
                                                     <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 600, marginLeft: '4px' }}>
                                                         ({correctWords[idx]})
                                                     </span>
+                                                )}
+                                                {isAIAccepted && (
+                                                    <span style={{ fontSize: '0.7rem', color: '#d97706', fontWeight: 600, marginLeft: '4px' }}>✓ AI ({correctWords[idx]})</span>
                                                 )}
                                                 {isEmpty && (
                                                     <span style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 600, marginLeft: '4px' }}>
@@ -997,9 +1056,15 @@ export default function GrammarReviewPage() {
                             {questionRef.type === 'essay' && (
                                 <textarea
                                     value={currentAnswer || ''}
-                                    onChange={(e) => setCurrentAnswer(e.target.value)}
+                                    onChange={(e) => {
+                                        setCurrentAnswer(e.target.value);
+                                        e.target.style.height = 'auto';
+                                        e.target.style.height = e.target.scrollHeight + 'px';
+                                    }}
                                     disabled={!!feedback}
                                     placeholder="Nhập câu trả lời của bạn..."
+                                    autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+                                    ref={el => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
                                     style={{
                                         width: '100%',
                                         maxWidth: '600px',
@@ -1009,7 +1074,8 @@ export default function GrammarReviewPage() {
                                         borderRadius: '16px',
                                         border: `2px solid ${feedback ? (feedback.isCorrect ? 'var(--color-success)' : 'var(--color-error)') : 'var(--border-color)'}`,
                                         outline: 'none',
-                                        resize: 'vertical',
+                                        resize: 'none',
+                                        overflow: 'hidden',
                                         background: 'var(--bg-input)',
                                         color: 'var(--text-primary)',
                                         fontFamily: 'var(--font-body)'
@@ -1087,9 +1153,15 @@ export default function GrammarReviewPage() {
                             {(questionRef.type === 'fill_in_blank' || questionRef.type === 'fill_in_blanks') && !/\{\{.+?\}\}/.test(variation.text || '') && (
                                 <textarea
                                     value={currentAnswer || ''}
-                                    onChange={(e) => setCurrentAnswer(e.target.value)}
+                                    onChange={(e) => {
+                                        setCurrentAnswer(e.target.value);
+                                        e.target.style.height = 'auto';
+                                        e.target.style.height = e.target.scrollHeight + 'px';
+                                    }}
                                     disabled={!!feedback}
                                     placeholder="Nhập câu trả lời của bạn..."
+                                    autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+                                    ref={el => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
                                     style={{
                                         width: '100%',
                                         maxWidth: '600px',
@@ -1099,7 +1171,8 @@ export default function GrammarReviewPage() {
                                         borderRadius: '16px',
                                         border: `2px solid ${feedback ? (feedback.isCorrect ? 'var(--color-success)' : 'var(--color-error)') : 'var(--border-color)'}`,
                                         outline: 'none',
-                                        resize: 'vertical',
+                                        resize: 'none',
+                                        overflow: 'hidden',
                                         background: 'var(--bg-input)',
                                         color: 'var(--text-primary)',
                                         fontFamily: 'var(--font-body)'
@@ -1110,10 +1183,10 @@ export default function GrammarReviewPage() {
                             {/* Ordering question */}
                             {questionRef.type === 'ordering' && currentAnswer && (() => {
                                 const { pool = [], answer: orderedAnswer = [] } = currentAnswer;
-                                const handleSelectItem = (item) => {
+                                const handleSelectItem = (item, poolIdx) => {
                                     if (feedback) return;
                                     setCurrentAnswer(prev => ({
-                                        pool: prev.pool.filter(i => i !== item),
+                                        pool: prev.pool.filter((_, i) => i !== poolIdx),
                                         answer: [...prev.answer, item]
                                     }));
                                 };
@@ -1167,7 +1240,7 @@ export default function GrammarReviewPage() {
                                                 {pool.map((item, idx) => (
                                                     <div key={`pool-${idx}`}
                                                         className="exam-ordering-chip pool"
-                                                        onClick={() => handleSelectItem(item)}
+                                                        onClick={() => handleSelectItem(item, idx)}
                                                         style={{ cursor: feedback ? 'default' : 'pointer' }}>
                                                         {item}
                                                     </div>
@@ -1407,7 +1480,7 @@ export default function GrammarReviewPage() {
                                 const markerRegex = /\{\{(.+?)\}\}/g;
                                 const cw = [];
                                 let m2;
-                                while ((m2 = markerRegex.exec(variation.text || '')) !== null) { cw.push(m2[1].replace(/&nbsp;/g, ' ')); }
+                                while ((m2 = markerRegex.exec(variation.text || '')) !== null) { cw.push(decodeHtmlEntities(m2[1])); }
                                 if (cw.length > 0) {
                                     return (
                                         <div className="learn-bottom-bar-subtitle">

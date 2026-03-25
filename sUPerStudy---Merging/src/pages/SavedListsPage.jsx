@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, FolderOpen, Heart, Trash2, Calendar, Play, Sparkles, Plus, AlertTriangle, Check, X, XCircle, CheckCheck, RotateCcw, PenLine } from 'lucide-react';
+import { ArrowLeft, FolderOpen, Heart, Trash2, Calendar, Play, Sparkles, Plus, AlertTriangle, Check, X, XCircle, CheckCheck, RotateCcw, PenLine, Loader2 } from 'lucide-react';
 import logo from '../assets/logo.png';
 import BrandLogo from '../components/common/BrandLogo';
 import { useAuth } from '../contexts/AuthContext';
-import { getSavedWords, toggleSavedWord, getCustomLists, deleteCustomList } from '../services/savedService';
+import { getSavedWords, toggleSavedWord, getCustomLists, deleteCustomList, updateCustomListWords } from '../services/savedService';
+import { chatCompletion } from '../services/aiService';
 import { getAllWordProgressMap, resetWordProgress, resetTopicProgress } from '../services/spacedRepetition';
 import './SavedListsPage.css';
 import './TopicSelectPage.css';
@@ -26,6 +27,15 @@ export default function SavedListsPage() {
     const [loading, setLoading] = useState(true);
     const [listToDelete, setListToDelete] = useState(null);
     const [progressMap, setProgressMap] = useState({});
+
+    // Edit Modal State
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editingList, setEditingList] = useState(null);
+    const [editWords, setEditWords] = useState([]);
+    const [newWordInput, setNewWordInput] = useState('');
+    const [isAddingWord, setIsAddingWord] = useState(false);
+    const [isSavingEdit, setIsSavingEdit] = useState(false);
+    const [editError, setEditError] = useState('');
 
     // Learning Modal State
     const [isLearnModalOpen, setIsLearnModalOpen] = useState(false);
@@ -152,6 +162,152 @@ export default function SavedListsPage() {
         } catch (err) {
             console.error("Lỗi khi xóa danh sách", err);
         }
+    };
+
+    // ===== EDIT LIST HANDLERS =====
+    const handleEditList = (list) => {
+        setEditingList(list);
+        setEditWords([...list.words]);
+        setNewWordInput('');
+        setEditError('');
+        setIsEditModalOpen(true);
+    };
+
+    const handleRemoveEditWord = (wordToRemove) => {
+        if (editWords.length <= 1) {
+            setEditError('Danh sách phải có ít nhất 1 từ.');
+            return;
+        }
+        setEditWords(prev => prev.filter(w => w.word !== wordToRemove));
+        setEditError('');
+    };
+
+    const EDIT_SYSTEM_PROMPT = `Bạn là chuyên gia dạy từ vựng tiếng Anh. Bạn sẽ nhận một danh sách từ tiếng Anh và trả về JSON array chứa data học tập chi tiết.
+
+Với MỖI từ trong danh sách, trả về object có ĐÚNG cấu trúc sau:
+{
+  "word": "từ tiếng Anh",
+  "phonetic": "phiên âm IPA, ví dụ /nɪˈɡoʊ.ʃi.eɪt/",
+  "partOfSpeech": "noun/verb/adjective/adverb/...",
+  "vietnameseMeaning": "nghĩa tiếng Việt ngắn gọn",
+  "explanation": "Giải thích ý nghĩa bằng tiếng Việt dễ hiểu (2-3 câu), KHÔNG được nhắc lại từ tiếng Anh gốc trong phần giải thích",
+  "distractors": ["từ1_giống_phát_âm", "từ2", "từ3"],
+  "pronunciationTip": "Gợi ý cách phát âm bằng tiếng Việt",
+  "collocations": [
+    { "phrase": "cụm từ 1", "vietnamese": "nghĩa tiếng Việt" },
+    { "phrase": "cụm từ 2", "vietnamese": "nghĩa tiếng Việt" },
+    { "phrase": "cụm từ 3", "vietnamese": "nghĩa tiếng Việt" }
+  ],
+  "exampleSentences": [
+    { "en": "Câu ví dụ tiếng Anh", "vi": "Bản dịch tiếng Việt" }
+  ],
+  "sentenceSequence": {
+    "en": "Một câu tiếng Anh tự nhiên để học viên luyện tập ráp từ.",
+    "vi": "Dịch nghĩa tiếng Việt của câu trên"
+  }
+}
+
+QUY TẮC:
+- Trả về ĐÚNG JSON array, KHÔNG có markdown, KHÔNG có text ngoài JSON
+- distractors: 3 từ có cách phát âm hoặc hình dạng tương tự để gây nhiễu
+- collocations: đúng 3 cụm từ thông dụng
+- sentenceSequence: 1 câu tiếng Anh thông dụng để ráp chữ.
+- explanation phải bằng tiếng Việt, giải thích dễ hiểu cho người Việt. TUYỆT ĐỐI KHÔNG được nhắc lại hoặc bao gồm từ tiếng Anh gốc trong phần explanation — học viên cần tự nhớ lại từ đó`;
+
+    const handleAddNewWords = async () => {
+        if (!newWordInput.trim() || isAddingWord) return;
+
+        const MAX_WORDS = 15;
+        const newWords = newWordInput
+            .split(/[,，;;\n]+/)
+            .map(w => w.trim().toLowerCase().replace(/[^a-z\s'-]/g, ''))
+            .filter(w => w.length > 1);
+        const uniqueNew = [...new Set(newWords)];
+
+        // Filter out words that already exist
+        const existingWordSet = new Set(editWords.map(w => w.word.toLowerCase()));
+        const toAdd = uniqueNew.filter(w => !existingWordSet.has(w));
+
+        if (toAdd.length === 0) {
+            setEditError('Tất cả từ đã có trong danh sách.');
+            return;
+        }
+
+        if (editWords.length + toAdd.length > MAX_WORDS) {
+            setEditError(`Tối đa ${MAX_WORDS} từ. Chỉ có thể thêm ${MAX_WORDS - editWords.length} từ nữa.`);
+            return;
+        }
+
+        setIsAddingWord(true);
+        setEditError('');
+
+        try {
+            const result = await chatCompletion({
+                systemPrompt: EDIT_SYSTEM_PROMPT,
+                userContent: `Tạo dữ liệu học tập cho các từ sau: ${toAdd.join(', ')}`,
+                responseFormat: 'json',
+            });
+
+            let generatedWords;
+            let text = result.text.trim();
+            if (text.startsWith('```')) {
+                text = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+            }
+            generatedWords = JSON.parse(text);
+
+            if (!Array.isArray(generatedWords) || generatedWords.length === 0) {
+                throw new Error('AI không tạo được dữ liệu.');
+            }
+
+            const validWords = generatedWords.filter(w => w.word && w.vietnameseMeaning && w.phonetic);
+            if (validWords.length === 0) {
+                throw new Error('Dữ liệu từ AI không đúng cấu trúc.');
+            }
+
+            setEditWords(prev => [...prev, ...validWords]);
+            setNewWordInput('');
+        } catch (err) {
+            console.error('Error adding new words:', err);
+            setEditError(err.message || 'Có lỗi khi thêm từ. Vui lòng thử lại.');
+        } finally {
+            setIsAddingWord(false);
+        }
+    };
+
+    const handleSaveEdit = async () => {
+        if (!user || !editingList || isSavingEdit) return;
+        if (editWords.length === 0) {
+            setEditError('Danh sách không thể trống.');
+            return;
+        }
+
+        setIsSavingEdit(true);
+        setEditError('');
+
+        try {
+            await updateCustomListWords(user.uid, editingList.id, editWords);
+            // Update local state
+            setCustomLists(prev => prev.map(list =>
+                list.id === editingList.id
+                    ? { ...list, words: editWords, wordCount: editWords.length }
+                    : list
+            ));
+            setIsEditModalOpen(false);
+            setEditingList(null);
+        } catch (err) {
+            console.error('Error saving edit:', err);
+            setEditError('Lỗi khi lưu. Vui lòng thử lại.');
+        } finally {
+            setIsSavingEdit(false);
+        }
+    };
+
+    const closeEditModal = () => {
+        setIsEditModalOpen(false);
+        setEditingList(null);
+        setEditWords([]);
+        setNewWordInput('');
+        setEditError('');
     };
 
     const startLearningWords = () => {
@@ -327,6 +483,9 @@ export default function SavedListsPage() {
                                                 <div className="custom-list-actions">
                                                     <button className="btn btn-primary btn-learn" onClick={() => startLearningList(list)}>
                                                         Học ngay
+                                                    </button>
+                                                    <button className="btn-icon btn-edit" onClick={() => handleEditList(list)} title="Chỉnh sửa danh sách">
+                                                        <PenLine size={18} />
                                                     </button>
                                                     <button className="btn-icon btn-delete" onClick={() => handleDeleteList(list)} title="Xóa danh sách">
                                                         <Trash2 size={18} />
@@ -509,6 +668,102 @@ export default function SavedListsPage() {
                             </div>
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* ===== EDIT LIST MODAL ===== */}
+            {isEditModalOpen && editingList && (
+                <div className="modal-overlay animate-fade-in" onClick={closeEditModal}>
+                    <div className="edit-modal-panel animate-slide-up" onClick={e => e.stopPropagation()}>
+                        {/* Header */}
+                        <div className="edit-modal-header">
+                            <div className="edit-modal-header-info">
+                                <PenLine size={20} className="text-warning" />
+                                <div>
+                                    <h2 className="edit-modal-title">Chỉnh sửa danh sách</h2>
+                                    <p className="edit-modal-subtitle">{editingList.name} • {editWords.length} từ</p>
+                                </div>
+                            </div>
+                            <button className="topic-modal-close" onClick={closeEditModal}>
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Error */}
+                        {editError && (
+                            <div className="edit-modal-error">
+                                <AlertTriangle size={14} />
+                                <span>{editError}</span>
+                            </div>
+                        )}
+
+                        {/* Add New Words Section */}
+                        <div className="edit-modal-add-section">
+                            <label className="edit-modal-add-label">
+                                <Plus size={14} /> Thêm từ mới
+                            </label>
+                            <div className="edit-modal-add-row">
+                                <input
+                                    type="text"
+                                    className="edit-modal-add-input"
+                                    placeholder="VD: negotiate, deadline, revenue"
+                                    value={newWordInput}
+                                    onChange={e => setNewWordInput(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleAddNewWords(); }}
+                                    disabled={isAddingWord}
+                                />
+                                <button
+                                    className="btn btn-primary edit-modal-add-btn"
+                                    onClick={handleAddNewWords}
+                                    disabled={isAddingWord || !newWordInput.trim()}
+                                >
+                                    {isAddingWord ? (
+                                        <Loader2 size={16} className="spinning" />
+                                    ) : (
+                                        <><Sparkles size={14} /> Thêm</>
+                                    )}
+                                </button>
+                            </div>
+                            <p className="edit-modal-add-hint">Cách nhau bằng dấu phẩy. AI sẽ tự tạo dữ liệu bài học.</p>
+                        </div>
+
+                        {/* Word List */}
+                        <div className="edit-modal-word-list">
+                            {editWords.map((w, idx) => (
+                                <div key={w.word + idx} className="edit-modal-word-item" style={{ animationDelay: `${idx * 0.03}s` }}>
+                                    <div className="edit-modal-word-info">
+                                        <span className="edit-modal-word-en">{w.word}</span>
+                                        <span className="edit-modal-word-vi">{w.vietnameseMeaning}</span>
+                                    </div>
+                                    <button
+                                        className="edit-modal-word-remove"
+                                        onClick={() => handleRemoveEditWord(w.word)}
+                                        title="Xoá từ này"
+                                    >
+                                        <X size={16} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="edit-modal-footer">
+                            <button className="btn btn-ghost" onClick={closeEditModal} disabled={isSavingEdit}>
+                                Hủy
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleSaveEdit}
+                                disabled={isSavingEdit || editWords.length === 0}
+                            >
+                                {isSavingEdit ? (
+                                    <><Loader2 size={16} className="spinning" /> Đang lưu...</>
+                                ) : (
+                                    <>✅ Lưu ({editWords.length} từ)</>
+                                )}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 

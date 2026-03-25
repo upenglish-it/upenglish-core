@@ -1,0 +1,177 @@
+/* ─── ShareModal — 2-column / 2-tab responsive layout ─── */
+
+.share-modal-header {
+    margin-bottom: 20px;
+    padding: 12px;
+    background: #f8fafc;
+    border-radius: 8px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.share-modal-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    color: #0f172a;
+}
+
+.share-modal-header p {
+    margin: 0;
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+/* ─── Tabs (mobile only) ─── */
+.share-modal-tabs {
+    display: none;
+    margin-bottom: 16px;
+    background: #f1f5f9;
+    border-radius: 10px;
+    padding: 3px;
+    gap: 4px;
+}
+
+.share-modal-tab {
+    flex: 1;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+    background: transparent;
+    color: #64748b;
+}
+
+.share-modal-tab.active {
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.share-modal-tab.tab-student.active {
+    color: #2563eb;
+}
+
+.share-modal-tab.tab-internal.active {
+    color: #7c3aed;
+}
+
+/* ─── Columns container ─── */
+.share-modal-columns {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.share-modal-col {
+    flex: 1;
+    min-width: 0;
+}
+
+/* ─── Column headers (desktop only, colored label bars) ─── */
+.share-modal-col-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.share-modal-col-header.student {
+    background: linear-gradient(135deg, #eff6ff, #dbeafe);
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+}
+
+.share-modal-col-header.internal {
+    background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+    color: #6d28d9;
+    border: 1px solid #c4b5fd;
+}
+
+/* ─── Section spacing inside columns ─── */
+.share-modal-section {
+    margin-bottom: 20px;
+}
+
+.share-modal-section:last-child {
+    margin-bottom: 0;
+}
+
+.share-modal-section h4 {
+    font-size: 0.9rem;
+    color: #0f172a;
+    margin: 0 0 10px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.share-modal-section > p {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin: 0 0 12px 0;
+}
+
+.share-modal-section .share-modal-divider {
+    border-top: 1px solid #e2e8f0;
+    padding-top: 16px;
+    margin-top: 16px;
+}
+
+/* ─── Not-owner banner ─── */
+.share-modal-readonly-banner {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+    background: #f8fafc;
+}
+
+.share-modal-readonly-banner p {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ─── Admin share modal column headers ─── */
+.share-modal-col-header.teacher {
+    background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+    color: #6d28d9;
+    border: 1px solid #c4b5fd;
+}
+
+/* ─── Mobile ─── */
+@media (max-width: 768px) {
+    .share-modal-tabs {
+        display: flex;
+    }
+
+    .share-modal-columns {
+        display: block;
+    }
+
+    .share-modal-col {
+        display: none;
+    }
+
+    .share-modal-col.active {
+        display: block;
+    }
+
+    .share-modal-col-header {
+        display: none;
+    }
+}

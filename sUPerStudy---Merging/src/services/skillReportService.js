@@ -100,7 +100,7 @@ ${skillSummary}${noDataNote}
 - Bài kiểm tra: ${skillData.totalExamsTaken || 0} bài (điểm TB: ${skillData.examAverageScore ?? 'N/A'}%)
 ${skillData.grammarWeakPoints?.length > 0 ? `\n═══ ĐIỂM NGỮ PHÁP THƯỜNG SAI ═══\n${skillData.grammarWeakPoints.map(w => `- ${w.purpose}${w.errorCategory ? ` [${ERROR_CATEGORY_LABELS[w.errorCategory] || w.errorCategory}]` : ''} (${w.accuracy}% đúng)`).join('\n')}` : ''}
 ${skillData.errorCategoryBreakdown?.length > 0 ? `\n═══ PHÂN TÍCH LỖI CHI TIẾT THEO DẠNG ═══\n${skillData.errorCategoryBreakdown.map(item => `- ${ERROR_CATEGORY_LABELS[item.category] || item.category}: ${item.accuracy}% đúng (${item.totalAttempts} lần làm)`).join('\n')}` : ''}
-${skillData.aiFeedbackSamples?.length > 0 ? `\n═══ NHẬN XÉT TỪ BÀI KIỂM TRA (rất quan trọng — dùng để trích dẫn ví dụ cụ thể) ═══\n${skillData.aiFeedbackSamples.map((s, i) => `${i + 1}. [${ERROR_CATEGORY_LABELS[s.errorCategory] || s.errorCategory || 'Chung'}] ${s.questionPurpose || 'Câu hỏi'} — Điểm: ${s.score}/${s.maxScore}\n   Nhận xét: "${s.note}"`).join('\n')}` : ''}
+${skillData.examSummaries?.length > 0 ? `\n═══ NHẬN XÉT TỔNG KẾT CÁC BÀI KIỂM TRA (rất quan trọng — dùng để trích dẫn ví dụ cụ thể) ═══\n${skillData.examSummaries.map((s, i) => `${i + 1}. Bài kiểm tra — Điểm: ${s.totalScore}/${s.maxTotalScore}\n   Nhận xét:\n${s.summary.split('\n').map(line => '   ' + line).join('\n')}`).join('\n\n')}` : ''}
 ${previousReport ? `\n═══ BÁO CÁO KỲ TRƯỚC (dùng để so sánh) ═══\n- Điểm mạnh kỳ trước: ${previousReport.strengths?.join(', ') || 'Không có'}\n- Điểm yếu kỳ trước: ${previousReport.weaknesses?.join(', ') || 'Không có'}\n- Trình độ kỳ trước: ${previousReport.overallLevel || 'Không có'}\nBẮT BUỘC so sánh: điểm yếu nào đã cải thiện, điểm nào vẫn còn, có điểm yếu mới nào không.` : ''}
 ${(() => {
     const activeRedFlags = redFlags.filter(f => !f.removed);
@@ -111,7 +111,7 @@ ${(() => {
 ═══ QUY TẮC QUAN TRỌNG ═══
 1. KHÔNG BAO GIỜ dùng tên mã tiếng Anh (writing_structure, verb_tense, fluency...). Luôn dùng tên tiếng Việt dễ hiểu.
 2. Chỉ nhận xét những kỹ năng CÓ dữ liệu. KHÔNG bịa hoặc đoán kỹ năng không có điểm.
-3. Trích dẫn ví dụ CỤ THỂ từ nhận xét bài kiểm tra khi nhận xét điểm yếu (nếu có).
+3. Tận dụng nhận xét tổng kết bài kiểm tra để trích dẫn ví dụ CỤ THỂ khi phân tích điểm yếu (nếu có).
 4. Nếu có báo cáo kỳ trước, BẮT BUỘC so sánh xu hướng tiến bộ/thụt lùi.
 5. TUYỆT ĐỐI KHÔNG nhắc đến "AI" trong báo cáo. Mọi nhận xét đều là của thầy/cô giáo viên.
 
@@ -266,7 +266,7 @@ export async function sendSkillReport(reportId, { studentId, studentName, teache
         type: 'skill_report',
         title: '📊 Báo cáo kỹ năng mới',
         message: `${teacherName || 'Giáo viên'} đã gửi báo cáo đánh giá kỹ năng của bạn${groupName ? ` trong lớp ${groupName}` : ''}. Hãy xem ngay!`,
-        link: '/dashboard'
+        link: '/dashboard?scrollTo=reports'
     });
 
     // #6: Email to student
@@ -282,7 +282,7 @@ export async function sendSkillReport(reportId, { studentId, studentName, teache
                     emoji: '📊', heading: 'Báo cáo kỹ năng mới', headingColor: '#06b6d4',
                     greeting: 'Chào bạn 👋',
                     body: `<p>Thầy/cô <strong>${teacherName || 'Giáo viên'}</strong> vừa gửi báo cáo đánh giá kỹ năng của bạn${groupName ? ` trong lớp <strong>${groupName}</strong>` : ''}. Vào xem để biết mình đang tiến bộ thế nào nhé! 💪</p>`,
-                    ctaText: 'Xem báo cáo', ctaColor: '#06b6d4', ctaColor2: '#22d3ee'
+                    ctaText: 'Xem báo cáo', ctaLink: 'https://upenglishvietnam.com/preview/superstudy/dashboard?scrollTo=reports', ctaColor: '#06b6d4', ctaColor2: '#22d3ee'
                 })
             });
         }

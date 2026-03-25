@@ -74,7 +74,7 @@ export default function SavedPromptPicker({ uid, onSelect, disabled }) {
     }
 
     function handleSelect(prompt) {
-        onSelect(prompt.content);
+        onSelect({ id: prompt.id, title: prompt.title, content: prompt.content });
         setOpen(false);
     }
 

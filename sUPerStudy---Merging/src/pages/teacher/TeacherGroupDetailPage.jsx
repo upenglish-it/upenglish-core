@@ -105,7 +105,7 @@ export default function TeacherGroupDetailPage() {
     const [grammarExercises, setGrammarExercises] = useState([]);
     const [folders, setFolders] = useState([]);
     const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
-    const [assignmentForm, setAssignmentForm] = useState({ topicId: '', dueDate: '' });
+    const [assignmentForm, setAssignmentForm] = useState({ topicId: '', dueDate: '', scheduledStart: '' });
     const [assignLoading, setAssignLoading] = useState(false);
     const [assignmentToDelete, setAssignmentToDelete] = useState(null);
     const [assignmentMode, setAssignmentMode] = useState('all'); // 'all' | 'individual'
@@ -130,7 +130,7 @@ export default function TeacherGroupDetailPage() {
     const [examAssignments, setExamAssignments] = useState([]);
     const [allExams, setAllExams] = useState([]);
     const [isExamAssignModalOpen, setIsExamAssignModalOpen] = useState(false);
-    const [examAssignmentForm, setExamAssignmentForm] = useState({ examId: '', dueDate: '' });
+    const [examAssignmentForm, setExamAssignmentForm] = useState({ examId: '', dueDate: '', scheduledStart: '' });
     const [examAssignmentMode, setExamAssignmentMode] = useState('all'); // 'all' | 'individual'
     const [examAssignLoading, setExamAssignLoading] = useState(false);
     const [examAssignmentToDelete, setExamAssignmentToDelete] = useState(null);
@@ -356,11 +356,30 @@ export default function TeacherGroupDetailPage() {
             setExamAssignments(allExamAssignments);
 
             // Compute unreleased graded counts per assignment
+            const currentStudentUids = new Set(stds.map(s => s.uid));
             if (allExamAssignments.length > 0) {
                 try {
                     const allAssignmentSubs = await getExamSubmissionsForAssignments(allExamAssignments.map(a => a.id));
-                    const counts = {};
+                    // Deduplicate by studentId+assignmentId: keep only the latest submission per student per assignment
+                    const latestSubMap = new Map(); // key: `${assignmentId}_${studentId}` -> latest sub
                     allAssignmentSubs.forEach(sub => {
+                        // Only count submissions from students currently in the group
+                        if (!currentStudentUids.has(sub.studentId)) return;
+                        const key = `${sub.assignmentId}_${sub.studentId}`;
+                        const existing = latestSubMap.get(key);
+                        if (!existing) {
+                            latestSubMap.set(key, sub);
+                        } else {
+                            // Keep the one with the later updatedAt/createdAt
+                            const existingTime = existing.updatedAt?.toMillis?.() || existing.createdAt?.toMillis?.() || 0;
+                            const newTime = sub.updatedAt?.toMillis?.() || sub.createdAt?.toMillis?.() || 0;
+                            if (newTime > existingTime) {
+                                latestSubMap.set(key, sub);
+                            }
+                        }
+                    });
+                    const counts = {};
+                    latestSubMap.forEach(sub => {
                         if (sub.status === 'graded' && !sub.resultsReleased) {
                             counts[sub.assignmentId] = (counts[sub.assignmentId] || 0) + 1;
                         }
@@ -855,13 +874,17 @@ export default function TeacherGroupDetailPage() {
                 createdBy: user?.uid
             };
 
+            if (assignmentForm.scheduledStart && assignmentForm.scheduledStart !== 'pending') {
+                assignmentData.scheduledStart = Timestamp.fromDate(new Date(assignmentForm.scheduledStart));
+            }
+
             if (assignmentMode === 'individual') {
                 assignmentData.assignedStudentIds = selectedStudentIds;
             }
 
             await createAssignment(assignmentData);
             setIsAssignModalOpen(false);
-            setAssignmentForm({ topicId: '', dueDate: '' });
+            setAssignmentForm({ topicId: '', dueDate: '', scheduledStart: '' });
             setAssignmentMode('all');
             setSelectedStudentIds([]);
             const asgns = await getAssignmentsForGroup(groupId);
@@ -1044,7 +1067,7 @@ export default function TeacherGroupDetailPage() {
                 setExamAssignLoading(false);
                 return;
             }
-            if (selectedExam.timingMode === 'question') {
+            if (selectedExam.timingMode === 'question' && selectedExam.cachedQuestionTimeMissingCount > 0) {
                 alert(`Bài "${selectedExam.name}" chưa hoàn thành thiết lập thời gian theo từng câu hỏi. Vui lòng kiểm tra thời gian từng câu trước khi giao bài.`);
                 setExamAssignLoading(false);
                 return;
@@ -1063,6 +1086,10 @@ export default function TeacherGroupDetailPage() {
                 studentTitle: user?.studentTitle || ''
             };
 
+            if (examAssignmentForm.scheduledStart && examAssignmentForm.scheduledStart !== 'pending') {
+                assignmentData.scheduledStart = Timestamp.fromDate(new Date(examAssignmentForm.scheduledStart));
+            }
+
             // In individual mode, we might need a different handling if targetId is expected to be a single string.
             // Looking at examService.js, targetId is used with 'in' query for groups, and directly for individual studentId.
             // If the user wants multiple individuals, we'll create one assignment per student or update targetId handling.
@@ -1077,7 +1104,7 @@ export default function TeacherGroupDetailPage() {
             }
 
             setIsExamAssignModalOpen(false);
-            setExamAssignmentForm({ examId: '', dueDate: '' });
+            setExamAssignmentForm({ examId: '', dueDate: '', scheduledStart: '' });
             setExamAssignmentMode('all');
             setSelectedStudentIds([]);
             const asgns = await getExamAssignmentsForGroup(groupId);
@@ -1095,10 +1122,23 @@ export default function TeacherGroupDetailPage() {
         setExamSubmissionsLoading(true);
         setExamPopupQuestions([]);
         try {
-            const [submissions, questions] = await Promise.all([
+            const [allSubs, questions] = await Promise.all([
                 getExamSubmissionsForAssignment(assignment.id),
                 getExamQuestions(assignment.examId)
             ]);
+            // Deduplicate: keep only the latest submission per student
+            const latestMap = new Map();
+            allSubs.forEach(sub => {
+                const existing = latestMap.get(sub.studentId);
+                if (!existing) {
+                    latestMap.set(sub.studentId, sub);
+                } else {
+                    const existingTime = existing.updatedAt?.toMillis?.() || existing.createdAt?.toMillis?.() || 0;
+                    const newTime = sub.updatedAt?.toMillis?.() || sub.createdAt?.toMillis?.() || 0;
+                    if (newTime > existingTime) latestMap.set(sub.studentId, sub);
+                }
+            });
+            const submissions = Array.from(latestMap.values());
             setExamSubmissions(submissions);
             setExamPopupQuestions(questions);
         } catch (error) {
@@ -1355,7 +1395,7 @@ export default function TeacherGroupDetailPage() {
                                                             padding: '2px 8px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700,
                                                             background: '#fff7ed', color: '#ea580c', border: '1px solid #fed7aa'
                                                         }}>
-                                                            <Flame size={12} /> {streak} ngày streak
+                                                            <Flame size={12} /> Streak: {streak}
                                                         </span>
                                                     )}
                                                     {/* Review counts — combined badge */}
@@ -1461,11 +1501,12 @@ export default function TeacherGroupDetailPage() {
                                                         }
                                                         return null;
                                                     })()}
-                                                    {/* Red Flag 3-flag indicators */}
+                                                    {/* Red Flag 3-flag indicators + "Không còn đảm bảo đầu ra" */}
                                                     {(() => {
                                                         const count = redFlagCounts[s.uid] || 0;
                                                         return (
-                                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                                                 {[1, 2, 3].map(i => {
                                                                     const isFilled = i <= count;
                                                                     const isNext = i === count + 1 && count < 3;
@@ -1476,13 +1517,11 @@ export default function TeacherGroupDetailPage() {
                                                                             onClick={(e) => {
                                                                                 e.stopPropagation();
                                                                                 if (isFilled) {
-                                                                                    // View this specific flag
                                                                                     setRedFlagViewIndex(i);
                                                                                     setRedFlagHistoryStudent(s);
                                                                                     setRedFlagHistoryLoading(true);
                                                                                     getRedFlagsForStudentInGroup(s.uid, groupId).then(setRedFlagHistory).finally(() => setRedFlagHistoryLoading(false));
                                                                                 } else if (isNext && !isStaff) {
-                                                                                    // Open add flag modal
                                                                                     setRedFlagModalStudent(s);
                                                                                     setRedFlagForm({ violationType: '', note: '' });
                                                                                     getRedFlagsForStudentInGroup(s.uid, groupId).then(setAddModalFlags);
@@ -1495,7 +1534,7 @@ export default function TeacherGroupDetailPage() {
                                                                                 background: isFilled ? (i >= 3 ? '#fef2f2' : i === 2 ? '#fff7ed' : '#fefce8') : 'transparent',
                                                                                 border: isFilled ? `1.5px solid ${flagColor}40` : '1.5px solid transparent',
                                                                                 cursor: (isFilled || (isNext && !isStaff)) ? 'pointer' : 'default',
-                                                                                opacity: isFilled ? 1 : isNext ? 0.4 : 0.2,
+                                                                                opacity: isFilled ? 1 : 0.3,
                                                                                 transition: 'all 0.2s',
                                                                                 filter: !isFilled ? 'grayscale(1)' : 'none'
                                                                             }}
@@ -1505,15 +1544,18 @@ export default function TeacherGroupDetailPage() {
                                                                         </span>
                                                                     );
                                                                 })}
+                                                                </span>
+                                                                {!isStaff && count >= 3 && (
+                                                                    <span style={{ fontSize: '0.7rem', color: '#dc2626', fontWeight: 600 }}>
+                                                                        ❌ Không còn đảm bảo đầu ra
+                                                                    </span>
+                                                                )}
                                                             </span>
                                                         );
                                                     })()}
                                                 </div>
                                             </div>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                                                {!isStaff && (redFlagCounts[s.uid] || 0) >= 3 && (
-                                                    <span style={{ fontSize: '0.7rem', color: '#dc2626', fontWeight: 600 }}>Không còn đảm bảo đầu ra</span>
-                                                )}
                                                 <Link
                                                     className="teacher-view-progress-btn"
                                                     to={isAdminView ? `/admin/groups/${groupId}/students/${s.uid}` : `/teacher/groups/${groupId}/students/${s.uid}`}
@@ -1697,6 +1739,19 @@ export default function TeacherGroupDetailPage() {
                                                     }}>
                                                         <Clock size={14} /> Hạn: {formatDate(a.dueDate)}
                                                     </span>
+                                                    {(() => {
+                                                        if (!a.scheduledStart) return null;
+                                                        const ss = a.scheduledStart.toDate ? a.scheduledStart.toDate() : new Date(a.scheduledStart);
+                                                        const isFuture = ss > new Date();
+                                                        return (
+                                                            <span style={{
+                                                                display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700,
+                                                                background: isFuture ? '#fef3c7' : '#ecfdf5', color: isFuture ? '#d97706' : '#059669', border: `1px solid ${isFuture ? '#fde68a' : '#a7f3d0'}`
+                                                            }}>
+                                                                {isFuture ? '🕐 Sẽ mở lúc' : '✅ Đã mở từ'} {ss.toLocaleString('vi-VN')}
+                                                            </span>
+                                                        );
+                                                    })()}
                                                     {hasActiveExtension && (
                                                         <span style={{
                                                             display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700,
@@ -2046,7 +2101,11 @@ export default function TeacherGroupDetailPage() {
                                                     'released': { label: 'Đã trả kết quả', color: '#7c3aed', bg: '#f5f3ff' }
                                                 };
                                                 const statusKey = sub ? (sub.status === 'graded' && sub.resultsReleased ? 'released' : sub.status) : 'none';
-                                                const statusStyle = sub ? (statusMap[statusKey] || statusMap['submitted']) : (() => {
+                                                const subHasError = sub?.results && (
+                                                    Object.values(sub.results).some(r => r.feedback && (r.feedback.includes('Lỗi khi chấm') || r.feedback.includes('chấm thủ công') || r.feedback.includes('chưa được AI chấm')))
+                                                    || Object.entries(sub.results).some(([qId, r]) => (r.score === 0 || r.score === undefined) && !r.feedback && !r.teacherOverride && Object.values(sub.answers || {}).some(sec => sec?.[qId]?.answer?.hasRecording))
+                                                );
+                                                let statusStyle = sub ? (statusMap[statusKey] || statusMap['submitted']) : (() => {
                                                     const studentDl = a.studentDeadlines?.[selectedStudent?.uid];
                                                     const dl = studentDl ? (studentDl.toDate ? studentDl.toDate() : new Date(studentDl)) : (a.dueDate ? (a.dueDate.toDate ? a.dueDate.toDate() : new Date(a.dueDate)) : null);
                                                     const deadlinePassed = dl && dl.getTime() <= Date.now();
@@ -2054,6 +2113,26 @@ export default function TeacherGroupDetailPage() {
                                                         ? { label: 'Không hoàn thành', color: '#ef4444', bg: '#fef2f2' }
                                                         : { label: 'Chưa làm', color: '#94a3b8', bg: '#f8fafc' };
                                                 })();
+                                                if (subHasError && sub?.status === 'graded' && !sub?.resultsReleased) {
+                                                    statusStyle = { label: 'AI chấm sót', color: '#ea580c', bg: '#fff7ed' };
+                                                }
+                                                // Follow-up status overrides
+                                                if (sub && sub.resultsReleased && sub.followUpRequested && Object.keys(sub.followUpRequested).length > 0) {
+                                                    const fuReq = sub.followUpRequested;
+                                                    const fuAns = sub.followUpAnswers || {};
+                                                    const fuRes = sub.followUpResults || {};
+                                                    const hasAllAnswers = Object.keys(fuReq).every(qId => Object.values(fuAns).some(sec => sec?.[qId]));
+                                                    const hasAllGraded = Object.keys(fuReq).every(qId => fuRes[qId]);
+                                                    if (sub.followUpResultsReleased) {
+                                                        statusStyle = { label: 'Đã trả bài sửa', color: '#059669', bg: '#ecfdf5' };
+                                                    } else if (hasAllGraded) {
+                                                        statusStyle = { label: 'AI đã chấm bài sửa', color: '#0891b2', bg: '#ecfeff' };
+                                                    } else if (hasAllAnswers) {
+                                                        statusStyle = { label: 'Đã nộp bài sửa', color: '#6d28d9', bg: '#f5f3ff' };
+                                                    } else {
+                                                        statusStyle = { label: 'Chờ bài sửa', color: '#d97706', bg: '#fffbeb' };
+                                                    }
+                                                }
 
                                                 return (
                                                     <div key={a.id} style={{ background: '#fff', borderRadius: '20px', border: '1px solid #f1f5f9', padding: '16px', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
@@ -2192,18 +2271,38 @@ export default function TeacherGroupDetailPage() {
                                                 {(() => {
                                                     const searchLower = topicSearch.toLowerCase().trim();
 
+                                                    // For non-admin teachers, filter admin content by group access
+                                                    const groupFolderAccess = group?.folderAccess || [];
+                                                    const groupTopicAccess = group?.topicAccess || [];
+
+                                                    // Filter admin folders by group access (admin sees all)
+                                                    const accessibleAdminFolders = isAdminView
+                                                        ? (folders || [])
+                                                        : (folders || []).filter(f => f.isPublic || groupFolderAccess.includes(f.id));
+
                                                     // Build a merged folder map: folderId -> { id, name, order }
                                                     // Admin folders (topic_folders) contain topicIds array
                                                     const adminTopicFolderMap = {}; // topicId -> folderId
-                                                    (folders || []).forEach(f => {
+                                                    accessibleAdminFolders.forEach(f => {
                                                         (f.topicIds || []).forEach(tid => { adminTopicFolderMap[tid] = f.id; });
                                                     });
+
+                                                    // Build set of accessible admin topic IDs (topics in accessible folders + explicitly granted)
+                                                    const accessibleAdminTopicIds = new Set(groupTopicAccess);
+                                                    accessibleAdminFolders.forEach(f => {
+                                                        (f.topicIds || []).forEach(tid => accessibleAdminTopicIds.add(tid));
+                                                    });
+
+                                                    // Filter admin topics by access (admin sees all)
+                                                    const accessibleAdminTopics = isAdminView
+                                                        ? (topics || [])
+                                                        : (topics || []).filter(t => t.isPublic || accessibleAdminTopicIds.has(t.id));
 
                                                     // Teacher topic folders: topics reference folderId directly
                                                     // Teacher grammar folders: exercises reference folderId directly
                                                     // Build unified folder lookup
                                                     const allPickerFolders = new Map(); // folderId -> { id, name, order }
-                                                    (folders || []).forEach(f => allPickerFolders.set(f.id, { id: f.id, name: f.name, order: f.order || 0, icon: f.icon }));
+                                                    accessibleAdminFolders.forEach(f => allPickerFolders.set(f.id, { id: f.id, name: f.name, order: f.order || 0, icon: f.icon }));
                                                     (teacherTopicFoldersData || []).forEach(f => { if (!allPickerFolders.has(f.id)) allPickerFolders.set(f.id, { id: f.id, name: f.name, order: f.order || 0, icon: f.icon }); });
                                                     (teacherGrammarFoldersData || []).forEach(f => { if (!allPickerFolders.has(f.id)) allPickerFolders.set(f.id, { id: f.id, name: f.name, order: f.order || 0, icon: f.icon }); });
 
@@ -2228,9 +2327,9 @@ export default function TeacherGroupDetailPage() {
                                                             .forEach(t => allItems.push({ type: 'item', id: `teacher_${t.id}`, name: t.name, badge: 'vocab', badgeText: 'Từ vựng', createdAt: t.createdAt, folderId: getTopicFolderId(t, true) }));
                                                     }
 
-                                                    // Default vocab (admin topics + public teacher topics)
+                                                    // Default vocab (accessible admin topics + public teacher topics)
                                                     if (showVocab && showDefault) {
-                                                        (topics || []).filter(t => !searchLower || t.name.toLowerCase().includes(searchLower))
+                                                        accessibleAdminTopics.filter(t => !searchLower || t.name.toLowerCase().includes(searchLower))
                                                             .forEach(t => allItems.push({ type: 'item', id: t.id, name: t.name, badge: 'default', badgeText: 'Từ vựng', createdAt: t.createdAt, folderId: getTopicFolderId(t, false) }));
                                                         teacherTopics.filter(t => t.teacherId !== user?.uid).filter(t => !searchLower || t.name.toLowerCase().includes(searchLower))
                                                             .forEach(t => allItems.push({ type: 'item', id: `teacher_${t.id}`, name: t.name, badge: 'vocab', badgeText: 'Từ vựng', createdAt: t.createdAt, folderId: getTopicFolderId(t, true) }));
@@ -2375,6 +2474,48 @@ export default function TeacherGroupDetailPage() {
                                 </div>
                             </div>
 
+                            {/* Scheduled Start Toggle */}
+                            <div className="teacher-form-group">
+                                <label className="teacher-form-label">
+                                    ⏰ Thời điểm bắt đầu
+                                </label>
+                                <div className="teacher-assign-mode-toggle">
+                                    <button
+                                        type="button"
+                                        className={`teacher-assign-mode-btn ${!assignmentForm.scheduledStart ? 'active' : ''}`}
+                                        onClick={() => setAssignmentForm({ ...assignmentForm, scheduledStart: '' })}
+                                        style={!assignmentForm.scheduledStart ? { background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', borderColor: '#059669' } : {}}
+                                    >
+                                        Bắt đầu ngay
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`teacher-assign-mode-btn ${assignmentForm.scheduledStart ? 'active' : ''}`}
+                                        onClick={() => setAssignmentForm({ ...assignmentForm, scheduledStart: 'pending' })}
+                                        style={assignmentForm.scheduledStart ? { background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#fff', borderColor: '#d97706' } : {}}
+                                    >
+                                        Hẹn ngày...
+                                    </button>
+                                </div>
+                                {assignmentForm.scheduledStart && (
+                                    <div style={{ marginTop: '8px' }}>
+                                        <div className="teacher-input-wrapper">
+                                            <span className="teacher-input-icon">📅</span>
+                                            <input
+                                                type="datetime-local"
+                                                className="teacher-input"
+                                                value={assignmentForm.scheduledStart === 'pending' ? '' : assignmentForm.scheduledStart}
+                                                onChange={e => setAssignmentForm({ ...assignmentForm, scheduledStart: e.target.value })}
+                                                style={{ borderColor: '#f59e0b', background: '#fffbeb' }}
+                                            />
+                                        </div>
+                                        {assignmentForm.scheduledStart && assignmentForm.scheduledStart !== 'pending' && assignmentForm.dueDate && new Date(assignmentForm.scheduledStart) >= new Date(assignmentForm.dueDate) && (
+                                            <p style={{ color: '#ef4444', fontSize: '0.8rem', margin: '4px 0 0', fontWeight: 600 }}>⚠ Ngày bắt đầu phải trước hạn nộp!</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="teacher-form-group">
                                 <label className="teacher-form-label">
                                     <Clock size={16} /> Hạn chót (Deadline)
@@ -2469,7 +2610,7 @@ export default function TeacherGroupDetailPage() {
                                 <button type="button" className="teacher-btn teacher-btn-secondary" style={{ flex: 1 }} onClick={() => { setIsAssignModalOpen(false); setAssignmentMode('all'); setSelectedStudentIds([]); }} disabled={assignLoading}>
                                     Hủy
                                 </button>
-                                <button type="submit" className="teacher-btn teacher-btn-primary" style={{ flex: 1 }} disabled={assignLoading || (assignmentMode === 'individual' && selectedStudentIds.length === 0)}>
+                                <button type="submit" className="teacher-btn teacher-btn-primary" style={{ flex: 1 }} disabled={assignLoading || (assignmentMode === 'individual' && selectedStudentIds.length === 0) || assignmentForm.scheduledStart === 'pending' || (assignmentForm.scheduledStart && assignmentForm.scheduledStart !== 'pending' && assignmentForm.dueDate && new Date(assignmentForm.scheduledStart) >= new Date(assignmentForm.dueDate))}>
                                     {assignLoading ? 'Đang giao...' : 'Giao bài luyện'}
                                 </button>
                             </div>
@@ -2532,9 +2673,14 @@ export default function TeacherGroupDetailPage() {
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                 {(() => {
-                                    // Check if assignment is expired
+                                    // Check if assignment is expired (consider studentDeadlines)
                                     const dueDateObj = selectedAssignment.dueDate?.toDate ? selectedAssignment.dueDate.toDate() : (selectedAssignment.dueDate ? new Date(selectedAssignment.dueDate) : null);
-                                    const isExpired = dueDateObj ? dueDateObj < new Date() : false;
+                                    // Assignment is only fully expired if ALL students' deadlines have passed
+                                    const hasAnyActiveStudentDeadline = selectedAssignment.studentDeadlines && Object.values(selectedAssignment.studentDeadlines).some(sd => {
+                                        const sdDate = sd?.toDate ? sd.toDate() : (sd ? new Date(sd) : null);
+                                        return sdDate && sdDate > new Date();
+                                    });
+                                    const isExpired = (dueDateObj ? dueDateObj < new Date() : false) && !hasAnyActiveStudentDeadline;
 
                                     // Calculate overall stats for assignment
                                     let completedCount = 0;
@@ -2581,12 +2727,23 @@ export default function TeacherGroupDetailPage() {
                                 {assignmentProgressData.map((item) => {
                                     const { student, progress } = item;
                                     const { total, learned, learning, totalCorrect: tc, totalWrong: tw } = progress;
-                                    const percent = total > 0 ? Math.round((learned / total) * 100) : 0;
+                                    // Use step-based progress (same as student dashboard) for consistency
+                                    const totalSteps = total * 6;
+                                    const completedSteps = progress.completedSteps || 0;
+                                    let percent = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
+                                    // Cap at 99% if not fully mastered yet, show 100% only when all words are learned
+                                    if (total > 0 && learned === total) {
+                                        percent = 100;
+                                    } else if (percent >= 100) {
+                                        percent = 99;
+                                    }
                                     const attempts = (tc ?? 0) + (tw ?? 0);
                                     const errorRate = attempts > 0 ? Math.round(((tw ?? 0) / attempts) * 100) : 0;
 
-                                    // Check if assignment is expired
-                                    const dueDateObj = selectedAssignment.dueDate?.toDate ? selectedAssignment.dueDate.toDate() : (selectedAssignment.dueDate ? new Date(selectedAssignment.dueDate) : null);
+                                    // Check if assignment is expired (consider studentDeadlines for this specific student)
+                                    const studentSpecificDl = selectedAssignment.studentDeadlines?.[student.uid];
+                                    const effectiveDueDate = studentSpecificDl || selectedAssignment.dueDate;
+                                    const dueDateObj = effectiveDueDate?.toDate ? effectiveDueDate.toDate() : (effectiveDueDate ? new Date(effectiveDueDate) : null);
                                     const isExpired = dueDateObj ? dueDateObj < new Date() : false;
 
                                     let statusColor = '#64748b'; // Not started
@@ -2667,7 +2824,7 @@ export default function TeacherGroupDetailPage() {
                                                                                 background: isFilled ? (i >= 3 ? '#fef2f2' : i === 2 ? '#fff7ed' : '#fefce8') : 'transparent',
                                                                                 border: isFilled ? `1.5px solid ${flagColor}40` : '1.5px solid transparent',
                                                                                 cursor: (isFilled || (isNext && !isStaff)) ? 'pointer' : 'default',
-                                                                                opacity: isFilled ? 1 : isNext ? 0.4 : 0.2,
+                                                                                opacity: isFilled ? 1 : 0.3,
                                                                                 filter: !isFilled ? 'grayscale(1)' : 'none',
                                                                                 transition: 'all 0.2s'
                                                                             }}
@@ -3692,7 +3849,7 @@ export default function TeacherGroupDetailPage() {
                                                                 {examType === 'test' ? 'Kiểm tra' : 'Bài tập'}
                                                             </span>
                                                         </div>
-                                                        <span className="teacher-student-email" style={{ color: '#64748b', fontWeight: 800, fontSize: '1rem', display: 'block', marginBottom: '8px' }}>{item.examName || 'Không tên'}</span>
+                                                        <span className="teacher-student-email" style={{ color: '#64748b', fontWeight: 800, fontSize: '1rem', display: 'block', marginBottom: '8px' }}>{allExams.find(e => e.id === item.examId)?.name || item.examName || 'Không tên'}</span>
                                                         <div style={{ fontSize: '0.8rem', color: '#f59e0b', fontWeight: 600 }}>
                                                             ⏳ Còn {daysLeft} ngày trước khi xoá vĩnh viễn
                                                         </div>
@@ -3756,6 +3913,19 @@ export default function TeacherGroupDetailPage() {
                                                     }}>
                                                         <Clock size={14} /> Hạn: {formatDate(a.dueDate)}
                                                     </span>
+                                                    {(() => {
+                                                        if (!a.scheduledStart) return null;
+                                                        const ss = a.scheduledStart.toDate ? a.scheduledStart.toDate() : new Date(a.scheduledStart);
+                                                        const isFuture = ss > new Date();
+                                                        return (
+                                                            <span style={{
+                                                                display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700,
+                                                                background: isFuture ? '#fef3c7' : '#ecfdf5', color: isFuture ? '#d97706' : '#059669', border: `1px solid ${isFuture ? '#fde68a' : '#a7f3d0'}`
+                                                            }}>
+                                                                {isFuture ? '🕐 Sẽ mở lúc' : '✅ Đã mở từ'} {ss.toLocaleString('vi-VN')}
+                                                            </span>
+                                                        );
+                                                    })()}
                                                     {hasActiveExtension && (
                                                         <span style={{
                                                             display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700,
@@ -3889,7 +4059,7 @@ export default function TeacherGroupDetailPage() {
                                 </div>
                                 <div style={{ padding: '0 24px 24px' }}>
                                     <p style={{ margin: 0, color: '#475569', fontSize: '1rem', lineHeight: '1.5' }}>
-                                        Bạn có chắc chắn muốn xóa {deleteExamLabel} <strong>{examAssignmentToDelete.examName}</strong> đã giao cho lớp này?<br /><br />
+                                        Bạn có chắc chắn muốn xóa {deleteExamLabel} <strong>{allExams.find(e => e.id === examAssignmentToDelete.examId)?.name || examAssignmentToDelete.examName}</strong> đã giao cho lớp này?<br /><br />
                                         Bài sẽ được chuyển vào <strong>Thùng rác</strong> và có thể khôi phục trong vòng 30 ngày. Bài làm của học sinh vẫn được giữ nguyên.
                                     </p>
                                 </div>
@@ -3922,7 +4092,7 @@ export default function TeacherGroupDetailPage() {
                             </div>
                             <div>
                                 <p style={{ margin: '0 0 12px', color: '#1e293b', fontSize: '1rem', lineHeight: '1.5', fontWeight: 700 }}>
-                                    {extendDeadlineTarget.type === 'exam' ? extendDeadlineTarget.item.examName : (() => {
+                                    {extendDeadlineTarget.type === 'exam' ? (allExams.find(e => e.id === extendDeadlineTarget.item.examId)?.name || extendDeadlineTarget.item.examName) : (() => {
                                         const item = extendDeadlineTarget.item;
                                         let topic = null;
                                         if (item.isTeacherTopic) topic = teacherTopics.find(t => t.id === item.topicId);
@@ -4369,6 +4539,48 @@ export default function TeacherGroupDetailPage() {
                                     )}
                                 </div>
 
+                                {/* Scheduled Start Toggle */}
+                                <div className="teacher-form-group">
+                                    <label className="teacher-form-label">
+                                        ⏰ Thời điểm bắt đầu
+                                    </label>
+                                    <div className="teacher-assign-mode-toggle">
+                                        <button
+                                            type="button"
+                                            className={`teacher-assign-mode-btn ${!examAssignmentForm.scheduledStart ? 'active' : ''}`}
+                                            onClick={() => setExamAssignmentForm({ ...examAssignmentForm, scheduledStart: '' })}
+                                            style={!examAssignmentForm.scheduledStart ? { background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', borderColor: '#059669' } : {}}
+                                        >
+                                            Bắt đầu ngay
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`teacher-assign-mode-btn ${examAssignmentForm.scheduledStart ? 'active' : ''}`}
+                                            onClick={() => setExamAssignmentForm({ ...examAssignmentForm, scheduledStart: 'pending' })}
+                                            style={examAssignmentForm.scheduledStart ? { background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#fff', borderColor: '#d97706' } : {}}
+                                        >
+                                            Hẹn ngày...
+                                        </button>
+                                    </div>
+                                    {examAssignmentForm.scheduledStart && (
+                                        <div style={{ marginTop: '8px' }}>
+                                            <div className="teacher-input-wrapper">
+                                                <span className="teacher-input-icon">📅</span>
+                                                <input
+                                                    type="datetime-local"
+                                                    className="teacher-input"
+                                                    value={examAssignmentForm.scheduledStart === 'pending' ? '' : examAssignmentForm.scheduledStart}
+                                                    onChange={e => setExamAssignmentForm({ ...examAssignmentForm, scheduledStart: e.target.value })}
+                                                    style={{ borderColor: '#f59e0b', background: '#fffbeb' }}
+                                                />
+                                            </div>
+                                            {examAssignmentForm.scheduledStart && examAssignmentForm.scheduledStart !== 'pending' && examAssignmentForm.dueDate && new Date(examAssignmentForm.scheduledStart) >= new Date(examAssignmentForm.dueDate) && (
+                                                <p style={{ color: '#ef4444', fontSize: '0.8rem', margin: '4px 0 0', fontWeight: 600 }}>⚠ Ngày bắt đầu phải trước hạn nộp!</p>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
                                 <div className="teacher-form-group">
                                     <label className="teacher-form-label">
                                         <Clock size={16} /> Hạn hoàn thành
@@ -4391,11 +4603,11 @@ export default function TeacherGroupDetailPage() {
                                     </button>
                                     <button
                                         type="submit"
-                                        disabled={examAssignLoading || (examAssignmentMode === 'individual' && selectedStudentIds.length === 0)}
+                                        disabled={examAssignLoading || (examAssignmentMode === 'individual' && selectedStudentIds.length === 0) || examAssignmentForm.scheduledStart === 'pending' || (examAssignmentForm.scheduledStart && examAssignmentForm.scheduledStart !== 'pending' && examAssignmentForm.dueDate && new Date(examAssignmentForm.scheduledStart) >= new Date(examAssignmentForm.dueDate))}
                                         className="teacher-btn teacher-btn-primary"
                                         style={{ background: '#8b5cf6' }}
                                     >
-                                        {examAssignLoading ? 'Đang giao...' : 'Giao bài tập và kiểm tra'}
+                                        {examAssignLoading ? 'Đang giao...' : 'Giao bài'}
                                     </button>
                                 </div>
                             </form>
@@ -4418,7 +4630,7 @@ export default function TeacherGroupDetailPage() {
                                 <div>
                                     <h2 className="teacher-modal-title" style={{ color: '#0f172a', display: 'flex', alignItems: 'flex-start', gap: '8px', margin: 0, paddingRight: '40px' }}>
                                         <BarChart3 size={24} color="#8b5cf6" style={{ minWidth: '24px', flexShrink: 0, marginTop: '2px' }} />
-                                        <span style={{ fontSize: '1.2rem', lineHeight: '1.3' }}>{selectedExamAssignment.examName}</span>
+                                        <span style={{ fontSize: '1.2rem', lineHeight: '1.3' }}>{allExams.find(e => e.id === selectedExamAssignment.examId)?.name || selectedExamAssignment.examName}</span>
                                     </h2>
                                     <p style={{ margin: '4px 0 12px 32px', color: '#64748b', fontSize: '0.85rem' }}>Hạn: {formatDate(selectedExamAssignment.dueDate)}</p>
                                 </div>
@@ -4574,7 +4786,10 @@ export default function TeacherGroupDetailPage() {
                                                     })
                                                     .map(student => {
                                                         const sub = examSubmissions.find(s => s.studentId === student.uid);
-                                                        const subHasAiError = sub?.results && Object.values(sub.results).some(r => r.feedback && (r.feedback.includes('Lỗi khi chấm') || r.feedback.includes('chấm thủ công')));
+                                                        const subHasAiError = sub?.results && (
+                                                            Object.values(sub.results).some(r => r.feedback && (r.feedback.includes('Lỗi khi chấm') || r.feedback.includes('chấm thủ công') || r.feedback.includes('chưa được AI chấm')))
+                                                            || Object.entries(sub.results).some(([qId, r]) => (r.score === 0 || r.score === undefined) && !r.feedback && !r.teacherOverride && Object.values(sub.answers || {}).some(sec => sec?.[qId]?.answer?.hasRecording))
+                                                        );
                                                         const statusMap = {
                                                             'in_progress': { label: 'Đang làm', color: '#f59e0b', bg: '#fef3c7' },
                                                             'submitted': { label: 'Đã nộp', color: '#3b82f6', bg: '#eff6ff' },
@@ -4583,14 +4798,34 @@ export default function TeacherGroupDetailPage() {
                                                         };
                                                         const statusKey = sub ? (sub.status === 'graded' && sub.resultsReleased ? 'released' : sub.status) : 'none';
                                                         let status = sub ? (statusMap[statusKey] || statusMap['submitted']) : (() => {
-                                                            const dl = selectedExamAssignment?.dueDate ? (selectedExamAssignment.dueDate.toDate ? selectedExamAssignment.dueDate.toDate() : new Date(selectedExamAssignment.dueDate)) : null;
+                                                            // Check student-specific deadline first, then fall back to general dueDate
+                                                            const studentDl = selectedExamAssignment?.studentDeadlines?.[student.uid];
+                                                            const effectiveDl = studentDl || selectedExamAssignment?.dueDate;
+                                                            const dl = effectiveDl ? (effectiveDl.toDate ? effectiveDl.toDate() : new Date(effectiveDl)) : null;
                                                             const deadlinePassed = dl && dl.getTime() <= Date.now();
                                                             return deadlinePassed
                                                                 ? { label: 'Không hoàn thành', color: '#ef4444', bg: '#fef2f2' }
                                                                 : { label: 'Chưa làm', color: '#94a3b8', bg: '#f8fafc' };
                                                         })();
                                                         if (subHasAiError && sub?.status === 'graded' && !sub?.resultsReleased) {
-                                                            status = { label: '⚠ AI chấm lỗi', color: '#ea580c', bg: '#fff7ed' };
+                                                            status = { label: 'AI chấm sót', color: '#ea580c', bg: '#fff7ed' };
+                                                        }
+                                                        // Follow-up status overrides
+                                                        if (sub && sub.resultsReleased && sub.followUpRequested && Object.keys(sub.followUpRequested).length > 0) {
+                                                            const fuReq = sub.followUpRequested;
+                                                            const fuAns = sub.followUpAnswers || {};
+                                                            const fuRes = sub.followUpResults || {};
+                                                            const hasAllAnswers = Object.keys(fuReq).every(qId => Object.values(fuAns).some(sec => sec?.[qId]));
+                                                            const hasAllGraded = Object.keys(fuReq).every(qId => fuRes[qId]);
+                                                            if (sub.followUpResultsReleased) {
+                                                                status = { label: 'Đã trả bài sửa', color: '#059669', bg: '#ecfdf5' };
+                                                            } else if (hasAllGraded) {
+                                                                status = { label: 'AI đã chấm bài sửa', color: '#0891b2', bg: '#ecfeff' };
+                                                            } else if (hasAllAnswers) {
+                                                                status = { label: 'Đã nộp bài sửa', color: '#6d28d9', bg: '#f5f3ff' };
+                                                            } else {
+                                                                status = { label: 'Chờ bài sửa', color: '#d97706', bg: '#fffbeb' };
+                                                            }
                                                         }
 
                                                         return (
@@ -4647,7 +4882,7 @@ export default function TeacherGroupDetailPage() {
                                                                 </td>
                                                                 <td data-label="Thao tác" className="text-right">
                                                                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', alignItems: 'center', flexWrap: 'nowrap' }}>
-                                                                        {sub && (sub.status === 'submitted' || (sub.status === 'graded' && !sub.resultsReleased && (settings?.allowRetryAiGrading || (sub.results && Object.values(sub.results).some(r => r.feedback && (r.feedback.includes('Lỗi khi chấm') || r.feedback.includes('chấm thủ công'))))))) && (
+                                                                        {sub && (sub.status === 'submitted' || (sub.status === 'graded' && !sub.resultsReleased && (settings?.allowRetryAiGrading || subHasAiError))) && (
                                                                             <button
                                                                                 className="admin-action-btn"
                                                                                 style={{ color: '#f59e0b', background: '#fffbeb', border: '1px solid #fde68a' }}
@@ -4733,7 +4968,20 @@ export default function TeacherGroupDetailPage() {
                                                                                             type: 'danger',
                                                                                             onConfirm: async () => {
                                                                                                 try {
-                                                                                                    await deleteExamSubmission(sub.id);
+                                                                                                    // Delete ALL submissions for this student on this assignment (in case of duplicates)
+                                                                                                    const allSubs = await getExamSubmissionsForAssignment(selectedExamAssignment.id);
+                                                                                                    const studentSubs = allSubs.filter(s => s.studentId === student.uid);
+                                                                                                    await Promise.all(studentSubs.map(s => deleteExamSubmission(s.id)));
+
+                                                                                                    // Auto-extend deadline if it has passed (so student can actually redo)
+                                                                                                    const studentDl = selectedExamAssignment?.studentDeadlines?.[student.uid];
+                                                                                                    const effectiveDl = studentDl || selectedExamAssignment?.dueDate;
+                                                                                                    const dlDate = effectiveDl ? (effectiveDl.toDate ? effectiveDl.toDate() : new Date(effectiveDl)) : null;
+                                                                                                    if (dlDate && dlDate.getTime() <= Date.now()) {
+                                                                                                        const newDeadline = new Date(Date.now() + 24 * 60 * 60 * 1000); // +24h from now
+                                                                                                        await updateExamAssignmentStudentDeadline(selectedExamAssignment.id, student.uid, newDeadline);
+                                                                                                    }
+
                                                                                                     const updated = await getExamSubmissionsForAssignment(selectedExamAssignment.id);
                                                                                                     setExamSubmissions(updated);
                                                                                                     setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -4782,7 +5030,7 @@ export default function TeacherGroupDetailPage() {
                                                                                                     background: isFilled ? (i >= 3 ? '#fef2f2' : i === 2 ? '#fff7ed' : '#fefce8') : 'transparent',
                                                                                                     border: isFilled ? `1.5px solid ${flagColor}40` : '1.5px solid transparent',
                                                                                                     cursor: (isFilled || (isNext && !isStaff)) ? 'pointer' : 'default',
-                                                                                                    opacity: isFilled ? 1 : isNext ? 0.4 : 0.2,
+                                                                                                    opacity: isFilled ? 1 : 0.3,
                                                                                                     filter: !isFilled ? 'grayscale(1)' : 'none',
                                                                                                     transition: 'all 0.2s'
                                                                                                 }}

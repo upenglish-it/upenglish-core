@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link, useLocation } from 'react-router-dom';
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, BarChart3, BookOpen, Sparkles, Send, Trash2, Eye, EyeOff, Loader, ChevronDown, ChevronUp, Calendar, PenLine, X, AlertTriangle } from 'lucide-react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
@@ -100,6 +100,7 @@ function getFilterDateRange(filterKey) {
 export default function StudentProgressPage() {
     const { groupId, studentId } = useParams();
     const location = useLocation();
+    const navigate = useNavigate();
     const isAdminView = location.pathname.startsWith('/admin/');
     const { user } = useAuth();
     const isStaff = user?.role === 'staff';
@@ -357,8 +358,21 @@ export default function StudentProgressPage() {
             // Load submissions for ALL exam assignments (not filtered by range,
             // because the UI groups by deadline, not creation date)
             if (examAsgns.length > 0) {
-                const subs = await getExamSubmissionsForAssignments(examAsgns.map(a => a.id));
-                setStudentExamSubmissions(subs.filter(s => s.studentId === studentId));
+                const allSubs = await getExamSubmissionsForAssignments(examAsgns.map(a => a.id));
+                const studentSubs = allSubs.filter(s => s.studentId === studentId);
+                // Deduplicate: keep only the latest submission per assignment
+                const latestMap = new Map();
+                studentSubs.forEach(sub => {
+                    const existing = latestMap.get(sub.assignmentId);
+                    if (!existing) {
+                        latestMap.set(sub.assignmentId, sub);
+                    } else {
+                        const existingTime = existing.updatedAt?.toMillis?.() || existing.createdAt?.toMillis?.() || 0;
+                        const newTime = sub.updatedAt?.toMillis?.() || sub.createdAt?.toMillis?.() || 0;
+                        if (newTime > existingTime) latestMap.set(sub.assignmentId, sub);
+                    }
+                });
+                setStudentExamSubmissions(Array.from(latestMap.values()));
             } else {
                 setStudentExamSubmissions([]);
             }
@@ -593,9 +607,9 @@ export default function StudentProgressPage() {
 
     return (
         <div className="sp-page">
-            <Link to={backUrl} className="sp-back-link">
+            <button onClick={() => navigate(-1)} className="sp-back-link" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                 <ArrowLeft size={16} /> Quay lại {group.name}
-            </Link>
+            </button>
 
             <div className="sp-header">
                 <h1>{student.displayName || student.email}</h1>
@@ -988,7 +1002,7 @@ export default function StudentProgressPage() {
                                                     background: isFilled ? (i >= 3 ? '#fef2f2' : i === 2 ? '#fff7ed' : '#fefce8') : 'transparent',
                                                     border: isFilled ? `1.5px solid ${flagColor}40` : '1.5px solid var(--border-color)',
                                                     cursor: (isFilled || (isNext && !isStaff)) ? 'pointer' : 'default',
-                                                    opacity: isFilled ? 1 : isNext ? 0.5 : 0.25,
+                                                    opacity: isFilled ? 1 : 0.3,
                                                     transition: 'all 0.2s',
                                                     filter: !isFilled ? 'grayscale(1)' : 'none'
                                                 }}
@@ -1050,9 +1064,12 @@ export default function StudentProgressPage() {
                         const filterEndDate = getDeadlineCheckDate();
                         const getTopicDl = (topicId) => {
                             const asg = assignments.find(x => x.topicId === topicId);
-                            if (!asg || !asg.dueDate) return null;
-                            const dl = asg.dueDate;
-                            return dl.toMillis ? dl.toMillis() : (dl.seconds ? dl.seconds * 1000 : new Date(dl).getTime());
+                            if (!asg) return null;
+                            // Check student-specific deadline first
+                            const studentDl = asg.studentDeadlines?.[studentId];
+                            const effectiveDl = studentDl || asg.dueDate;
+                            if (!effectiveDl) return null;
+                            return effectiveDl.toMillis ? effectiveDl.toMillis() : (effectiveDl.seconds ? effectiveDl.seconds * 1000 : new Date(effectiveDl).getTime());
                         };
                         const expiredTopics = topicsToShow.filter(t => { const d = getTopicDl(t.id); return !d || d <= filterEndDate.getTime(); });
                         const inProgressTopics = topicsToShow.filter(t => { const d = getTopicDl(t.id); return d && d > filterEndDate.getTime(); });
@@ -1160,9 +1177,12 @@ export default function StudentProgressPage() {
                         const filterEndDate = getDeadlineCheckDate();
                         const getGrammarDl = (exId) => {
                             const asg = assignments.find(x => x.topicId === exId);
-                            if (!asg || !asg.dueDate) return null;
-                            const dl = asg.dueDate;
-                            return dl.toMillis ? dl.toMillis() : (dl.seconds ? dl.seconds * 1000 : new Date(dl).getTime());
+                            if (!asg) return null;
+                            // Check student-specific deadline first
+                            const studentDl = asg.studentDeadlines?.[studentId];
+                            const effectiveDl = studentDl || asg.dueDate;
+                            if (!effectiveDl) return null;
+                            return effectiveDl.toMillis ? effectiveDl.toMillis() : (effectiveDl.seconds ? effectiveDl.seconds * 1000 : new Date(effectiveDl).getTime());
                         };
                         const expiredEntries = entries.filter(([exId]) => { const d = getGrammarDl(exId); return !d || d <= filterEndDate.getTime(); });
                         const inProgressEntries = entries.filter(([exId]) => { const d = getGrammarDl(exId); return d && d > filterEndDate.getTime(); });
@@ -1298,13 +1318,17 @@ export default function StudentProgressPage() {
                                 'released': { label: 'Đã trả kết quả', color: '#7c3aed', bg: '#f5f3ff' }
                             };
                             const statusKey = sub ? (sub.status === 'graded' && sub.resultsReleased ? 'released' : sub.status) : 'none';
-                            const st = sub ? (statusMap[statusKey] || statusMap.submitted) : (() => {
+                            const subHasError = sub?.results && Object.values(sub.results).some(r => r.feedback && (r.feedback.includes('Lỗi khi chấm') || r.feedback.includes('chấm thủ công')));
+                            let st = sub ? (statusMap[statusKey] || statusMap.submitted) : (() => {
                                 const dlMs = getEffectiveDeadline(a);
                                 const deadlinePassed = dlMs && dlMs <= Date.now();
                                 return deadlinePassed
                                     ? { label: 'Không hoàn thành', color: '#ef4444', bg: '#fef2f2' }
                                     : { label: 'Chưa làm', color: '#94a3b8', bg: '#f8fafc' };
                             })();
+                            if (subHasError && sub?.status === 'graded' && !sub?.resultsReleased) {
+                                st = { label: 'AI chấm sót', color: '#ea580c', bg: '#fff7ed' };
+                            }
 
                             return (
                                 <div key={a.id} className="sp-progress-card" style={{ padding: '16px' }}>
@@ -1421,28 +1445,54 @@ export default function StudentProgressPage() {
 
                 {/* Warning: assignments with active deadlines */}
                 {(() => {
-                    const filterEnd = getDeadlineCheckDate();
+                    const now = Date.now();
                     const getEffDl = (a) => {
                         const dl = a.studentDeadlines?.[studentId] || a.dueDate;
                         if (!dl) return null;
                         return dl.toMillis ? dl.toMillis() : (dl.seconds ? dl.seconds * 1000 : new Date(dl).getTime());
                     };
+                    // Only warn about assignments whose deadline is:
+                    // 1. Within the filter date range
+                    // 2. Still in the future (not yet expired)
+                    // 3. Student hasn't completed yet
+                    const filterStart = currentFilterStartDate ? new Date(currentFilterStartDate).getTime() : null;
+                    const filterEndMs = currentFilterEndDate ? new Date(currentFilterEndDate + 'T23:59:59').getTime() : null;
+                    const isInFilterRange = (dlMs) => {
+                        if (!filterStart || !filterEndMs) return true;
+                        return dlMs >= filterStart && dlMs <= filterEndMs;
+                    };
+                    const DONE_STATUSES = ['submitted', 'graded', 'released'];
                     // Check regular assignments (vocab/grammar)
                     const activeRegular = assignments.filter(a => {
                         const dlMs = getEffDl(a);
-                        return dlMs && dlMs > filterEnd.getTime();
+                        if (!dlMs) return false;
+                        // Must be within filter range and still in the future
+                        if (!isInFilterRange(dlMs) || dlMs <= now) return false;
+                        // Exclude if student already completed 100%
+                        const vocabProg = studentTopicProgress?.[a.topicId];
+                        if (vocabProg && vocabProg.total > 0 && vocabProg.learned >= vocabProg.total) return false;
+                        const grammarProg = studentGrammarProgress?.[a.topicId];
+                        if (grammarProg && grammarProg.total > 0 && grammarProg.learned >= grammarProg.total) return false;
+                        return true;
                     });
                     // Check exam assignments
                     const activeExams = examAssignments.filter(a => {
                         const dlMs = getEffDl(a);
-                        return dlMs && dlMs > filterEnd.getTime();
+                        if (!dlMs) return false;
+                        // Must be within filter range and still in the future
+                        if (!isInFilterRange(dlMs) || dlMs <= now) return false;
+                        // Exclude if student already submitted/graded/released
+                        const sub = studentExamSubmissions?.find(s => s.assignmentId === a.id);
+                        if (sub && DONE_STATUSES.includes(sub.status)) return false;
+                        return true;
                     });
                     if (activeRegular.length === 0 && activeExams.length === 0) return null;
                     const basePath = isAdminView ? '/admin' : '/teacher';
                     const linkItems = [
                         ...activeRegular.map(a => {
                             const topic = topics.find(t => t.id === a.topicId);
-                            const name = topic?.name || a.topicId;
+                            const grammar = grammarExercises.find(e => e.id === a.topicId);
+                            const name = topic?.name || grammar?.name || a.topicName || a.topicId;
                             return { id: a.id, name, to: `${basePath}/groups/${groupId}?tab=assignments` };
                         }),
                         ...activeExams.map(a => {

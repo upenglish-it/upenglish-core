@@ -4,7 +4,7 @@ import { collection, getDocs, getCountFromServer, query, where, collectionGroup 
 import { useAppSettings } from '../../contexts/AppSettingsContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { updateAppSettings } from '../../services/appSettingsService';
-import { Users, UsersRound, Award, TrendingUp, CheckCircle, UserPlus, AlertTriangle, Send, Loader, Bot, ChevronDown, ChevronUp } from 'lucide-react';
+import { Users, UsersRound, Award, TrendingUp, CheckCircle, UserPlus, Send, Loader, Bot, ChevronDown, ChevronUp } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, PieChart, Pie } from 'recharts';
 import { chatCompletion } from '../../services/aiService';
 
@@ -25,8 +25,7 @@ export default function AdminDashboardPage() {
         topClasses: [],
         weeklyActivity: [],
         userGrowth: [],
-        assignmentCompletion: { submitted: 0, overdue: 0, pending: 0, notStarted: 0 },
-        weakestSkills: []
+        teacherCompletionRank: [],
     });
     const [loading, setLoading] = useState(true);
     const { settings } = useAppSettings();
@@ -55,24 +54,28 @@ export default function AdminDashboardPage() {
                     grammarSubSnap,
                     examSubSnap,
                     wordProgressSnap,
+                    grammarProgressSnap,
                     systemExamsCountSnap,
                     teacherTopicsSnap,
                     teacherExamsSnap,
                     groupsSnap,
                     examAssignmentsSnap,
-                    grammarAssignmentsSnap
+                    grammarAssignmentsSnap,
+                    vocabGrammarAssignmentsSnap
                 ] = await Promise.all([
                     getCountFromServer(collection(db, 'topics')),
                     getDocs(collection(db, 'grammar_exercises')),
                     getDocs(collection(db, 'grammar_submissions')),
                     getDocs(collection(db, 'exam_submissions')),
                     getDocs(collectionGroup(db, 'word_progress')),
+                    getDocs(collectionGroup(db, 'grammar_progress')),
                     getCountFromServer(query(collection(db, 'exams'), where('createdByRole', '==', 'admin'))),
                     getDocs(collection(db, 'teacher_topics')),
                     getDocs(query(collection(db, 'exams'), where('createdByRole', '==', 'teacher'))),
                     getDocs(collection(db, 'user_groups')),
                     getDocs(collection(db, 'exam_assignments')),
                     getDocs(collection(db, 'grammar_assignments')),
+                    getDocs(collection(db, 'assignments')),
                 ]);
 
                 // Aggregate Teacher Data
@@ -80,6 +83,7 @@ export default function AdminDashboardPage() {
                 const processTeacherDocs = (snap, isArray = false) => {
                     snap.forEach(docSnap => {
                         const data = isArray ? docSnap : docSnap.data();
+                        if (data.isDeleted) return;
                         const tid = data.teacherId || data.createdBy;
                         if (tid) {
                             teacherContentCount[tid] = (teacherContentCount[tid] || 0) + 1;
@@ -93,6 +97,7 @@ export default function AdminDashboardPage() {
 
                 grammarDocsSnap.forEach(docSnap => {
                     const data = docSnap.data();
+                    if (data.isDeleted) return;
                     if (data.teacherId) {
                         teacherGrammarCount++;
                         teacherGrammarData.push(data);
@@ -114,8 +119,7 @@ export default function AdminDashboardPage() {
                             count
                         };
                     })
-                    .sort((a, b) => b.count - a.count)
-                    .slice(0, 5);
+                    .sort((a, b) => b.count - a.count);
 
                 const groupDocs = [];
                 groupsSnap.forEach(docSnap => {
@@ -129,14 +133,31 @@ export default function AdminDashboardPage() {
                     usersList.filter(u => u.role === 'user' && (u.groupIds || []).some(gid => visibleGroupIds.has(gid))).map(u => u.uid)
                 );
 
-                // Aggregate Student Activity for Groups
+                // Aggregate Student Activity for Groups (last 30 days only)
+                const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+                const getDocTs = (docSnap) => {
+                    const d = docSnap.data();
+                    const ts = d.createdAt || d.lastStudied;
+                    return ts?.toMillis ? ts.toMillis() : (ts?.seconds ? ts.seconds * 1000 : 0);
+                };
                 const activeStudentIds = new Set();
-                grammarSubSnap.forEach(docSnap => activeStudentIds.add(docSnap.data().studentId));
-                examSubSnap.forEach(docSnap => activeStudentIds.add(docSnap.data().studentId));
+                grammarProgressSnap.forEach(docSnap => {
+                    if (getDocTs(docSnap) >= sevenDaysAgo) {
+                        const pathParts = docSnap.ref.path.split('/');
+                        if (pathParts.length >= 2) activeStudentIds.add(pathParts[1]);
+                    }
+                });
+                grammarSubSnap.forEach(docSnap => {
+                    if (getDocTs(docSnap) >= sevenDaysAgo) activeStudentIds.add(docSnap.data().studentId);
+                });
+                examSubSnap.forEach(docSnap => {
+                    if (getDocTs(docSnap) >= sevenDaysAgo) activeStudentIds.add(docSnap.data().studentId);
+                });
                 wordProgressSnap.forEach(docSnap => {
-                    // Extract studentId from the path: users/{studentId}/word_progress/{wordId}
-                    const pathParts = docSnap.ref.path.split('/');
-                    if (pathParts.length >= 2) activeStudentIds.add(pathParts[1]);
+                    if (getDocTs(docSnap) >= sevenDaysAgo) {
+                        const pathParts = docSnap.ref.path.split('/');
+                        if (pathParts.length >= 2) activeStudentIds.add(pathParts[1]);
+                    }
                 });
 
                 const topClasses = groupDocs
@@ -178,123 +199,190 @@ export default function AdminDashboardPage() {
                 const weeklyBuckets = Array.from({ length: 8 }, (_, i) => {
                     const weekStart = now - (7 - i) * weekMs;
                     const d = new Date(weekStart);
-                    return { label: `${d.getDate()}/${d.getMonth() + 1}`, grammar: 0, exam: 0, total: 0 };
+                    return { label: `${d.getDate()}/${d.getMonth() + 1}`, grammar: 0, exam: 0, vocab: 0, total: 0 };
                 });
                 const getTs = (doc) => {
                     const d = doc.data();
-                    return d.createdAt?.toMillis ? d.createdAt.toMillis() : (d.createdAt?.seconds ? d.createdAt.seconds * 1000 : 0);
+                    const ts = d.createdAt || d.lastStudied;
+                    return ts?.toMillis ? ts.toMillis() : (ts?.seconds ? ts.seconds * 1000 : 0);
                 };
-                grammarSubSnap.forEach(d => {
+                // Count number of assignments created by teachers per week
+                vocabGrammarAssignmentsSnap.forEach(d => {
                     const data = d.data();
-                    if (!visibleStudentIds.has(data.studentId)) return;
+                    if (data.isDeleted) return;
                     const ts = getTs(d);
                     const weekIdx = Math.floor((ts - (now - 8 * weekMs)) / weekMs);
-                    if (weekIdx >= 0 && weekIdx < 8) { weeklyBuckets[weekIdx].grammar++; weeklyBuckets[weekIdx].total++; }
+                    if (weekIdx >= 0 && weekIdx < 8) {
+                        if (data.isGrammar) {
+                            weeklyBuckets[weekIdx].grammar++;
+                        } else {
+                            weeklyBuckets[weekIdx].vocab++;
+                        }
+                        weeklyBuckets[weekIdx].total++;
+                    }
                 });
-                examSubSnap.forEach(d => {
-                    const data = d.data();
-                    if (!visibleStudentIds.has(data.studentId)) return;
-                    const ts = getTs(d);
-                    const weekIdx = Math.floor((ts - (now - 8 * weekMs)) / weekMs);
-                    if (weekIdx >= 0 && weekIdx < 8) { weeklyBuckets[weekIdx].exam++; weeklyBuckets[weekIdx].total++; }
-                });
-
-                // 2. User Growth (last 6 months)
-                const monthBuckets = Array.from({ length: 6 }, (_, i) => {
-                    const d = new Date();
-                    d.setMonth(d.getMonth() - (5 - i));
-                    return { label: `T${d.getMonth() + 1}/${d.getFullYear().toString().slice(2)}`, count: 0 };
-                });
-                usersList.forEach(u => {
-                    const ts = u.createdAt?.toMillis ? u.createdAt.toMillis() : (u.createdAt?.seconds ? u.createdAt.seconds * 1000 : 0);
-                    if (!ts) return;
-                    const d = new Date(ts);
-                    const key = `T${d.getMonth() + 1}/${d.getFullYear().toString().slice(2)}`;
-                    const bucket = monthBuckets.find(b => b.label === key);
-                    if (bucket) bucket.count++;
-                });
-
-                // 3. Assignment Completion Rate (exam + grammar)
-                let submitted = 0, overdue = 0, pending = 0;
-                examSubSnap.forEach(d => {
-                    const data = d.data();
-                    if (!visibleStudentIds.has(data.studentId)) return;
-                    if (data.status === 'graded' || data.status === 'released' || data.status === 'submitted') submitted++;
-                    else if (data.status === 'overdue') overdue++;
-                    else pending++;
-                });
-                // Count grammar submissions as completed (visible students only)
-                grammarSubSnap.forEach(d => {
-                    const data = d.data();
-                    if (visibleStudentIds.has(data.studentId)) submitted++;
-                });
-
-                // Calculate expected submissions to find "not started"
-                let totalExpected = 0;
                 examAssignmentsSnap.forEach(d => {
                     const data = d.data();
                     if (data.isDeleted) return;
-                    if (data.targetType === 'group') {
-                        if (!visibleGroupIds.has(data.targetId)) return;
-                        const groupStudents = usersList.filter(u =>
-                            u.role === 'user' && (u.groupIds || []).includes(data.targetId)
-                        ).length;
-                        totalExpected += groupStudents;
-                    } else {
-                        totalExpected += 1;
+                    const ts = getTs(d);
+                    const weekIdx = Math.floor((ts - (now - 8 * weekMs)) / weekMs);
+                    if (weekIdx >= 0 && weekIdx < 8) {
+                        weeklyBuckets[weekIdx].exam++;
+                        weeklyBuckets[weekIdx].total++;
                     }
                 });
-                grammarAssignmentsSnap.forEach(d => {
-                    const data = d.data();
-                    if (data.groupId && !visibleGroupIds.has(data.groupId)) return;
-                    if (data.groupId) {
-                        const groupStudents = usersList.filter(u =>
-                            u.role === 'user' && (u.groupIds || []).includes(data.groupId)
-                        ).length;
-                        totalExpected += groupStudents;
-                    }
-                });
-                const totalActual = submitted + overdue + pending;
-                const notStarted = Math.max(0, totalExpected - totalActual);
 
-                // 4. Weakest Skills (from error categories in exam submissions)
-                const errorCatCounts = {};
-                const errorCatCorrect = {};
+                // 2. Active Users (last 6 months)
+                const monthBuckets = Array.from({ length: 6 }, (_, i) => {
+                    const d = new Date();
+                    d.setMonth(d.getMonth() - (5 - i));
+                    return { label: `T${d.getMonth() + 1}/${d.getFullYear().toString().slice(2)}`, month: d.getMonth(), year: d.getFullYear(), _activeSet: new Set() };
+                });
+                const addActivityToMonth = (ts, studentId) => {
+                    if (!ts || !studentId) return;
+                    const d = new Date(ts);
+                    const bucket = monthBuckets.find(b => b.month === d.getMonth() && b.year === d.getFullYear());
+                    if (bucket) bucket._activeSet.add(studentId);
+                };
+                grammarSubSnap.forEach(d => {
+                    const data = d.data();
+                    const ts = data.createdAt?.toMillis ? data.createdAt.toMillis() : (data.createdAt?.seconds ? data.createdAt.seconds * 1000 : 0);
+                    addActivityToMonth(ts, data.studentId);
+                });
                 examSubSnap.forEach(d => {
                     const data = d.data();
-                    if (!visibleStudentIds.has(data.studentId)) return;
-                    if (data.answers && Array.isArray(data.answers)) {
-                        data.answers.forEach(a => {
-                            const cat = a.errorCategory || 'other';
-                            errorCatCounts[cat] = (errorCatCounts[cat] || 0) + 1;
-                            if (a.isCorrect) errorCatCorrect[cat] = (errorCatCorrect[cat] || 0) + 1;
-                        });
+                    const ts = data.createdAt?.toMillis ? data.createdAt.toMillis() : (data.createdAt?.seconds ? data.createdAt.seconds * 1000 : 0);
+                    addActivityToMonth(ts, data.studentId);
+                });
+                wordProgressSnap.forEach(d => {
+                    const data = d.data();
+                    const ts = data.createdAt?.toMillis ? data.createdAt.toMillis() : (data.createdAt?.seconds ? data.createdAt.seconds * 1000 : 0);
+                    const pathParts = d.ref.path.split('/');
+                    if (pathParts.length >= 2) addActivityToMonth(ts, pathParts[1]);
+                });
+                // Convert Sets to counts and clean up
+                monthBuckets.forEach(b => { b.count = b._activeSet.size; delete b._activeSet; delete b.month; delete b.year; });
+
+                // 3. Teacher Completion Rate Ranking
+                // Build groupId → teacherId map (teachers store groupIds on their user doc)
+                const groupToTeacher = {};
+                usersList.filter(u => u.role === 'teacher').forEach(t => {
+                    (t.groupIds || []).forEach(gid => { groupToTeacher[gid] = t.uid; });
+                });
+
+                // Build student lookup maps for completion checking
+                const studentVocabTopics = {}; // studentId → Set<topicId>
+                wordProgressSnap.forEach(d => {
+                    const pathParts = d.ref.path.split('/');
+                    if (pathParts.length < 2) return;
+                    const sid = pathParts[1];
+                    const data = d.data();
+                    if (data.topicId) {
+                        if (!studentVocabTopics[sid]) studentVocabTopics[sid] = new Set();
+                        studentVocabTopics[sid].add(data.topicId);
                     }
                 });
-                const ERROR_LABELS = {
-                    verb_tense: 'Thì động từ', article: 'Mạo từ', preposition: 'Giới từ', word_form: 'Dạng từ',
-                    subject_verb_agreement: 'Chủ-vị', pronoun: 'Đại từ', conjunction: 'Liên từ', comparison: 'So sánh',
-                    passive_voice: 'Bị động', conditional: 'Điều kiện', modal_verb: 'Động từ KK', relative_clause: 'MĐ quan hệ',
-                    gerund_infinitive: 'V-ing/To V', quantifier: 'Lượng từ', writing_structure: 'Cấu trúc viết',
-                    fluency: 'Lưu loát', vocabulary_usage: 'Dùng từ', vocabulary_meaning: 'Nghĩa từ', other: 'Khác'
+                const studentGrammarExercises = {}; // studentId → Set<exerciseId>
+                grammarProgressSnap.forEach(d => {
+                    const pathParts = d.ref.path.split('/');
+                    if (pathParts.length < 2) return;
+                    const sid = pathParts[1];
+                    const data = d.data();
+                    if (data.exerciseId) {
+                        if (!studentGrammarExercises[sid]) studentGrammarExercises[sid] = new Set();
+                        studentGrammarExercises[sid].add(data.exerciseId);
+                    }
+                });
+                const studentExamIds = {}; // studentId → Set<examId>
+                examSubSnap.forEach(d => {
+                    const data = d.data();
+                    if (data.examId && data.studentId) {
+                        const st = data.status;
+                        if (st === 'submitted' || st === 'graded' || st === 'released' || st === 'grading') {
+                            if (!studentExamIds[data.studentId]) studentExamIds[data.studentId] = new Set();
+                            studentExamIds[data.studentId].add(data.examId);
+                        }
+                    }
+                });
+
+                // Build groupId → studentUids map
+                const groupStudentsMap = {};
+                groupDocs.forEach(g => {
+                    groupStudentsMap[g.id] = usersList.filter(u =>
+                        u.role === 'user' && (u.groupIds || []).includes(g.id)
+                    ).map(u => u.uid);
+                });
+
+                // Per-teacher: { expected, completed }
+                const teacherCompletion = {};
+                const addToTeacher = (tid, expected, completed) => {
+                    if (!tid) return;
+                    if (!teacherCompletion[tid]) teacherCompletion[tid] = { expected: 0, completed: 0 };
+                    teacherCompletion[tid].expected += expected;
+                    teacherCompletion[tid].completed += completed;
                 };
-                const weakestSkills = Object.entries(errorCatCounts)
-                    .filter(([, count]) => count >= 3)
-                    .map(([cat, count]) => ({
-                        name: ERROR_LABELS[cat] || cat,
-                        accuracy: Math.round(((errorCatCorrect[cat] || 0) / count) * 100),
-                        total: count
-                    }))
-                    .sort((a, b) => a.accuracy - b.accuracy)
-                    .slice(0, 6);
+
+                // Vocab + Grammar assignments
+                vocabGrammarAssignmentsSnap.forEach(d => {
+                    const data = d.data();
+                    if (data.isDeleted) return;
+                    const gid = data.groupId;
+                    if (!gid || !visibleGroupIds.has(gid)) return;
+                    const tid = groupToTeacher[gid];
+                    const students = groupStudentsMap[gid] || [];
+                    const topicId = data.topicId;
+                    if (!topicId || students.length === 0) return;
+                    let completed = 0;
+                    students.forEach(sid => {
+                        if (data.isGrammar) {
+                            if (studentGrammarExercises[sid]?.has(topicId)) completed++;
+                        } else {
+                            if (studentVocabTopics[sid]?.has(topicId)) completed++;
+                        }
+                    });
+                    addToTeacher(tid, students.length, completed);
+                });
+
+                // Exam assignments
+                examAssignmentsSnap.forEach(d => {
+                    const data = d.data();
+                    if (data.isDeleted) return;
+                    if (data.targetType !== 'group') return;
+                    const gid = data.targetId;
+                    if (!gid || !visibleGroupIds.has(gid)) return;
+                    const tid = groupToTeacher[gid];
+                    const students = groupStudentsMap[gid] || [];
+                    const examId = data.examId;
+                    if (!examId || students.length === 0) return;
+                    let completed = 0;
+                    students.forEach(sid => {
+                        if (studentExamIds[sid]?.has(examId)) completed++;
+                    });
+                    addToTeacher(tid, students.length, completed);
+                });
+
+                const teacherCompletionRank = Object.entries(teacherCompletion)
+                    .map(([tid, { expected, completed }]) => {
+                        const teacher = usersList.find(u => u.uid === tid);
+                        return {
+                            name: teacher?.displayName || 'GV ' + tid.slice(0, 5),
+                            rate: expected > 0 ? Math.round((completed / expected) * 100) : 0,
+                            completed,
+                            expected
+                        };
+                    })
+                    .filter(t => t.expected > 0)
+                    .sort((a, b) => b.rate - a.rate || b.completed - a.completed);
+
+
+
 
                 setChartData({
                     topTeachers,
                     topClasses,
                     weeklyActivity: weeklyBuckets,
                     userGrowth: monthBuckets,
-                    assignmentCompletion: { submitted, overdue, pending, notStarted },
-                    weakestSkills
+                    teacherCompletionRank
                 });
 
                 setStats({
@@ -430,6 +518,7 @@ export default function AdminDashboardPage() {
     return (
         <div className="admin-page">
             <h1 className="admin-page-title">Tổng quan hệ thống</h1>
+            <p className="admin-page-subtitle">Xem tổng quan hoạt động, thống kê và biểu đồ của toàn hệ thống.</p>
 
             {/* Dashboard Charts Area */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginTop: '24px' }} className="admin-charts-area">
@@ -447,37 +536,32 @@ export default function AdminDashboardPage() {
                         <div style={{ padding: '40px 0', textAlign: 'center', color: '#64748b' }}>Đang tải dữ liệu...</div>
                     ) : chartData.topTeachers.length === 0 ? (
                         <div style={{ padding: '40px 0', textAlign: 'center', color: '#64748b' }}>Chưa có đủ dữ liệu giáo viên.</div>
-                    ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                            {chartData.topTeachers.map((teacher, index) => {
-                                const maxCount = Math.max(...chartData.topTeachers.map(t => t.count), 1);
-                                const percentage = Math.round((teacher.count / maxCount) * 100);
-
-                                return (
-                                    <div key={teacher.id}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.9rem', fontWeight: 500, color: '#334155' }}>
-                                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <span style={{ color: '#94a3b8', fontSize: '0.8rem', fontWeight: 600 }}>#{index + 1}</span>
-                                                {teacher.name}
-                                            </span>
-                                            <span style={{ fontWeight: 600, color: '#0f172a' }}>{teacher.count} bài</span>
+                    ) : (() => {
+                        const PIE_COLORS = ['#d946ef', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4'];
+                        const totalContent = chartData.topTeachers.reduce((s, t) => s + t.count, 0);
+                        return (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                                <ResponsiveContainer width={160} height={160}>
+                                    <PieChart>
+                                        <Pie data={chartData.topTeachers} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={38} outerRadius={70} paddingAngle={3}>
+                                            {chartData.topTeachers.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                                        </Pie>
+                                        <Tooltip formatter={(val, name) => [`${val} bài`, name]} contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0' }} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+                                    {chartData.topTeachers.map((t, i) => (
+                                        <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <div style={{ width: 10, height: 10, borderRadius: '50%', background: PIE_COLORS[i % PIE_COLORS.length], flexShrink: 0 }} />
+                                            <span style={{ fontSize: '0.85rem', color: '#334155', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{t.name}</span>
+                                            <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.85rem', flexShrink: 0 }}>{t.count}</span>
+                                            <span style={{ fontSize: '0.72rem', color: '#94a3b8', flexShrink: 0 }}>({totalContent > 0 ? Math.round(t.count / totalContent * 100) : 0}%)</span>
                                         </div>
-                                        <div style={{ width: '100%', height: '10px', background: '#f1f5f9', borderRadius: '5px', overflow: 'hidden' }}>
-                                            <div
-                                                style={{
-                                                    height: '100%',
-                                                    width: `${percentage}%`,
-                                                    background: 'linear-gradient(90deg, #d946ef 0%, #c026d3 100%)',
-                                                    borderRadius: '5px',
-                                                    transition: 'width 1s ease-out'
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })()}
                 </div>
 
                 {/* Top Classes Chart */}
@@ -486,7 +570,7 @@ export default function AdminDashboardPage() {
                         <div style={{ padding: '8px', borderRadius: '10px', background: '#ecfdf5', color: '#10b981' }}>
                             <UsersRound size={20} />
                         </div>
-                        <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: '#0f172a' }}>Top Lớp Học (Năng động)</h3>
+                        <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: '#0f172a' }}>Top Lớp Học (7 ngày gần nhất)</h3>
                     </div>
 
                     {loading ? (
@@ -533,7 +617,7 @@ export default function AdminDashboardPage() {
                         <div style={{ padding: '8px', borderRadius: '10px', background: '#eff6ff', color: '#3b82f6' }}>
                             <TrendingUp size={20} />
                         </div>
-                        <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: '#0f172a' }}>Xu hướng hoạt động (8 tuần)</h3>
+                        <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: '#0f172a' }}>Xu hướng giao bài</h3>
                     </div>
                     {loading ? (
                         <div style={{ padding: '40px 0', textAlign: 'center', color: '#64748b' }}>Đang tải...</div>
@@ -545,10 +629,11 @@ export default function AdminDashboardPage() {
                                 <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
                                 <Tooltip
                                     contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                                    formatter={(val, name) => [val, name === 'grammar' ? 'Kỹ năng' : name === 'exam' ? 'Bài tập' : 'Tổng']}
+                                    formatter={(val, name) => [val, name === 'grammar' ? 'Kỹ năng' : name === 'exam' ? 'Bài tập' : name === 'vocab' ? 'Từ vựng' : 'Tổng']}
                                 />
                                 <Line type="monotone" dataKey="grammar" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3 }} name="grammar" />
                                 <Line type="monotone" dataKey="exam" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} name="exam" />
+                                <Line type="monotone" dataKey="vocab" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} name="vocab" />
                             </LineChart>
                         </ResponsiveContainer>
                     )}
@@ -558,9 +643,9 @@ export default function AdminDashboardPage() {
                 <div className="admin-card" style={{ padding: '24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
                         <div style={{ padding: '8px', borderRadius: '10px', background: '#f0fdf4', color: '#22c55e' }}>
-                            <UserPlus size={20} />
+                            <Users size={20} />
                         </div>
-                        <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: '#0f172a' }}>Tăng trưởng người dùng (6 tháng)</h3>
+                        <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: '#0f172a' }}>Người dùng hoạt động</h3>
                     </div>
                     {loading ? (
                         <div style={{ padding: '40px 0', textAlign: 'center', color: '#64748b' }}>Đang tải...</div>
@@ -572,7 +657,7 @@ export default function AdminDashboardPage() {
                                 <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} allowDecimals={false} />
                                 <Tooltip
                                     contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                                    formatter={(val) => [val, 'Đăng ký mới']}
+                                    formatter={(val) => [val, 'Active users']}
                                 />
                                 <Bar dataKey="count" radius={[6, 6, 0, 0]}>
                                     {chartData.userGrowth.map((_, i) => (
@@ -587,88 +672,39 @@ export default function AdminDashboardPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginTop: '24px' }} className="admin-charts-area">
 
-                {/* Assignment Completion Rate */}
+                {/* Top Giáo Viên — Tỉ lệ HV hoàn thành bài */}
                 <div className="admin-card" style={{ padding: '24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
                         <div style={{ padding: '8px', borderRadius: '10px', background: '#faf5ff', color: '#8b5cf6' }}>
                             <CheckCircle size={20} />
                         </div>
-                        <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: '#0f172a' }}>Tỷ lệ hoàn thành bài được giao</h3>
+                        <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: '#0f172a' }}>Top GV — Tỉ lệ HV hoàn thành bài</h3>
                     </div>
                     {loading ? (
                         <div style={{ padding: '40px 0', textAlign: 'center', color: '#64748b' }}>Đang tải...</div>
-                    ) : (() => {
-                        const { submitted, overdue, pending, notStarted } = chartData.assignmentCompletion;
-                        const total = submitted + overdue + pending + notStarted;
-                        if (total === 0) return <div style={{ padding: '40px 0', textAlign: 'center', color: '#64748b' }}>Chưa có dữ liệu</div>;
-                        const pieData = [
-                            { name: 'Hoàn thành', value: submitted, color: '#22c55e' },
-                            { name: 'Quá hạn', value: overdue, color: '#f97316' },
-                            { name: 'Đang làm', value: pending, color: '#94a3b8' },
-                            { name: 'Chưa làm', value: notStarted, color: '#cbd5e1' }
-                        ].filter(d => d.value > 0);
-                        return (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-                                <ResponsiveContainer width={160} height={160}>
-                                    <PieChart>
-                                        <Pie data={pieData} dataKey="value" cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={3}>
-                                            {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                                        </Pie>
-                                        <Tooltip formatter={(val, name) => [val, name]} contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0' }} />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
-                                    {pieData.map(d => (
-                                        <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                            <div style={{ width: 12, height: 12, borderRadius: '50%', background: d.color, flexShrink: 0 }} />
-                                            <span style={{ fontSize: '0.85rem', color: '#475569', fontWeight: 500 }}>{d.name}</span>
-                                            <span style={{ marginLeft: 'auto', fontWeight: 700, color: '#0f172a', fontSize: '0.9rem' }}>{d.value}</span>
-                                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>({Math.round(d.value / total * 100)}%)</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        );
-                    })()}
-                </div>
-
-                {/* Weakest Skills */}
-                <div className="admin-card" style={{ padding: '24px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-                        <div style={{ padding: '8px', borderRadius: '10px', background: '#fff7ed', color: '#f97316' }}>
-                            <AlertTriangle size={20} />
-                        </div>
-                        <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: '#0f172a' }}>Kỹ năng yếu nhất hệ thống</h3>
-                    </div>
-                    {loading ? (
-                        <div style={{ padding: '40px 0', textAlign: 'center', color: '#64748b' }}>Đang tải...</div>
-                    ) : chartData.weakestSkills.length === 0 ? (
-                        <div style={{ padding: '40px 0', textAlign: 'center', color: '#64748b' }}>Chưa đủ dữ liệu phân loại lỗi</div>
+                    ) : chartData.teacherCompletionRank.length === 0 ? (
+                        <div style={{ padding: '40px 0', textAlign: 'center', color: '#64748b' }}>Chưa có dữ liệu</div>
                     ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                            {chartData.weakestSkills.map(skill => (
-                                <div key={skill.name}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '0.85rem' }}>
-                                        <span style={{ fontWeight: 600, color: '#334155' }}>{skill.name}</span>
-                                        <span style={{ color: skill.accuracy < 40 ? '#ef4444' : skill.accuracy < 60 ? '#f97316' : '#22c55e', fontWeight: 700 }}>
-                                            {skill.accuracy}% đúng
-                                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {chartData.teacherCompletionRank.map((t, i) => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: i === 0 ? '#fbbf24' : i === 1 ? '#94a3b8' : i === 2 ? '#cd7f32' : '#e2e8f0', color: i < 3 ? '#fff' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
+                                            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
+                                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: t.rate >= 70 ? '#22c55e' : t.rate >= 40 ? '#f59e0b' : '#ef4444', flexShrink: 0, marginLeft: '8px' }}>{t.rate}%</span>
+                                        </div>
+                                        <div style={{ width: '100%', height: 6, borderRadius: 3, background: '#f1f5f9', overflow: 'hidden' }}>
+                                            <div style={{ width: `${t.rate}%`, height: '100%', borderRadius: 3, background: t.rate >= 70 ? '#22c55e' : t.rate >= 40 ? '#f59e0b' : '#ef4444', transition: 'width 0.5s ease' }} />
+                                        </div>
+                                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '2px' }}>{t.completed}/{t.expected} lượt hoàn thành</div>
                                     </div>
-                                    <div style={{ width: '100%', height: '8px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
-                                        <div style={{
-                                            height: '100%',
-                                            width: `${skill.accuracy}%`,
-                                            background: skill.accuracy < 40 ? '#ef4444' : skill.accuracy < 60 ? '#f97316' : '#22c55e',
-                                            borderRadius: '4px',
-                                            transition: 'width 0.8s ease'
-                                        }} />
-                                    </div>
-                                    <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>{skill.total} lần làm</div>
                                 </div>
                             ))}
                         </div>
                     )}
                 </div>
+
             </div>
 
             {/* AI Data Analyst Chat */}

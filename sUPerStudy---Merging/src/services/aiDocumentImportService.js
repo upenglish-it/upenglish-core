@@ -296,7 +296,7 @@ function normalizeQuestion(rawQ, index, sectionId, examId) {
         purpose: rawQ.purpose || '',
         targetSkill,
         points: rawQ.points || (finalType === 'essay' ? 10 : 1),
-        hasContext: true,
+        hasContext: false,
         sectionId: sectionId || '',
         examId: examId || '',
         variations
