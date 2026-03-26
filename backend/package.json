@@ -20,7 +20,10 @@
     "build:prod:superlms": "rimraf dist/apps/superlms && nest build superlms",
     "start:prod:superlms": "node dist/apps/superlms/main",
     "start:dev": "nest start --watch",
-    "start": "concurrently \"yarn start:isms\" \"yarn start:superlms\""
+    "start:superstudy": "rimraf dist/apps/superstudy && nest start superstudy --watch",
+    "build:prod:superstudy": "rimraf dist/apps/superstudy && nest build superstudy",
+    "start:prod:superstudy": "node dist/apps/superstudy/main",
+    "start": "concurrently \"yarn start:isms\" \"yarn start:superlms\" \"yarn start:superstudy\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

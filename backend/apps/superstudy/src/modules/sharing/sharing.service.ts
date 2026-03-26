@@ -249,6 +249,28 @@ export class SharingService {
     };
   }
 
+  async getResourceAccess(resourceType: string, resourceId: string) {
+    const field = ACCESS_FIELD_MAP[resourceType];
+    if (!field) throw new BadRequestException(`No access array for resourceType "${resourceType}"`);
+
+    const usersWithAccess = await this.sstUsersModel.find({ [field]: resourceId }).lean();
+    const users = usersWithAccess.map((u: any) => ({
+      uid: String(u._id),
+      email: u.email,
+      displayName: u.displayName || u.email,
+      role: u.role
+    }));
+
+    const groupsWithAccess = await this.groupsModel.find({ [field]: resourceId }).lean();
+    const groups = groupsWithAccess.map((g: any) => ({
+      id: String(g._id),
+      name: g.name
+    }));
+
+    return { users, groups };
+  }
+
+
   // ─────────────────────────────────────────────────────────────────────────
   // Mode 5: Teacher collaboration
   // Mirrors addCollaborator / removeCollaborator / updateCollaboratorRole /

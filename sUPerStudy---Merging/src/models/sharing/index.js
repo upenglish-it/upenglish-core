@@ -25,7 +25,7 @@ export const sharingService = {
 
   /** Remove a resource from a group's access array */
   removeGroupAccess: (body) =>
-    api.delete(`${BASE}/group-access/remove`),
+    api.delete(`${BASE}/group-access/remove`, { data: body }),
 
   /** Sync all group access arrays for a resource */
   syncGroupAccess: (body) =>
@@ -38,11 +38,15 @@ export const sharingService = {
 
   /** Remove a resource from an individual user's access */
   removeUserAccess: (body) =>
-    api.delete(`${BASE}/user-access/remove`),
+    api.delete(`${BASE}/user-access/remove`, { data: body }),
 
   /** Get all SST access arrays for a user */
   getUserAccess: (userId) =>
     api.get(`${BASE}/user-access`, { userId }),
+
+  /** Get all users and groups that have access to a specific resource */
+  getResourceAccess: (resourceType, resourceId) =>
+    api.get(`${BASE}/resource-access`, { resourceType, resourceId }),
 
   // ─── Collaborators ────────────────────────────────────────────────────
   /** Add a collaborator to a teacher resource */
@@ -51,7 +55,7 @@ export const sharingService = {
 
   /** Remove a collaborator from a teacher resource */
   removeCollaborator: (body) =>
-    api.delete(`${BASE}/collaborators/remove`),
+    api.delete(`${BASE}/collaborators/remove`, { data: body }),
 
   /** Update a collaborator's role (viewer / editor) */
   updateCollaboratorRole: (body) =>
@@ -72,5 +76,5 @@ export const sharingService = {
 
   /** Remove a specific teacher from an admin resource's shared list */
   removeTeacherShare: (body) =>
-    api.delete(`${BASE}/teacher-share/remove`),
+    api.delete(`${BASE}/teacher-share/remove`, { data: body }),
 };

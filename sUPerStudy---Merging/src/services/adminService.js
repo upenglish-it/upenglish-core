@@ -107,8 +107,8 @@ export async function deleteAdminTopic(topicId) {
 // Fetch all folders
 export async function getFolders() {
     const result = await adminFoldersService.getTopicFolders();
-    const folders = Array.isArray(result) ? result : (result?.data || []);
-    return folders.sort((a, b) => (a.order || 0) - (b.order || 0));
+    let folders = Array.isArray(result) ? result : (result?.data || []);
+    return folders.map(f => ({ ...f, id: f._id || f.id })).sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
 // Add or Edit a folder
@@ -291,21 +291,33 @@ export async function getWhitelistEmails() {
 
 // ========== RESOURCE SHARING ==========
 
+function mapResourceType(resourceType) {
+    if (resourceType === 'admin_topic') return 'topic';
+    if (resourceType === 'teacher_topic_folder' || resourceType === 'admin_folder') {
+        throw new Error('Chức năng chia sẻ toàn bộ thư mục đang được cập nhật. Vui lòng chia sẻ từng bài học bên trong.');
+    }
+    return resourceType;
+}
+
 export async function toggleResourcePublic(resourceType, resourceId, isPublic) {
-    await sharingService.togglePublic({ resourceType, resourceId, isPublic });
+    const mappedType = mapResourceType(resourceType);
+    await sharingService.togglePublic({ resourceType: mappedType, resourceId, isPublic });
 }
 
 export async function toggleTeacherVisible(resourceType, resourceId, teacherVisible) {
-    await sharingService.toggleTeacherVisible({ resourceType, resourceId, teacherVisible });
+    const mappedType = mapResourceType(resourceType);
+    await sharingService.toggleTeacherVisible({ resourceType: mappedType, resourceId, teacherVisible });
 }
 
 export async function shareResourceToTeacher(resourceType, resourceId, teacherEmail) {
-    const result = await sharingService.addTeacherShare({ resourceType, resourceId, teacherEmail });
+    const mappedType = mapResourceType(resourceType);
+    const result = await sharingService.addTeacherShare({ resourceType: mappedType, resourceId, teacherEmail });
     return result;
 }
 
 export async function unshareResourceFromTeacher(resourceType, resourceId, teacherUid) {
-    await sharingService.removeTeacherShare({ resourceType, resourceId, teacherId: teacherUid });
+    const mappedType = mapResourceType(resourceType);
+    await sharingService.removeTeacherShare({ resourceType: mappedType, resourceId, teacherId: teacherUid });
 }
 
 export async function getResourceSharedTeachers(resourceType, resourceId) {
@@ -321,28 +333,37 @@ export async function getResourceSharedTeachers(resourceType, resourceId) {
 
 export async function getResourceSharedEntities(resourceType, resourceId) {
     try {
-        const userAccess = await sharingService.getUserAccess(resourceId);
-        return userAccess || { users: [], groups: [] };
+        if (resourceType === 'teacher_topic_folder' || resourceType === 'admin_folder') return { users: [], groups: [] };
+        const mappedType = mapResourceType(resourceType);
+        const result = await sharingService.getResourceAccess(mappedType, resourceId);
+        
+        const users = Array.isArray(result?.users) ? result.users.map(u => ({ ...u, id: u._id || u.id })) : [];
+        const groups = Array.isArray(result?.groups) ? result.groups.map(g => ({ ...g, id: g._id || g.id })) : [];
+        return { users, groups };
     } catch (e) {
         return { users: [], groups: [] };
     }
 }
 
 export async function shareResourceToEmail(resourceType, resourceId, email) {
-    const result = await sharingService.addUserAccess({ userEmail: email, resourceType, resourceId });
+    const mappedType = mapResourceType(resourceType);
+    const result = await sharingService.addUserAccess({ email, resourceType: mappedType, resourceId });
     return result;
 }
 
-export async function unshareResourceFromUser(resourceType, resourceId, uid) {
-    await sharingService.removeUserAccess({ userId: uid, resourceType, resourceId });
+export async function unshareResourceFromUser(resourceType, resourceId, userId) {
+    const mappedType = mapResourceType(resourceType);
+    await sharingService.removeUserAccess({ userId, resourceType: mappedType, resourceId });
 }
 
 export async function shareResourceToGroup(resourceType, resourceId, groupId) {
-    await sharingService.addGroupAccess({ groupId, resourceType, resourceId });
+    const mappedType = mapResourceType(resourceType);
+    await sharingService.addGroupAccess({ groupId, resourceType: mappedType, resourceId });
 }
 
 export async function unshareResourceFromGroup(resourceType, resourceId, groupId) {
-    await sharingService.removeGroupAccess({ groupId, resourceType, resourceId });
+    const mappedType = mapResourceType(resourceType);
+    await sharingService.removeGroupAccess({ groupId, resourceType: mappedType, resourceId });
 }
 
 // ========== TEACHER CONTENT MANAGEMENT (ADMIN) ==========
@@ -350,7 +371,8 @@ export async function unshareResourceFromGroup(resourceType, resourceId, groupId
 export async function getAdminAllTeacherTopics() {
     const { teacherTopicsService } = await import('../models');
     const result = await teacherTopicsService.findAll('');
-    const topics = Array.isArray(result) ? result : (result?.data || []);
+    let topics = Array.isArray(result) ? result : (result?.data || []);
+    topics = topics.map(t => ({ ...t, id: t._id || t.id }));
     return topics.filter(t => !t.isDeleted);
 }
 
@@ -364,8 +386,8 @@ export async function deleteAdminTeacherTopic(topicId) {
 
 export async function getGrammarFolders() {
     const result = await adminFoldersService.getGrammarFolders();
-    const folders = Array.isArray(result) ? result : (result?.data || []);
-    return folders.sort((a, b) => (a.order || 0) - (b.order || 0));
+    let folders = Array.isArray(result) ? result : (result?.data || []);
+    return folders.map(f => ({ ...f, id: f._id || f.id })).sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
 export async function saveGrammarFolder(folderData) {

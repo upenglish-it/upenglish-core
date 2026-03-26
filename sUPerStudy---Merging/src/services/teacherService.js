@@ -2,7 +2,7 @@ import { db } from '../config/firebase';
 import { collection, query, where, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, deleteField, serverTimestamp, orderBy, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { getAllWordProgressMap } from './spacedRepetition';
 import wordData from '../data/wordData';
-import { userGroupsService, usersService, assignmentsService, teacherTopicsService, teacherFoldersService } from '../models';
+import { userGroupsService, usersService, assignmentsService, teacherTopicsService, teacherFoldersService, sharingService } from '../models';
 
 // Get groups managed by the teacher
 // The teacher's user document has an array `groupIds`. 
@@ -402,50 +402,22 @@ export async function getStudentTopicWordsProgress(uid, topicId) {
 import { documentId } from 'firebase/firestore';
 
 export async function getSharedAndPublicTeacherTopics(topicAccessIds = []) {
-    const topics = [];
-    const addedIds = new Set();
-
     try {
-        // 1. Get all public teacher topics
-        const publicQ = query(collection(db, 'teacher_topics'), where('isPublic', '==', true));
-        const publicSnap = await getDocs(publicQ);
-        publicSnap.forEach(docSnap => {
-            topics.push({ id: docSnap.id, ...docSnap.data() });
-            addedIds.add(docSnap.id);
-        });
-
-        // 2. Get explicitly shared topics
-        const teacherTopicIds = topicAccessIds.filter(id => id.startsWith('t-'));
-        if (teacherTopicIds.length > 0) {
-            // Firestore 'in' query on documentId can have BloomFilter errors after writes
-            // Fetch them individually to prevent internal cache corruption issues
-            const docPromises = teacherTopicIds.map(id => getDoc(doc(db, 'teacher_topics', id)));
-            const docsSnap = await Promise.all(docPromises);
-            docsSnap.forEach(docSnap => {
-                if (docSnap.exists() && !addedIds.has(docSnap.id)) {
-                    topics.push({ id: docSnap.id, ...docSnap.data() });
-                    addedIds.add(docSnap.id);
-                }
-            });
-        }
+        const result = await teacherTopicsService.getSharedAndPublic(topicAccessIds);
+        let topics = Array.isArray(result) ? result : (result?.data || []);
+        return topics.map(t => ({ ...t, id: t._id || t.id }));
     } catch (error) {
         console.error("Error fetching shared teacher topics:", error);
+        return [];
     }
-
-    return topics;
 }
 
 export async function getTeacherTopics(teacherId) {
     if (!teacherId) return [];
     try {
-        const q = query(collection(db, 'teacher_topics'), where('teacherId', '==', teacherId), orderBy('createdAt', 'desc'));
-        const snapshot = await getDocs(q);
-        const topics = [];
-        snapshot.forEach(docSnap => {
-            const data = docSnap.data();
-            if (!data.isDeleted) topics.push({ id: docSnap.id, ...data });
-        });
-        return topics;
+        const result = await teacherTopicsService.findAll(teacherId);
+        let topics = Array.isArray(result) ? result : (result?.data || []);
+        return topics.map(t => ({ ...t, id: t._id || t.id }));
     } catch (error) {
         console.error("Error fetching teacher topics:", error);
         throw error;
@@ -455,20 +427,23 @@ export async function getTeacherTopics(teacherId) {
 export async function saveTeacherTopic(teacherId, topicData) {
     if (!teacherId || !topicData) throw new Error("Missing teacherId or topic data");
     try {
-        const topicRef = doc(db, 'teacher_topics', topicData.id);
-        const dataToSave = {
-            ...topicData,
-            teacherId,
-            updatedAt: serverTimestamp()
-        };
-
-        const docSnap = await getDoc(topicRef);
-        if (!docSnap.exists()) {
-            dataToSave.createdAt = serverTimestamp();
+        const { id, _id, ...data } = topicData;
+        const targetId = id || _id;
+        
+        if (targetId) {
+            try {
+                // Attempt to update first (optimistic for existing docs)
+                const updated = await teacherTopicsService.update(targetId, data);
+                return updated;
+            } catch (e) {
+                // If not found, it's a new document with an explicitly provided ID
+                const created = await teacherTopicsService.create({ _id: targetId, ...data, teacherId });
+                return created;
+            }
+        } else {
+            const created = await teacherTopicsService.create({ ...data, teacherId });
+            return created;
         }
-
-        await setDoc(topicRef, dataToSave, { merge: true });
-        return dataToSave;
     } catch (error) {
         console.error("Error saving teacher topic:", error);
         throw error;
@@ -494,11 +469,7 @@ export async function updateGrammarQuestionsOrder(exerciseId, orderedQuestions) 
 export async function deleteTeacherTopic(teacherId, topicId) {
     if (!teacherId || !topicId) throw new Error("Missing teacherId or topicId");
     try {
-        // Soft delete: mark as deleted instead of removing
-        await updateDoc(doc(db, 'teacher_topics', topicId), {
-            isDeleted: true,
-            deletedAt: serverTimestamp()
-        });
+        await teacherTopicsService.softDelete(topicId);
     } catch (error) {
         console.error("Error soft-deleting teacher topic:", error);
         throw error;
@@ -507,32 +478,13 @@ export async function deleteTeacherTopic(teacherId, topicId) {
 
 export async function restoreTeacherTopic(topicId) {
     if (!topicId) throw new Error("Missing topicId");
-    await updateDoc(doc(db, 'teacher_topics', topicId), {
-        isDeleted: deleteField(),
-        deletedAt: deleteField()
-    });
+    await teacherTopicsService.restore(topicId);
 }
 
 export async function permanentlyDeleteTeacherTopic(topicId) {
     if (!topicId) throw new Error("Missing topicId");
     try {
-        // Delete all words in this topic
-        const wordsRef = collection(db, `teacher_topics/${topicId}/words`);
-        const wordsSnap = await getDocs(wordsRef);
-        const deletePromises = [];
-        wordsSnap.forEach(wordDoc => {
-            deletePromises.push(deleteDoc(wordDoc.ref));
-        });
-        // Delete all assignments linked to this topic
-        const assignmentsRef = collection(db, 'assignments');
-        const assignmentsQ = query(assignmentsRef, where('topicId', '==', topicId));
-        const asgnsSnap = await getDocs(assignmentsQ);
-        asgnsSnap.forEach(asgnDoc => {
-            deletePromises.push(deleteDoc(asgnDoc.ref));
-        });
-        await Promise.all(deletePromises);
-        // Delete the topic itself
-        await deleteDoc(doc(db, 'teacher_topics', topicId));
+        await teacherTopicsService.permanentDelete(topicId);
     } catch (error) {
         console.error("Error permanently deleting teacher topic:", error);
         throw error;
@@ -541,13 +493,12 @@ export async function permanentlyDeleteTeacherTopic(topicId) {
 
 export async function getDeletedTeacherTopics() {
     try {
-        const q = query(collection(db, 'teacher_topics'), where('isDeleted', '==', true));
-        const snapshot = await getDocs(q);
-        const topics = [];
-        snapshot.forEach(docSnap => topics.push({ id: docSnap.id, ...docSnap.data() }));
+        const result = await teacherTopicsService.findDeleted();
+        let topics = Array.isArray(result) ? result : (result?.data || []);
+        topics = topics.map(t => ({ ...t, id: t._id || t.id }));
         return topics.sort((a, b) => {
-            const tA = a.deletedAt?.toMillis ? a.deletedAt.toMillis() : 0;
-            const tB = b.deletedAt?.toMillis ? b.deletedAt.toMillis() : 0;
+            const tA = a.deletedAt ? new Date(a.deletedAt).getTime() : 0;
+            const tB = b.deletedAt ? new Date(b.deletedAt).getTime() : 0;
             return tB - tA;
         });
     } catch (error) {
@@ -559,13 +510,15 @@ export async function getDeletedTeacherTopics() {
 export async function getTeacherTopicWords(topicId) {
     if (!topicId) return [];
     try {
-        const wordsRef = collection(db, `teacher_topics/${topicId}/words`);
-        const q = query(wordsRef, orderBy('createdAt', 'asc'));
-        const snapshot = await getDocs(q);
-        const words = [];
-        snapshot.forEach(docSnap => {
-            const data = docSnap.data();
-            words.push({ ...data, id: docSnap.id });
+        const topic = await teacherTopicsService.findOne(topicId);
+        if (!topic) return [];
+        let words = topic.words || [];
+        words = words.map(w => ({ ...w, id: w._id || w.id }));
+        words.sort((a, b) => {
+            if (a.index !== undefined && b.index !== undefined) return a.index - b.index;
+            const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return tA - tB;
         });
         return words;
     } catch (error) {
@@ -578,16 +531,26 @@ export async function saveTeacherTopicWord(topicId, wordData) {
     if (!topicId || !wordData || !wordData.word) throw new Error("Missing data to save word");
     console.log("saveTeacherTopicWord called with id:", wordData.id, "word:", wordData.word);
     try {
-        let docRef;
+        const topic = await teacherTopicsService.findOne(topicId);
+        if (!topic) throw new Error("Topic not found");
+        let words = topic.words || [];
+        words = words.map(w => ({ ...w, id: w._id || w.id }));
+        
+        let savedWord;
         if (wordData.id) {
-            docRef = doc(db, `teacher_topics/${topicId}/words`, wordData.id);
+            words = words.map(w => w.id === wordData.id ? { ...w, ...wordData, updatedAt: new Date().toISOString() } : w);
+            savedWord = words.find(w => w.id === wordData.id);
         } else {
-            const wordsRef = collection(db, `teacher_topics/${topicId}/words`);
-            docRef = doc(wordsRef); // auto ID
-            wordData.createdAt = serverTimestamp();
+            savedWord = { 
+                ...wordData, 
+                id: crypto.randomUUID(), 
+                createdAt: new Date().toISOString(), 
+                updatedAt: new Date().toISOString() 
+            };
+            words.push(savedWord);
         }
-        await setDoc(docRef, { ...wordData, updatedAt: serverTimestamp() }, { merge: true });
-        return { id: docRef.id, ...wordData };
+        await teacherTopicsService.update(topicId, { words, cachedWordCount: words.length });
+        return savedWord;
     } catch (error) {
         console.error("Error saving teacher topic word:", error);
         throw error;
@@ -597,13 +560,20 @@ export async function saveTeacherTopicWord(topicId, wordData) {
 export async function saveMultipleTeacherTopicWords(topicId, wordsArray) {
     if (!topicId || !wordsArray || !Array.isArray(wordsArray)) throw new Error("Invalid parameters");
     try {
-        const wordsRef = collection(db, `teacher_topics/${topicId}/words`);
-        const promises = wordsArray.map(async (wordData) => {
-            const docRef = doc(wordsRef); // assign new ID
-            const toSave = { ...wordData, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
-            return setDoc(docRef, toSave);
-        });
-        await Promise.all(promises);
+        const topic = await teacherTopicsService.findOne(topicId);
+        if (!topic) throw new Error("Topic not found");
+        let currentWords = topic.words || [];
+        currentWords = currentWords.map(w => ({ ...w, id: w._id || w.id }));
+        
+        const newWords = wordsArray.map(wordData => ({
+            ...wordData,
+            id: wordData.id || crypto.randomUUID(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        }));
+
+        currentWords = [...currentWords, ...newWords];
+        await teacherTopicsService.update(topicId, { words: currentWords, cachedWordCount: currentWords.length });
     } catch (error) {
         console.error("Error saving multiple teacher topic words:", error);
         throw error;
@@ -613,7 +583,12 @@ export async function saveMultipleTeacherTopicWords(topicId, wordsArray) {
 export async function deleteTeacherTopicWord(topicId, wordId) {
     if (!topicId || !wordId) throw new Error("Missing topicId or wordId. Received wordId: " + wordId);
     try {
-        await deleteDoc(doc(db, `teacher_topics/${topicId}/words/${wordId}`));
+        const topic = await teacherTopicsService.findOne(topicId);
+        if (!topic) return;
+        let words = topic.words || [];
+        words = words.map(w => ({ ...w, id: w._id || w.id }));
+        words = words.filter(w => w.id !== wordId);
+        await teacherTopicsService.update(topicId, { words, cachedWordCount: words.length });
     } catch (error) {
         console.error("Error deleting teacher topic word:", error);
         throw error;
@@ -623,13 +598,21 @@ export async function deleteTeacherTopicWord(topicId, wordId) {
 export async function updateTeacherTopicWordOrder(topicId, orderedWords) {
     if (!topicId || !Array.isArray(orderedWords)) throw new Error("Invalid parameters");
     try {
-        const wordsRef = collection(db, `teacher_topics/${topicId}/words`);
-        const promises = orderedWords.map(async (wordData) => {
-            if (!wordData.id) return;
-            const docRef = doc(wordsRef, wordData.id);
-            return setDoc(docRef, { index: wordData.index, updatedAt: serverTimestamp() }, { merge: true });
+        const topic = await teacherTopicsService.findOne(topicId);
+        if (!topic) return;
+        let currentWords = topic.words || [];
+        currentWords = currentWords.map(w => ({ ...w, id: w._id || w.id }));
+        
+        orderedWords.forEach(updatedWord => {
+            if (!updatedWord.id) return;
+            const index = currentWords.findIndex(w => w.id === updatedWord.id);
+            if (index !== -1) {
+                currentWords[index].index = updatedWord.index;
+                currentWords[index].updatedAt = new Date().toISOString();
+            }
         });
-        await Promise.all(promises);
+        
+        await teacherTopicsService.update(topicId, { words: currentWords });
     } catch (error) {
         console.error("Error updating word order:", error);
         throw error;
@@ -642,78 +625,78 @@ export async function updateTeacherTopicWordOrder(topicId, orderedWords) {
 
 export async function getTeacherTopicFolders(teacherId) {
     if (!teacherId) return [];
-    const q = query(collection(db, 'teacher_topic_folders'), where('teacherId', '==', teacherId));
-    const snapshot = await getDocs(q);
-    const folders = [];
-    snapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        if (!data.isDeleted) folders.push({ id: docSnap.id, ...data });
-    });
-    return folders.sort((a, b) => (a.order || 0) - (b.order || 0));
+    try {
+        const result = await teacherFoldersService.getTopicFolders(teacherId);
+        let folders = Array.isArray(result) ? result : (result?.data || []);
+        return folders.map(f => ({ ...f, id: f._id || f.id })).sort((a, b) => (a.order || 0) - (b.order || 0));
+    } catch (error) {
+        console.error("Error fetching teacher topic folders:", error);
+        return [];
+    }
 }
 
 export async function updateTeacherTopicFoldersOrder(orderedFolders) {
-    const batch = writeBatch(db);
-    orderedFolders.forEach((folder, index) => {
-        const ref = doc(db, 'teacher_topic_folders', folder.id);
-        batch.update(ref, { order: index, updatedAt: serverTimestamp() });
-    });
-    await batch.commit();
+    try {
+        await teacherFoldersService.reorderTopicFolders(orderedFolders.map((f, i) => ({ id: f.id, order: i })));
+    } catch (error) {
+        console.error("Error updating teacher topic folders order:", error);
+    }
 }
 
 export async function getAllTeacherTopicFolders() {
-    const snapshot = await getDocs(collection(db, 'teacher_topic_folders'));
-    const folders = [];
-    snapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        if (!data.isDeleted) folders.push({ id: docSnap.id, ...data });
-    });
-    return folders.sort((a, b) => (a.order || 0) - (b.order || 0));
+    try {
+        const result = await teacherFoldersService.getAllTopicFolders();
+        let folders = Array.isArray(result) ? result : (result?.data || []);
+        return folders.map(f => ({ ...f, id: f._id || f.id })).sort((a, b) => (a.order || 0) - (b.order || 0));
+    } catch (error) {
+        console.error("Error fetching all teacher topic folders:", error);
+        return [];
+    }
 }
 
 export async function saveTeacherTopicFolder(teacherId, folderData) {
-    const { id, ...data } = folderData;
-    if (id) {
-        const folderRef = doc(db, 'teacher_topic_folders', id);
-        await updateDoc(folderRef, { ...data, updatedAt: serverTimestamp() });
-        return id;
-    } else {
-        const folderRef = doc(collection(db, 'teacher_topic_folders'));
-        await setDoc(folderRef, { ...data, teacherId, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-        return folderRef.id;
+    const dataToSave = { ...folderData, teacherId };
+    try {
+        const result = await teacherFoldersService.saveTopicFolder(dataToSave);
+        return result?.id || result;
+    } catch (error) {
+        console.error("Error saving teacher topic folder:", error);
+        throw error;
     }
 }
 
 export async function deleteTeacherTopicFolder(folderId) {
-    // Soft delete
-    await updateDoc(doc(db, 'teacher_topic_folders', folderId), {
-        isDeleted: true,
-        deletedAt: serverTimestamp()
-    });
+    try {
+        await teacherFoldersService.softDeleteTopicFolder(folderId);
+    } catch (error) {
+        console.error("Error deleting teacher topic folder:", error);
+        throw error;
+    }
 }
 
 export async function restoreTeacherTopicFolder(folderId) {
-    await updateDoc(doc(db, 'teacher_topic_folders', folderId), {
-        isDeleted: deleteField(),
-        deletedAt: deleteField()
-    });
+    try {
+        await teacherFoldersService.restoreTopicFolder(folderId);
+    } catch (error) {
+        console.error("Error restoring teacher topic folder:", error);
+        throw error;
+    }
 }
 
 export async function permanentlyDeleteTeacherTopicFolder(folderId) {
-    await deleteDoc(doc(db, 'teacher_topic_folders', folderId));
+    try {
+        await teacherFoldersService.permanentDeleteTopicFolder(folderId);
+    } catch (error) {
+        console.error("Error permanently deleting teacher topic folder:", error);
+        throw error;
+    }
 }
 
-export async function getDeletedTeacherTopicFolders() {
+export async function getDeletedTeacherTopicFolders(teacherId) {
     try {
-        const q = query(collection(db, 'teacher_topic_folders'), where('isDeleted', '==', true));
-        const snapshot = await getDocs(q);
-        const folders = [];
-        snapshot.forEach(docSnap => folders.push({ id: docSnap.id, ...docSnap.data() }));
-        return folders.sort((a, b) => {
-            const tA = a.deletedAt?.toMillis ? a.deletedAt.toMillis() : 0;
-            const tB = b.deletedAt?.toMillis ? b.deletedAt.toMillis() : 0;
-            return tB - tA;
-        });
+        const result = await teacherFoldersService.getDeletedTopicFolders(teacherId);
+        const folders = Array.isArray(result) ? result : (result?.data || []);
+        return folders;
     } catch (error) {
         console.error("Error fetching deleted teacher topic folders:", error);
         return [];
@@ -780,53 +763,11 @@ export async function addCollaborator(collectionName, resourceId, collaboratorUi
  */
 export async function removeCollaborator(collectionName, resourceId, collaboratorUid, resourceName = '') {
     if (!collectionName || !resourceId || !collaboratorUid) throw new Error('Missing parameters');
-    const ref = doc(db, collectionName, resourceId);
-
-    // We need to remove the key from the collaboratorNames and collaboratorRoles maps
-    const docSnap = await getDoc(ref);
-    if (!docSnap.exists()) throw new Error('Resource not found');
-    const data = docSnap.data();
-    const updatedNames = { ...(data.collaboratorNames || {}) };
-    delete updatedNames[collaboratorUid];
-    const updatedRoles = { ...(data.collaboratorRoles || {}) };
-    delete updatedRoles[collaboratorUid];
-
-    await updateDoc(ref, {
-        collaboratorIds: arrayRemove(collaboratorUid),
-        collaboratorNames: updatedNames,
-        collaboratorRoles: updatedRoles,
-        updatedAt: serverTimestamp()
+    await sharingService.removeCollaborator({
+        resourceType: collectionName,
+        resourceId,
+        collaboratorId: collaboratorUid
     });
-
-    // Send notification + email
-    try {
-        const { createNotification, queueEmail, buildEmailHtml, getUserEmailPreference } = await import('./notificationService');
-        const typeLabels = { teacher_topics: 'bài từ vựng', grammar_exercises: 'bài Kỹ năng', exams: 'bài tập và kiểm tra', teacher_topic_folders: 'folder Từ vựng', teacher_grammar_folders: 'folder Kỹ năng', teacher_exam_folders: 'folder Đề thi' };
-        await createNotification({
-            userId: collaboratorUid,
-            type: 'collab_removed',
-            title: 'Đã bị gỡ khỏi danh sách cộng tác',
-            message: `Bạn đã bị gỡ khỏi danh sách cộng tác viên của ${typeLabels[collectionName] || 'bài học'} "${resourceName}".`,
-            link: '/teacher'
-        });
-
-        // Email (check preference)
-        const wantsEmail = await getUserEmailPreference(collaboratorUid, 'collab');
-        if (wantsEmail) {
-            const collabSnap = await getDoc(doc(db, 'users', collaboratorUid));
-            if (collabSnap.exists() && collabSnap.data().email) {
-                await queueEmail(collabSnap.data().email, {
-                    subject: `Thông báo cộng tác: ${resourceName}`,
-                    html: buildEmailHtml({
-                        emoji: '📌', heading: 'Thông báo cộng tác', headingColor: '#64748b',
-                        body: `<p>Bạn đã được gỡ khỏi danh sách cộng tác viên của ${typeLabels[collectionName] || 'bài học'} <strong>"${resourceName}"</strong>. Nếu bạn có thắc mắc, hãy liên hệ người quản lý nhé.</p>`
-                    })
-                });
-            }
-        }
-    } catch (e) {
-        console.error('Error sending collab removed notification:', e);
-    }
 }
 
 /**
@@ -835,10 +776,11 @@ export async function removeCollaborator(collectionName, resourceId, collaborato
 export async function updateCollaboratorRole(collectionName, resourceId, collaboratorUid, newRole) {
     if (!collectionName || !resourceId || !collaboratorUid) throw new Error('Missing parameters');
     if (!['viewer', 'editor'].includes(newRole)) throw new Error('Invalid role');
-    const ref = doc(db, collectionName, resourceId);
-    await updateDoc(ref, {
-        [`collaboratorRoles.${collaboratorUid}`]: newRole,
-        updatedAt: serverTimestamp()
+    await sharingService.updateCollaboratorRole({
+        resourceType: collectionName,
+        resourceId,
+        collaboratorId: collaboratorUid,
+        role: newRole
     });
 }
 
@@ -855,68 +797,15 @@ export async function updateCollaboratorRole(collectionName, resourceId, collabo
  */
 export async function transferOwnership(collectionName, resourceId, oldOwnerUid, oldOwnerName, newOwnerUid, newOwnerName, resourceName = '') {
     if (!collectionName || !resourceId || !oldOwnerUid || !newOwnerUid) throw new Error('Missing parameters');
-    const ref = doc(db, collectionName, resourceId);
-
-    const docSnap = await getDoc(ref);
-    if (!docSnap.exists()) throw new Error('Resource not found');
-    const data = docSnap.data();
-
-    // Build updated collaborator list: remove new owner from collaborators, add old owner
-    const currentCollaboratorIds = data.collaboratorIds || [];
-    const updatedCollaboratorIds = currentCollaboratorIds.filter(id => id !== newOwnerUid);
-    if (!updatedCollaboratorIds.includes(oldOwnerUid)) {
-        updatedCollaboratorIds.push(oldOwnerUid);
-    }
-
-    const updatedNames = { ...(data.collaboratorNames || {}) };
-    delete updatedNames[newOwnerUid];
-    updatedNames[oldOwnerUid] = oldOwnerName || 'Giáo viên';
-
-    const updatedRoles = { ...(data.collaboratorRoles || {}) };
-    delete updatedRoles[newOwnerUid];
-    updatedRoles[oldOwnerUid] = 'editor'; // Old owner becomes editor collaborator
-
-    // Determine the owner field name
-    const ownerField = collectionName === 'exams' ? 'createdBy' : 'teacherId';
-
-    await updateDoc(ref, {
-        [ownerField]: newOwnerUid,
-        collaboratorIds: updatedCollaboratorIds,
-        collaboratorNames: updatedNames,
-        collaboratorRoles: updatedRoles,
-        updatedAt: serverTimestamp()
+    await sharingService.transferOwnership({
+        resourceType: collectionName,
+        resourceId,
+        oldOwnerId: oldOwnerUid,
+        oldOwnerName,
+        newOwnerId: newOwnerUid,
+        newOwnerName,
+        resourceName
     });
-
-    // Also transfer related folders if applicable
-    // For teacher_topics: update teacher_topic_folders
-    // For grammar_exercises: update teacher_grammar_folders
-    // For exams: update teacher_exam_folders
-    // (Folders remain with old owner — the topics just move to new owner view)
-
-    // Send notifications
-    try {
-        const { createNotification } = await import('./notificationService');
-        const typeLabels = { teacher_topics: 'bài từ vựng', grammar_exercises: 'bài Kỹ năng', exams: 'bài tập và kiểm tra', teacher_topic_folders: 'folder Từ vựng', teacher_grammar_folders: 'folder Kỹ năng', teacher_exam_folders: 'folder Đề thi' };
-        const label = typeLabels[collectionName] || 'bài học';
-
-        await createNotification({
-            userId: newOwnerUid,
-            type: 'ownership_received',
-            title: '🎉 Bạn đã được chuyển nhượng quyền sở hữu',
-            message: `Bạn đã nhận quyền sở hữu ${label} "${resourceName}" từ ${oldOwnerName}.`,
-            link: '/teacher'
-        });
-
-        await createNotification({
-            userId: oldOwnerUid,
-            type: 'ownership_transferred',
-            title: 'Đã chuyển nhượng quyền sở hữu',
-            message: `Bạn đã chuyển nhượng quyền sở hữu ${label} "${resourceName}" cho ${newOwnerName}. Bạn vẫn là cộng tác viên.`,
-            link: '/teacher'
-        });
-    } catch (e) {
-        console.error('Error sending ownership transfer notifications:', e);
-    }
 }
 
 /**
@@ -927,16 +816,8 @@ export async function transferOwnership(collectionName, resourceId, oldOwnerUid,
 export async function getCollaboratedResources(collectionName, teacherUid) {
     if (!collectionName || !teacherUid) return [];
     try {
-        const q = query(
-            collection(db, collectionName),
-            where('collaboratorIds', 'array-contains', teacherUid)
-        );
-        const snapshot = await getDocs(q);
-        const results = [];
-        snapshot.forEach(docSnap => {
-            results.push({ id: docSnap.id, ...docSnap.data() });
-        });
-        return results;
+        const result = await sharingService.getCollaboratedResources(collectionName, teacherUid);
+        return Array.isArray(result) ? result : (result?.data || []);
     } catch (error) {
         console.error(`Error fetching collaborated ${collectionName}:`, error);
         return [];
@@ -948,12 +829,12 @@ export async function getCollaboratedResources(collectionName, teacherUid) {
  */
 export async function findTeacherByEmail(email) {
     if (!email) return null;
-    const emailKey = email.toLowerCase().trim();
-    const q = query(collection(db, 'users'), where('email', '==', emailKey));
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) return null;
-    const docSnap = snapshot.docs[0];
-    const data = docSnap.data();
-    if (data.role !== 'teacher' && data.role !== 'admin') return null;
-    return { uid: docSnap.id, displayName: data.displayName || data.email, email: data.email };
+    try {
+        const result = await sharingService.findUser(email, 'teacher');
+        // Backend returns `{ uid, email, displayName, role }` directly
+        return result?.uid ? result : null;
+    } catch (e) {
+        console.error('Error finding teacher by email:', e);
+        return null;
+    }
 }

@@ -3,6 +3,7 @@ import { collection, doc, getDocs, getDoc, setDoc, Timestamp, query, where, orde
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { recalcExamQuestionCache } from './examService';
 import { recalcGrammarQuestionCache } from './grammarService';
+import { teacherTopicsService } from '../models';
 
 // ==========================================
 // HELPER: Copy a Firebase Storage file to a new path
@@ -112,10 +113,9 @@ async function copyQuestionOptionImages(variations) {
 export async function duplicateTeacherTopic(topicId, teacherId) {
     if (!topicId || !teacherId) throw new Error('Missing topicId or teacherId');
 
-    // 1. Read source topic
-    const topicSnap = await getDoc(doc(db, 'teacher_topics', topicId));
-    if (!topicSnap.exists()) throw new Error('Bài học không tồn tại.');
-    const topicData = topicSnap.data();
+    // 1. Read source topic from API
+    const topicData = await teacherTopicsService.findOne(topicId);
+    if (!topicData) throw new Error('Bài học không tồn tại.');
 
     // 2. Generate new ID
     const newTopicId = `t-${teacherId.substring(0, 5)}-${Date.now()}`;
@@ -124,47 +124,50 @@ export async function duplicateTeacherTopic(topicId, teacherId) {
     const newTopicData = {
         ...topicData,
         teacherId,
+        id: newTopicId,
         name: `${topicData.name || 'Bài học'} (Bản sao)`,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
     };
+    
     // Reset ownership/sharing fields
+    delete newTopicData._id;
     delete newTopicData.collaboratorIds;
     delete newTopicData.collaboratorNames;
     delete newTopicData.isPublic;
-    delete newTopicData.id; // CRITICAL: remove old id so it doesn't override docSnap.id on read
     delete newTopicData.duplicatedFrom;
+    
     newTopicData.duplicatedFrom = topicId;
     newTopicData.collaborators = [];
 
-    // 4. Save new topic
-    await setDoc(doc(db, 'teacher_topics', newTopicId), newTopicData);
-
-    // 5. Read and copy all words
-    const wordsRef = collection(db, `teacher_topics/${topicId}/words`);
-    const wordsSnap = await getDocs(query(wordsRef, orderBy('createdAt', 'asc')));
+    // 4. Read and copy all words (already inside topicData.words for the API version)
+    let words = newTopicData.words || [];
     let wordCount = 0;
-
-    for (const wordDoc of wordsSnap.docs) {
-        const wordData = { ...wordDoc.data() };
+    
+    // Create new words array with copied assets
+    const newWords = [];
+    for (const w of words) {
+        const wordData = { ...w };
 
         // Copy vocab image if present
         if (wordData.imageUrl && wordData.imageUrl.includes('firebasestorage.googleapis.com')) {
             wordData.imageUrl = await copyStorageFile(wordData.imageUrl, 'vocab_images');
         }
 
-        // Save to new topic's words subcollection (auto-ID)
-        const newWordRef = doc(collection(db, `teacher_topics/${newTopicId}/words`));
-        await setDoc(newWordRef, {
+        newWords.push({
             ...wordData,
-            createdAt: Timestamp.now(),
-            updatedAt: Timestamp.now()
+            id: crypto.randomUUID(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
         });
         wordCount++;
     }
+    
+    newTopicData.words = newWords;
+    newTopicData.cachedWordCount = wordCount;
 
-    // 6. Update cached word count
-    await setDoc(doc(db, 'teacher_topics', newTopicId), { cachedWordCount: wordCount }, { merge: true });
+    // 5. Save new topic via API
+    await teacherTopicsService.create(newTopicData);
 
     return newTopicId;
 }

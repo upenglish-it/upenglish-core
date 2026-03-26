@@ -130,11 +130,13 @@ export default function CustomSelect({
                 >
                     <span className={`cs-value${!selected ? ' cs-placeholder' : ''}`}>
                         {selected ? (
-                            <>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 {selected.icon && <span className="cs-item-icon">{selected.icon}</span>}
-                                {selected.label}
-                            </>
-                        ) : placeholder}
+                                <span>{selected.label}</span>
+                            </span>
+                        ) : (
+                            <span>{placeholder}</span>
+                        )}
                     </span>
                     <ChevronDown size={16} className={`cs-chevron${open ? ' cs-chevron-up' : ''}`} />
                 </button>

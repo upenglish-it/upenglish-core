@@ -30,11 +30,17 @@ export class SSTTeacherGrammarFolders {
   @Prop({ type: Array, required: true })
   public readonly exerciseIds: string[];
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly appSystemFolder: boolean;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: true })
   public readonly ownFolder: boolean;
+
+  @Prop({ type: Date, default: null })
+  public readonly deletedAt: Date;
+
+  @Prop({ type: Boolean, default: false })
+  public readonly isDeleted: boolean;
 
   @Prop({ ref: () => Accounts, type: String, required: true })
   public readonly createdBy: Accounts;

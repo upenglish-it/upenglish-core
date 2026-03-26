@@ -5,7 +5,6 @@ import { submitProposal, getProposalForSource } from '../../services/contentProp
 import { getUsersPublicInfo } from '../../services/userService';
 import { getFolders, getGroups, toggleResourcePublic, getResourceSharedEntities, shareResourceToEmail, unshareResourceFromUser, shareResourceToGroup, unshareResourceFromGroup, getAdminTopics } from '../../services/adminService';
 import { useAuth } from '../../contexts/AuthContext';
-import { Timestamp } from 'firebase/firestore';
 import { BookOpen, Edit, Trash2, X, Plus, List, FolderOpen, Share2, Globe, Users, Mail, UserPlus, Lock, Search, AlertTriangle, ChevronDown, ChevronRight, AlertCircle, Landmark, Send, CheckCircle, XCircle, Clock, ArrowRightLeft, UsersRound, FileText, Calendar, Copy, GripVertical } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { duplicateTeacherTopic } from '../../services/duplicateService';
@@ -561,16 +560,15 @@ export default function TeacherTopicsPage() {
         setIsQuickAssigning(true);
         setQuickAssignSuccess('');
         try {
-            const dueDateTimestamp = Timestamp.fromDate(new Date(quickAssignDueDate));
             await createAssignment({
                 groupId: quickAssignGroupId,
                 topicId: resourceToShare.id,
                 topicName: resourceToShare.name,
-                dueDate: dueDateTimestamp,
+                dueDate: new Date(quickAssignDueDate).toISOString(),
                 isTeacherTopic: !resourceToShare.isAdmin,
                 isGrammar: false,
                 createdBy: user?.uid,
-                ...(quickAssignScheduledStart && quickAssignScheduledStart !== 'pending' ? { scheduledStart: Timestamp.fromDate(new Date(quickAssignScheduledStart)) } : {}),
+                ...(quickAssignScheduledStart && quickAssignScheduledStart !== 'pending' ? { scheduledStart: new Date(quickAssignScheduledStart).toISOString() } : {}),
                 ...(quickAssignSelectedStudentIds.length > 0 ? { assignedStudentIds: quickAssignSelectedStudentIds } : {})
             });
             const groupName = teacherManagedGroups.find(g => g.id === quickAssignGroupId)?.name || '';

@@ -8,6 +8,11 @@ export const teacherTopicsService = {
   findAll: (teacherId) =>
     api.get(`${BASE}`, { teacherId }),
 
+  /** List shared and public teacher topics */
+  getSharedAndPublic: (topicAccessIds) =>
+    api.get(`${BASE}/shared-and-public`, { topicAccessIds: topicAccessIds.join(',') }),
+
+
   /** List soft-deleted teacher topics */
   findDeleted: (teacherId) =>
     api.get(`${BASE}/deleted`, { teacherId }),
