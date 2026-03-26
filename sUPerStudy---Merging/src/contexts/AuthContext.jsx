@@ -8,8 +8,8 @@ import {
     signOut as firebaseSignOut,
 } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
-import { doc, getDoc, setDoc, deleteDoc, serverTimestamp, Timestamp, collection, getDocs, query, where } from 'firebase/firestore';
-import { auth, db, googleProvider, microsoftProvider, functions } from '../config/firebase';
+import { auth, googleProvider, microsoftProvider, functions } from '../config/firebase';
+import { usersService, userGroupsService, emailWhitelistService } from '../models';
 
 const AuthContext = createContext(null);
 
@@ -32,18 +32,16 @@ async function mergeGroupAccess(userData) {
     let visibleGroupIds = []; // groupIds excluding hidden groups
     if (userData.groupIds && userData.groupIds.length > 0) {
         try {
-            const groupsRef = collection(db, 'user_groups');
-            const q = query(groupsRef, where('__name__', 'in', userData.groupIds));
-            const groupsSnap = await getDocs(q);
-            groupsSnap.forEach(gSnap => {
-                const gData = gSnap.data();
+            const groupsArray = await userGroupsService.findByIds(userData.groupIds);
+            const groupsSnap = Array.isArray(groupsArray) ? groupsArray : (groupsArray?.data || []);
+            groupsSnap.forEach(gData => {
                 if (gData.isHidden) return; // Skip hidden groups
 
                 if (gData.name) {
                     groupNames.push(gData.name);
-                    groupIdToNameMap[gSnap.id] = gData.name;
+                    groupIdToNameMap[gData.id] = gData.name;
                 }
-                visibleGroupIds.push(gSnap.id);
+                visibleGroupIds.push(gData.id);
                 if (gData.folderAccess) mergedFolderAccess = [...mergedFolderAccess, ...gData.folderAccess];
                 if (gData.topicAccess) mergedTopicAccess = [...mergedTopicAccess, ...gData.topicAccess];
                 if (gData.grammarAccess) mergedGrammarAccess = [...mergedGrammarAccess, ...gData.grammarAccess];
@@ -75,11 +73,9 @@ export function AuthProvider({ children }) {
                     return;
                 }
                 try {
-                    const userRef = doc(db, 'users', firebaseUser.uid);
-                    const userSnap = await getDoc(userRef);
+                    const userData = await usersService.findOne(firebaseUser.uid).catch(() => null);
 
-                    if (userSnap.exists()) {
-                        const userData = userSnap.data();
+                    if (userData) {
 
                         // Check if account is disabled
                         if (userData.disabled) {
@@ -113,12 +109,9 @@ export function AuthProvider({ children }) {
     }, []);
 
     async function handlePostSignIn(firebaseUser) {
-        const userRef = doc(db, 'users', firebaseUser.uid);
-        const userSnap = await getDoc(userRef);
+        let userData = await usersService.findOne(firebaseUser.uid).catch(() => null);
 
-        if (userSnap.exists()) {
-            let userData = userSnap.data();
-
+        if (userData) {
             // Check if disabled
             if (userData.disabled) {
                 await firebaseSignOut(auth);
@@ -130,22 +123,20 @@ export function AuthProvider({ children }) {
             // If user is pending, re-check whitelist — admin may have pre-approved since last login
             if (userData.status === 'pending') {
                 const emailKey = firebaseUser.email.toLowerCase().trim();
-                const wlRef = doc(db, 'email_whitelist', emailKey);
-                const wlSnap = await getDoc(wlRef);
-                if (wlSnap.exists()) {
-                    const wl = wlSnap.data();
+                const wl = await emailWhitelistService.checkEmail(emailKey).catch(() => null);
+                if (wl) {
                     const now = new Date();
                     let expiresAt = null;
                     if (wl.customExpiresAt) {
-                        expiresAt = Timestamp.fromDate(new Date(`${wl.customExpiresAt}T23:59:59`));
+                        expiresAt = new Date(`${wl.customExpiresAt}T23:59:59`).toISOString();
                     } else if (wl.durationDays) {
-                        expiresAt = Timestamp.fromDate(new Date(now.getTime() + wl.durationDays * 86400000));
+                        expiresAt = new Date(now.getTime() + wl.durationDays * 86400000).toISOString();
                     }
                     const approvedData = {
                         status: 'approved',
                         role: wl.role || 'user',
                         displayName: wl.displayName || userData.displayName || firebaseUser.displayName || '',
-                        approvedAt: serverTimestamp(),
+                        approvedAt: new Date().toISOString(),
                         expiresAt,
                         folderAccess: wl.folderAccess || userData.folderAccess || [],
                         topicAccess: wl.topicAccess || userData.topicAccess || [],
@@ -153,16 +144,16 @@ export function AuthProvider({ children }) {
                         examAccess: wl.examAccess || userData.examAccess || [],
                         groupIds: wl.groupIds || userData.groupIds || [],
                     };
-                    await setDoc(userRef, approvedData, { merge: true });
-                    await deleteDoc(wlRef);
+                    await usersService.update(firebaseUser.uid, approvedData);
+                    await emailWhitelistService.remove(wl.id).catch(() => {});
                     userData = { ...userData, ...approvedData };
                 }
             }
 
             // Update photo from provider (don't overwrite displayName — it may have been customized by admin)
-            await setDoc(userRef, {
+            await usersService.update(firebaseUser.uid, {
                 photoURL: firebaseUser.photoURL || '',
-            }, { merge: true });
+            });
 
             const merged = await mergeGroupAccess(userData);
             setUser({ ...firebaseUser, ...userData, ...merged });
@@ -183,9 +174,8 @@ export function AuthProvider({ children }) {
                     photoURL: firebaseUser.photoURL || '',
                     role: 'admin',
                     status: 'approved',
-                    approvedAt: serverTimestamp(),
+                    approvedAt: new Date().toISOString(),
                     expiresAt: null,
-                    createdAt: serverTimestamp(),
                     disabled: false,
                     folderAccess: [],
                     topicAccess: [],
@@ -194,18 +184,16 @@ export function AuthProvider({ children }) {
                     groupIds: [],
                 };
             } else {
-                const whitelistRef = doc(db, 'email_whitelist', emailKey);
-                const whitelistSnap = await getDoc(whitelistRef);
+                const wl = await emailWhitelistService.checkEmail(emailKey).catch(() => null);
 
-                if (whitelistSnap.exists()) {
+                if (wl) {
                     // Pre-approved email — propagate stored permissions
-                    const wl = whitelistSnap.data();
                     const now = new Date();
                     let expiresAt = null;
                     if (wl.customExpiresAt) {
-                        expiresAt = Timestamp.fromDate(new Date(`${wl.customExpiresAt}T23:59:59`));
+                        expiresAt = new Date(`${wl.customExpiresAt}T23:59:59`).toISOString();
                     } else if (wl.durationDays) {
-                        expiresAt = Timestamp.fromDate(new Date(now.getTime() + wl.durationDays * 86400000));
+                        expiresAt = new Date(now.getTime() + wl.durationDays * 86400000).toISOString();
                     }
 
                     newUserData = {
@@ -214,9 +202,8 @@ export function AuthProvider({ children }) {
                         photoURL: firebaseUser.photoURL || '',
                         role: wl.role || 'user',
                         status: 'approved',
-                        approvedAt: serverTimestamp(),
+                        approvedAt: new Date().toISOString(),
                         expiresAt,
-                        createdAt: serverTimestamp(),
                         disabled: false,
                         folderAccess: wl.folderAccess || [],
                         topicAccess: wl.topicAccess || [],
@@ -234,7 +221,6 @@ export function AuthProvider({ children }) {
                         status: 'pending',
                         approvedAt: null,
                         expiresAt: null,
-                        createdAt: serverTimestamp(),
                         disabled: false,
                         folderAccess: [],
                         topicAccess: [],
@@ -245,7 +231,7 @@ export function AuthProvider({ children }) {
                 }
             }
 
-            await setDoc(userRef, newUserData);
+            await usersService.sync({ id: firebaseUser.uid, ...newUserData });
 
             // Notify admins when a new user registers with pending status
             if (newUserData.status === 'pending') {
@@ -275,10 +261,9 @@ export function AuthProvider({ children }) {
 
             // Clean up whitelist after successful auto-approval (best-effort)
             try {
-                const whitelistRef = doc(db, 'email_whitelist', emailKey);
-                const whitelistSnap = await getDoc(whitelistRef);
-                if (whitelistSnap.exists()) {
-                    await deleteDoc(whitelistRef);
+                const wl = await emailWhitelistService.checkEmail(emailKey).catch(() => null);
+                if (wl) {
+                    await emailWhitelistService.remove(wl.id);
                 }
             } catch (cleanupErr) {
                 console.warn('Could not clean up whitelist entry (non-critical):', cleanupErr);

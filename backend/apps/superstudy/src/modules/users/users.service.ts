@@ -36,6 +36,17 @@ export class UsersService {
   }
 
   /**
+   * Sync SSO user profile from frontend (create if not exists).
+   * Uses upsert to bypass strict schema validation on first login.
+   */
+  async syncUser(id: string, data: Record<string, any>) {
+    const user = await this.usersModel
+      .findByIdAndUpdate(id, { $set: data }, { new: true, upsert: true })
+      .lean();
+    return user;
+  }
+
+  /**
    * Approve a pending user — mirrors adminService.approveUser
    */
   async approveUser(

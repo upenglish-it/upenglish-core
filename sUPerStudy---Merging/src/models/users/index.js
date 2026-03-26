@@ -20,6 +20,10 @@ export const usersService = {
   update: (id, body) =>
     api.patch(`${BASE}/${id}`, body),
 
+  /** Sync user profile on login (create if not exists) */
+  sync: (body) =>
+    api.post(`${BASE}/sync`, body),
+
   /** Approve pending user with role and optional expiry */
   approve: (id, body) =>
     api.post(`${BASE}/${id}/approve`, body),
