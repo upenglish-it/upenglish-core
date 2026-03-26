@@ -1,8 +1,8 @@
 import { db, storage } from '../config/firebase';
 import { collection, doc, getDocs, getDoc, setDoc, Timestamp, query, where } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { recalcExamQuestionCache } from './examService';
-import { recalcGrammarQuestionCache } from './grammarService';
+import { recalcExamQuestionCache, getExam, getExamQuestions, saveExam, saveExamQuestion } from './examService';
+import { recalcGrammarQuestionCache, getGrammarExercise, getGrammarQuestions, saveGrammarExercise, saveGrammarQuestion } from './grammarService';
 
 // ==========================================
 // HELPER: Copy a Firebase Storage file to a new path
@@ -152,20 +152,18 @@ export async function convertGrammarToExam(exerciseId, teacherId, options = {}) 
 
     const { examType = 'homework', timingMode = 'exam', createdByRole = 'teacher' } = options;
 
-    // 1. Read source grammar exercise
-    const exSnap = await getDoc(doc(db, 'grammar_exercises', exerciseId));
-    if (!exSnap.exists()) throw new Error('Bài kỹ năng không tồn tại.');
-    const exData = exSnap.data();
+    // 1. Read source grammar exercise via API
+    const exData = await getGrammarExercise(exerciseId);
+    if (!exData) throw new Error('Bài kỹ năng không tồn tại.');
 
     // 2. Create a default section
     const defaultSectionId = crypto.randomUUID();
     const sections = [{ id: defaultSectionId, title: 'Phần 1' }];
 
     // 3. Prepare new exam data
-    const newExamRef = doc(collection(db, 'exams'));
-    const newExamId = newExamRef.id;
+    const newExamId = `e-${teacherId.substring(0, 5)}-${Date.now()}`;
     const newExamData = {
-        name: exData.name || 'Bài chuyển đổi',
+        name: exData.name || exData.title || 'Bài chuyển đổi',
         description: exData.description || '',
         icon: exData.icon || '📝',
         color: exData.color || '#6366f1',
@@ -177,27 +175,23 @@ export async function convertGrammarToExam(exerciseId, teacherId, options = {}) 
         createdBy: teacherId,
         createdByRole,
         convertedFrom: { type: 'grammar', id: exerciseId },
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
     };
 
-    await setDoc(newExamRef, newExamData);
+    await saveExam({ _id: newExamId, ...newExamData });
 
-    // 4. Read and copy all grammar questions → exam questions
-    const questionsSnap = await getDocs(
-        query(collection(db, 'grammar_questions'), where('exerciseId', '==', exerciseId))
-    );
+    // 4. Read and copy all grammar questions → exam questions via API
+    const questions = await getGrammarQuestions(exerciseId);
 
     // Sort by order to preserve sequence
-    const sortedDocs = questionsSnap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => (a.order || 0) - (b.order || 0));
+    const sortedDocs = questions.sort((a, b) => (a.order || 0) - (b.order || 0));
 
     for (let i = 0; i < sortedDocs.length; i++) {
         const qData = { ...sortedDocs[i] };
 
-        // Remove grammar-specific fields
         delete qData.id;
+        delete qData._id;
         delete qData.exerciseId;
 
         // Set exam-specific fields
@@ -228,12 +222,11 @@ export async function convertGrammarToExam(exerciseId, teacherId, options = {}) 
             qData.context = await copyContextImagesInHtml(qData.context);
         }
 
-        // Save new question
-        const newQRef = doc(collection(db, 'exam_questions'));
-        await setDoc(newQRef, {
+        // Save new question via API
+        await saveExamQuestion({
             ...qData,
-            createdAt: Timestamp.now(),
-            updatedAt: Timestamp.now()
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
         });
     }
 
@@ -261,16 +254,15 @@ export async function convertExamToGrammar(examId, teacherId, options = {}) {
 
     const { createdByRole = 'teacher' } = options;
 
-    // 1. Read source exam
-    const examSnap = await getDoc(doc(db, 'exams', examId));
-    if (!examSnap.exists()) throw new Error('Bài tập/Kiểm tra không tồn tại.');
-    const examData = examSnap.data();
+    // 1. Read source exam via API
+    const examData = await getExam(examId);
+    if (!examData) throw new Error('Bài tập/Kiểm tra không tồn tại.');
 
     // 2. Create new grammar exercise
-    const newExRef = doc(collection(db, 'grammar_exercises'));
-    const newExId = newExRef.id;
+    const newExId = `g-${teacherId.substring(0, 5)}-${Date.now()}`;
     const newExData = {
         name: examData.name || 'Bài chuyển đổi',
+        title: examData.name || 'Bài chuyển đổi',
         description: examData.description || '',
         icon: examData.icon || '✍️',
         color: examData.color || '#d97706',
@@ -279,36 +271,32 @@ export async function convertExamToGrammar(examId, teacherId, options = {}) {
         teacherId,
         createdByRole,
         convertedFrom: { type: 'exam', id: examId },
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
     };
 
-    await setDoc(newExRef, newExData);
+    await saveGrammarExercise({ _id: newExId, ...newExData });
 
-    // 3. Read ALL exam questions from ALL sections, ordered by section then question order
-    const questionsSnap = await getDocs(
-        query(collection(db, 'exam_questions'), where('examId', '==', examId))
-    );
+    // 3. Read ALL exam questions from ALL sections via API
+    const questions = await getExamQuestions(examId);
 
     // Build section order map
     const sectionOrder = {};
-    (examData.sections || []).forEach((s, idx) => { sectionOrder[s.id] = idx; });
+    (examData.sections || []).forEach((s, idx) => { sectionOrder[s.id || s._id] = idx; });
 
     // Sort: section order first, then question order within section
-    const sortedDocs = questionsSnap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => {
-            const sA = sectionOrder[a.sectionId] ?? 999;
-            const sB = sectionOrder[b.sectionId] ?? 999;
-            if (sA !== sB) return sA - sB;
-            return (a.order || 0) - (b.order || 0);
-        });
+    const sortedDocs = questions.sort((a, b) => {
+        const sA = sectionOrder[a.sectionId] ?? 999;
+        const sB = sectionOrder[b.sectionId] ?? 999;
+        if (sA !== sB) return sA - sB;
+        return (a.order || 0) - (b.order || 0);
+    });
 
     for (let i = 0; i < sortedDocs.length; i++) {
         const qData = { ...sortedDocs[i] };
 
-        // Remove exam-specific fields
         delete qData.id;
+        delete qData._id;
         delete qData.examId;
         delete qData.sectionId;
         delete qData.timeLimitSeconds; // Remove time limit
@@ -341,11 +329,10 @@ export async function convertExamToGrammar(examId, teacherId, options = {}) {
         }
 
         // Save new question
-        const newQRef = doc(collection(db, 'grammar_questions'));
-        await setDoc(newQRef, {
+        await saveGrammarQuestion({
             ...qData,
-            createdAt: Timestamp.now(),
-            updatedAt: Timestamp.now()
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
         });
     }
 

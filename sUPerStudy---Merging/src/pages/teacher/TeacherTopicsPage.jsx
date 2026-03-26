@@ -230,12 +230,25 @@ export default function TeacherTopicsPage() {
 
         try {
             const { folderId, ...topicData } = formData;
-            await saveTeacherTopic(user.uid, { ...topicData, id: finalTopicId });
+            const topicPayload = {
+                ...topicData,
+                id: finalTopicId,
+                createdBy: user.uid,
+                properties: user.properties || 'default',
+                propertiesBranches: Array.isArray(user.propertiesBranches) && user.propertiesBranches.length > 0 ? user.propertiesBranches[0] : (user.propertiesBranches || 'default')
+            };
+            await saveTeacherTopic(user.uid, topicPayload);
 
             if (folderId) {
                 const folder = teacherFolders.find(f => f.id === folderId);
                 if (folder && !(folder.topicIds || []).includes(finalTopicId)) {
-                    await saveTeacherTopicFolder(user.uid, { ...folder, topicIds: [...(folder.topicIds || []), finalTopicId] });
+                    await saveTeacherTopicFolder(user.uid, { 
+                        ...folder, 
+                        topicIds: [...(folder.topicIds || []), finalTopicId],
+                        createdBy: user.uid,
+                        properties: user.properties || 'default',
+                        propertiesBranches: Array.isArray(user.propertiesBranches) && user.propertiesBranches.length > 0 ? user.propertiesBranches[0] : (user.propertiesBranches || 'default')
+                    });
                 }
             }
             for (const f of teacherFolders) {
@@ -608,7 +621,13 @@ export default function TeacherTopicsPage() {
         e.preventDefault();
         setIsFolderSaving(true);
         try {
-            await saveTeacherTopicFolder(user.uid, folderFormData);
+            const folderPayload = {
+                ...folderFormData,
+                createdBy: user.uid,
+                properties: user.properties || 'default',
+                propertiesBranches: Array.isArray(user.propertiesBranches) && user.propertiesBranches.length > 0 ? user.propertiesBranches[0] : (user.propertiesBranches || 'default')
+            };
+            await saveTeacherTopicFolder(user.uid, folderPayload);
             setFolderFormOpen(false);
             setAlertMessage({ type: 'success', text: isFolderEditing ? 'Cập nhật Folder thành công!' : 'Tạo Folder mới thành công!' });
             loadTopics();

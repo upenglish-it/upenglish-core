@@ -34,7 +34,7 @@ export async function recalcGrammarQuestionCache(exerciseId) {
 export async function getGrammarExercises(teacherId = null) {
     const result = await grammarExercisesService.findAll({ teacherId });
     let exercises = Array.isArray(result) ? result : (result?.data || []);
-    exercises = exercises.filter(e => !e.isDeleted);
+    exercises = exercises.map(e => ({ ...e, id: e._id || e.id })).filter(e => !e.isDeleted);
     return exercises.sort((a, b) => {
         const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -45,6 +45,7 @@ export async function getGrammarExercises(teacherId = null) {
 export async function getSharedAndPublicGrammarExercises(grammarAccessIds = []) {
     const result = await grammarExercisesService.findShared(grammarAccessIds);
     let exercises = Array.isArray(result) ? result : (result?.data || []);
+    exercises = exercises.map(e => ({ ...e, id: e._id || e.id }));
     return exercises.sort((a, b) => {
         const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -54,17 +55,24 @@ export async function getSharedAndPublicGrammarExercises(grammarAccessIds = []) 
 
 export async function getGrammarExercise(id) {
     const result = await grammarExercisesService.findOne(id);
-    return result || null;
+    return result ? { ...result, id: result._id || result.id } : null;
 }
 
 export async function saveGrammarExercise(exerciseData) {
-    const { id, ...data } = exerciseData;
-    if (id) {
-        await grammarExercisesService.update(id, data);
-        return id;
+    const { id, _id, ...data } = exerciseData;
+    const targetId = id || _id;
+    
+    if (targetId) {
+        try {
+            await grammarExercisesService.update(targetId, data);
+            return targetId;
+        } catch (e) {
+            const result = await grammarExercisesService.create({ _id: targetId, ...data });
+            return result?.id || result?._id || result;
+        }
     } else {
         const result = await grammarExercisesService.create(data);
-        return result?.id || result;
+        return result?.id || result?._id || result;
     }
 }
 
@@ -85,6 +93,7 @@ export async function getDeletedGrammarExercises() {
     try {
         const result = await grammarExercisesService.findDeleted();
         let exercises = Array.isArray(result) ? result : (result?.data || []);
+        exercises = exercises.map(e => ({ ...e, id: e._id || e.id }));
         return exercises.sort((a, b) => {
             const tA = a.deletedAt ? new Date(a.deletedAt).getTime() : 0;
             const tB = b.deletedAt ? new Date(b.deletedAt).getTime() : 0;
@@ -239,7 +248,7 @@ import { teacherFoldersService } from '../models';
 export async function getTeacherGrammarFolders(teacherId) {
     const result = await teacherFoldersService.getGrammarFolders(teacherId);
     let folders = Array.isArray(result) ? result : (result?.data || []);
-    folders = folders.filter(f => !f.isDeleted);
+    folders = folders.map(f => ({ ...f, id: f._id || f.id })).filter(f => !f.isDeleted);
     return folders.sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
@@ -251,7 +260,7 @@ export async function updateTeacherGrammarFoldersOrder(orderedFolders) {
 export async function getAllTeacherGrammarFolders() {
     const result = await teacherFoldersService.getAllGrammarFolders();
     let folders = Array.isArray(result) ? result : (result?.data || []);
-    folders = folders.filter(f => !f.isDeleted);
+    folders = folders.map(f => ({ ...f, id: f._id || f.id })).filter(f => !f.isDeleted);
     return folders.sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 

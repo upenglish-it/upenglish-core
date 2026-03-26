@@ -292,8 +292,9 @@ export async function getWhitelistEmails() {
 // ========== RESOURCE SHARING ==========
 
 function mapResourceType(resourceType) {
-    if (resourceType === 'admin_topic') return 'topic';
-    if (resourceType === 'teacher_topic_folder' || resourceType === 'admin_folder') {
+    if (resourceType === 'admin_topic' || resourceType === 'teacher_topic') return 'topic';
+    if (resourceType === 'admin_grammar' || resourceType === 'teacher_grammar') return 'grammar';
+    if (resourceType === 'teacher_topic_folder' || resourceType === 'admin_folder' || resourceType === 'teacher_grammar_folder') {
         throw new Error('Chức năng chia sẻ toàn bộ thư mục đang được cập nhật. Vui lòng chia sẻ từng bài học bên trong.');
     }
     return resourceType;
