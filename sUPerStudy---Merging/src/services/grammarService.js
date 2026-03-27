@@ -110,6 +110,7 @@ export async function getDeletedGrammarExercises() {
 export async function getGrammarQuestions(exerciseId) {
     const result = await grammarQuestionsService.findAll(exerciseId);
     let questions = Array.isArray(result) ? result : (result?.data || []);
+    questions = questions.map(q => ({ ...q, id: q._id || q.id }));
     return questions.sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
@@ -118,8 +119,10 @@ export async function getGrammarQuestionsByIds(questionIds = []) {
     try {
         // Fetch individually since there's no batch-by-IDs endpoint
         const promises = questionIds.map(id => grammarQuestionsService.findOne(id).catch(() => null));
-        const results = await Promise.all(promises);
-        return results.filter(Boolean);
+        return results.filter(Boolean).map(q => {
+            const data = q?.data || q;
+            return { ...data, id: data._id || data.id };
+        });
     } catch (err) {
         console.error("Error fetching grammar questions by IDs:", err);
         return [];
@@ -134,7 +137,7 @@ export async function saveGrammarQuestion(questionData) {
         resultId = id;
     } else {
         const result = await grammarQuestionsService.create(data);
-        resultId = result?.id || result;
+        resultId = result?.data?._id || result?.data?.id || result?._id || result?.id || result;
     }
 
     // Fire-and-forget: auto-classify errorCategory in background

@@ -47,7 +47,7 @@ export class SSTGrammarQuestions {
   @Prop({ type: Boolean, default: false })
   public readonly hasContext: boolean;
 
-  @Prop({ type: String, enum: GrammarQuestionErrorCategoriesC, default: null })
+  @Prop({ type: String, enum: GrammarQuestionErrorCategoriesC })
   public readonly errorCategory: GrammarQuestionErrorCategoriesT;
 
   @Prop({ type: Array, default: [] })
@@ -56,7 +56,7 @@ export class SSTGrammarQuestions {
   @Prop({ type: String, default: null })
   public readonly teacherId: string;
 
-  @Prop({ type: String, enum: GrammarQuestionTargetSkillsC, default: null })
+  @Prop({ type: String, enum: GrammarQuestionTargetSkillsC })
   public readonly targetSkill: GrammarQuestionTargetSkillsT;
 
   @Prop({ type: String, required: true })
@@ -98,14 +98,14 @@ export class SSTGrammarQuestions {
   @Prop({ type: Number, default: null })
   public readonly timeLimitSeconds: number;
 
-  @Prop({ ref: () => Accounts, type: String, required: true })
-  public readonly createdBy: Accounts;
+  // @Prop({ ref: () => Accounts, type: String, required: true })
+  // public readonly createdBy: Accounts;
 
-  @Prop({ ref: () => Properties, type: String, required: true })
-  public readonly properties: Properties;
+  // @Prop({ ref: () => Properties, type: String, required: true })
+  // public readonly properties: Properties;
 
-  @Prop({ ref: () => PropertiesBranches, type: String, required: true })
-  public readonly propertiesBranches: PropertiesBranches;
+  // @Prop({ ref: () => PropertiesBranches, type: String, required: true })
+  // public readonly propertiesBranches: PropertiesBranches;
 }
 
 export type GrammarQuestionErrorCategoriesT = (typeof GrammarQuestionErrorCategoriesC)[number];

@@ -213,13 +213,19 @@ export async function getSharedExams(examAccessIds = []) {
 }
 
 export async function saveExam(examData) {
-    const { id, ...data } = examData;
-    if (id) {
-        await examsService.update(id, data);
-        return id;
+    const { id, _id, ...data } = examData;
+    const targetId = id || _id;
+    if (targetId) {
+        try {
+            await examsService.update(targetId, data);
+            return targetId;
+        } catch (e) {
+            const result = await examsService.create({ _id: targetId, ...data });
+            return result?.id || result?._id || result;
+        }
     } else {
         const result = await examsService.create(data);
-        return result?.id || result;
+        return result?.id || result?._id || result;
     }
 }
 
