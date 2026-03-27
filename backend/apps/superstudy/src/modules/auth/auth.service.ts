@@ -30,9 +30,12 @@ export class AuthService {
   public async signIn(body: AuthSignInDTO, request: Request): Promise<IResponseHandlerParams> {
     try {
       if (body.provider === 'email-password') {
+
         const user = await this.usersModel.findOne({
           email: body.emailAddress?.toLowerCase().trim(),
         });
+
+
 
         if (isEmpty(user)) {
           return ResponseHandlerService({

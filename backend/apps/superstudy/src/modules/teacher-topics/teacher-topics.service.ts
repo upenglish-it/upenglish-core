@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from 'nestjs-typegoose';
 import { ReturnModelType } from '@typegoose/typegoose';
 import { SSTTeacherTopics } from 'apps/common/src/database/mongodb/src/superstudy';
+import { clearGlobalAppDefaultCred } from 'firebase-admin/lib/app/credential-factory';
 
 @Injectable()
 export class TeacherTopicsService {
@@ -15,6 +16,18 @@ export class TeacherTopicsService {
       .find({ teacherId, isDeleted: { $ne: true } })
       .lean();
     return topics.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }
+
+  async getSharedAndPublic(topicAccessIds: string[]) {
+    const query = {
+      isDeleted: { $ne: true },
+      $or: [
+        { isPublic: true },
+        { _id: { $in: topicAccessIds } }
+      ]
+    };
+    const topics = await this.teacherTopicsModel.find(query).lean();
+    return topics;
   }
 
   async findDeleted(teacherId?: string) {
@@ -35,11 +48,13 @@ export class TeacherTopicsService {
   }
 
   async create(data: Record<string, any>) {
+    console.log(data);
     const topic = await this.teacherTopicsModel.create({
       ...data,
       isDeleted: false,
       cachedWordCount: 0,
     });
+    console.log(topic);
     return topic.toObject();
   }
 

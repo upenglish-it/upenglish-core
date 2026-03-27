@@ -30,6 +30,16 @@
         "assets": ["../../**/*.handlebars"],
         "tsConfigPath": "apps/superlms/tsconfig.app.json"
       }
+    },
+    "superstudy": {
+      "type": "application",
+      "root": "apps/superstudy",
+      "entryFile": "main",
+      "sourceRoot": "apps/superstudy/src",
+      "compilerOptions": {
+        "assets": ["../../**/*.handlebars"],
+        "tsConfigPath": "apps/superstudy/tsconfig.app.json"
+      }
     }
   }
 }

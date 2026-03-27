@@ -29,6 +29,14 @@ export class UsersController {
     return this.usersService.update(id, body);
   }
 
+  @ApiOperation({ summary: 'Sync user profile on login (create if not exists)' })
+  @Post('sync')
+  @HttpCode(HttpStatus.OK)
+  syncUser(@Body() body: Record<string, any>) {
+    const { id, ...data } = body;
+    return this.usersService.syncUser(id, data);
+  }
+
   @ApiOperation({ summary: 'Approve pending user with role and optional expiry' })
   @Post(':id/approve')
   @HttpCode(HttpStatus.OK)

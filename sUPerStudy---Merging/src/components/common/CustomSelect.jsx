@@ -101,9 +101,9 @@ export default function CustomSelect({
                             setOpen(false);
                         }}
                     >
-                        {opt.icon && <span className="cs-item-icon">{opt.icon}</span>}
+                        {opt.icon ? <span className="cs-item-icon">{opt.icon}</span> : null}
                         <span className="cs-option-label">{opt.label}</span>
-                        {opt.value === value && <Check size={14} className="cs-check" />}
+                        {opt.value === value ? <Check size={14} className="cs-check" /> : null}
                     </li>
                 ))}
             </ul>,
@@ -113,12 +113,12 @@ export default function CustomSelect({
 
     return (
         <div className={`admin-form-group ${className || ''}`} style={style}>
-            {label && (
+            {label ? (
                 <label>
-                    {labelIcon && <span className="cs-label-icon">{labelIcon}</span>}
+                    {labelIcon ? <span className="cs-label-icon">{labelIcon}</span> : null}
                     {label}
                 </label>
-            )}
+            ) : null}
             <div className={`cs-wrapper${disabled ? ' cs-disabled' : ''}`}>
                 <button
                     type="button"
@@ -130,11 +130,13 @@ export default function CustomSelect({
                 >
                     <span className={`cs-value${!selected ? ' cs-placeholder' : ''}`}>
                         {selected ? (
-                            <>
-                                {selected.icon && <span className="cs-item-icon">{selected.icon}</span>}
-                                {selected.label}
-                            </>
-                        ) : placeholder}
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {selected.icon ? <span className="cs-item-icon">{selected.icon}</span> : null}
+                                <span>{selected.label}</span>
+                            </span>
+                        ) : (
+                            <span>{placeholder}</span>
+                        )}
                     </span>
                     <ChevronDown size={16} className={`cs-chevron${open ? ' cs-chevron-up' : ''}`} />
                 </button>

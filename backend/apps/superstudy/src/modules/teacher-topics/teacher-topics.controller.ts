@@ -11,6 +11,13 @@ import { TeacherTopicsService } from './teacher-topics.service';
 export class TeacherTopicsController {
   constructor(private readonly teacherTopicsService: TeacherTopicsService) {}
 
+  @ApiOperation({ summary: 'List shared and public teacher topics' })
+  @Get('shared-and-public')
+  getSharedAndPublic(@Query('topicAccessIds') topicAccessIds?: string) {
+    const idsArray = topicAccessIds ? topicAccessIds.split(',') : [];
+    return this.teacherTopicsService.getSharedAndPublic(idsArray);
+  }
+
   @ApiOperation({ summary: 'List teacher topics by teacherId (default: non-deleted)' })
   @Get()
   findAll(@Query('teacherId') teacherId: string) {

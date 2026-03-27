@@ -117,6 +117,16 @@ export class SharingController {
     return this.sharingService.getUserAccess(userId);
   }
 
+  @ApiOperation({ summary: 'Get all users and groups that have access to a specific resource' })
+  @Get('resource-access')
+  getResourceAccess(
+    @Query('resourceType') resourceType: string,
+    @Query('resourceId') resourceId: string
+  ) {
+    return this.sharingService.getResourceAccess(resourceType, resourceId);
+  }
+
+
   // ─────────────────────────────────────────────
   // Mode 5: Teacher collaboration (teacher-owned resources)
   // ─────────────────────────────────────────────

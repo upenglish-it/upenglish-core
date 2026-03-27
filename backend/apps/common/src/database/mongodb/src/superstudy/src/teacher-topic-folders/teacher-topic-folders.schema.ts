@@ -30,17 +30,17 @@ export class SSTTeacherTopicFolders {
   @Prop({ type: Array, required: true })
   public readonly topicIds: string[];
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly appSystemFolder: boolean;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: true })
   public readonly ownFolder: boolean;
 
-  @Prop({ type: String, required: true })
-  public readonly deletedAt: string;
+  @Prop({ type: Date, default: null })
+  public readonly deletedAt: Date;
 
-  @Prop({ type: Boolean, required: true })
-  public readonly deleted: boolean;
+  @Prop({ type: Boolean, default: false })
+  public readonly isDeleted: boolean;
 
   @Prop({ ref: () => Accounts, type: String, required: true })
   public readonly createdBy: Accounts;

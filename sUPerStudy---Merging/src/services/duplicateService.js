@@ -1,8 +1,9 @@
 import { db, storage } from '../config/firebase';
 import { collection, doc, getDocs, getDoc, setDoc, Timestamp, query, where, orderBy } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { recalcExamQuestionCache } from './examService';
-import { recalcGrammarQuestionCache } from './grammarService';
+import { recalcExamQuestionCache, getExam, getExamQuestions, saveExam, saveExamQuestion } from './examService';
+import { recalcGrammarQuestionCache, getGrammarExercise, getGrammarQuestions, saveGrammarExercise, saveGrammarQuestion } from './grammarService';
+import { teacherTopicsService } from '../models';
 
 // ==========================================
 // HELPER: Copy a Firebase Storage file to a new path
@@ -112,10 +113,9 @@ async function copyQuestionOptionImages(variations) {
 export async function duplicateTeacherTopic(topicId, teacherId) {
     if (!topicId || !teacherId) throw new Error('Missing topicId or teacherId');
 
-    // 1. Read source topic
-    const topicSnap = await getDoc(doc(db, 'teacher_topics', topicId));
-    if (!topicSnap.exists()) throw new Error('Bài học không tồn tại.');
-    const topicData = topicSnap.data();
+    // 1. Read source topic from API
+    const topicData = await teacherTopicsService.findOne(topicId);
+    if (!topicData) throw new Error('Bài học không tồn tại.');
 
     // 2. Generate new ID
     const newTopicId = `t-${teacherId.substring(0, 5)}-${Date.now()}`;
@@ -124,47 +124,50 @@ export async function duplicateTeacherTopic(topicId, teacherId) {
     const newTopicData = {
         ...topicData,
         teacherId,
+        id: newTopicId,
         name: `${topicData.name || 'Bài học'} (Bản sao)`,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
     };
+    
     // Reset ownership/sharing fields
+    delete newTopicData._id;
     delete newTopicData.collaboratorIds;
     delete newTopicData.collaboratorNames;
     delete newTopicData.isPublic;
-    delete newTopicData.id; // CRITICAL: remove old id so it doesn't override docSnap.id on read
     delete newTopicData.duplicatedFrom;
+    
     newTopicData.duplicatedFrom = topicId;
     newTopicData.collaborators = [];
 
-    // 4. Save new topic
-    await setDoc(doc(db, 'teacher_topics', newTopicId), newTopicData);
-
-    // 5. Read and copy all words
-    const wordsRef = collection(db, `teacher_topics/${topicId}/words`);
-    const wordsSnap = await getDocs(query(wordsRef, orderBy('createdAt', 'asc')));
+    // 4. Read and copy all words (already inside topicData.words for the API version)
+    let words = newTopicData.words || [];
     let wordCount = 0;
-
-    for (const wordDoc of wordsSnap.docs) {
-        const wordData = { ...wordDoc.data() };
+    
+    // Create new words array with copied assets
+    const newWords = [];
+    for (const w of words) {
+        const wordData = { ...w };
 
         // Copy vocab image if present
         if (wordData.imageUrl && wordData.imageUrl.includes('firebasestorage.googleapis.com')) {
             wordData.imageUrl = await copyStorageFile(wordData.imageUrl, 'vocab_images');
         }
 
-        // Save to new topic's words subcollection (auto-ID)
-        const newWordRef = doc(collection(db, `teacher_topics/${newTopicId}/words`));
-        await setDoc(newWordRef, {
+        newWords.push({
             ...wordData,
-            createdAt: Timestamp.now(),
-            updatedAt: Timestamp.now()
+            id: crypto.randomUUID(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
         });
         wordCount++;
     }
+    
+    newTopicData.words = newWords;
+    newTopicData.cachedWordCount = wordCount;
 
-    // 6. Update cached word count
-    await setDoc(doc(db, 'teacher_topics', newTopicId), { cachedWordCount: wordCount }, { merge: true });
+    // 5. Save new topic via API
+    await teacherTopicsService.create(newTopicData);
 
     return newTopicId;
 }
@@ -182,16 +185,15 @@ export async function duplicateTeacherTopic(topicId, teacherId) {
 export async function duplicateExam(examId, teacherId) {
     if (!examId || !teacherId) throw new Error('Missing examId or teacherId');
 
-    // 1. Read source exam
-    const examSnap = await getDoc(doc(db, 'exams', examId));
-    if (!examSnap.exists()) throw new Error('Đề thi không tồn tại.');
-    const examData = examSnap.data();
+    // 1. Read source exam via API
+    const examData = await getExam(examId);
+    if (!examData) throw new Error('Đề thi không tồn tại.');
 
     // 2. Create section ID mapping (old → new)
     const sectionIdMap = {};
     const newSections = (examData.sections || []).map(section => {
         const newSectionId = crypto.randomUUID();
-        sectionIdMap[section.id] = newSectionId;
+        sectionIdMap[section.id || section._id] = newSectionId;
         return { ...section, id: newSectionId };
     });
 
@@ -210,35 +212,34 @@ export async function duplicateExam(examId, teacherId) {
     }
 
     // 4. Prepare new exam data
-    const newExamRef = doc(collection(db, 'exams'));
-    const newExamId = newExamRef.id;
+    const newExamId = `e-${teacherId.substring(0, 5)}-${Date.now()}`;
     const newExamData = {
         ...examData,
         sections: newSections,
         createdBy: teacherId,
         createdByRole: 'teacher',
         name: `${examData.name || 'Đề thi'} (Bản sao)`,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
     };
     // Reset ownership/sharing
     delete newExamData.collaboratorIds;
     delete newExamData.collaboratorNames;
     delete newExamData.isPublic;
-    delete newExamData.id; // CRITICAL: remove old id
+    delete newExamData.id;
+    delete newExamData._id;
     newExamData.duplicatedFrom = examId;
     newExamData.collaborators = [];
 
-    await setDoc(newExamRef, newExamData);
+    // Save new exam via API
+    await saveExam({ _id: newExamId, ...newExamData });
 
-    // 5. Read and copy all questions
-    const questionsSnap = await getDocs(
-        query(collection(db, 'exam_questions'), where('examId', '==', examId))
-    );
+    // 5. Read and copy all questions via API
+    const questions = await getExamQuestions(examId);
 
-    for (const qDoc of questionsSnap.docs) {
+    for (const qBase of questions) {
         try {
-            const qData = { ...qDoc.data() };
+            const qData = { ...qBase };
 
             // Map IDs
             qData.examId = newExamId;
@@ -274,15 +275,17 @@ export async function duplicateExam(examId, teacherId) {
                 }
             }
 
-            // Save new question (auto-ID)
-            const newQRef = doc(collection(db, 'exam_questions'));
-            await setDoc(newQRef, {
+            delete qData.id;
+            delete qData._id;
+
+            // Save new question via API
+            await saveExamQuestion({
                 ...qData,
-                createdAt: Timestamp.now(),
-                updatedAt: Timestamp.now()
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
             });
         } catch (e) {
-            console.error('[duplicateService] Error copying exam question:', qDoc.id, e);
+            console.error('[duplicateService] Error copying exam question:', qBase.id || qBase._id, e);
         }
     }
 
@@ -305,39 +308,38 @@ export async function duplicateExam(examId, teacherId) {
 export async function duplicateGrammarExercise(exerciseId, teacherId) {
     if (!exerciseId || !teacherId) throw new Error('Missing exerciseId or teacherId');
 
-    // 1. Read source exercise
-    const exSnap = await getDoc(doc(db, 'grammar_exercises', exerciseId));
-    if (!exSnap.exists()) throw new Error('Bài học không tồn tại.');
-    const exData = exSnap.data();
+    // 1. Read source exercise via API
+    const exData = await getGrammarExercise(exerciseId);
+    if (!exData) throw new Error('Bài học không tồn tại.');
 
     // 2. Create new exercise
-    const newExRef = doc(collection(db, 'grammar_exercises'));
-    const newExId = newExRef.id;
+    const newExId = `g-${teacherId.substring(0, 5)}-${Date.now()}`;
     const newExData = {
         ...exData,
         teacherId,
-        name: `${exData.name || 'Bài học'} (Bản sao)`,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
+        name: `${exData.name || exData.title || 'Bài học'} (Bản sao)`,
+        title: `${exData.name || exData.title || 'Bài học'} (Bản sao)`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
     };
     // Reset ownership/sharing
     delete newExData.collaboratorIds;
     delete newExData.collaboratorNames;
     delete newExData.isPublic;
-    delete newExData.id; // CRITICAL: remove old id
+    delete newExData.id;
+    delete newExData._id;
     newExData.duplicatedFrom = exerciseId;
     newExData.collaborators = [];
 
-    await setDoc(newExRef, newExData);
+    // Save exercise via API
+    await saveGrammarExercise({ _id: newExId, ...newExData });
 
-    // 3. Read and copy all questions
-    const questionsSnap = await getDocs(
-        query(collection(db, 'grammar_questions'), where('exerciseId', '==', exerciseId))
-    );
+    // 3. Read and copy all questions via API
+    const questions = await getGrammarQuestions(exerciseId);
 
-    for (const qDoc of questionsSnap.docs) {
+    for (const qBase of questions) {
         try {
-            const qData = { ...qDoc.data() };
+            const qData = { ...qBase };
 
             // Map exercise ID
             qData.exerciseId = newExId;
@@ -370,15 +372,17 @@ export async function duplicateGrammarExercise(exerciseId, teacherId) {
                 }
             }
 
-            // Save new question (auto-ID)
-            const newQRef = doc(collection(db, 'grammar_questions'));
-            await setDoc(newQRef, {
+            delete qData.id;
+            delete qData._id;
+
+            // Save new question via API
+            await saveGrammarQuestion({
                 ...qData,
-                createdAt: Timestamp.now(),
-                updatedAt: Timestamp.now()
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
             });
         } catch (e) {
-            console.error('[duplicateService] Error copying grammar question:', qDoc.id, e);
+            console.error('[duplicateService] Error copying grammar question:', qBase.id || qBase._id, e);
         }
     }
 

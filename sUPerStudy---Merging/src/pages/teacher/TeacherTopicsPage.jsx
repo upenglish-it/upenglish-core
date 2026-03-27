@@ -5,7 +5,6 @@ import { submitProposal, getProposalForSource } from '../../services/contentProp
 import { getUsersPublicInfo } from '../../services/userService';
 import { getFolders, getGroups, toggleResourcePublic, getResourceSharedEntities, shareResourceToEmail, unshareResourceFromUser, shareResourceToGroup, unshareResourceFromGroup, getAdminTopics } from '../../services/adminService';
 import { useAuth } from '../../contexts/AuthContext';
-import { Timestamp } from 'firebase/firestore';
 import { BookOpen, Edit, Trash2, X, Plus, List, FolderOpen, Share2, Globe, Users, Mail, UserPlus, Lock, Search, AlertTriangle, ChevronDown, ChevronRight, AlertCircle, Landmark, Send, CheckCircle, XCircle, Clock, ArrowRightLeft, UsersRound, FileText, Calendar, Copy, GripVertical } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { duplicateTeacherTopic } from '../../services/duplicateService';
@@ -231,12 +230,25 @@ export default function TeacherTopicsPage() {
 
         try {
             const { folderId, ...topicData } = formData;
-            await saveTeacherTopic(user.uid, { ...topicData, id: finalTopicId });
+            const topicPayload = {
+                ...topicData,
+                id: finalTopicId,
+                createdBy: user.uid,
+                properties: user.properties || 'default',
+                propertiesBranches: Array.isArray(user.propertiesBranches) && user.propertiesBranches.length > 0 ? user.propertiesBranches[0] : (user.propertiesBranches || 'default')
+            };
+            await saveTeacherTopic(user.uid, topicPayload);
 
             if (folderId) {
                 const folder = teacherFolders.find(f => f.id === folderId);
                 if (folder && !(folder.topicIds || []).includes(finalTopicId)) {
-                    await saveTeacherTopicFolder(user.uid, { ...folder, topicIds: [...(folder.topicIds || []), finalTopicId] });
+                    await saveTeacherTopicFolder(user.uid, { 
+                        ...folder, 
+                        topicIds: [...(folder.topicIds || []), finalTopicId],
+                        createdBy: user.uid,
+                        properties: user.properties || 'default',
+                        propertiesBranches: Array.isArray(user.propertiesBranches) && user.propertiesBranches.length > 0 ? user.propertiesBranches[0] : (user.propertiesBranches || 'default')
+                    });
                 }
             }
             for (const f of teacherFolders) {
@@ -561,16 +573,15 @@ export default function TeacherTopicsPage() {
         setIsQuickAssigning(true);
         setQuickAssignSuccess('');
         try {
-            const dueDateTimestamp = Timestamp.fromDate(new Date(quickAssignDueDate));
             await createAssignment({
                 groupId: quickAssignGroupId,
                 topicId: resourceToShare.id,
                 topicName: resourceToShare.name,
-                dueDate: dueDateTimestamp,
+                dueDate: new Date(quickAssignDueDate).toISOString(),
                 isTeacherTopic: !resourceToShare.isAdmin,
                 isGrammar: false,
                 createdBy: user?.uid,
-                ...(quickAssignScheduledStart && quickAssignScheduledStart !== 'pending' ? { scheduledStart: Timestamp.fromDate(new Date(quickAssignScheduledStart)) } : {}),
+                ...(quickAssignScheduledStart && quickAssignScheduledStart !== 'pending' ? { scheduledStart: new Date(quickAssignScheduledStart).toISOString() } : {}),
                 ...(quickAssignSelectedStudentIds.length > 0 ? { assignedStudentIds: quickAssignSelectedStudentIds } : {})
             });
             const groupName = teacherManagedGroups.find(g => g.id === quickAssignGroupId)?.name || '';
@@ -610,7 +621,13 @@ export default function TeacherTopicsPage() {
         e.preventDefault();
         setIsFolderSaving(true);
         try {
-            await saveTeacherTopicFolder(user.uid, folderFormData);
+            const folderPayload = {
+                ...folderFormData,
+                createdBy: user.uid,
+                properties: user.properties || 'default',
+                propertiesBranches: Array.isArray(user.propertiesBranches) && user.propertiesBranches.length > 0 ? user.propertiesBranches[0] : (user.propertiesBranches || 'default')
+            };
+            await saveTeacherTopicFolder(user.uid, folderPayload);
             setFolderFormOpen(false);
             setAlertMessage({ type: 'success', text: isFolderEditing ? 'Cập nhật Folder thành công!' : 'Tạo Folder mới thành công!' });
             loadTopics();

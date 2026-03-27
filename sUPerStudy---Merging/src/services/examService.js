@@ -6,6 +6,7 @@ import { getPromptById } from './promptService';
 import { normalizeForComparison } from '../utils/textNormalization';
 import { evaluateAudioAnswer, chatCompletion, isSilentAudio } from './aiService';
 import { deleteContextAudio } from './contextAudioService';
+import { examsService, examQuestionsService, examAssignmentsService, examSubmissionsService } from '../models';
 
 /**
  * Upload an audio answer blob to Firebase Storage.
@@ -181,158 +182,67 @@ export async function deleteQuestionImages(question) {
 // ========== EXAMS ==========
 
 export async function getExams(createdByRole = null) {
-    let q;
-    if (createdByRole) {
-        q = query(collection(db, 'exams'), where('createdByRole', '==', createdByRole));
-    } else {
-        q = query(collection(db, 'exams'));
-    }
-    const snapshot = await getDocs(q);
-    const exams = [];
-    snapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        if (!data.isDeleted) exams.push({ id: docSnap.id, ...data });
-    });
+    const result = await examsService.findAll({ createdByRole });
+    let exams = Array.isArray(result) ? result : (result?.data || []);
+    exams = exams.filter(e => !e.isDeleted);
     return exams.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return timeB - timeA;
     });
 }
 
 export async function getExam(id) {
-    const docSnap = await getDoc(doc(db, 'exams', id));
-    if (docSnap.exists()) return { id: docSnap.id, ...docSnap.data() };
-    return null;
+    const result = await examsService.findOne(id);
+    return result || null;
 }
 
 export async function getSharedExams(examAccessIds = []) {
-    const exams = [];
-    const addedIds = new Set();
-
     try {
-        // 1. Get all public exams (visible to teachers, not students)
-        const publicQ = query(collection(db, 'exams'), where('isPublic', '==', true));
-        const publicSnap = await getDocs(publicQ);
-        publicSnap.forEach(docSnap => {
-            exams.push({ id: docSnap.id, ...docSnap.data() });
-            addedIds.add(docSnap.id);
+        const result = await examsService.findShared(examAccessIds);
+        let exams = Array.isArray(result) ? result : (result?.data || []);
+        return exams.sort((a, b) => {
+            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return timeB - timeA;
         });
-
-        // 1b. Get all teacher-visible exams
-        const tvQ = query(collection(db, 'exams'), where('teacherVisible', '==', true));
-        const tvSnap = await getDocs(tvQ);
-        tvSnap.forEach(docSnap => {
-            if (!addedIds.has(docSnap.id)) {
-                exams.push({ id: docSnap.id, ...docSnap.data() });
-                addedIds.add(docSnap.id);
-            }
-        });
-
-        // 2. Get explicitly shared exams
-        if (examAccessIds.length > 0) {
-            for (let i = 0; i < examAccessIds.length; i += 10) {
-                const batchIds = examAccessIds.slice(i, i + 10);
-                const sharedQ = query(collection(db, 'exams'), where(documentId(), 'in', batchIds));
-                const sharedSnap = await getDocs(sharedQ);
-                sharedSnap.forEach(docSnap => {
-                    if (!addedIds.has(docSnap.id)) {
-                        exams.push({ id: docSnap.id, ...docSnap.data() });
-                        addedIds.add(docSnap.id);
-                    }
-                });
-            }
-        }
     } catch (error) {
         console.error("Error fetching shared exams:", error);
+        return [];
     }
-
-    return exams.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
-        return timeB - timeA;
-    });
 }
 
 export async function saveExam(examData) {
     const { id, ...data } = examData;
-    let examRef;
     if (id) {
-        examRef = doc(db, 'exams', id);
-        await updateDoc(examRef, { ...data, updatedAt: serverTimestamp() });
+        await examsService.update(id, data);
         return id;
     } else {
-        examRef = doc(collection(db, 'exams'));
-        await setDoc(examRef, { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-        return examRef.id;
+        const result = await examsService.create(data);
+        return result?.id || result;
     }
 }
 
 export async function deleteExam(id) {
-    // Soft delete: mark as deleted instead of removing
-    await updateDoc(doc(db, 'exams', id), {
-        isDeleted: true,
-        deletedAt: serverTimestamp()
-    });
+    await examsService.softDelete(id);
 }
 
 export async function restoreExam(id) {
-    await updateDoc(doc(db, 'exams', id), {
-        isDeleted: deleteField(),
-        deletedAt: deleteField()
-    });
+    await examsService.restore(id);
 }
 
 export async function permanentlyDeleteExam(id) {
-    // Delete questions first
-    const questions = await getExamQuestions(id);
-    const batch = writeBatch(db);
-
-    // Delete option images for these questions
-    await Promise.allSettled(questions.map(q => deleteQuestionImages(q)));
-
-    questions.forEach(q => batch.delete(doc(db, 'exam_questions', q.id)));
-
-    // Delete related assignments
-    const assignmentsQ = query(collection(db, 'exam_assignments'), where('examId', '==', id));
-    const asgnsSnap = await getDocs(assignmentsQ);
-    asgnsSnap.forEach(asgnDoc => {
-        batch.delete(asgnDoc.ref);
-    });
-
-    // Delete related submissions and their storage
-    const submissionsQ = query(collection(db, 'exam_submissions'), where('examId', '==', id));
-    const subsSnap = await getDocs(submissionsQ);
-
-    for (const subDoc of subsSnap.docs) {
-        batch.delete(subDoc.ref);
-        const folderRef = ref(storage, `audio_answers/${subDoc.id}`);
-        listAll(folderRef).then(listRes => {
-            listRes.items.forEach(fileRef => deleteObject(fileRef).catch(() => { }));
-        }).catch(() => { });
-    }
-
-    // Delete context audio for all sections
-    const examDoc = await getDoc(doc(db, 'exams', id));
-    if (examDoc.exists()) {
-        const examData = examDoc.data();
-        const audioCleanup = (examData.sections || []).filter(s => s.contextAudioUrl).map(s => deleteContextAudio(s.contextAudioUrl));
-        await Promise.allSettled(audioCleanup);
-    }
-
-    batch.delete(doc(db, 'exams', id));
-    await batch.commit();
+    // Backend handles cascade deletion of questions, assignments, submissions, and storage
+    await examsService.permanentDelete(id);
 }
 
 export async function getDeletedExams() {
     try {
-        const q = query(collection(db, 'exams'), where('isDeleted', '==', true));
-        const snapshot = await getDocs(q);
-        const exams = [];
-        snapshot.forEach(docSnap => exams.push({ id: docSnap.id, ...docSnap.data() }));
+        const result = await examsService.findDeleted();
+        let exams = Array.isArray(result) ? result : (result?.data || []);
         return exams.sort((a, b) => {
-            const tA = a.deletedAt?.toMillis ? a.deletedAt.toMillis() : 0;
-            const tB = b.deletedAt?.toMillis ? b.deletedAt.toMillis() : 0;
+            const tA = a.deletedAt ? new Date(a.deletedAt).getTime() : 0;
+            const tB = b.deletedAt ? new Date(b.deletedAt).getTime() : 0;
             return tB - tA;
         });
     } catch (error) {
@@ -344,22 +254,14 @@ export async function getDeletedExams() {
 // ========== EXAM QUESTIONS ==========
 
 export async function getExamQuestions(examId) {
-    const q = query(collection(db, 'exam_questions'), where('examId', '==', examId));
-    const snapshot = await getDocs(q);
-    const questions = [];
-    snapshot.forEach(docSnap => questions.push({ id: docSnap.id, ...docSnap.data() }));
+    const result = await examQuestionsService.findAll(examId);
+    let questions = Array.isArray(result) ? result : (result?.data || []);
     return questions.sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
 export async function getExamQuestionsBySection(examId, sectionId) {
-    const q = query(
-        collection(db, 'exam_questions'),
-        where('examId', '==', examId),
-        where('sectionId', '==', sectionId)
-    );
-    const snapshot = await getDocs(q);
-    const questions = [];
-    snapshot.forEach(docSnap => questions.push({ id: docSnap.id, ...docSnap.data() }));
+    const result = await examQuestionsService.findBySection(examId, sectionId);
+    let questions = Array.isArray(result) ? result : (result?.data || []);
     return questions.sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
@@ -410,33 +312,8 @@ export async function getExamQuestionTimeTotals(examIds) {
  */
 export async function recalcExamQuestionCache(examId) {
     try {
-        // Fetch exam to get valid section IDs
-        const examSnap = await getDoc(doc(db, 'exams', examId));
-        const examData = examSnap.exists() ? examSnap.data() : {};
-        const validSectionIds = new Set((examData.sections || []).map(s => s.id));
-
-        const q = query(collection(db, 'exam_questions'), where('examId', '==', examId));
-        const snapshot = await getDocs(q);
-        let totalSeconds = 0;
-        let missingCount = 0;
-        let validCount = 0;
-        snapshot.forEach(docSnap => {
-            const data = docSnap.data();
-            // Skip orphan questions that don't belong to any active section
-            if (data.sectionId && !validSectionIds.has(data.sectionId)) return;
-            if (!data.sectionId && validSectionIds.size > 0) return;
-            validCount++;
-            if (data.timeLimitSeconds && data.timeLimitSeconds >= 5) {
-                totalSeconds += data.timeLimitSeconds;
-            } else {
-                missingCount++;
-            }
-        });
-        await updateDoc(doc(db, 'exams', examId), {
-            cachedQuestionCount: validCount,
-            cachedQuestionTimeTotalSeconds: totalSeconds,
-            cachedQuestionTimeMissingCount: missingCount
-        });
+        // Backend handles the recalculation
+        await examsService.update(examId, { _recalcQuestionCache: true });
     } catch (e) {
         console.error(`Error recalculating exam question cache for ${examId}:`, e);
     }
@@ -444,21 +321,13 @@ export async function recalcExamQuestionCache(examId) {
 
 export async function saveExamQuestion(questionData) {
     const { id, ...data } = questionData;
-    let questionRef;
+    let resultId;
     if (id) {
-        questionRef = doc(db, 'exam_questions', id);
-        await updateDoc(questionRef, { ...data, updatedAt: serverTimestamp() });
+        await examQuestionsService.update(id, data);
+        resultId = id;
     } else {
-        // Find current max order for this section
-        const questionsSnapshot = await getDocs(query(
-            collection(db, 'exam_questions'),
-            where('examId', '==', data.examId),
-            where('sectionId', '==', data.sectionId)
-        ));
-        const numQuestions = questionsSnapshot.size;
-
-        questionRef = doc(collection(db, 'exam_questions'));
-        await setDoc(questionRef, { ...data, order: numQuestions, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        const result = await examQuestionsService.create(data);
+        resultId = result?.id || result;
     }
 
     // Fire-and-forget: auto-classify errorCategory in background
@@ -470,64 +339,44 @@ export async function saveExamQuestion(questionData) {
             questionText: data.variations?.[0]?.text || data.text,
             options: data.variations?.[0]?.options || data.options
         }).then(category => {
-            updateDoc(questionRef, { errorCategory: category }).catch(() => {});
+            examQuestionsService.update(resultId, { errorCategory: category }).catch(() => {});
         }).catch(() => {});
     }).catch(() => {});
 
     // Fire-and-forget: recalc exam question cache
     recalcExamQuestionCache(data.examId).catch(() => {});
 
-    return id || questionRef.id;
+    return resultId;
 }
 
 export async function deleteExamQuestion(id) {
-    const docRef = doc(db, 'exam_questions', id);
-    const snap = await getDoc(docRef);
-    let examId = null;
-    if (snap.exists()) {
-        examId = snap.data().examId;
-        await deleteQuestionImages(snap.data());
+    try {
+        const question = await examQuestionsService.findOne(id);
+        if (question) await deleteQuestionImages(question);
+        await examQuestionsService.remove(id);
+        if (question?.examId) recalcExamQuestionCache(question.examId).catch(() => {});
+    } catch (e) {
+        await examQuestionsService.remove(id);
     }
-    await deleteDoc(docRef);
-
-    // Fire-and-forget: recalc exam question cache
-    if (examId) recalcExamQuestionCache(examId).catch(() => {});
 }
 
 export async function updateExamQuestionsOrder(examId, sectionId, orderedQuestions) {
-    const batch = writeBatch(db);
-    orderedQuestions.forEach((q, index) => {
-        const ref = doc(db, 'exam_questions', q.id);
-        batch.update(ref, { order: index });
-    });
-    await batch.commit();
+    const orders = orderedQuestions.map((q, index) => ({ id: q.id, order: index }));
+    await examQuestionsService.reorder(examId, sectionId, orders);
 }
 
 // ========== EXAM ASSIGNMENTS ==========
 
 export async function createExamAssignment(assignmentData) {
     const { id, ...data } = assignmentData;
-    const assignmentRef = doc(collection(db, 'exam_assignments'));
     // Generate a random seed for variation selection
     const variationSeed = Math.floor(Math.random() * 100000);
 
-    // Resolve targetName for group assignments if not already provided
-    if (data.targetType === 'group' && data.targetId && !data.targetName) {
-        try {
-            const groupSnap = await getDoc(doc(db, 'groups', data.targetId));
-            if (groupSnap.exists()) {
-                data.targetName = groupSnap.data().name || '';
-            }
-        } catch (e) {
-            console.warn('Could not resolve group name for assignment:', e);
-        }
-    }
-
-    await setDoc(assignmentRef, {
+    const result = await examAssignmentsService.create({
         ...data,
         variationSeed,
-        createdAt: serverTimestamp()
     });
+    const assignmentId = result?.id || result;
 
     // Notifications for group assignments
     // Check if scheduledStart is in the future — if so, skip student notifications
@@ -590,17 +439,16 @@ export async function createExamAssignment(assignmentData) {
 }
 
 export async function getExamAssignment(id) {
-    const docSnap = await getDoc(doc(db, 'exam_assignments', id));
-    if (docSnap.exists()) return { id: docSnap.id, ...docSnap.data() };
-    return null;
+    const result = await examAssignmentsService.findOne(id);
+    return result || null;
 }
 
 export async function getExamAssignmentsForExam(examId) {
     if (!examId) return [];
     try {
-        const q = query(collection(db, 'exam_assignments'), where('examId', '==', examId));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(d => ({ id: d.id, ...d.data() })).filter(a => !a.isDeleted);
+        const result = await examAssignmentsService.findByExam(examId);
+        let assignments = Array.isArray(result) ? result : (result?.data || []);
+        return assignments.filter(a => !a.isDeleted);
     } catch (error) {
         console.error('Error fetching exam assignments for exam:', error);
         return [];
@@ -608,124 +456,61 @@ export async function getExamAssignmentsForExam(examId) {
 }
 
 export async function getExamAssignmentsForGroup(groupId) {
-    const q = query(collection(db, 'exam_assignments'), where('targetType', '==', 'group'), where('targetId', '==', groupId));
-    const snapshot = await getDocs(q);
-    const assignments = snapshot.docs.map(d => ({ id: d.id, ...d.data() })).filter(a => !a.isDeleted);
+    const result = await examAssignmentsService.findByGroup(groupId);
+    let assignments = Array.isArray(result) ? result : (result?.data || []);
+    assignments = assignments.filter(a => !a.isDeleted);
     return assignments.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return timeB - timeA;
     });
 }
 
 export async function getExamAssignmentsForStudent(studentId, groupIds = []) {
-    const assignments = [];
-    const addedIds = new Set();
-
-    // 1. Individual assignments
     try {
-        const indQ = query(collection(db, 'exam_assignments'), where('targetType', '==', 'individual'), where('targetId', '==', studentId));
-        const indSnap = await getDocs(indQ);
-        indSnap.forEach(d => {
-            assignments.push({ id: d.id, ...d.data() });
-            addedIds.add(d.id);
-        });
-    } catch (e) {
-        console.error("Error fetching individual exam assignments:", e);
-    }
-
-    // 2. Group assignments
-    if (groupIds.length > 0) {
-        for (let i = 0; i < groupIds.length; i += 10) {
-            const batchGroupIds = groupIds.slice(i, i + 10);
-            try {
-                const grpQ = query(collection(db, 'exam_assignments'), where('targetType', '==', 'group'), where('targetId', 'in', batchGroupIds));
-                const grpSnap = await getDocs(grpQ);
-                grpSnap.forEach(d => {
-                    if (!addedIds.has(d.id)) {
-                        assignments.push({ id: d.id, ...d.data() });
-                        addedIds.add(d.id);
-                    }
-                });
-            } catch (e) {
-                console.error("Error fetching group exam assignments:", e);
+        const result = await examAssignmentsService.findForStudent(studentId, groupIds);
+        let assignments = Array.isArray(result) ? result : (result?.data || []);
+        // Filter out deleted and filter by assignedStudentIds
+        let filtered = assignments.filter(a => !a.isDeleted);
+        filtered = filtered.filter(a => {
+            if (a.assignedStudentIds && Array.isArray(a.assignedStudentIds) && a.assignedStudentIds.length > 0) {
+                return a.assignedStudentIds.includes(studentId);
             }
-        }
+            return true;
+        });
+        return filtered.sort((a, b) => {
+            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return timeB - timeA;
+        });
+    } catch (error) {
+        console.error('Error fetching student exam assignments:', error);
+        return [];
     }
-
-    // Filter out deleted and filter by assignedStudentIds
-    let filtered = assignments.filter(a => !a.isDeleted);
-    
-    // If assignment has assignedStudentIds, only show to those students
-    filtered = filtered.filter(a => {
-        if (a.assignedStudentIds && Array.isArray(a.assignedStudentIds) && a.assignedStudentIds.length > 0) {
-            return a.assignedStudentIds.includes(studentId);
-        }
-        return true; // whole-class assignment
-    });
-
-    return filtered.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
-        return timeB - timeA;
-    });
 }
 
 export async function deleteExamAssignment(assignmentId) {
-    // Soft delete: mark as deleted instead of removing
-    try {
-        await updateDoc(doc(db, 'exam_assignments', assignmentId), {
-            isDeleted: true,
-            deletedAt: serverTimestamp()
-        });
-    } catch (error) {
-        console.error("Error soft-deleting exam assignment:", error);
-        throw error;
-    }
+    await examAssignmentsService.softDelete(assignmentId);
 }
 
 export async function restoreExamAssignment(assignmentId) {
     if (!assignmentId) throw new Error("Missing assignment ID");
-    try {
-        await updateDoc(doc(db, 'exam_assignments', assignmentId), {
-            isDeleted: deleteField(),
-            deletedAt: deleteField()
-        });
-    } catch (error) {
-        console.error("Error restoring exam assignment:", error);
-        throw error;
-    }
+    await examAssignmentsService.restore(assignmentId);
 }
 
 export async function permanentlyDeleteExamAssignment(assignmentId) {
-    // Actually delete submissions and the assignment document
-    const subsQ = query(collection(db, 'exam_submissions'), where('assignmentId', '==', assignmentId));
-    const subsSnap = await getDocs(subsQ);
-    const batch = writeBatch(db);
-
-    for (const subDoc of subsSnap.docs) {
-        batch.delete(subDoc.ref);
-        const folderRef = ref(storage, `audio_answers/${subDoc.id}`);
-        listAll(folderRef).then(listRes => {
-            listRes.items.forEach(fileRef => deleteObject(fileRef).catch(() => { }));
-        }).catch(() => { });
-    }
-
-    batch.delete(doc(db, 'exam_assignments', assignmentId));
-    await batch.commit();
+    // Backend handles cascade deletion of submissions and storage cleanup
+    await examAssignmentsService.permanentDelete(assignmentId);
 }
 
 export async function getDeletedExamAssignmentsForGroup(groupId) {
     if (!groupId) return [];
     try {
-        const q = query(collection(db, 'exam_assignments'), where('targetType', '==', 'group'), where('targetId', '==', groupId));
-        const snapshot = await getDocs(q);
-        const data = snapshot.docs
-            .map(d => ({ id: d.id, ...d.data() }))
-            .filter(a => a.isDeleted);
+        const result = await examAssignmentsService.findDeletedByGroup(groupId);
+        let data = Array.isArray(result) ? result : (result?.data || []);
         data.sort((a, b) => {
-            const tA = a.deletedAt?.toMillis ? a.deletedAt.toMillis() : 0;
-            const tB = b.deletedAt?.toMillis ? b.deletedAt.toMillis() : 0;
+            const tA = a.deletedAt ? new Date(a.deletedAt).getTime() : 0;
+            const tB = b.deletedAt ? new Date(b.deletedAt).getTime() : 0;
             return tB - tA;
         });
         return data;
@@ -879,73 +664,48 @@ export async function removeExamAssignmentStudentDeadline(assignmentId, studentI
 // ========== EXAM SUBMISSIONS ==========
 
 export async function getExamSubmission(assignmentId, studentId) {
-    const q = query(
-        collection(db, 'exam_submissions'),
-        where('assignmentId', '==', assignmentId),
-        where('studentId', '==', studentId)
-    );
-    const snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-        const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        const finished = docs.find(d => d.status === 'submitted' || d.status === 'grading' || d.status === 'graded');
+    const result = await examSubmissionsService.findByAssignmentAndStudent(assignmentId, studentId);
+    if (!result) return null;
+    // If multiple returned, pick the finished one
+    if (Array.isArray(result)) {
+        const finished = result.find(d => d.status === 'submitted' || d.status === 'grading' || d.status === 'graded');
         if (finished) return finished;
-        // If none is finished, see if any has totalScore (just in case)
-        const hasScore = docs.find(d => d.totalScore !== undefined && d.totalScore !== null);
+        const hasScore = result.find(d => d.totalScore !== undefined && d.totalScore !== null);
         if (hasScore) return hasScore;
-        return docs[0];
+        return result[0] || null;
     }
-    return null;
+    return result;
 }
 
 export async function getExamSubmissionsForAssignment(assignmentId) {
-    const q = query(collection(db, 'exam_submissions'), where('assignmentId', '==', assignmentId));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    const result = await examSubmissionsService.findByAssignment(assignmentId);
+    return Array.isArray(result) ? result : (result?.data || []);
 }
 
 export async function getExamSubmissionsForAssignments(assignmentIds) {
     if (!assignmentIds || assignmentIds.length === 0) return [];
-
-    const submissions = [];
-    const addedIds = new Set();
-
-    // Firestore 'in' query supports up to 10 elements
-    for (let i = 0; i < assignmentIds.length; i += 10) {
-        const batchIds = assignmentIds.slice(i, i + 10);
-        try {
-            const q = query(collection(db, 'exam_submissions'), where('assignmentId', 'in', batchIds));
-            const snapshot = await getDocs(q);
-            snapshot.forEach(d => {
-                if (!addedIds.has(d.id)) {
-                    submissions.push({ id: d.id, ...d.data() });
-                    addedIds.add(d.id);
-                }
-            });
-        } catch (e) {
-            console.error("Error fetching bulk exam submissions:", e);
-        }
+    try {
+        const result = await examSubmissionsService.findByAssignments(assignmentIds);
+        return Array.isArray(result) ? result : (result?.data || []);
+    } catch (e) {
+        console.error("Error fetching bulk exam submissions:", e);
+        return [];
     }
-
-    return submissions;
 }
 
 export async function getExamSubmissionsForStudent(studentId) {
-    const q = query(collection(db, 'exam_submissions'), where('studentId', '==', studentId));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    const result = await examSubmissionsService.findByStudent(studentId);
+    return Array.isArray(result) ? result : (result?.data || []);
 }
 
 export async function saveExamSubmission(submissionData) {
     const { id, ...data } = submissionData;
-    let submissionRef;
     if (id) {
-        submissionRef = doc(db, 'exam_submissions', id);
-        await updateDoc(submissionRef, { ...data, updatedAt: serverTimestamp() });
+        await examSubmissionsService.update(id, data);
         return id;
     } else {
-        submissionRef = doc(collection(db, 'exam_submissions'));
-        await setDoc(submissionRef, { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-        return submissionRef.id;
+        const result = await examSubmissionsService.create(data);
+        return result?.id || result;
     }
 }
 
@@ -956,8 +716,8 @@ export async function saveExamSubmission(submissionData) {
 export async function deleteExamSubmission(submissionId) {
     if (!submissionId) return;
 
-    // 1. Delete Firestore document
-    await deleteDoc(doc(db, 'exam_submissions', submissionId));
+    // 1. Delete via API
+    await examSubmissionsService.remove(submissionId);
 
     // 2. Clean up audio files in Storage
     try {

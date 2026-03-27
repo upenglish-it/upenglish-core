@@ -6,7 +6,6 @@ import { getUsersPublicInfo } from '../../services/userService';
 import { getGroups, toggleResourcePublic, getResourceSharedEntities, shareResourceToEmail, unshareResourceFromUser, shareResourceToGroup, unshareResourceFromGroup, getGrammarFolders } from '../../services/adminService';
 import { addCollaborator, removeCollaborator, transferOwnership, getCollaboratedResources, findTeacherByEmail, getTeacherGroups, createAssignment, getAssignmentsForTopic, getStudentsInGroup, updateCollaboratorRole } from '../../services/teacherService';
 import { useAuth } from '../../contexts/AuthContext';
-import { Timestamp } from 'firebase/firestore';
 import { BookOpen, Edit, Trash2, X, Plus, List, FolderOpen, Share2, Globe, Users, Mail, UserPlus, Lock, Search, AlertTriangle, ChevronDown, ChevronRight, AlertCircle, Landmark, Send, CheckCircle, XCircle, Clock, ArrowRightLeft, UsersRound, FileText, Calendar, Copy, GripVertical } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { duplicateGrammarExercise } from '../../services/duplicateService';
@@ -220,12 +219,28 @@ export default function TeacherGrammarPage() {
         setIsSaving(true);
         try {
             const { folderId, ...exerciseData } = formData;
-            const exerciseId = await saveGrammarExercise({ ...exerciseData, teacherId: user.uid }) || formData.id;
+            const parsedColor = exerciseData.color ? parseInt(exerciseData.color.replace('#', ''), 16) : null;
+            const exercisePayload = {
+                ...exerciseData,
+                title: exerciseData.name || 'Untitled',
+                color: parsedColor,
+                teacherId: user.uid,
+                createdBy: user.uid,
+                properties: user.properties || 'default',
+                propertiesBranches: Array.isArray(user.propertiesBranches) && user.propertiesBranches.length > 0 ? user.propertiesBranches[0] : (user.propertiesBranches || 'default')
+            };
+            const exerciseId = await saveGrammarExercise(exercisePayload) || formData.id;
 
             if (folderId && exerciseId) {
                 const folder = teacherFolders.find(f => f.id === folderId);
                 if (folder && !(folder.exerciseIds || []).includes(exerciseId)) {
-                    await saveTeacherGrammarFolder(user.uid, { ...folder, exerciseIds: [...(folder.exerciseIds || []), exerciseId] });
+                    await saveTeacherGrammarFolder(user.uid, { 
+                        ...folder, 
+                        exerciseIds: [...(folder.exerciseIds || []), exerciseId],
+                        createdBy: user.uid,
+                        properties: user.properties || 'default',
+                        propertiesBranches: Array.isArray(user.propertiesBranches) && user.propertiesBranches.length > 0 ? user.propertiesBranches[0] : (user.propertiesBranches || 'default')
+                    });
                 }
             }
             if (exerciseId) {
@@ -569,16 +584,16 @@ export default function TeacherGrammarPage() {
         setIsQuickAssigning(true);
         setQuickAssignSuccess('');
         try {
-            const dueDateTimestamp = Timestamp.fromDate(new Date(quickAssignDueDate));
+            const dueDateIso = new Date(quickAssignDueDate).toISOString();
             await createAssignment({
                 groupId: quickAssignGroupId,
                 topicId: resourceToShare.id,
                 topicName: resourceToShare.name,
-                dueDate: dueDateTimestamp,
+                dueDate: dueDateIso,
                 isTeacherTopic: false,
                 isGrammar: true,
                 createdBy: user?.uid,
-                ...(quickAssignScheduledStart && quickAssignScheduledStart !== 'pending' ? { scheduledStart: Timestamp.fromDate(new Date(quickAssignScheduledStart)) } : {}),
+                ...(quickAssignScheduledStart && quickAssignScheduledStart !== 'pending' ? { scheduledStart: new Date(quickAssignScheduledStart).toISOString() } : {}),
                 ...(quickAssignSelectedStudentIds.length > 0 ? { assignedStudentIds: quickAssignSelectedStudentIds } : {})
             });
             const groupName = teacherManagedGroups.find(g => g.id === quickAssignGroupId)?.name || '';
