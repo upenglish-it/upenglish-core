@@ -15,7 +15,6 @@ import { SuperStudyModule } from './superstudy.module';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(SuperStudyModule, {
     bodyParser: true,
-    cors: true,
   });
 
   const PORT = process.env.PORT || 3000;
@@ -28,7 +27,10 @@ async function bootstrap() {
   app.disable('x-powered-by');
 
   app.setGlobalPrefix(apiVersionOne);
-  app.enableCors();
+  app.enableCors({
+    origin: true,
+    credentials: true,
+  });
   app.use(useragent.express());
 
   // Trim request

@@ -6,6 +6,7 @@
 
 import { db } from '../config/firebase';
 import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, updateDoc, query, where, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { api } from '../models/httpClient';
 import { chatCompletion } from './aiService';
 import { getAllReportPeriods } from './reportPeriodService';
 
@@ -386,10 +387,16 @@ export async function getAllRatingsForPeriod(periodId) {
  */
 export async function getRatingSummary(periodId, teacherId) {
     if (!periodId || !teacherId) return null;
-    const docId = `${periodId}_${teacherId}`;
-    const snap = await getDoc(doc(db, 'teacher_rating_summaries', docId));
-    if (snap.exists()) return { id: snap.id, ...snap.data() };
-    return null;
+    try {
+        const result = await api.get('/teacher-ratings/summary', { periodId, teacherId });
+        const data = result?.data || result;
+        if (!data) return null;
+        // The backend returns it properly with id
+        return data; 
+    } catch (e) {
+        console.error('Error fetching rating summary:', e);
+        return null;
+    }
 }
 
 /**
@@ -397,12 +404,13 @@ export async function getRatingSummary(periodId, teacherId) {
  */
 export async function getAllSummariesForPeriod(periodId) {
     if (!periodId) return [];
-    const q = query(
-        collection(db, 'teacher_rating_summaries'),
-        where('periodId', '==', periodId)
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    try {
+        const result = await api.get('/teacher-ratings/summaries/all', { periodId });
+        return Array.isArray(result) ? result : (result?.data || []);
+    } catch (e) {
+        console.error('Error fetching all summaries:', e);
+        return [];
+    }
 }
 
 /**

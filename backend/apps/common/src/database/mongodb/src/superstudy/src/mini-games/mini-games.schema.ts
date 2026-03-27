@@ -1,11 +1,8 @@
-const MiniGameDataTypesC = [''] as const;
-const MiniGameStatusC = [''] as const;
+const MiniGameDataTypesC = ['vocabulary', 'grammar', 'reading', 'listening', 'writing', 'speaking', 'custom'] as const;
+const MiniGameStatusC = ['draft', 'pending_review', 'approved', 'rejected'] as const;
 
-// Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
-// NestJs Imports
 import { Prop, modelOptions } from '@typegoose/typegoose';
-// Schemas
 import { Accounts, Properties, PropertiesBranches } from '../../../isms';
 
 export const SSTMiniGamesCN = 'sst-mini-games';
@@ -18,74 +15,63 @@ export class SSTMiniGames {
   @Prop({ type: String, required: true })
   public readonly name: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: '' })
   public readonly description: string;
 
-  @Prop({ type: String, enum: MiniGameDataTypesC, required: true })
+  @Prop({ type: String, enum: MiniGameDataTypesC, default: 'vocabulary' })
   public readonly dataType: MiniGameDataTypesT;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: '' })
   public readonly thumbnail: string;
 
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, default: 0 })
   public readonly minWords: number;
 
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, default: 0 })
   public readonly maxWords: number;
 
-  @Prop({ type: Array, required: true })
+  @Prop({ type: Array, default: [] })
   public readonly tags: string[];
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: '' })
   public readonly createdByName: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: '' })
   public readonly fileName: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: '' })
   public readonly gameUrl: string;
 
-  @Prop({ type: Date, required: true })
+  @Prop({ type: Date, default: null })
   public readonly submittedAt: Date;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: '' })
   public readonly reviewNote: string;
 
-  @Prop({ type: Date, required: true })
+  @Prop({ type: Date, default: null })
   public readonly reviewedAt: Date;
 
-  @Prop({ type: String, required: true })
-  public readonly changeLog: string;
+  @Prop({ type: Array, default: [] })
+  public readonly changeLog: any[];
 
-  @Prop({ type: Boolean, required: true })
-  public readonly active: boolean;
+  @Prop({ type: Boolean, default: false })
+  public readonly isActive: boolean;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: '' })
   public readonly reviewedBy: string;
 
-  @Prop({ type: String, enum: MiniGameStatusC, required: true })
+  @Prop({ type: String, enum: MiniGameStatusC, default: 'draft' })
   public readonly status: MiniGameStatusT;
 
-  @Prop({ ref: () => Accounts, type: String, required: true })
+  @Prop({ ref: () => Accounts, type: String, default: '' })
   public readonly createdBy: Accounts;
 
-  @Prop({ ref: () => Properties, type: String, required: true })
+  @Prop({ ref: () => Properties, type: String, default: '' })
   public readonly properties: Properties;
 
-  @Prop({ ref: () => PropertiesBranches, type: String, required: true })
+  @Prop({ ref: () => PropertiesBranches, type: String, default: '' })
   public readonly propertiesBranches: PropertiesBranches;
 }
 
-/**
- * @interface     MiniGameDataTypesT
- * @description   Mini Game Data Types Type
- *
- */
 export type MiniGameDataTypesT = (typeof MiniGameDataTypesC)[number];
-
-/**
- * @interface     MiniGameStatusT
- * @description   Mini Game Status Type
- *
- */
 export type MiniGameStatusT = (typeof MiniGameStatusC)[number];

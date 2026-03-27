@@ -1,4 +1,4 @@
-const SkillReportStatusC = [''] as const;
+const SkillReportStatusC = ['draft', 'sent'] as const;
 
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
@@ -41,7 +41,7 @@ export class SSTSkillReports {
   @Prop({ type: String, enum: SkillReportStatusC, required: true })
   public readonly status: SkillReportStatusT;
 
-  @Prop({ type: Date, required: true })
+  @Prop({ type: Date, default: null })
   public readonly sentAt: Date;
 
   @Prop({ ref: () => Accounts, type: String, required: true })

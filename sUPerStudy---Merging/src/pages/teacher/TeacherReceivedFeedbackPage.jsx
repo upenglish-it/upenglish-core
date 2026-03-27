@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { MessageSquareText, CheckCheck, Loader, Send, X, Filter, Trash2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getMyReceivedFeedback, markFeedbackAsRead, submitFeedback, hideFeedbackForUser } from '../../services/feedbackService';
-import { db } from '../../config/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { usersService } from '../../models/users';
 
 const CATEGORIES = [
     { value: 'suggestion', label: 'Đề xuất', emoji: '💡', color: '#4f46e5', bg: '#eff6ff' },
@@ -81,13 +80,19 @@ export default function TeacherFeedbackPage() {
         if (staffTeacherList.length > 0) return;
         setLoadingUsers(true);
         try {
-            const q = query(collection(db, 'users'), where('role', 'in', ['staff', 'teacher']));
-            const snap = await getDocs(q);
+            const [staffRes, teacherRes] = await Promise.all([
+                usersService.findAll({ role: 'staff' }),
+                usersService.findAll({ role: 'teacher' })
+            ]);
+            
+            const staffData = staffRes?.data || staffRes || [];
+            const teacherData = teacherRes?.data || teacherRes || [];
+            
             const list = [];
-            snap.forEach(d => {
-                if (d.id !== user.uid) {
-                    const data = d.data();
-                    list.push({ uid: d.id, displayName: data.displayName || data.email, email: data.email, role: data.role });
+            [...staffData, ...teacherData].forEach(d => {
+                const uid = d._id || d.id || d.uid;
+                if (uid !== user.uid) {
+                    list.push({ uid, displayName: d.displayName || d.email, email: d.email, role: d.role });
                 }
             });
             list.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
