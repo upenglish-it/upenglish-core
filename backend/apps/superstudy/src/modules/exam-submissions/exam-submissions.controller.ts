@@ -11,7 +11,7 @@ import { ExamSubmissionsService } from './exam-submissions.service';
 export class ExamSubmissionsController {
   constructor(private readonly examSubmissionsService: ExamSubmissionsService) {}
 
-  @ApiOperation({ summary: 'List submissions for an assignment' })
+  @ApiOperation({ summary: 'List submissions for an assignment or student' })
   @Get()
   findAll(
     @Query('assignmentId') assignmentId?: string,
@@ -36,6 +36,19 @@ export class ExamSubmissionsController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() body: Record<string, any>) {
     return this.examSubmissionsService.update(id, body);
+  }
+
+  @ApiOperation({
+    summary: 'Grade a submission server-side (on demand)',
+    description:
+      'Mirrors the server-side grading from autoSubmitExpiredExams Cloud Function. ' +
+      'Handles all question types: multiple_choice, fill_in_blank, matching, categorization, ' +
+      'ordering, essay (AI via Gemini), audio_recording. Updates submission status to "graded".',
+  })
+  @Post(':id/grade')
+  @HttpCode(HttpStatus.OK)
+  grade(@Param('id') id: string) {
+    return this.examSubmissionsService.gradeSubmission(id);
   }
 
   @ApiOperation({ summary: 'Release exam results to student' })

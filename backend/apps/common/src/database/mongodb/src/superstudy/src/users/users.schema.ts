@@ -1,5 +1,5 @@
 export const UserStatusC = ['pending', 'approved', 'expired'] as const;
-export const UserRoleC = ['admin', 'teacher', 'student', 'user'] as const;
+export const UserRoleC = ['admin', 'staff', 'teacher', 'student', 'user'] as const;
 export const UserGenderC = ['male', 'female'] as const;
 
 // Utils
@@ -53,6 +53,14 @@ export class SSTUsers {
   /** Group IDs this user belongs to */
   @Prop({ type: Array, default: [] })
   public readonly groupIds: string[];
+
+  /**
+   * Group IDs this user was previously removed from (archived).
+   * Used in cascading deleteUser cleanup to handle assignment/exam_assignment references.
+   * Mirrors the original Firestore user document's archivedGroupIds field.
+   */
+  @Prop({ type: Array, default: [] })
+  public readonly archivedGroupIds: string[];
 
   @Prop({ type: Date, default: null })
   public readonly approvedAt: Date;

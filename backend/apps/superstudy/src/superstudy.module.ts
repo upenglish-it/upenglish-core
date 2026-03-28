@@ -28,6 +28,8 @@ import { SharingModule } from './modules/sharing/sharing.module';
 import { AdminFoldersModule } from './modules/admin-folders/admin-folders.module';
 import { TeacherFoldersModule } from './modules/teacher-folders/teacher-folders.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { AppConfigModule } from './modules/app-config/app-config.module';
+
 
 const DatabaseProvider = {
   provide: 'DATABASE_CONNECTION',
@@ -70,6 +72,7 @@ const DatabaseProvider = {
     AdminFoldersModule,
     TeacherFoldersModule,
     AuthModule,
+    AppConfigModule,
   ],
 
   providers: [

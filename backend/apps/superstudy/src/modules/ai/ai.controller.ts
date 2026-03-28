@@ -11,7 +11,46 @@ export class AiController {
   constructor(private readonly aiService: AiService) {}
 
   // ──────────────────────────────────────────
-  // Core proxy endpoints (mirror api_handler.php)
+  // Unified proxy — mirrors aiProxy.js processRequest()
+  // Single entry point supporting all actions/modes
+  // ──────────────────────────────────────────
+
+  @ApiOperation({
+    summary: 'Unified AI proxy — mirrors original Cloud Function aiProxy endpoint',
+    description:
+      'Accepts the same input shape as the original Firebase Cloud Function: action, modelProfile, mode, ' +
+      'systemPrompt, userContent, image, audio, fileData, images[], thinkingLevel, mediaResolution, ' +
+      'speechConfig, courseConfig, responseFormat. Routes internally to the correct provider/mode.',
+  })
+  @Post('proxy')
+  @HttpCode(HttpStatus.OK)
+  proxy(@Body() body: {
+    action?: string;
+    modelProfile?: string;
+    mode?: string;
+    systemPrompt?: string;
+    userContent?: string;
+    responseFormat?: string;
+    image?: string;
+    mimeType?: string;
+    audio?: string;
+    fileData?: string;
+    fileMimeType?: string;
+    images?: Array<{ data: string; mimeType: string }>;
+    thinkingLevel?: string;
+    mediaResolution?: string;
+    speechConfig?: Record<string, any>;
+    courseConfig?: Record<string, any>;
+    text?: string;
+    lang?: string;
+    prompt?: string;
+    model?: string;
+  }) {
+    return this.aiService.proxy(body);
+  }
+
+  // ──────────────────────────────────────────
+  // Individual feature endpoints
   // ──────────────────────────────────────────
 
   @ApiOperation({ summary: 'Text chat completion (routes to Gemini or OpenRouter based on modelProfile)' })
@@ -23,8 +62,50 @@ export class AiController {
     userContent: string;
     responseFormat?: string;
     thinkingLevel?: string;
+    images?: Array<{ data: string; mimeType: string }>;
+    mediaResolution?: string;
   }) {
     return this.aiService.chat(body);
+  }
+
+  @ApiOperation({
+    summary: 'File/PDF chat — send a PDF or document to Gemini for Q&A',
+    description: 'Mirrors file_chat mode. fileData must be base64-encoded. mimeType defaults to application/pdf.',
+  })
+  @Post('file-chat')
+  @HttpCode(HttpStatus.OK)
+  fileChat(@Body() body: {
+    modelProfile?: string;
+    systemPrompt?: string;
+    userContent: string;
+    fileData: string;
+    fileMimeType?: string;
+    responseFormat?: string;
+    thinkingLevel?: string;
+  }) {
+    return this.aiService.proxy({
+      mode: 'file_chat',
+      modelProfile: body.modelProfile,
+      systemPrompt: body.systemPrompt,
+      userContent: body.userContent,
+      fileData: body.fileData,
+      fileMimeType: body.fileMimeType,
+      responseFormat: body.responseFormat,
+      thinkingLevel: body.thinkingLevel,
+    });
+  }
+
+  @ApiOperation({
+    summary: 'Hugging Face image generation (uses HF_API_TOKEN)',
+    description: 'Mirrors hf_image action from original aiProxy.js. Requires HF_API_TOKEN env var.',
+  })
+  @Post('hf-image')
+  @HttpCode(HttpStatus.OK)
+  hfImage(@Body() body: {
+    prompt: string;
+    model?: string;
+  }) {
+    return this.aiService.hfImageGenerate(body);
   }
 
   @ApiOperation({ summary: 'Audio evaluation — pronunciation or speaking grading (Gemini audio mode)' })
@@ -34,8 +115,8 @@ export class AiController {
     modelProfile?: string;
     systemPrompt: string;
     userContent: string;
-    audio: string;       // base64
-    mimeType?: string;   // e.g. audio/webm
+    audio: string;
+    mimeType?: string;
     responseFormat?: string;
   }) {
     return this.aiService.audioEval(body);
@@ -48,17 +129,14 @@ export class AiController {
     return this.aiService.gtts(body.text, body.lang);
   }
 
-  @ApiOperation({ summary: 'Google Cloud TTS (Gemini or Standard) — returns base64 audio blob' })
+  @ApiOperation({ summary: 'Gemini TTS — returns base64 audio blob (WAV or MP3)' })
   @Post('tts/gemini')
   @HttpCode(HttpStatus.OK)
   geminiTts(@Body() body: {
     modelProfile?: string;
     text: string;
-    courseConfig?: {
-      instructions?: string;
-      speed?: number;
-    };
-    speechConfig?: Record<string, any>; // multi-speaker config
+    courseConfig?: { instructions?: string; speed?: number };
+    speechConfig?: Record<string, any>;
   }) {
     return this.aiService.geminiTts(body);
   }
@@ -150,7 +228,7 @@ export class AiController {
   @Post('audio-grade')
   @HttpCode(HttpStatus.OK)
   gradeAudio(@Body() body: {
-    audio: string;       // base64
+    audio: string;
     mimeType?: string;
     questionText: string;
     purpose: string;
@@ -171,7 +249,7 @@ export class AiController {
   @Post('pronunciation-eval')
   @HttpCode(HttpStatus.OK)
   evaluatePronunciation(@Body() body: {
-    audio: string;       // base64
+    audio: string;
     mimeType?: string;
     targetWord: string;
     targetIpa?: string;

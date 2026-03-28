@@ -1,3 +1,4 @@
+export * from './src/app-config/app-config.schema';
 export * from './src/exams/exams.schema';
 export * from './src/tools/tools.schema';
 export * from './src/users/users.schema';
