@@ -18,6 +18,7 @@ async function bootstrap() {
   });
 
   const PORT = process.env.PORT || 3000;
+  const ORIGINS = process.env.CORS_ORIGIN.split(',');
   const apiVersionOne = 'api/v1';
   const appTitle = 'Super Study Core';
 
@@ -28,7 +29,7 @@ async function bootstrap() {
 
   app.setGlobalPrefix(apiVersionOne);
   app.enableCors({
-    origin: true,
+    origin:ORIGINS,
     credentials: true,
   });
   app.use(useragent.express());

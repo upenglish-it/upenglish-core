@@ -150,6 +150,12 @@ export async function syncLocalDataToFirestore() {
 
 // ========== USER MANAGEMENT ==========
 
+export async function getAllUsers() {
+    const result = await usersService.findAll();
+    const users = Array.isArray(result) ? result : (result?.data || []);
+    return users.map(u => ({ ...u, uid: u.id || u._id }));
+}
+
 export async function updateUserRole(uid, newRole) {
     await usersService.update(uid, { role: newRole });
 }

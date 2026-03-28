@@ -1,4 +1,6 @@
-const BASE_URL = `http://192.168.100.34:3001/api/v1`;
+/// <reference types="vite/client" />
+const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 
 export interface ApiResponseI<T> {
   status: number;

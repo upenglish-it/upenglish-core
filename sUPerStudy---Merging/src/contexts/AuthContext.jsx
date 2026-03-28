@@ -9,7 +9,7 @@ import {
 } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { auth, googleProvider, microsoftProvider, functions } from '../config/firebase';
-import { usersService, userGroupsService, emailWhitelistService } from '../models';
+import { authService, usersService } from '../models';
 
 const AuthContext = createContext(null);
 
@@ -21,44 +21,8 @@ export function useAuth() {
     return context;
 }
 
-// Helper: merge group access into user access arrays
-async function mergeGroupAccess(userData) {
-    let mergedFolderAccess = [...(userData.folderAccess || [])];
-    let mergedTopicAccess = [...(userData.topicAccess || [])];
-    let mergedGrammarAccess = [...(userData.grammarAccess || [])];
-    let mergedExamAccess = [...(userData.examAccess || [])];
-    let groupNames = [];
-    let groupIdToNameMap = {}; // { groupId: groupName }
-    let visibleGroupIds = []; // groupIds excluding hidden groups
-    if (userData.groupIds && userData.groupIds.length > 0) {
-        try {
-            const groupsArray = await userGroupsService.findByIds(userData.groupIds);
-            const groupsSnap = Array.isArray(groupsArray) ? groupsArray : (groupsArray?.data || []);
-            groupsSnap.forEach(gData => {
-                if (gData.isHidden) return; // Skip hidden groups
-
-                if (gData.name) {
-                    groupNames.push(gData.name);
-                    groupIdToNameMap[gData.id] = gData.name;
-                }
-                visibleGroupIds.push(gData.id);
-                if (gData.folderAccess) mergedFolderAccess = [...mergedFolderAccess, ...gData.folderAccess];
-                if (gData.topicAccess) mergedTopicAccess = [...mergedTopicAccess, ...gData.topicAccess];
-                if (gData.grammarAccess) mergedGrammarAccess = [...mergedGrammarAccess, ...gData.grammarAccess];
-                if (gData.examAccess) mergedExamAccess = [...mergedExamAccess, ...gData.examAccess];
-            });
-            mergedFolderAccess = [...new Set(mergedFolderAccess)];
-            mergedTopicAccess = [...new Set(mergedTopicAccess)];
-            mergedGrammarAccess = [...new Set(mergedGrammarAccess)];
-            mergedExamAccess = [...new Set(mergedExamAccess)];
-        } catch (e) {
-            console.error('Failed to fetch groups for user', e);
-        }
-    }
-    return { mergedFolderAccess, mergedTopicAccess, mergedGrammarAccess, mergedExamAccess, groupNames, groupIdToNameMap, visibleGroupIds };
-}
-
 export function AuthProvider({ children }) {
+
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -72,36 +36,43 @@ export function AuthProvider({ children }) {
                     setLoading(false);
                     return;
                 }
-                try {
-                    const userData = await usersService.findOne(firebaseUser.uid).catch(() => null);
-
-                    if (userData) {
-
-                        // Check if account is disabled
-                        if (userData.disabled) {
+                // On session restore: read the ISMS-sourced user from localStorage.
+                // It was stored by handlePostSignIn / signInWithEmail after ISMS verification.
+                const tempUser = localStorage.getItem('tempUser');
+                if (tempUser) {
+                    try {
+                        const parsed = JSON.parse(tempUser);
+                        setUser(parsed);
+                    } catch (e) {
+                        // Corrupted — force re-auth
+                        await firebaseSignOut(auth);
+                        localStorage.removeItem('tempUser');
+                        localStorage.removeItem('authorizationToken');
+                        setUser(null);
+                    }
+                } else {
+                    // No persisted ISMS user — check if they are pending in SSTUsers
+                    try {
+                        const userData = await usersService.findOne(firebaseUser.uid).catch(() => null);
+                        if (userData && userData.status === 'pending') {
+                            setUser({ ...firebaseUser, status: 'pending' });
+                        } else {
                             await firebaseSignOut(auth);
                             setUser(null);
-                            setLoading(false);
-                            return;
                         }
-
-                        const merged = await mergeGroupAccess(userData);
-                        setUser({
-                            ...firebaseUser,
-                            ...userData,
-                            ...merged,
-                        });
-                    } else {
-                        // New user — will be handled by signInWithProvider
-                        // Just set basic info so PendingApprovalPage can render
-                        setUser({ ...firebaseUser, status: 'pending' });
+                    } catch (e) {
+                        await firebaseSignOut(auth);
+                        setUser(null);
                     }
-                } catch (err) {
-                    console.error("Error fetching user data:", err);
-                    setUser(firebaseUser);
                 }
             } else {
-                setUser(null);
+                // Firebase signed out — also read tempUser (for email-only dev login path)
+                const tempUser = localStorage.getItem('tempUser');
+                if (tempUser) {
+                    try { setUser(JSON.parse(tempUser)); } catch (e) { setUser(null); }
+                } else {
+                    setUser(null);
+                }
             }
             setLoading(false);
         });
@@ -109,72 +80,35 @@ export function AuthProvider({ children }) {
     }, []);
 
     async function handlePostSignIn(firebaseUser) {
-        let userData = await usersService.findOne(firebaseUser.uid).catch(() => null);
+        // After Firebase SSO resolves email, check ISMS Accounts.
+        // If email is not in ISMS → deny access (no auto-create).
+        try {
+            const result = await authService.signInViaSSOEmail(firebaseUser.email);
 
-        if (userData) {
-            // Check if disabled
-            if (userData.disabled) {
-                await firebaseSignOut(auth);
-                setUser(null);
-                setError('Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.');
-                return false;
-            }
-
-            // If user is pending, re-check whitelist — admin may have pre-approved since last login
-            if (userData.status === 'pending') {
-                const emailKey = firebaseUser.email.toLowerCase().trim();
-                const wl = await emailWhitelistService.checkEmail(emailKey).catch(() => null);
-                if (wl) {
-                    const now = new Date();
-                    let expiresAt = null;
-                    if (wl.customExpiresAt) {
-                        expiresAt = new Date(`${wl.customExpiresAt}T23:59:59`).toISOString();
-                    } else if (wl.durationDays) {
-                        expiresAt = new Date(now.getTime() + wl.durationDays * 86400000).toISOString();
-                    }
-                    const approvedData = {
-                        status: 'approved',
-                        role: wl.role || 'user',
-                        displayName: wl.displayName || userData.displayName || firebaseUser.displayName || '',
-                        approvedAt: new Date().toISOString(),
-                        expiresAt,
-                        folderAccess: wl.folderAccess || userData.folderAccess || [],
-                        topicAccess: wl.topicAccess || userData.topicAccess || [],
-                        grammarAccess: wl.grammarAccess || userData.grammarAccess || [],
-                        examAccess: wl.examAccess || userData.examAccess || [],
-                        groupIds: wl.groupIds || userData.groupIds || [],
-                    };
-                    await usersService.update(firebaseUser.uid, approvedData);
-                    await emailWhitelistService.remove(wl.id).catch(() => {});
-                    userData = { ...userData, ...approvedData };
-                }
-            }
-
-            // Update photo from provider (don't overwrite displayName — it may have been customized by admin)
-            await usersService.update(firebaseUser.uid, {
-                photoURL: firebaseUser.photoURL || '',
-            });
-
-            const merged = await mergeGroupAccess(userData);
-            setUser({ ...firebaseUser, ...userData, ...merged });
-            return true;
-        } else {
-            // New user — check built-in admin, then whitelist
-            const emailKey = firebaseUser.email.toLowerCase().trim();
-
-            // Built-in admin emails — always auto-approved as admin
-            const BUILTIN_ADMIN_EMAILS = ['huynhquan.nguyen@gmail.com'];
-
-            let newUserData;
-
-            if (BUILTIN_ADMIN_EMAILS.includes(emailKey)) {
-                newUserData = {
+            if (result?.success || result?.statusCode === 'HAS_DATA') {
+                const data = result.data || result;
+                localStorage.setItem('authorizationToken', data.authorizationToken);
+                const newUser = {
+                    uid: data.userId,
+                    email: data.email,
+                    displayName: data.displayName,
+                    role: data.role,
+                    active: data.active,
+                    profilePhoto: data.profilePhoto ?? firebaseUser.photoURL ?? null,
+                    status: 'approved',
+                };
+                setUser(newUser);
+                localStorage.setItem('tempUser', JSON.stringify(newUser));
+                return true;
+            } else {
+                // Email not in ISMS — create a pending user in SSTUsers & notify admins
+                const newUserData = {
                     email: firebaseUser.email,
                     displayName: firebaseUser.displayName || '',
                     photoURL: firebaseUser.photoURL || '',
-                    role: 'admin',
-                    status: 'approved',
-                    approvedAt: new Date().toISOString(),
+                    role: 'user',
+                    status: 'pending',
+                    approvedAt: null,
                     expiresAt: null,
                     disabled: false,
                     folderAccess: [],
@@ -183,58 +117,9 @@ export function AuthProvider({ children }) {
                     examAccess: [],
                     groupIds: [],
                 };
-            } else {
-                const wl = await emailWhitelistService.checkEmail(emailKey).catch(() => null);
 
-                if (wl) {
-                    // Pre-approved email — propagate stored permissions
-                    const now = new Date();
-                    let expiresAt = null;
-                    if (wl.customExpiresAt) {
-                        expiresAt = new Date(`${wl.customExpiresAt}T23:59:59`).toISOString();
-                    } else if (wl.durationDays) {
-                        expiresAt = new Date(now.getTime() + wl.durationDays * 86400000).toISOString();
-                    }
+                await usersService.sync({ id: firebaseUser.uid, ...newUserData });
 
-                    newUserData = {
-                        email: firebaseUser.email,
-                        displayName: wl.displayName || firebaseUser.displayName || '',
-                        photoURL: firebaseUser.photoURL || '',
-                        role: wl.role || 'user',
-                        status: 'approved',
-                        approvedAt: new Date().toISOString(),
-                        expiresAt,
-                        disabled: false,
-                        folderAccess: wl.folderAccess || [],
-                        topicAccess: wl.topicAccess || [],
-                        grammarAccess: wl.grammarAccess || [],
-                        examAccess: wl.examAccess || [],
-                        groupIds: wl.groupIds || [],
-                    };
-                } else {
-                    // Not whitelisted — pending approval
-                    newUserData = {
-                        email: firebaseUser.email,
-                        displayName: firebaseUser.displayName || '',
-                        photoURL: firebaseUser.photoURL || '',
-                        role: 'user',
-                        status: 'pending',
-                        approvedAt: null,
-                        expiresAt: null,
-                        disabled: false,
-                        folderAccess: [],
-                        topicAccess: [],
-                        grammarAccess: [],
-                        examAccess: [],
-                        groupIds: [],
-                    };
-                }
-            }
-
-            await usersService.sync({ id: firebaseUser.uid, ...newUserData });
-
-            // Notify admins when a new user registers with pending status
-            if (newUserData.status === 'pending') {
                 try {
                     const { createNotificationForAdmins, queueEmailForAdmins, buildEmailHtml } = await import('../services/notificationService');
                     await createNotificationForAdmins({
@@ -248,29 +133,25 @@ export function AuthProvider({ children }) {
                         subject: `User mới: ${firebaseUser.displayName || firebaseUser.email}`,
                         html: buildEmailHtml({
                             emoji: '👤', heading: 'User mới cần duyệt', headingColor: '#f59e0b',
-                            body: `<p>Có người mới đăng ký tài khoản trên sUPerStudy:</p>`,
+                            body: `<p>Có người mới đăng ký bằng SSO, chưa có trong hệ thống ISMS:</p>`,
                             highlight: `<strong>${firebaseUser.displayName || ''}</strong> (${firebaseUser.email})`,
                             highlightBg: '#fffbeb', highlightBorder: '#f59e0b',
-                            ctaText: 'Duyệt tài khoản', ctaColor: '#f59e0b', ctaColor2: '#fbbf24'
+                            ctaText: 'Vui lòng tạo Account trong ISMS cho Email này', ctaColor: '#f59e0b', ctaColor2: '#fbbf24'
                         })
                     }, 'new_user_pending');
                 } catch (e) {
                     console.error('Error sending new user notification:', e);
                 }
-            }
 
-            // Clean up whitelist after successful auto-approval (best-effort)
-            try {
-                const wl = await emailWhitelistService.checkEmail(emailKey).catch(() => null);
-                if (wl) {
-                    await emailWhitelistService.remove(wl.id);
-                }
-            } catch (cleanupErr) {
-                console.warn('Could not clean up whitelist entry (non-critical):', cleanupErr);
+                setUser({ ...firebaseUser, ...newUserData });
+                return true;
             }
-
-            setUser({ ...firebaseUser, ...newUserData });
-            return true;
+        } catch (err) {
+            console.error('[AuthContext] SSO ISMS check failed:', err);
+            await firebaseSignOut(auth);
+            setUser(null);
+            setError(err?.message || 'Không thể xác minh tài khoản. Vui lòng thử lại.');
+            return false;
         }
     }
 
@@ -332,6 +213,8 @@ export function AuthProvider({ children }) {
     async function signOut() {
         try {
             sessionStorage.removeItem('viewMode');
+            localStorage.removeItem('authorizationToken');
+            localStorage.removeItem('tempUser');
             await firebaseSignOut(auth);
             setUser(null);
         } catch (err) {
@@ -348,7 +231,41 @@ export function AuthProvider({ children }) {
         return expiry <= new Date();
     }
 
-    const value = { user, loading, error, signInWithGoogle, signInWithMicrosoft, signOut, clearError, isExpired };
+    async function signInWithEmail(email) {
+        setError(null);
+        isSigningIn.current = true;
+        try {
+            // Dev testing only — calls ISMS via POST /auth/signin
+            const result = await authService.signIn({ provider: 'email-password', emailAddress: email });
+            if (result?.success || result?.statusCode === 'HAS_DATA') {
+                const data = result.data || result;
+                localStorage.setItem('authorizationToken', data.authorizationToken);
+                const newUser = {
+                    uid: data.userId,
+                    email: data.email,
+                    displayName: data.displayName,
+                    role: data.role,
+                    active: data.active,
+                    profilePhoto: data.profilePhoto ?? null,
+                    status: 'approved',
+                };
+                setUser(newUser);
+                localStorage.setItem('tempUser', JSON.stringify(newUser));
+                return true;
+            } else {
+                setError(result?.message || 'Đăng nhập thất bại.');
+                return false;
+            }
+        } catch (err) {
+            console.error("Email Sign-In error:", err);
+            setError(err?.message || 'Hệ thống đang bảo trì hoặc email không hợp lệ.');
+            return false;
+        } finally {
+            isSigningIn.current = false;
+        }
+    }
+
+    const value = { user, loading, error, signInWithGoogle, signInWithMicrosoft, signInWithEmail, signOut, clearError, isExpired };
 
     return (
         <AuthContext.Provider value={value}>
