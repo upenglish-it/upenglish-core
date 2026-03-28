@@ -1,18 +1,6 @@
 import { db } from '../config/firebase';
-import {
-    collection,
-    addDoc,
-    getDocs,
-    doc,
-    updateDoc,
-    deleteDoc,
-    query,
-    orderBy,
-    serverTimestamp,
-    getCountFromServer,
-    where,
-    arrayUnion
-} from 'firebase/firestore';
+import { collection, getDocs, doc, deleteDoc, query, orderBy, getCountFromServer, where } from 'firebase/firestore';
+import { api } from '../models/httpClient';
 import { queueEmail, buildEmailHtml } from './notificationService';
 
 const FEEDBACK_COLLECTION = 'anonymous_feedback';
@@ -32,7 +20,6 @@ const FEEDBACK_COLLECTION = 'anonymous_feedback';
  * @param {string} [data.targetEmail] - Email of direct recipient
  */
 export async function submitFeedback({ message, category, senderUid, senderName, senderEmail, senderRole, targetType, targetUid, targetName, targetEmail }) {
-    const feedbackRef = collection(db, FEEDBACK_COLLECTION);
     const feedbackData = {
         message: message.trim(),
         category: category || 'suggestion',
@@ -41,8 +28,6 @@ export async function submitFeedback({ message, category, senderUid, senderName,
         senderEmail: senderEmail || '',
         senderRole: senderRole || 'user',
         targetType: targetType || 'admin',
-        createdAt: serverTimestamp(),
-        isRead: false,
     };
 
     // Add direct target fields if sending to a specific person
@@ -52,7 +37,7 @@ export async function submitFeedback({ message, category, senderUid, senderName,
         feedbackData.targetEmail = targetEmail || '';
     }
 
-    const result = await addDoc(feedbackRef, feedbackData);
+    const result = await api.post('/anonymous-feedback', feedbackData);
 
     // Send email notification for direct feedback
     if (targetType === 'direct' && targetEmail) {
@@ -137,30 +122,11 @@ export async function getDirectFeedback() {
 export async function getMyReceivedFeedback(uid) {
     if (!uid) return [];
     try {
-        const q = query(
-            collection(db, FEEDBACK_COLLECTION),
-            where('targetType', '==', 'direct'),
-            where('targetUid', '==', uid),
-            orderBy('createdAt', 'desc')
-        );
-        const snap = await getDocs(q);
-        return snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(fb => !(fb.hiddenBy || []).includes(uid));
+        const result = await api.get('/anonymous-feedback/me', { uid });
+        return Array.isArray(result) ? result : (result?.data || []);
     } catch (err) {
-        // Fallback if composite index not yet built
-        console.warn('Index not ready, using client-side sort:', err.message);
-        const q = query(
-            collection(db, FEEDBACK_COLLECTION),
-            where('targetType', '==', 'direct'),
-            where('targetUid', '==', uid)
-        );
-        const snap = await getDocs(q);
-        const results = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        results.sort((a, b) => {
-            const ta = a.createdAt?.toDate?.() || new Date(a.createdAt || 0);
-            const tb = b.createdAt?.toDate?.() || new Date(b.createdAt || 0);
-            return tb - ta;
-        });
-        return results.filter(fb => !(fb.hiddenBy || []).includes(uid));
+        console.error('Error fetching received feedback:', err);
+        return [];
     }
 }
 
@@ -195,8 +161,7 @@ export async function getAllFeedback() {
  * Mark feedback as read
  */
 export async function markFeedbackAsRead(feedbackId) {
-    const ref = doc(db, FEEDBACK_COLLECTION, feedbackId);
-    return updateDoc(ref, { isRead: true });
+    return api.patch(`/anonymous-feedback/${feedbackId}/read`);
 }
 
 /**
@@ -211,8 +176,7 @@ export async function deleteFeedback(feedbackId) {
  * Hide feedback for a specific user (soft delete)
  */
 export async function hideFeedbackForUser(feedbackId, uid) {
-    const ref = doc(db, FEEDBACK_COLLECTION, feedbackId);
-    return updateDoc(ref, { hiddenBy: arrayUnion(uid) });
+    return api.patch(`/anonymous-feedback/${feedbackId}/hide`, { uid });
 }
 
 /**

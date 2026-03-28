@@ -1,6 +1,6 @@
-const CategoryC = [''] as const;
-const RolesC = [''] as const;
-const TargetTypesC = [''] as const;
+const CategoryC = ['suggestion', 'complaint'] as const;
+const RolesC = ['user', 'staff', 'admin', 'teacher'] as const;
+const TargetTypesC = ['admin', 'direct'] as const;
 
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
@@ -16,7 +16,7 @@ export class SSTAnonymousFeedback {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public readonly _id: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: '' })
   public readonly name: string;
 
   @Prop({ type: String, required: true })
@@ -28,10 +28,10 @@ export class SSTAnonymousFeedback {
   @Prop({ type: String, required: true })
   public readonly senderUid: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: '' })
   public readonly senderName: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: '' })
   public readonly senderEmail: string;
 
   @Prop({ type: String, enum: RolesC, required: true })
@@ -40,45 +40,31 @@ export class SSTAnonymousFeedback {
   @Prop({ type: String, enum: TargetTypesC, required: true })
   public readonly targetType: TargetTypesT;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: '' })
   public readonly targetUid: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: '' })
   public readonly targetName: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: '' })
   public readonly targetEmail: string;
 
-  @Prop({ type: String, required: true })
-  public readonly hiddenBy: string;
+  @Prop({ type: [String], default: [] })
+  public readonly hiddenBy: string[];
 
-  @Prop({ ref: () => Accounts, type: String, required: true })
+  @Prop({ ref: () => Accounts, type: String, default: '' })
   public createdBy: Accounts;
 
-  @Prop({ ref: () => Properties, type: String, required: true })
+  @Prop({ ref: () => Properties, type: String, default: '' })
   public properties: Properties;
 
-  @Prop({ ref: () => PropertiesBranches, type: String, required: true })
+  @Prop({ ref: () => PropertiesBranches, type: String, default: '' })
   public propertiesBranches: PropertiesBranches;
 
   @Prop({ type: Boolean, default: false })
   public read: boolean;
 }
 
-/**
- * @interface     CategoryT
- * @description   Category Type
- */
 export type CategoryT = (typeof CategoryC)[number];
-
-/**
- * @interface     RolesT
- * @description   Roles Type
- */
 export type RolesT = (typeof RolesC)[number];
-
-/**
- * @interface     TargetTypesT
- * @description   Target Types Type
- */
 export type TargetTypesT = (typeof TargetTypesC)[number];

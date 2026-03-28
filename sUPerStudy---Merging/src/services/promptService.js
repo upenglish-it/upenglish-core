@@ -1,19 +1,14 @@
-import { db } from '../config/firebase';
-import {
-    collection, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc,
-    query, where, orderBy, serverTimestamp
-} from 'firebase/firestore';
+import { api } from '../models/httpClient';
 
-const COLLECTION = 'teacher_prompts';
+const BASE = '/teacher-prompts';
 
 /**
  * Get ALL prompts (admin use). Returns every prompt across all teachers.
  * @returns {Promise<Array>}
  */
 export async function getAllPrompts() {
-    const q = query(collection(db, COLLECTION), orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const result = await api.get(`${BASE}/all`);
+    return Array.isArray(result) ? result : (result?.data || []);
 }
 
 /**
@@ -22,13 +17,9 @@ export async function getAllPrompts() {
  * @returns {Promise<Array>} Array of prompt objects
  */
 export async function getTeacherPrompts(uid) {
-    const q = query(
-        collection(db, COLLECTION),
-        where('createdBy', '==', uid),
-        orderBy('createdAt', 'desc')
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const result = await api.get(BASE, { teacherId: uid });
+    let prompts = Array.isArray(result) ? result : (result?.data || []);
+    return prompts.map(p => ({ ...p, id: p._id || p.id }));
 }
 
 /**
@@ -36,16 +27,9 @@ export async function getTeacherPrompts(uid) {
  * @param {{ title: string, content: string, skill: 'writing'|'speaking', createdBy: string }} data
  * @returns {Promise<string>} The new document ID
  */
-export async function createPrompt({ title, content, skill, createdBy }) {
-    const docRef = await addDoc(collection(db, COLLECTION), {
-        title: title.trim(),
-        content: content.trim(),
-        skill, // 'writing' or 'speaking'
-        createdBy,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-    });
-    return docRef.id;
+export async function createPrompt(data) {
+    const result = await api.post(BASE, data);
+    return result?.data?._id || result?.data?.id || result?._id || result?.id || result;
 }
 
 /**
@@ -54,11 +38,7 @@ export async function createPrompt({ title, content, skill, createdBy }) {
  * @param {{ title?: string, content?: string, skill?: string }} data
  */
 export async function updatePrompt(id, data) {
-    const ref = doc(db, COLLECTION, id);
-    const update = { ...data, updatedAt: serverTimestamp() };
-    if (update.title) update.title = update.title.trim();
-    if (update.content) update.content = update.content.trim();
-    await updateDoc(ref, update);
+    return api.patch(`${BASE}/${id}`, data);
 }
 
 /**
@@ -66,18 +46,22 @@ export async function updatePrompt(id, data) {
  * @param {string} id - Document ID
  */
 export async function deletePrompt(id) {
-    await deleteDoc(doc(db, COLLECTION, id));
+    return api.delete(`${BASE}/${id}`);
 }
 
 /**
  * Get a single prompt by its document ID.
- * Used to resolve prompt content at grading time.
  * @param {string} id - Document ID
  * @returns {Promise<Object|null>} The prompt object or null if not found
  */
 export async function getPromptById(id) {
     if (!id) return null;
-    const snap = await getDoc(doc(db, COLLECTION, id));
-    if (!snap.exists()) return null;
-    return { id: snap.id, ...snap.data() };
+    try {
+        const result = await api.get(`${BASE}/${id}`);
+        const data = result?.data || result;
+        if (!data) return null;
+        return { ...data, id: data._id || data.id };
+    } catch {
+        return null;
+    }
 }

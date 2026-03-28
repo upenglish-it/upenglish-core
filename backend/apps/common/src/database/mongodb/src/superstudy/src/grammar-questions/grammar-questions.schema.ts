@@ -47,7 +47,7 @@ export class SSTGrammarQuestions {
   @Prop({ type: Boolean, default: false })
   public readonly hasContext: boolean;
 
-  @Prop({ type: String, enum: GrammarQuestionErrorCategoriesC, default: null })
+  @Prop({ type: String, enum: GrammarQuestionErrorCategoriesC })
   public readonly errorCategory: GrammarQuestionErrorCategoriesT;
 
   @Prop({ type: Array, default: [] })
@@ -56,7 +56,7 @@ export class SSTGrammarQuestions {
   @Prop({ type: String, default: null })
   public readonly teacherId: string;
 
-  @Prop({ type: String, enum: GrammarQuestionTargetSkillsC, default: null })
+  @Prop({ type: String, enum: GrammarQuestionTargetSkillsC })
   public readonly targetSkill: GrammarQuestionTargetSkillsT;
 
   @Prop({ type: String, required: true })

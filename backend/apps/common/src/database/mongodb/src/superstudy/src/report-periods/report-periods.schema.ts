@@ -15,42 +15,42 @@ export class SSTReportPeriods {
   @Prop({ type: String, required: true })
   public readonly label: string;
 
-  @Prop({ type: Date, required: true })
-  public readonly startDate: Date;
+  @Prop({ type: String, required: true })
+  public readonly startDate: string;
 
-  @Prop({ type: Date, required: true })
-  public readonly endDate: Date;
+  @Prop({ type: String, required: true })
+  public readonly endDate: string;
 
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, default: 0 })
   public readonly graceDays: number;
 
-  @Prop({ type: Date, required: true })
-  public readonly dataStartDate: Date;
+  @Prop({ type: String, default: '' })
+  public readonly dataStartDate: string;
 
-  @Prop({ type: Date, required: true })
-  public readonly dataEndDate: Date;
+  @Prop({ type: String, default: '' })
+  public readonly dataEndDate: string;
 
-  @Prop({ type: Date, required: true })
-  public readonly ratingStartDate: Date;
+  @Prop({ type: String, default: '' })
+  public readonly ratingStartDate: string;
 
-  @Prop({ type: Date, required: true })
-  public readonly ratingEndDate: Date;
+  @Prop({ type: String, default: '' })
+  public readonly ratingEndDate: string;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Boolean, default: false })
   public readonly autoCreated: boolean;
 
-  @Prop({ type: Date, required: true })
+  @Prop({ type: Date, default: null })
   public readonly deletedAt: Date;
 
-  @Prop({ type: Boolean, required: true })
-  public readonly deleted: boolean;
+  @Prop({ type: Boolean, default: false })
+  public readonly isDeleted: boolean;
 
-  @Prop({ ref: () => Accounts, type: String, required: true })
+  @Prop({ ref: () => Accounts, type: String, default: '' })
   public readonly createdBy: Accounts;
 
-  @Prop({ ref: () => Properties, type: String, required: true })
+  @Prop({ ref: () => Properties, type: String, default: '' })
   public readonly properties: Properties;
 
-  @Prop({ ref: () => PropertiesBranches, type: String, required: true })
+  @Prop({ ref: () => PropertiesBranches, type: String, default: '' })
   public readonly propertiesBranches: PropertiesBranches;
 }

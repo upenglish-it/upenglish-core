@@ -329,7 +329,7 @@ export default function TeacherGrammarPage() {
             setTeacherManagedGroups(managedGroups);
 
             // Fetch existing assignments for this resource
-            if (!resource.type?.includes('folder')) {
+            if (!type.includes('folder')) {
                 const assignments = await getAssignmentsForTopic(resource.id);
                 const enriched = assignments.map(a => ({
                     ...a,
@@ -524,7 +524,14 @@ export default function TeacherGrammarPage() {
         const newPublicStatus = !resourceToShare.isPublic;
         setIsSharing(true);
         try {
-            await toggleResourcePublic(resourceToShare.type || 'teacher_grammar', resourceToShare.id, newPublicStatus);
+            if (resourceToShare.type === 'teacher_grammar_folder') {
+                const folderData = folders.find(f => f.id === resourceToShare.id) || teacherFolders.find(f => f.id === resourceToShare.id);
+                if (folderData) {
+                    await saveTeacherGrammarFolder(user.uid, { ...folderData, isPublic: newPublicStatus });
+                }
+            } else {
+                await toggleResourcePublic(resourceToShare.type || 'teacher_grammar', resourceToShare.id, newPublicStatus);
+            }
             setResourceToShare({ ...resourceToShare, isPublic: newPublicStatus });
             loadExercises();
         } catch (err) {

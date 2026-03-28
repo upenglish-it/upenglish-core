@@ -702,7 +702,7 @@ export default function TeacherGrammarEditorPage() {
     function openAddForm() {
         setCurrentQuestion({
             type: 'multiple_choice',
-            purpose: '',
+            purpose: 'main',
             hasContext: false,
             context: '',
             contextAudioUrl: '',
@@ -800,7 +800,7 @@ export default function TeacherGrammarEditorPage() {
 
     async function handleDuplicate(q) {
         try {
-            const { id: _id, createdAt, updatedAt, order, ...rest } = JSON.parse(JSON.stringify(q));
+            const { id: _idMapped, _id, createdAt, updatedAt, order, ...rest } = JSON.parse(JSON.stringify(q));
             await saveGrammarQuestion({
                 ...rest,
                 exerciseId: id,
@@ -1837,7 +1837,7 @@ export default function TeacherGrammarEditorPage() {
                                                 disabled={isReadOnly}
                                                 placeholder="Nhập nội dung câu hỏi..."
                                                 minHeight='80px'
-                                                wrapperClassName={activeVariationTab === 0 ? `required-field${currentQuestion.variations[activeVariationTab].text?.replace(/<[^>]*>?/gm, '').trim() ? ' filled' : ''}` : ''}
+                                                wrapperClassName={activeVariationTab === 0 ? `required-field${(currentQuestion.variations[activeVariationTab].text?.replace(/<[^>]*>?/gm, '') || '').trim() ? ' filled' : ''}` : ''}
                                             />
                                         </div>
                                     )}

@@ -27,6 +27,11 @@ import { WordProgressModule } from './modules/word-progress/word-progress.module
 import { SharingModule } from './modules/sharing/sharing.module';
 import { AdminFoldersModule } from './modules/admin-folders/admin-folders.module';
 import { TeacherFoldersModule } from './modules/teacher-folders/teacher-folders.module';
+import { TeacherPromptsModule } from './modules/teacher-prompts/teacher-prompts.module';
+import { TeacherRatingsModule } from './modules/teacher-ratings/teacher-ratings.module';
+import { AnonymousFeedbackModule } from './modules/anonymous-feedback/anonymous-feedback.module';
+import { MiniGamesModule } from './modules/mini-games/mini-games.module';
+import { ReportPeriodsModule } from './modules/report-periods/report-periods.module';
 import { AuthModule } from './modules/auth/auth.module';
 
 const DatabaseProvider = {
@@ -40,7 +45,7 @@ const DatabaseProvider = {
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ envFilePath: `env/.superstudy.env` }),
+    ConfigModule.forRoot({ envFilePath: `apps/env/.superstudy.env` }),
     TypegooseModule.forRoot(process.env.MONGODB_URL),
     AgendaModule.forRootAsync({
       useFactory: (mongo: any) => ({
@@ -69,6 +74,11 @@ const DatabaseProvider = {
     SharingModule,
     AdminFoldersModule,
     TeacherFoldersModule,
+    TeacherPromptsModule,
+    TeacherRatingsModule,
+    AnonymousFeedbackModule,
+    MiniGamesModule,
+    ReportPeriodsModule,
     AuthModule,
   ],
 
