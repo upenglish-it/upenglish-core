@@ -6,7 +6,7 @@ import { getPromptById } from './promptService';
 import { normalizeForComparison } from '../utils/textNormalization';
 import { evaluateAudioAnswer, chatCompletion, isSilentAudio } from './aiService';
 import { deleteContextAudio } from './contextAudioService';
-import { examsService, examQuestionsService, examAssignmentsService, examSubmissionsService } from '../models';
+import { examsService, examQuestionsService, examAssignmentsService, examSubmissionsService, teacherFoldersService, adminFoldersService } from '../models';
 
 /**
  * Upload an audio answer blob to Firebase Storage.
@@ -184,7 +184,7 @@ export async function deleteQuestionImages(question) {
 export async function getExams(createdByRole = null) {
     const result = await examsService.findAll({ createdByRole });
     let exams = Array.isArray(result) ? result : (result?.data || []);
-    exams = exams.filter(e => !e.isDeleted);
+    exams = exams.filter(e => !e.isDeleted).map(e => ({ ...e, id: e._id || e.id }));
     return exams.sort((a, b) => {
         const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -193,14 +193,16 @@ export async function getExams(createdByRole = null) {
 }
 
 export async function getExam(id) {
-    const result = await examsService.findOne(id);
-    return result || null;
+    const response = await examsService.findOne(id);
+    const result = response?.data || response;
+    return result ? { ...result, id: result._id || result.id } : null;
 }
 
 export async function getSharedExams(examAccessIds = []) {
     try {
         const result = await examsService.findShared(examAccessIds);
         let exams = Array.isArray(result) ? result : (result?.data || []);
+        exams = exams.map(e => ({ ...e, id: e._id || e.id }));
         return exams.sort((a, b) => {
             const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
             const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -220,11 +222,13 @@ export async function saveExam(examData) {
             await examsService.update(targetId, data);
             return targetId;
         } catch (e) {
-            const result = await examsService.create({ _id: targetId, ...data });
+            const response = await examsService.create({ _id: targetId, ...data });
+            const result = response?.data || response;
             return result?.id || result?._id || result;
         }
     } else {
-        const result = await examsService.create(data);
+        const response = await examsService.create(data);
+        const result = response?.data || response;
         return result?.id || result?._id || result;
     }
 }
@@ -246,6 +250,7 @@ export async function getDeletedExams() {
     try {
         const result = await examsService.findDeleted();
         let exams = Array.isArray(result) ? result : (result?.data || []);
+        exams = exams.map(e => ({ ...e, id: e._id || e.id }));
         return exams.sort((a, b) => {
             const tA = a.deletedAt ? new Date(a.deletedAt).getTime() : 0;
             const tB = b.deletedAt ? new Date(b.deletedAt).getTime() : 0;
@@ -1847,110 +1852,118 @@ export async function releaseExamSubmissionResults(submissionId, releaserUid, re
 // ========== EXAM FOLDERS ==========
 
 export async function getExamFolders() {
-    const snapshot = await getDocs(collection(db, 'exam_folders'));
-    const folders = [];
-    snapshot.forEach(docSnap => {
-        folders.push({ id: docSnap.id, ...docSnap.data() });
-    });
-    return folders.sort((a, b) => (a.order || 0) - (b.order || 0));
+    try {
+        const result = await adminFoldersService.getExamFolders();
+        let folders = Array.isArray(result) ? result : (result?.data || []);
+        return folders.map(f => ({ ...f, id: f._id || f.id })).sort((a, b) => (a.order || 0) - (b.order || 0));
+    } catch (e) {
+        console.error("Error fetching admin exam folders:", e);
+        return [];
+    }
 }
 
 export async function saveExamFolder(folderData) {
-    const { id, ...data } = folderData;
-    const folderRef = doc(db, 'exam_folders', id);
-    await setDoc(folderRef, {
-        ...data,
-        updatedAt: serverTimestamp()
-    }, { merge: true });
+    try {
+        await adminFoldersService.saveExamFolder(folderData);
+    } catch (error) {
+        console.error("Error saving admin exam folder:", error);
+    }
 }
 
 export async function updateExamFoldersOrder(orderedFolders) {
-    const batch = writeBatch(db);
-    orderedFolders.forEach((folder, index) => {
-        const ref = doc(db, 'exam_folders', folder.id);
-        batch.update(ref, { order: index });
-    });
-    await batch.commit();
+    try {
+        await adminFoldersService.reorderExamFolders(orderedFolders.map((f, i) => ({ id: f.id, order: i })));
+    } catch (error) {
+        console.error("Error updating admin exam folders order:", error);
+    }
 }
 
 export async function deleteExamFolder(folderId) {
-    const folderRef = doc(db, 'exam_folders', folderId);
-    await deleteDoc(folderRef);
+    try {
+        await adminFoldersService.deleteExamFolder(folderId);
+    } catch (error) {
+        console.error("Error deleting admin exam folder:", error);
+    }
 }
 
 // ========== TEACHER EXAM FOLDERS ==========
 
 export async function getTeacherExamFolders(teacherId) {
-    const q = query(collection(db, 'teacher_exam_folders'), where('teacherId', '==', teacherId));
-    const snapshot = await getDocs(q);
-    const folders = [];
-    snapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        if (!data.isDeleted) folders.push({ id: docSnap.id, ...data });
-    });
-    return folders.sort((a, b) => (a.order || 0) - (b.order || 0));
+    if (!teacherId) return [];
+    try {
+        const result = await teacherFoldersService.getExamFolders(teacherId);
+        let folders = Array.isArray(result) ? result : (result?.data || []);
+        return folders.map(f => ({ ...f, id: f._id || f.id })).sort((a, b) => (a.order || 0) - (b.order || 0));
+    } catch (error) {
+        console.error("Error fetching teacher exam folders:", error);
+        return [];
+    }
 }
 
 export async function getAllTeacherExamFolders() {
-    const snapshot = await getDocs(collection(db, 'teacher_exam_folders'));
-    const folders = [];
-    snapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        if (!data.isDeleted) folders.push({ id: docSnap.id, ...data });
-    });
-    return folders.sort((a, b) => (a.order || 0) - (b.order || 0));
+    try {
+        const result = await teacherFoldersService.getAllExamFolders();
+        let folders = Array.isArray(result) ? result : (result?.data || []);
+        return folders.map(f => ({ ...f, id: f._id || f.id })).sort((a, b) => (a.order || 0) - (b.order || 0));
+    } catch (error) {
+        console.error("Error fetching all teacher exam folders:", error);
+        return [];
+    }
 }
 
 export async function saveTeacherExamFolder(teacherId, folderData) {
-    const { id, ...data } = folderData;
-    if (id) {
-        const folderRef = doc(db, 'teacher_exam_folders', id);
-        await updateDoc(folderRef, { ...data, updatedAt: serverTimestamp() });
-        return id;
-    } else {
-        const folderRef = doc(collection(db, 'teacher_exam_folders'));
-        await setDoc(folderRef, { ...data, teacherId, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-        return folderRef.id;
+    const dataToSave = { ...folderData, teacherId };
+    try {
+        const result = await teacherFoldersService.saveExamFolder(dataToSave);
+        return result?.id || result?._id || result;
+    } catch (error) {
+        console.error("Error saving teacher exam folder:", error);
+        throw error;
     }
 }
 
 export async function deleteTeacherExamFolder(folderId) {
-    // Soft delete
-    await updateDoc(doc(db, 'teacher_exam_folders', folderId), {
-        isDeleted: true,
-        deletedAt: serverTimestamp()
-    });
+    try {
+        await teacherFoldersService.softDeleteExamFolder(folderId);
+    } catch (error) {
+        console.error("Error deleting teacher exam folder:", error);
+        throw error;
+    }
 }
 
 export async function updateTeacherExamFoldersOrder(orderedFolders) {
-    const batch = writeBatch(db);
-    orderedFolders.forEach((folder, index) => {
-        const ref = doc(db, 'teacher_exam_folders', folder.id);
-        batch.update(ref, { order: index });
-    });
-    await batch.commit();
+    try {
+        await teacherFoldersService.reorderExamFolders(orderedFolders.map((f, i) => ({ id: f.id, order: i })));
+    } catch (error) {
+        console.error("Error updating teacher exam folders order:", error);
+    }
 }
 
 export async function restoreTeacherExamFolder(folderId) {
-    await updateDoc(doc(db, 'teacher_exam_folders', folderId), {
-        isDeleted: deleteField(),
-        deletedAt: deleteField()
-    });
+    try {
+        await teacherFoldersService.restoreExamFolder(folderId);
+    } catch (error) {
+        console.error("Error restoring teacher exam folder:", error);
+        throw error;
+    }
 }
 
 export async function permanentlyDeleteTeacherExamFolder(folderId) {
-    await deleteDoc(doc(db, 'teacher_exam_folders', folderId));
+    try {
+        await teacherFoldersService.permanentDeleteExamFolder(folderId);
+    } catch (error) {
+        console.error("Error permanently deleting teacher exam folder:", error);
+        throw error;
+    }
 }
 
-export async function getDeletedTeacherExamFolders() {
+export async function getDeletedTeacherExamFolders(teacherId) {
     try {
-        const q = query(collection(db, 'teacher_exam_folders'), where('isDeleted', '==', true));
-        const snapshot = await getDocs(q);
-        const folders = [];
-        snapshot.forEach(docSnap => folders.push({ id: docSnap.id, ...docSnap.data() }));
-        return folders.sort((a, b) => {
-            const tA = a.deletedAt?.toMillis ? a.deletedAt.toMillis() : 0;
-            const tB = b.deletedAt?.toMillis ? b.deletedAt.toMillis() : 0;
+        const result = await teacherFoldersService.getDeletedExamFolders(teacherId);
+        const folders = Array.isArray(result) ? result : (result?.data || []);
+        return folders.map(f => ({ ...f, id: f._id || f.id })).sort((a, b) => {
+            const tA = a.deletedAt ? new Date(a.deletedAt).getTime() : 0;
+            const tB = b.deletedAt ? new Date(b.deletedAt).getTime() : 0;
             return tB - tA;
         });
     } catch (error) {

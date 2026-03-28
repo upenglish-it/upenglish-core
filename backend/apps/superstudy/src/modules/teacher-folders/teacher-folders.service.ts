@@ -96,8 +96,32 @@ export class TeacherFoldersService {
 
     // Create new — auto-generate ID (mirrors doc(collection(db, ...)) = auto-ID from Firestore)
     const newId = SYSTEM_ID();
-    const created = await (this.model(type) as any).create({ _id: newId, ...rest });
-    return created.toObject ? created.toObject() : created;
+    
+    // Inject fallback DB references and required fields if missing from payload
+    const properties = data.properties || 'SYSTEM';
+    const propertiesBranches = data.propertiesBranches || 'SYSTEM';
+    const createdBy = data.createdBy || data.teacherId || 'SYSTEM';
+    
+    // Ensure array and string defaults for old Firestore payloads
+    const listField = type === 'topics' ? 'topicIds' : type === 'grammar' ? 'exerciseIds' : 'examIds';
+    const listValues = data[listField] || [];
+
+    try {
+      const created = await (this.model(type) as any).create({ 
+        _id: newId,
+        ...rest,
+        description: data.description || '',
+        icon: data.icon || '📁',
+        color: data.color || '#3b82f6',
+        [listField]: listValues,
+        properties,
+        propertiesBranches,
+        createdBy,
+      });
+      return created.toObject ? created.toObject() : created;
+    } catch (error: any) {
+      throw new BadRequestException(`Validation failed: ${error.message}`);
+    }
   }
 
   // ═════════════════════════════════════════════════════════════════════════

@@ -7,13 +7,6 @@ import { generateGrammarVariations, generateSingleGrammarVariation, generateVari
 import { extractQuestionsFromText, extractQuestionsFromPDF } from '../../services/aiDocumentImportService';
 import { useAuth } from '../../contexts/AuthContext';
 
-// Decode ALL HTML entities (&#39; → ', &amp; → &, &nbsp; → space, etc.)
-function decodeHtmlEntities(str) {
-    if (!str) return str;
-    const ta = document.createElement('textarea');
-    ta.innerHTML = str;
-    return ta.value.replace(/\u00a0/g, ' ');
-}
 import { ArrowLeft, Plus, Edit, Trash2, X, Wand2, RefreshCw, Save, GripVertical, ChevronDown, Check, AlertCircle, Info, CheckCircle, Sparkles, Award, Copy, FileText, Upload } from 'lucide-react';
 import './TeacherGrammarEditorPage.css';
 
@@ -23,6 +16,51 @@ import AudioContextUploader from '../../components/common/AudioContextUploader';
 import { deleteContextAudio } from '../../services/contextAudioService';
 import { uploadContextImage } from '../../services/examService';
 import SavedPromptPicker from '../../components/SavedPromptPicker';
+
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
+
+// Decode ALL HTML entities (&#39; → ', &amp; → &, &nbsp; → space, etc.)
+function decodeHtmlEntities(str) {
+    if (!str) return str;
+    const ta = document.createElement('textarea');
+    ta.innerHTML = str;
+    return ta.value.replace(/\u00a0/g, ' ');
+}
+
+// Fix video disappearing on load/edit
+const Quill = ReactQuill.Quill;
+if (Quill) {
+    const Video = Quill.import('formats/video');
+    class CustomVideo extends Video {
+        static create(value) {
+            let node = super.create(value);
+            node.setAttribute('src', value);
+            node.setAttribute('frameborder', '0');
+            node.setAttribute('allowfullscreen', true);
+            node.setAttribute('class', 'ql-video');
+            return node;
+        }
+        static sanitize(url) {
+            return url;
+        }
+    }
+    Quill.register(CustomVideo, true);
+}
+
+const QUILL_FORMATS = [
+    'header', 'bold', 'italic', 'underline', 'strike',
+    'color', 'background', 'list', 'align',
+    'link', 'image', 'video'
+];
+
+const MINI_QUILL_MODULES = {
+    toolbar: [
+        ['bold', 'italic', 'underline'],
+    ]
+};
+const MINI_QUILL_FORMATS = ['bold', 'italic', 'underline'];
 
 /**
  * Minimal WYSIWYG rich-text input using ReactQuill.
@@ -49,13 +87,6 @@ function RichTextInput({ value, onChange, disabled, placeholder, minHeight = '10
         onChange(cleanedHtml);
     }, [onChange]);
 
-    const modules = {
-        toolbar: [
-            ['bold', 'italic', 'underline'],
-        ]
-    };
-    const formats = ['bold', 'italic', 'underline'];
-
     return (
         <div style={{ position: 'relative' }}>
             {isFillInBlank && !disabled && (
@@ -81,8 +112,8 @@ function RichTextInput({ value, onChange, disabled, placeholder, minHeight = '10
                     onChange={onChange}
                     readOnly={disabled}
                     placeholder={placeholder || 'Nhập nội dung câu hỏi...'}
-                    modules={modules}
-                    formats={formats}
+                    modules={MINI_QUILL_MODULES}
+                    formats={MINI_QUILL_FORMATS}
                     style={{ minHeight }}
                 />
             </div>
@@ -272,35 +303,7 @@ const stripHtml = (html) => {
     return tmp.textContent || tmp.innerText || "";
 };
 
-import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import ReactQuill from 'react-quill-new';
-import 'react-quill-new/dist/quill.snow.css';
 
-// Fix video disappearing on load/edit
-const Quill = ReactQuill.Quill;
-if (Quill) {
-    const Video = Quill.import('formats/video');
-    class CustomVideo extends Video {
-        static create(value) {
-            let node = super.create(value);
-            node.setAttribute('src', value);
-            node.setAttribute('frameborder', '0');
-            node.setAttribute('allowfullscreen', true);
-            node.setAttribute('class', 'ql-video');
-            return node;
-        }
-        static sanitize(url) {
-            return url;
-        }
-    }
-    Quill.register(CustomVideo, true);
-}
-
-const QUILL_FORMATS = [
-    'header', 'bold', 'italic', 'underline', 'strike',
-    'color', 'background', 'list', 'align',
-    'link', 'image', 'video'
-];
 
 /**
  * Show a size picker popup. Returns the chosen maxWidth, or null if cancelled.
@@ -1827,12 +1830,12 @@ export default function TeacherGrammarEditorPage() {
 
 
                                     {/* Variation Content Editor */}
-                                    {currentQuestion.type !== 'fill_in_blank' && currentQuestion.type !== 'fill_in_blank_typing' && (
+                                    {currentQuestion.type !== 'fill_in_blank' && currentQuestion.type !== 'fill_in_blank_typing' && currentQuestion.variations?.[activeVariationTab] && (
                                         <div className="admin-form-group">
                                             <label>Đề bài / Câu hỏi</label>
                                             <RichTextInput
                                                 key={`text-${currentQuestion.type}-${activeVariationTab}-${aiRefreshKey}`}
-                                                value={currentQuestion.variations[activeVariationTab].text}
+                                                value={currentQuestion.variations[activeVariationTab].text || ''}
                                                 onChange={val => updateVariation(activeVariationTab, 'text', val)}
                                                 disabled={isReadOnly}
                                                 placeholder="Nhập nội dung câu hỏi..."
@@ -1842,7 +1845,7 @@ export default function TeacherGrammarEditorPage() {
                                         </div>
                                     )}
 
-                                    {currentQuestion.type === 'multiple_choice' && (
+                                    {currentQuestion.type === 'multiple_choice' && currentQuestion.variations?.[activeVariationTab] && (
                                         <div style={{ marginTop: '16px' }}>
                                             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#475569', marginBottom: '8px' }}>Các đáp án (Chọn đáp án đúng)</label>
                                             <div className="options-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -1873,7 +1876,7 @@ export default function TeacherGrammarEditorPage() {
                                                                         type="text"
                                                                         className="admin-form-input"
                                                                         placeholder={`Đáp án ${optIdx + 1}`}
-                                                                        value={optVal}
+                                                                        value={optVal || ''}
                                                                         onChange={e => updateOption(activeVariationTab, optIdx, e.target.value)}
                                                                         disabled={isReadOnly}
                                                                     />
@@ -2223,32 +2226,34 @@ export default function TeacherGrammarEditorPage() {
                                         </div>
                                     )}
 
-                                    <div className="admin-form-group" style={{ marginTop: '16px' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                            <label style={{ margin: 0 }}>Giải thích / Lời khuyên (Hiển thị khi học sinh làm xong)</label>
-                                            {!isReadOnly && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleGenerateExplanation(activeVariationTab)}
-                                                    disabled={isGeneratingExplanation}
-                                                    className="admin-btn admin-btn-outline"
-                                                    style={{ padding: '2px 10px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                                                    title="AI tạo giải thích bắt chước style Variation 1"
-                                                >
-                                                    {isGeneratingExplanation ? <RefreshCw size={12} className="animate-spin" /> : <Wand2 size={12} />}
-                                                    <span>AI giải thích</span>
-                                                </button>
-                                            )}
+                                    {currentQuestion.variations?.[activeVariationTab] && (
+                                        <div className="admin-form-group" style={{ marginTop: '16px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                <label style={{ margin: 0 }}>Giải thích / Lời khuyên (Hiển thị khi học sinh làm xong)</label>
+                                                {!isReadOnly && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleGenerateExplanation(activeVariationTab)}
+                                                        disabled={isGeneratingExplanation}
+                                                        className="admin-btn admin-btn-outline"
+                                                        style={{ padding: '2px 10px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                                        title="AI tạo giải thích bắt chước style Variation 1"
+                                                    >
+                                                        {isGeneratingExplanation ? <RefreshCw size={12} className="animate-spin" /> : <Wand2 size={12} />}
+                                                        <span>AI giải thích</span>
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <RichTextInput
+                                                key={`expl-${currentQuestion.type}-${activeVariationTab}-${aiRefreshKey}`}
+                                                value={currentQuestion.variations[activeVariationTab].explanation || ''}
+                                                onChange={val => updateVariation(activeVariationTab, 'explanation', val)}
+                                                disabled={isReadOnly}
+                                                placeholder="Giải thích vì sao lại chọn đáp án này..."
+                                                minHeight="60px"
+                                            />
                                         </div>
-                                        <RichTextInput
-                                            key={`expl-${currentQuestion.type}-${activeVariationTab}-${aiRefreshKey}`}
-                                            value={currentQuestion.variations[activeVariationTab].explanation}
-                                            onChange={val => updateVariation(activeVariationTab, 'explanation', val)}
-                                            disabled={isReadOnly}
-                                            placeholder="Giải thích vì sao lại chọn đáp án này..."
-                                            minHeight="60px"
-                                        />
-                                    </div>
+                                    )}
 
                                 </div>
                             </div>
