@@ -1,15 +1,29 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
-import { BookOpen, Sparkles, LogIn, UserPlus, ArrowRight } from 'lucide-react';
+import { BookOpen, Sparkles, LogIn, UserPlus, ChevronDown } from 'lucide-react';
 import './LoginPage.css';
 import BrandLogo from '../components/common/BrandLogo';
 
+const IS_DEV = import.meta.env.DEV;
+
 export default function LoginPage() {
-    const { user, signInWithGoogle, signInWithMicrosoft, error, clearError } = useAuth();
+    const { user, signInWithGoogle, signInWithMicrosoft, signInWithEmail, error, clearError } = useAuth();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submittingProvider, setSubmittingProvider] = useState(null);
     const [mode, setMode] = useState('login'); // 'login' or 'register'
+    const [email, setEmail] = useState('');
+    const [showDevForm, setShowDevForm] = useState(false);
+
+    async function handleEmailSignIn(e) {
+        e.preventDefault();
+        if (!email.trim()) return;
+        setIsSubmitting(true);
+        setSubmittingProvider('email');
+        await signInWithEmail(email.trim());
+        setIsSubmitting(false);
+        setSubmittingProvider(null);
+    }
 
     if (user) {
         if (user.status === 'pending') {
@@ -136,6 +150,7 @@ export default function LoginPage() {
                         </div>
                     )}
 
+                    {/* SSO Buttons */}
                     <button
                         type="button"
                         className="login-google-btn"
@@ -143,7 +158,7 @@ export default function LoginPage() {
                         disabled={isSubmitting}
                     >
                         {submittingProvider === 'google' ? (
-                            <><div className="spinner" style={{ width: 20, height: 20, borderWidth: 2 }} /> {mode === 'register' ? 'Đang đăng ký...' : 'Đang đăng nhập...'}</>
+                            <><div className="spinner" style={{ width: 20, height: 20, borderWidth: 2 }} /> Đang xử lý...</>
                         ) : (
                             <>
                                 <svg className="login-google-icon" viewBox="0 0 24 24" width="22" height="22">
@@ -152,14 +167,14 @@ export default function LoginPage() {
                                     <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
                                     <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
                                 </svg>
-                                {mode === 'register' ? 'Đăng ký bằng Google' : 'Đăng nhập bằng Google'}
+                                Log in with Google
                             </>
                         )}
                     </button>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '4px 0' }}>
                         <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
-                        <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 500 }}>hoặc</span>
+                        <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 500 }}>or</span>
                         <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }} />
                     </div>
 
@@ -171,7 +186,7 @@ export default function LoginPage() {
                         style={{ background: '#fff', border: '1px solid #e2e8f0' }}
                     >
                         {submittingProvider === 'microsoft' ? (
-                            <><div className="spinner" style={{ width: 20, height: 20, borderWidth: 2 }} /> {mode === 'register' ? 'Đang đăng ký...' : 'Đang đăng nhập...'}</>
+                            <><div className="spinner" style={{ width: 20, height: 20, borderWidth: 2 }} /> Đang xử lý...</>
                         ) : (
                             <>
                                 <svg width="21" height="21" viewBox="0 0 21 21">
@@ -180,7 +195,7 @@ export default function LoginPage() {
                                     <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
                                     <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
                                 </svg>
-                                {mode === 'register' ? 'Đăng ký bằng Microsoft' : 'Đăng nhập bằng Microsoft'}
+                                Sign in with Microsoft
                             </>
                         )}
                     </button>
@@ -216,6 +231,55 @@ export default function LoginPage() {
                                 Đăng nhập
                             </button>
                         </p>
+                    )}
+
+                    {/* Dev-only email login — only visible in development mode */}
+                    {IS_DEV && (
+                        <div style={{ borderTop: '1px dashed #e2e8f0', paddingTop: '12px', marginTop: '4px' }}>
+                            <button
+                                type="button"
+                                onClick={() => setShowDevForm(v => !v)}
+                                style={{
+                                    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                    background: 'none', border: 'none', cursor: 'pointer',
+                                    fontSize: '0.73rem', color: '#94a3b8', fontWeight: 500, padding: '2px 0'
+                                }}
+                            >
+                                <span>🛠 Developer Access (dev only)</span>
+                                <ChevronDown size={14} style={{ transform: showDevForm ? 'rotate(180deg)' : 'none', transition: '0.2s' }} />
+                            </button>
+                            {showDevForm && (
+                                <form onSubmit={handleEmailSignIn} style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                                    <input
+                                        id="dev-email"
+                                        type="email"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        placeholder="ISMS email address"
+                                        required
+                                        disabled={isSubmitting}
+                                        style={{
+                                            flex: 1, padding: '9px 10px', borderRadius: '7px',
+                                            border: '1px solid #cbd5e1', outline: 'none',
+                                            fontSize: '0.85rem', boxSizing: 'border-box'
+                                        }}
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting || !email.trim()}
+                                        style={{
+                                            padding: '9px 14px', borderRadius: '7px', border: 'none',
+                                            background: 'var(--color-primary)', color: '#fff',
+                                            fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer',
+                                            whiteSpace: 'nowrap',
+                                            opacity: (isSubmitting || !email.trim()) ? 0.7 : 1
+                                        }}
+                                    >
+                                        {submittingProvider === 'email' ? '...' : 'Login'}
+                                    </button>
+                                </form>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>

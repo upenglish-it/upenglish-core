@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { db } from '../../config/firebase';
-import { collection, getDocs } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
 import {
     updateUserRole, toggleUserDisabled, getUserLearningStats, deleteUserProgress,
@@ -9,7 +7,7 @@ import {
     addEmailToWhitelist, removeEmailFromWhitelist, getWhitelistEmails, updateWhitelistDisplayName, updateWhitelistEntry,
     getFolders, updateUserFolderAccess, getUserFolderAccess,
     getGroups, updateUserGroups, permanentDeleteUser, updateUserDisplayName, changeUserEmail,
-    softDeleteUser, restoreUser
+    softDeleteUser, restoreUser, getAllUsers
 } from '../../services/adminService';
 import {
     User, Shield, X, Calendar, Hash, Mail, Award, Lock, Unlock,
@@ -154,11 +152,7 @@ export default function AdminUsersPage() {
     async function loadUsers() {
         setLoading(true);
         try {
-            const usersSnap = await getDocs(collection(db, 'users'));
-            const usersList = [];
-            usersSnap.forEach(docSnap => {
-                usersList.push({ uid: docSnap.id, ...docSnap.data() });
-            });
+            const usersList = await getAllUsers();
             usersList.sort((a, b) => (a.email || '').localeCompare(b.email || ''));
             setUsers(usersList);
         } catch (error) {

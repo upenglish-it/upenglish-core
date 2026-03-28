@@ -2,12 +2,19 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from 'nestjs-typegoose';
 import { ReturnModelType } from '@typegoose/typegoose';
 import { SSTUsers } from 'apps/common/src/database/mongodb/src/superstudy';
+import { Accounts, Properties, PropertiesBranches } from 'apps/common/src/database/mongodb/src/isms';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectModel(SSTUsers)
     private readonly usersModel: ReturnModelType<typeof SSTUsers>,
+    @InjectModel(Accounts)
+    private readonly accountsModel: ReturnModelType<typeof Accounts>,
+    @InjectModel(Properties)
+    private readonly propertiesModel: ReturnModelType<typeof Properties>,
+    @InjectModel(PropertiesBranches)
+    private readonly propertiesBranchesModel: ReturnModelType<typeof PropertiesBranches>,
   ) {}
 
   async findAll(filters: { role?: string; status?: string } = {}) {
@@ -78,6 +85,40 @@ export class UsersService {
       .lean();
 
     if (!updated) throw new NotFoundException(`User ${uid} not found`);
+
+    if (updated.email) {
+      const emailLower = updated.email.toLowerCase().trim();
+      const existingAccount = await this.accountsModel
+        .findOne({ emailAddresses: emailLower })
+        .lean();
+
+      if (!existingAccount) {
+        // Fetch a default property/branch to satisfy schema requirements
+        const property = await this.propertiesModel.findOne().lean();
+        const branch = property
+          ? await this.propertiesBranchesModel.findOne({ properties: property._id }).lean()
+          : null;
+
+        await this.accountsModel.create({
+          accountId: uid,
+          firstName: updated.displayName || 'Vô danh',
+          lastName: '',
+          emailAddresses: [emailLower],
+          contactNumbers: [],
+          notification: { email: true, app: true },
+          lockScreen: { enable: false, code: null, idleDuration: 600 },
+          language: 'vi',
+          properties: property?._id || 'default_property_must_exist',
+          propertiesBranches: [branch?._id || 'default_branch_must_exist'],
+          sourceBranch: branch?._id || 'default_branch_must_exist',
+          role: role === 'user' ? 'student' : role, // map superstudy user -> student
+          createdFrom: 'system',
+          active: true,
+          deleted: false,
+        });
+      }
+    }
+
     return updated;
   }
 
