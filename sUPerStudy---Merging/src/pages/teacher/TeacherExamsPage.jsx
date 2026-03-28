@@ -5,7 +5,7 @@ import { submitProposal, getProposalForSource } from '../../services/contentProp
 import { getUsersPublicInfo } from '../../services/userService';
 import { addCollaborator, removeCollaborator, transferOwnership, getCollaboratedResources, findTeacherByEmail, getTeacherGroups, getStudentsInGroup, updateCollaboratorRole } from '../../services/teacherService';
 import { useAuth } from '../../contexts/AuthContext';
-import { Timestamp } from 'firebase/firestore';
+
 import { Edit, Trash2, X, Plus, List, Search, Clock, ClipboardCheck, ClipboardList, FolderOpen, Globe, Lock, AlertTriangle, Share2, ChevronDown, ChevronRight, AlertCircle, Users, UserPlus, Landmark, Send, CheckCircle, XCircle, ArrowRightLeft, UsersRound, FileText, Calendar, Copy, GripVertical } from 'lucide-react';
 import { duplicateExam } from '../../services/duplicateService';
 import { convertExamToGrammar } from '../../services/conversionService';

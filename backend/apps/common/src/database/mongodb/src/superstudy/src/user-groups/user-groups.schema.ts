@@ -18,8 +18,8 @@ export class SSTUserGroups {
   @Prop({ type: String, default: null })
   public readonly description: string;
 
-  @Prop({ type: String, default: null })
-  public readonly folderAccess: string;
+  @Prop({ type: Array, default: [] })
+  public readonly folderAccess: string[];
 
   /** Hidden groups are not displayed in teacher/student group lists */
   @Prop({ type: Boolean, default: false })
@@ -44,12 +44,12 @@ export class SSTUserGroups {
   @Prop({ type: Array, default: [] })
   public readonly examAccess: string[];
 
-  @Prop({ ref: () => Accounts, type: String, required: true })
-  public readonly createdBy: Accounts;
+  @Prop({ ref: () => Accounts, type: String, required: false })
+  public readonly createdBy?: Accounts;
 
-  @Prop({ ref: () => Properties, type: String, required: true })
-  public readonly properties: Properties;
+  @Prop({ ref: () => Properties, type: String, required: false })
+  public readonly properties?: Properties;
 
-  @Prop({ ref: () => PropertiesBranches, type: String, required: true })
-  public readonly propertiesBranches: PropertiesBranches;
+  @Prop({ ref: () => PropertiesBranches, type: String, required: false })
+  public readonly propertiesBranches?: PropertiesBranches;
 }

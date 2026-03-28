@@ -3,12 +3,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import { getAdminAllTeacherTopics, deleteAdminTeacherTopic, getGroups, toggleResourcePublic, getResourceSharedEntities, shareResourceToEmail, unshareResourceFromUser, shareResourceToGroup, unshareResourceFromGroup, cleanupExpiredDeletedContent, restoreTeacherTopicToAdmin } from '../../services/adminService';
 import { getAllTeacherTopicFolders, saveTeacherTopicFolder, deleteTeacherTopicFolder, saveTeacherTopic, createAssignment, getAssignmentsForTopic, getDeletedTeacherTopics, getDeletedTeacherTopicFolders, restoreTeacherTopic, restoreTeacherTopicFolder, permanentlyDeleteTeacherTopic, permanentlyDeleteTeacherTopicFolder } from '../../services/teacherService';
 import { useAuth } from '../../contexts/AuthContext';
-import { Timestamp } from 'firebase/firestore';
 import { BookOpen, Search, Trash2, Edit, AlertCircle, Globe, FolderOpen, Plus, X, ChevronDown, ChevronRight, AlertTriangle, List, User, Share2, Users, UsersRound, Mail, UserPlus, Lock, Send, FileText, CheckCircle, RotateCcw } from 'lucide-react';
-import { db } from '../../config/firebase';
-import { doc, getDoc } from 'firebase/firestore';
 import CustomSelect from '../../components/common/CustomSelect';
 import EmailAutocomplete from '../../components/common/EmailAutocomplete';
+import { usersService } from '../../models';
 
 export default function AdminTeacherTopicsPage() {
     const navigate = useNavigate();
@@ -68,18 +66,18 @@ export default function AdminTeacherTopicsPage() {
         loadData();
     }, []);
 
-    const fetchTeacherInfo = async (teacherId, currentMap) => {
+    const fetchTeacherInfo = async (teacherId, currentMap, fallbackName) => {
         if (!teacherId || currentMap[teacherId]) return;
         try {
-            const userRef = doc(db, 'users', teacherId);
-            const userSnap = await getDoc(userRef);
-            if (userSnap.exists()) {
-                setTeacherMap(prev => ({ ...prev, [teacherId]: userSnap.data() }));
+            const userSnap = await usersService.findOne(teacherId);
+            if (userSnap) {
+                setTeacherMap(prev => ({ ...prev, [teacherId]: userSnap }));
             } else {
-                setTeacherMap(prev => ({ ...prev, [teacherId]: { email: 'Unknown user', displayName: 'Unknown' } }));
+                setTeacherMap(prev => ({ ...prev, [teacherId]: { email: teacherId, displayName: fallbackName || 'Unknown' } }));
             }
         } catch (err) {
             console.error("Error fetching teacher:", err);
+            setTeacherMap(prev => ({ ...prev, [teacherId]: { email: teacherId, displayName: fallbackName || 'Unknown' } }));
         }
     };
 
@@ -101,6 +99,13 @@ export default function AdminTeacherTopicsPage() {
             cleanupExpiredDeletedContent().catch(() => {});
 
             const tempTeacherMap = { ...teacherMap };
+            const fallbackNames = {};
+            [...topicsData, ...foldersData, ...delTopics, ...delFolders].forEach(item => {
+                if (item.teacherId && item.createdByName && !fallbackNames[item.teacherId]) {
+                    fallbackNames[item.teacherId] = item.createdByName;
+                }
+            });
+
             const allTeacherIds = new Set([
                 ...topicsData.map(t => t.teacherId),
                 ...foldersData.map(f => f.teacherId),
@@ -108,7 +113,7 @@ export default function AdminTeacherTopicsPage() {
                 ...delTopics.map(t => t.teacherId),
                 ...delFolders.map(f => f.teacherId)
             ]);
-            await Promise.all([...allTeacherIds].map(id => fetchTeacherInfo(id, tempTeacherMap)));
+            await Promise.all([...allTeacherIds].map(id => fetchTeacherInfo(id, tempTeacherMap, fallbackNames[id])));
         } catch (error) {
             console.error(error);
             setAlertMessage({ type: 'error', text: 'Lỗi tải dữ liệu: ' + error.message });
@@ -312,12 +317,12 @@ export default function AdminTeacherTopicsPage() {
                 topicName: resourceToShare.name,
                 groupId: quickAssignGroupId,
                 groupName: selectedGroup?.name || '',
-                dueDate: Timestamp.fromDate(new Date(quickAssignDueDate)),
+                dueDate: new Date(quickAssignDueDate).toISOString(),
                 teacherId: user.uid,
                 teacherName: user.displayName || user.email,
             };
             if (quickAssignScheduledStart && quickAssignScheduledStart !== 'pending') {
-                assignPayload.scheduledStart = Timestamp.fromDate(new Date(quickAssignScheduledStart));
+                assignPayload.scheduledStart = new Date(quickAssignScheduledStart).toISOString();
             }
             await createAssignment(assignPayload);
             setQuickAssignSuccess(`Đã giao thành công cho lớp ${selectedGroup?.name}!`);

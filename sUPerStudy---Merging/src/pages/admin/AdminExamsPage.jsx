@@ -6,7 +6,6 @@ import { getGroups, toggleResourcePublic, toggleTeacherVisible, getResourceShare
 import { getStudentsInGroup } from '../../services/teacherService';
 
 import { getPendingProposals, approveProposal, rejectProposal, findExistingOfficialCopy } from '../../services/contentProposalService';
-import { Timestamp } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
 import { Edit, Trash2, X, Plus, List, Search, Clock, ClipboardCheck, FolderOpen, GripVertical, Check, Share2, Globe, ChevronDown, ChevronRight, AlertTriangle, Users, Mail, UserPlus, Lock, CheckCircle, XCircle, Landmark, Send, FileText, Filter, ArrowRightLeft, GraduationCap } from 'lucide-react';
 import { convertExamToGrammar } from '../../services/conversionService';
@@ -395,7 +394,7 @@ export default function AdminExamsPage() {
                 targetType: 'group',
                 targetId: quickAssignGroupId,
                 targetName: selectedGroup?.name || '',
-                dueDate: Timestamp.fromDate(new Date(quickAssignDueDate)),
+                dueDate: new Date(quickAssignDueDate).toISOString(),
                 assignedBy: user.uid,
                 assignedByName: user.displayName || user.email,
             };

@@ -234,6 +234,7 @@ export default function TeacherTopicsPage() {
                 ...topicData,
                 id: finalTopicId,
                 createdBy: user.uid,
+                createdByName: user.displayName || user.email || 'Teacher',
                 properties: user.properties || 'default',
                 propertiesBranches: Array.isArray(user.propertiesBranches) && user.propertiesBranches.length > 0 ? user.propertiesBranches[0] : (user.propertiesBranches || 'default')
             };
@@ -246,6 +247,7 @@ export default function TeacherTopicsPage() {
                         ...folder, 
                         topicIds: [...(folder.topicIds || []), finalTopicId],
                         createdBy: user.uid,
+                        createdByName: user.displayName || user.email || 'Teacher',
                         properties: user.properties || 'default',
                         propertiesBranches: Array.isArray(user.propertiesBranches) && user.propertiesBranches.length > 0 ? user.propertiesBranches[0] : (user.propertiesBranches || 'default')
                     });
@@ -624,6 +626,7 @@ export default function TeacherTopicsPage() {
             const folderPayload = {
                 ...folderFormData,
                 createdBy: user.uid,
+                createdByName: user.displayName || user.email || 'Teacher',
                 properties: user.properties || 'default',
                 propertiesBranches: Array.isArray(user.propertiesBranches) && user.propertiesBranches.length > 0 ? user.propertiesBranches[0] : (user.propertiesBranches || 'default')
             };

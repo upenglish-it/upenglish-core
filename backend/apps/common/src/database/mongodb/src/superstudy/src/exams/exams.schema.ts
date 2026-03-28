@@ -25,7 +25,7 @@ export class SSTExams {
   public readonly icon: string;
 
   @Prop({ type: String, default: null })
-  public readonly color: string;
+  public readonly color?: string;
 
   @Prop({ type: Number, default: null })
   public readonly timeLimitMinutes: number;
@@ -126,7 +126,7 @@ export class SSTExams {
   public readonly transferredToName: string;
 
   @Prop({ type: String, enum: TargetLevelsC })
-  public readonly targetLevel: TargetLevelsT;
+  public readonly targetLevel?: TargetLevelsT;
 
   @Prop({ type: String, default: null })
   public readonly targetAge: string;
@@ -156,10 +156,10 @@ export class SSTExams {
   public readonly createdBy: Accounts;
 
   @Prop({ ref: () => Properties, type: String, required: false })
-  public readonly properties: Properties;
+  public readonly properties?: Properties;
 
   @Prop({ ref: () => PropertiesBranches, type: String, required: false })
-  public readonly propertiesBranches: PropertiesBranches;
+  public readonly propertiesBranches?: PropertiesBranches;
 }
 
 /**

@@ -4,13 +4,11 @@ import { getExams, deleteExam, getAllTeacherExamFolders, saveTeacherExamFolder, 
 import { getGroups, toggleResourcePublic, getResourceSharedEntities, shareResourceToEmail, unshareResourceFromUser, shareResourceToGroup, unshareResourceFromGroup, cleanupExpiredDeletedContent, restoreExamToAdmin } from '../../services/adminService';
 import { getStudentsInGroup } from '../../services/teacherService';
 import { useAuth } from '../../contexts/AuthContext';
-import { Timestamp } from 'firebase/firestore';
-import { db } from '../../config/firebase';
-import { doc, getDoc } from 'firebase/firestore';
 import { BookOpen, Search, Trash2, Edit, AlertCircle, Globe, List, FolderOpen, X, ChevronDown, ChevronRight, AlertTriangle, User, Share2, Users, UsersRound, Mail, UserPlus, Lock, Send, FileText, CheckCircle, Clock, RotateCcw, ArrowRightLeft } from 'lucide-react';
 import { convertExamToGrammar } from '../../services/conversionService';
 import CustomSelect from '../../components/common/CustomSelect';
 import EmailAutocomplete from '../../components/common/EmailAutocomplete';
+import { usersService } from '../../models';
 
 export default function AdminTeacherExamsPage() {
     const { user } = useAuth();
@@ -82,10 +80,9 @@ export default function AdminTeacherExamsPage() {
     const fetchTeacherInfo = async (teacherId, currentMap) => {
         if (!teacherId || currentMap[teacherId]) return;
         try {
-            const userRef = doc(db, 'users', teacherId);
-            const userSnap = await getDoc(userRef);
-            if (userSnap.exists()) {
-                setTeacherMap(prev => ({ ...prev, [teacherId]: userSnap.data() }));
+            const userSnap = await usersService.findOne(teacherId);
+            if (userSnap) {
+                setTeacherMap(prev => ({ ...prev, [teacherId]: userSnap }));
             } else {
                 setTeacherMap(prev => ({ ...prev, [teacherId]: { email: 'Unknown user', displayName: 'Unknown' } }));
             }
@@ -365,11 +362,11 @@ export default function AdminTeacherExamsPage() {
                 targetType: 'group',
                 targetId: quickAssignGroupId,
                 targetName: selectedGroup?.name || '',
-                dueDate: Timestamp.fromDate(new Date(quickAssignDueDate)),
+                dueDate: new Date(quickAssignDueDate).toISOString(),
                 createdBy: user.uid,
             };
             if (quickAssignScheduledStart && quickAssignScheduledStart !== 'pending') {
-                assignPayload.scheduledStart = Timestamp.fromDate(new Date(quickAssignScheduledStart));
+                assignPayload.scheduledStart = new Date(quickAssignScheduledStart).toISOString();
             }
             if (quickAssignSelectedStudentIds.length > 0) {
                 assignPayload.assignedStudentIds = quickAssignSelectedStudentIds;

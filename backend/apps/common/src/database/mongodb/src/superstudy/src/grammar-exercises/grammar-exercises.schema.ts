@@ -23,8 +23,8 @@ export class SSTGrammarExercises {
   @Prop({ type: String, default: null })
   public readonly icon: string;
 
-  @Prop({ type: Number, default: null })
-  public readonly color: number;
+  @Prop({ type: String, default: null })
+  public readonly color?: string;
 
   /** 'admin' | 'teacher' */
   @Prop({ type: String, default: null })
@@ -43,7 +43,7 @@ export class SSTGrammarExercises {
   public readonly name: string;
 
   @Prop({ type: String, enum: GrammarExerciseTargetLevelsC, default: null })
-  public readonly targetLevel: GrammarExerciseTargetLevelsT;
+  public readonly targetLevel?: GrammarExerciseTargetLevelsT;
 
   @Prop({ type: String, default: null })
   public readonly targetAge: string;
@@ -104,14 +104,14 @@ export class SSTGrammarExercises {
   @Prop({ type: Array, default: [] })
   public readonly sharedWithTeacherIds: string[];
 
-  @Prop({ ref: () => Accounts, type: String, required: true })
-  public readonly createdBy: Accounts;
+  @Prop({ ref: () => Accounts, type: String, required: false })
+  public readonly createdBy?: Accounts;
 
-  @Prop({ ref: () => Properties, type: String, required: true })
-  public readonly properties: Properties;
+  @Prop({ ref: () => Properties, type: String, required: false })
+  public readonly properties?: Properties;
 
-  @Prop({ ref: () => PropertiesBranches, type: String, required: true })
-  public readonly propertiesBranches: PropertiesBranches;
+  @Prop({ ref: () => PropertiesBranches, type: String, required: false })
+  public readonly propertiesBranches?: PropertiesBranches;
 }
 
 export type GrammarExerciseTargetLevelsT = (typeof GrammarExerciseTargetLevelsC)[number];

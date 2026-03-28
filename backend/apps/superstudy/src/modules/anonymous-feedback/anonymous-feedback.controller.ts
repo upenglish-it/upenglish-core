@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Body, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AnonymousFeedbackService } from './anonymous-feedback.service';
 
@@ -12,6 +12,36 @@ export class AnonymousFeedbackController {
   @Get('me')
   getMyReceivedFeedback(@Query('uid') uid: string) {
     return this.service.getMyReceivedFeedback(uid);
+  }
+
+  @ApiOperation({ summary: 'Get all admin feedback' })
+  @Get('admin')
+  getAdminFeedback() {
+    return this.service.getAdminFeedback();
+  }
+
+  @ApiOperation({ summary: 'Get all direct feedback' })
+  @Get('direct')
+  getDirectFeedback() {
+    return this.service.getDirectFeedback();
+  }
+
+  @ApiOperation({ summary: 'Get all feedback' })
+  @Get('all')
+  getAllFeedback() {
+    return this.service.getAllFeedback();
+  }
+
+  @ApiOperation({ summary: 'Get unread admin feedback count' })
+  @Get('admin/unread-count')
+  getUnreadFeedbackCount() {
+    return this.service.getUnreadFeedbackCount();
+  }
+
+  @ApiOperation({ summary: 'Get my unread feedback count' })
+  @Get('me/unread-count')
+  getMyUnreadFeedbackCount(@Query('uid') uid: string) {
+    return this.service.getMyUnreadFeedbackCount(uid);
   }
 
   @ApiOperation({ summary: 'Submit anonymous feedback' })
@@ -30,5 +60,11 @@ export class AnonymousFeedbackController {
   @Patch(':id/hide')
   hideFeedbackForUser(@Param('id') id: string, @Body('uid') uid: string) {
     return this.service.hideFeedbackForUser(id, uid);
+  }
+
+  @ApiOperation({ summary: 'Delete feedback permanently' })
+  @Delete(':id')
+  deleteFeedback(@Param('id') id: string) {
+    return this.service.deleteFeedback(id);
   }
 }

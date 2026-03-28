@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { MessageSquareText, Send, Trash2, CheckCheck, X, Loader, ArrowRight, Users } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getAdminFeedback, getDirectFeedback, getMyReceivedFeedback, submitFeedback, markFeedbackAsRead, deleteFeedback, hideFeedbackForUser } from '../../services/feedbackService';
-import { db } from '../../config/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { getAllUsers } from '../../services/adminService';
 
 const CATEGORIES = [
     { value: 'suggestion', label: 'Đề xuất', emoji: '💡', color: '#4f46e5', bg: '#eff6ff' },
@@ -98,18 +97,16 @@ export default function AdminFeedbackPage() {
         if (staffTeacherList.length > 0) return;
         setLoadingUsers(true);
         try {
-            const q = query(collection(db, 'users'), where('role', 'in', ['staff', 'teacher']));
-            const snap = await getDocs(q);
+            const users = await getAllUsers();
             const list = [];
-            snap.forEach(d => {
-                if (d.id !== user.uid) {
-                    const data = d.data();
-                    list.push({ uid: d.id, displayName: data.displayName || data.email, email: data.email, role: data.role });
+            users.forEach(data => {
+                if (['staff', 'teacher'].includes(data.role) && data.uid !== user.uid) {
+                    list.push({ uid: data.uid, displayName: data.displayName || data.email, email: data.email, role: data.role });
                 }
             });
             list.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
             setStaffTeacherList(list);
-        } catch (err) { console.error('Error:', err); }
+        } catch (err) { console.error('Error loading staff/teachers:', err); }
         setLoadingUsers(false);
     }
 

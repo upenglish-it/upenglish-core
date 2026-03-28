@@ -1,9 +1,5 @@
-import { db } from '../config/firebase';
-import { collection, getDocs, doc, deleteDoc, query, orderBy, getCountFromServer, where } from 'firebase/firestore';
 import { api } from '../models/httpClient';
 import { queueEmail, buildEmailHtml } from './notificationService';
-
-const FEEDBACK_COLLECTION = 'anonymous_feedback';
 
 /**
  * Submit anonymous feedback
@@ -72,47 +68,23 @@ export async function submitFeedback({ message, category, senderUid, senderName,
     return result;
 }
 
-/**
- * Get all feedback sent TO ADMIN (targetType != 'direct')
- */
 export async function getAdminFeedback() {
-    // Get all and filter client-side: feedback without targetType or with targetType === 'admin'
-    const q = query(
-        collection(db, FEEDBACK_COLLECTION),
-        orderBy('createdAt', 'desc')
-    );
-    const snap = await getDocs(q);
-    return snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .filter(fb => !fb.targetType || fb.targetType === 'admin');
+    try {
+        const result = await api.get('/anonymous-feedback/admin');
+        return Array.isArray(result) ? result : (result?.data || []);
+    } catch (err) {
+        console.error('Error fetching admin feedback:', err);
+        return [];
+    }
 }
 
-/**
- * Get all DIRECT (peer-to-peer) feedback — for admin to view
- */
 export async function getDirectFeedback() {
     try {
-        const q = query(
-            collection(db, FEEDBACK_COLLECTION),
-            where('targetType', '==', 'direct'),
-            orderBy('createdAt', 'desc')
-        );
-        const snap = await getDocs(q);
-        return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const result = await api.get('/anonymous-feedback/direct');
+        return Array.isArray(result) ? result : (result?.data || []);
     } catch (err) {
-        console.warn('Index not ready, using client-side sort:', err.message);
-        const q = query(
-            collection(db, FEEDBACK_COLLECTION),
-            where('targetType', '==', 'direct')
-        );
-        const snap = await getDocs(q);
-        const results = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        results.sort((a, b) => {
-            const ta = a.createdAt?.toDate?.() || new Date(a.createdAt || 0);
-            const tb = b.createdAt?.toDate?.() || new Date(b.createdAt || 0);
-            return tb - ta;
-        });
-        return results;
+        console.error('Error fetching direct feedback:', err);
+        return [];
     }
 }
 
@@ -130,31 +102,25 @@ export async function getMyReceivedFeedback(uid) {
     }
 }
 
-/**
- * Get count of unread direct feedback for a user
- */
 export async function getMyUnreadFeedbackCount(uid) {
     if (!uid) return 0;
-    const q = query(
-        collection(db, FEEDBACK_COLLECTION),
-        where('targetType', '==', 'direct'),
-        where('targetUid', '==', uid),
-        where('isRead', '==', false)
-    );
-    const snap = await getCountFromServer(q);
-    return snap.data().count;
+    try {
+        const result = await api.get('/anonymous-feedback/me/unread-count', { uid });
+        return typeof result === 'number' ? result : (result?.count || 0);
+    } catch (err) {
+        console.error('Error fetching my unread feedback count:', err);
+        return 0;
+    }
 }
 
-/**
- * Get all feedback (legacy — used by admin sidebar badge)
- */
 export async function getAllFeedback() {
-    const q = query(
-        collection(db, FEEDBACK_COLLECTION),
-        orderBy('createdAt', 'desc')
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    try {
+        const result = await api.get('/anonymous-feedback/all');
+        return Array.isArray(result) ? result : (result?.data || []);
+    } catch (err) {
+        console.error('Error fetching all feedback:', err);
+        return [];
+    }
 }
 
 /**
@@ -164,12 +130,8 @@ export async function markFeedbackAsRead(feedbackId) {
     return api.patch(`/anonymous-feedback/${feedbackId}/read`);
 }
 
-/**
- * Delete feedback
- */
 export async function deleteFeedback(feedbackId) {
-    const ref = doc(db, FEEDBACK_COLLECTION, feedbackId);
-    return deleteDoc(ref);
+    return api.delete(`/anonymous-feedback/${feedbackId}`);
 }
 
 /**
@@ -179,15 +141,12 @@ export async function hideFeedbackForUser(feedbackId, uid) {
     return api.patch(`/anonymous-feedback/${feedbackId}/hide`, { uid });
 }
 
-/**
- * Get count of unread feedback sent to admin
- */
 export async function getUnreadFeedbackCount() {
-    // Can't filter targetType != 'direct' in count query, so just count all unread
-    const q = query(
-        collection(db, FEEDBACK_COLLECTION),
-        where('isRead', '==', false)
-    );
-    const snap = await getCountFromServer(q);
-    return snap.data().count;
+    try {
+        const result = await api.get('/anonymous-feedback/admin/unread-count');
+        return typeof result === 'number' ? result : (result?.count || 0);
+    } catch (err) {
+        console.error('Error fetching admin unread feedback count:', err);
+        return 0;
+    }
 }

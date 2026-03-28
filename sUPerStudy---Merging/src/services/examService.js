@@ -218,6 +218,8 @@ export async function saveExam(examData) {
     const { id, _id, ...data } = examData;
     const targetId = id || _id;
     if (targetId) {
+        if (!data.targetLevel) delete data.targetLevel;
+        if (!data.cefrLevel) delete data.cefrLevel;
         try {
             await examsService.update(targetId, data);
             return targetId;
@@ -227,6 +229,8 @@ export async function saveExam(examData) {
             return result?.id || result?._id || result;
         }
     } else {
+        if (!data.targetLevel) delete data.targetLevel;
+        if (!data.cefrLevel) delete data.cefrLevel;
         const response = await examsService.create(data);
         const result = response?.data || response;
         return result?.id || result?._id || result;

@@ -4,7 +4,6 @@ import { Link } from 'react-router-dom';
 import { getAdminTopics, saveAdminTopic, deleteAdminTopic, getFolders, saveFolder, deleteFolder, getGroups, toggleResourcePublic, toggleTeacherVisible, getResourceSharedEntities, shareResourceToEmail, unshareResourceFromUser, shareResourceToGroup, unshareResourceFromGroup, getAdminTopicContentStatus, updateTopicFoldersOrder, getAdminTopicWordCounts, recalcTopicWordCount, transferOfficialToTeacher, shareResourceToTeacher, unshareResourceFromTeacher, getResourceSharedTeachers } from '../../services/adminService';
 import { createAssignment, getAssignmentsForTopic } from '../../services/teacherService';
 import { getPendingProposals, approveProposal, rejectProposal, findExistingOfficialCopy } from '../../services/contentProposalService';
-import { Timestamp } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
 import { BookOpen, Edit, Trash2, X, Plus, List, FolderOpen, GripVertical, Check, CheckCircle, Share2, Globe, Users, Mail, UserPlus, Lock, Search, AlertTriangle, ChevronDown, ChevronRight, Clock, Send, XCircle, Landmark, FileText, Filter, GraduationCap } from 'lucide-react';
 import CustomSelect from '../../components/common/CustomSelect';
@@ -467,12 +466,12 @@ export default function AdminTopicsPage() {
                 topicName: resourceToShare.name,
                 groupId: quickAssignGroupId,
                 groupName: selectedGroup?.name || '',
-                dueDate: Timestamp.fromDate(new Date(quickAssignDueDate)),
+                dueDate: new Date(quickAssignDueDate).toISOString(),
                 teacherId: user.uid,
                 teacherName: user.displayName || user.email,
             };
             if (quickAssignScheduledStart && quickAssignScheduledStart !== 'pending') {
-                assignPayload.scheduledStart = Timestamp.fromDate(new Date(quickAssignScheduledStart));
+                assignPayload.scheduledStart = new Date(quickAssignScheduledStart).toISOString();
             }
             await createAssignment(assignPayload);
             setQuickAssignSuccess(`Đã giao thành công cho lớp ${selectedGroup?.name}!`);

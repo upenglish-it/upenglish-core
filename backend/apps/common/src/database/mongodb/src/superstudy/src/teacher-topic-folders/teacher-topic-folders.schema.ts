@@ -45,6 +45,9 @@ export class SSTTeacherTopicFolders {
   @Prop({ ref: () => Accounts, type: String, required: true })
   public readonly createdBy: Accounts;
 
+  @Prop({ type: String, default: '' })
+  public readonly createdByName?: string;
+
   @Prop({ ref: () => Properties, type: String, required: true })
   public readonly properties: Properties;
 

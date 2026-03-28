@@ -5,7 +5,6 @@ import { saveGrammarExercise, deleteGrammarExercise, getGrammarExercises } from 
 import { getGrammarFolders, saveGrammarFolder, deleteGrammarFolder, getGroups, toggleResourcePublic, toggleTeacherVisible, getResourceSharedEntities, shareResourceToEmail, unshareResourceFromUser, shareResourceToGroup, unshareResourceFromGroup, updateGrammarFoldersOrder, transferOfficialToTeacher, shareResourceToTeacher, unshareResourceFromTeacher, getResourceSharedTeachers } from '../../services/adminService';
 import { createAssignment, getAssignmentsForTopic } from '../../services/teacherService';
 import { getPendingProposals, approveProposal, rejectProposal, findExistingOfficialCopy } from '../../services/contentProposalService';
-import { Timestamp } from 'firebase/firestore';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useAuth } from '../../contexts/AuthContext';
 import { BookOpen, Edit, Trash2, X, Plus, List, FolderOpen, GripVertical, Check, Share2, Globe, Users, Mail, UserPlus, Lock, Search, AlertTriangle, ChevronDown, ChevronRight, CheckCircle, XCircle, Landmark, Clock, Send, FileText, Filter, ArrowRightLeft, GraduationCap } from 'lucide-react';
@@ -466,7 +465,7 @@ export default function AdminGrammarPage() {
                 topicName: resourceToShare.name,
                 groupId: quickAssignGroupId,
                 groupName: selectedGroup?.name || '',
-                dueDate: Timestamp.fromDate(new Date(quickAssignDueDate)),
+                dueDate: new Date(quickAssignDueDate).toISOString(),
                 teacherId: user.uid,
                 teacherName: user.displayName || user.email,
             });

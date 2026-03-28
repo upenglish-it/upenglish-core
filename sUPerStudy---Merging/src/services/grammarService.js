@@ -62,6 +62,9 @@ export async function saveGrammarExercise(exerciseData) {
     const { id, _id, ...data } = exerciseData;
     const targetId = id || _id;
     
+    if (!data.targetLevel) delete data.targetLevel;
+    if (!data.cefrLevel) delete data.cefrLevel;
+    
     if (targetId) {
         try {
             await grammarExercisesService.update(targetId, data);
