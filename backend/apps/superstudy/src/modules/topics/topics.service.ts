@@ -49,11 +49,11 @@ export class TopicsService {
   }
 
   async create(data: Record<string, any>) {
-    const topic = await this.topicsModel.create({
-      ...data,
-      isDeleted: false,
-      cachedWordCount: 0,
-    });
+    const payload: Record<string, any> = { ...data, isDeleted: false, cachedWordCount: 0 };
+    if (data.id) payload._id = data.id;
+    else if (data._id) payload._id = data._id;
+
+    const topic = await this.topicsModel.create(payload);
     return topic.toObject();
   }
 

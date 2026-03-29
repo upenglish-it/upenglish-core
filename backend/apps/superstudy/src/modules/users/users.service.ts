@@ -24,6 +24,57 @@ export class UsersService {
     return this.usersModel.find(query).lean();
   }
 
+  async getAllIsmsAccounts(search: string = '', limit: number = 50) {
+    const matchStage: any = { deleted: { $ne: true } };
+    if (search && search.trim() !== '') {
+      const q = search.trim();
+      matchStage.$or = [
+        { emailAddresses: { $regex: q, $options: 'i' } },
+        { firstName: { $regex: q, $options: 'i' } },
+        { lastName: { $regex: q, $options: 'i' } },
+      ];
+    }
+
+    return this.accountsModel.aggregate([
+      { $match: matchStage },
+      { $limit: Number(limit) },
+      {
+        $lookup: {
+          from: 'sst-users',
+          localField: 'accountId',
+          foreignField: '_id',
+          as: 'sstUser',
+        },
+      },
+      {
+        $addFields: {
+          sstUser: { $arrayElemAt: ['$sstUser', 0] },
+        },
+      },
+      {
+        $project: {
+          uid: '$accountId',
+          email: { $arrayElemAt: ['$emailAddresses', 0] },
+          displayName: {
+            $trim: {
+              input: {
+                $concat: [
+                  { $ifNull: ['$firstName', ''] },
+                  ' ',
+                  { $ifNull: ['$lastName', ''] }
+                ]
+              }
+            }
+          },
+          role: '$role',
+          photoURL: '$profilePhoto',
+          groupIds: { $ifNull: ['$sstUser.groupIds', []] },
+          active: '$active',
+        },
+      },
+    ]);
+  }
+
   async findOne(id: string) {
     const user = await this.usersModel.findById(id).lean();
     if (!user) throw new NotFoundException(`User ${id} not found`);
@@ -154,15 +205,34 @@ export class UsersService {
     return { deleted: true };
   }
 
-  /**
-   * Add user to a group — mirrors adminService.addUserToGroup
-   */
   async addToGroup(uid: string, groupId: string) {
-    const updated = await this.usersModel
-      .findByIdAndUpdate(uid, { $addToSet: { groupIds: groupId } }, { new: true })
-      .lean();
-    if (!updated) throw new NotFoundException(`User ${uid} not found`);
-    return updated;
+    let sstUser = await this.usersModel.findById(uid).lean();
+    if (!sstUser) {
+      // Create user from ISMS Accounts automatically
+      const account = await this.accountsModel.findOne({ accountId: uid }).lean();
+      if (!account) throw new NotFoundException(`User ${uid} not found in ISMS`);
+
+      const email = account.emailAddresses?.[0] || 'no-email@test.com';
+      const displayName = [account.firstName, account.lastName].filter(Boolean).join(' ') || 'User';
+
+      sstUser = (await this.usersModel.create({
+        _id: account.accountId,
+        email,
+        displayName,
+        role: account.role === 'student' ? 'user' : account.role,
+        status: 'approved',
+        groupIds: [groupId],
+        approvedAt: new Date(),
+      })) as any;
+      
+      return sstUser;
+    } else {
+      const updated = await this.usersModel
+        .findByIdAndUpdate(uid, { $addToSet: { groupIds: groupId } }, { new: true })
+        .lean();
+      if (!updated) throw new NotFoundException(`User ${uid} not found`);
+      return updated;
+    }
   }
 
   /**

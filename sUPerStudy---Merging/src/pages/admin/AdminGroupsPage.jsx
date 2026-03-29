@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
-import { collection, getDocs, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
-import { getGroups, saveGroup, deleteGroup, getFolders, getGrammarFolders, addUserToGroup, removeUserFromGroup, getWhitelistEmails } from '../../services/adminService';
+import { collection, getDocs } from 'firebase/firestore';
+import { getGroups, saveGroup, deleteGroup, getFolders, getGrammarFolders, addUserToGroup, removeUserFromGroup, searchIsmsAccounts, getGroupMembers } from '../../services/adminService';
 import { Link } from 'react-router-dom';
 import { Layers, Plus, Edit, Trash2, Tag, Save, X, FolderOpen, Users, Check, Search, UserPlus, UserMinus, User, Shield, Award, BarChart3, Mail, Briefcase, Eye, EyeOff, Gift } from 'lucide-react';
 import Avatar from '../../components/common/Avatar';
@@ -26,12 +26,12 @@ export default function AdminGroupsPage() {
     // Members Modal States
     const [membersModalOpen, setMembersModalOpen] = useState(false);
     const [selectedGroupForMembers, setSelectedGroupForMembers] = useState(null);
-    const [allUsers, setAllUsers] = useState([]);
+    const [currentMembers, setCurrentMembers] = useState([]);
+    const [searchResults, setSearchResults] = useState([]);
     const [memberSearchQuery, setMemberSearchQuery] = useState('');
     const [isUsersLoading, setIsUsersLoading] = useState(false);
     const [isUpdatingMember, setIsUpdatingMember] = useState(false);
     const [groupSearchTerm, setGroupSearchTerm] = useState('');
-    const [whitelistEmails, setWhitelistEmails] = useState([]);
 
     useEffect(() => {
         loadData();
@@ -43,6 +43,26 @@ export default function AdminGroupsPage() {
             return () => clearTimeout(timer);
         }
     }, [alertMessage]);
+
+    useEffect(() => {
+        let isActive = true;
+        if (!membersModalOpen || !selectedGroupForMembers) return;
+
+        const fetchSearch = async () => {
+            try {
+                const results = await searchIsmsAccounts(memberSearchQuery);
+                if (isActive) setSearchResults(results);
+            } catch (err) {
+                console.error(err);
+            }
+        };
+
+        const timer = setTimeout(fetchSearch, 300);
+        return () => {
+            isActive = false;
+            clearTimeout(timer);
+        };
+    }, [memberSearchQuery, membersModalOpen, selectedGroupForMembers]);
 
     async function loadData() {
         setLoading(true);
@@ -80,18 +100,9 @@ export default function AdminGroupsPage() {
         setMembersModalOpen(true);
         setIsUsersLoading(true);
         try {
-            const [usersSnap, wlList] = await Promise.all([
-                allUsers.length === 0 ? getDocs(collection(db, 'users')) : Promise.resolve(null),
-                getWhitelistEmails()
-            ]);
-            if (usersSnap) {
-                const usersList = [];
-                usersSnap.forEach(docSnap => {
-                    usersList.push({ uid: docSnap.id, ...docSnap.data() });
-                });
-                setAllUsers(usersList);
-            }
-            setWhitelistEmails(wlList);
+            const membersList = await getGroupMembers(group.id);
+            setCurrentMembers(membersList);
+            setSearchResults([]);
         } catch (error) {
             console.error("Lỗi tải người dùng:", error);
             setAlertMessage({ type: 'error', text: 'Lỗi tải dữ liệu người dùng.' });
@@ -105,12 +116,8 @@ export default function AdminGroupsPage() {
         try {
             await addUserToGroup(user.uid, selectedGroupForMembers.id);
             // Cập nhật state local
-            setAllUsers(prev => prev.map(u => {
-                if (u.uid === user.uid) {
-                    return { ...u, groupIds: [...(u.groupIds || []), selectedGroupForMembers.id] };
-                }
-                return u;
-            }));
+            setCurrentMembers(prev => [...prev, { ...user, groupIds: [...(user.groupIds || []), selectedGroupForMembers.id] }]);
+            setSearchResults(prev => prev.filter(u => u.uid !== user.uid));
         } catch (error) {
             setAlertMessage({ type: 'error', text: 'Lỗi thêm thành viên: ' + error.message });
         }
@@ -123,62 +130,14 @@ export default function AdminGroupsPage() {
         try {
             await removeUserFromGroup(user.uid, selectedGroupForMembers.id);
             // Cập nhật state local
-            setAllUsers(prev => prev.map(u => {
-                if (u.uid === user.uid) {
-                    return { ...u, groupIds: (u.groupIds || []).filter(id => id !== selectedGroupForMembers.id) };
-                }
-                return u;
-            }));
+            setCurrentMembers(prev => prev.filter(u => u.uid !== user.uid));
         } catch (error) {
             setAlertMessage({ type: 'error', text: 'Lỗi xóa thành viên: ' + error.message });
         }
         setIsUpdatingMember(false);
     }
 
-    // Whitelist member handlers
-    async function handleAddWhitelistMember(wlEntry) {
-        if (!selectedGroupForMembers || isUpdatingMember) return;
-        setIsUpdatingMember(true);
-        try {
-            const emailKey = wlEntry.email.toLowerCase().trim();
-            const wlRef = doc(db, 'email_whitelist', emailKey);
-            await updateDoc(wlRef, {
-                groupIds: arrayUnion(selectedGroupForMembers.id)
-            });
-            // Update local state
-            setWhitelistEmails(prev => prev.map(w => {
-                if (w.email === wlEntry.email) {
-                    return { ...w, groupIds: [...(w.groupIds || []), selectedGroupForMembers.id] };
-                }
-                return w;
-            }));
-        } catch (error) {
-            setAlertMessage({ type: 'error', text: 'Lỗi thêm email pre-approved: ' + error.message });
-        }
-        setIsUpdatingMember(false);
-    }
 
-    async function handleRemoveWhitelistMember(wlEntry) {
-        if (!selectedGroupForMembers || isUpdatingMember) return;
-        setIsUpdatingMember(true);
-        try {
-            const emailKey = wlEntry.email.toLowerCase().trim();
-            const wlRef = doc(db, 'email_whitelist', emailKey);
-            await updateDoc(wlRef, {
-                groupIds: arrayRemove(selectedGroupForMembers.id)
-            });
-            // Update local state
-            setWhitelistEmails(prev => prev.map(w => {
-                if (w.email === wlEntry.email) {
-                    return { ...w, groupIds: (w.groupIds || []).filter(id => id !== selectedGroupForMembers.id) };
-                }
-                return w;
-            }));
-        } catch (error) {
-            setAlertMessage({ type: 'error', text: 'Lỗi xóa email pre-approved: ' + error.message });
-        }
-        setIsUpdatingMember(false);
-    }
 
     async function handleSubmit(e) {
         e.preventDefault();
@@ -706,15 +665,8 @@ export default function AdminGroupsPage() {
                                             {memberSearchQuery.trim().length > 0 && (
                                                 <div style={{ maxHeight: '200px', overflowY: 'auto', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', marginTop: '8px' }}>
                                                     {(() => {
-                                                        const unassignedUsers = allUsers.filter(u => !(u.groupIds || []).includes(selectedGroupForMembers.id));
-                                                        const searchLower = memberSearchQuery.toLowerCase();
-                                                        const filtered = unassignedUsers.filter(u =>
-                                                            (u.email || '').toLowerCase().includes(searchLower) ||
-                                                            (u.displayName || '').toLowerCase().includes(searchLower)
-                                                        );
-
-                                                        // Sắp xếp: Admin -> Staff/Teacher -> User, user cũ -> mới
-                                                        const sortedUsers = [...filtered].sort((a, b) => {
+                                                        const unassignedUsers = searchResults.filter(u => !currentMembers.find(m => m.uid === u.uid));
+                                                        const sortedUsers = [...unassignedUsers].sort((a, b) => {
                                                             const roleWeight = { admin: 4, staff: 3, teacher: 2, user: 1 };
                                                             const weightA = roleWeight[a.role || 'user'] || 1;
                                                             const weightB = roleWeight[b.role || 'user'] || 1;
@@ -753,41 +705,6 @@ export default function AdminGroupsPage() {
                                                             </div>
                                                         ));
                                                     })()}
-                                                    {/* Whitelist emails matching search */}
-                                                    {(() => {
-                                                        const registeredEmails = allUsers.map(u => (u.email || '').toLowerCase());
-                                                        const unassignedWl = whitelistEmails.filter(w =>
-                                                            !(w.groupIds || []).includes(selectedGroupForMembers.id) &&
-                                                            !registeredEmails.includes(w.email.toLowerCase())
-                                                        );
-                                                        const searchLower = memberSearchQuery.toLowerCase();
-                                                        const filteredWl = unassignedWl.filter(w =>
-                                                            w.email.toLowerCase().includes(searchLower)
-                                                        );
-                                                        return filteredWl.map(wl => (
-                                                            <div key={`wl-${wl.email}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #f1f5f9' }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1, paddingRight: '12px' }}>
-                                                                    <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                                                        <Mail size={18} color="#22c55e" />
-                                                                    </div>
-                                                                    <div style={{ minWidth: 0, flex: 1 }}>
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '2px' }}>
-                                                                            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#0f172a', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{wl.email}</div>
-                                                                            <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '8px', background: '#fef3c7', color: '#92400e', fontWeight: 700 }}>Chưa đăng nhập</span>
-                                                                        </div>
-                                                                        <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Pre-approved • {wl.role === 'teacher' ? 'Giáo viên' : wl.role === 'admin' ? 'Admin' : wl.role === 'staff' ? 'Nhân viên VP' : 'Học viên'}</div>
-                                                                    </div>
-                                                                </div>
-                                                                <button
-                                                                    onClick={() => handleAddWhitelistMember(wl)}
-                                                                    disabled={isUpdatingMember}
-                                                                    style={{ flexShrink: 0, padding: '8px 16px', borderRadius: '12px', background: '#f0fdf4', color: '#16a34a', border: 'none', fontSize: '0.85rem', fontWeight: 700, cursor: isUpdatingMember ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s ease' }}
-                                                                >
-                                                                    <Plus size={16} /> Thêm
-                                                                </button>
-                                                            </div>
-                                                        ));
-                                                    })()}
                                                 </div>
                                             )}
                                         </div>
@@ -797,19 +714,14 @@ export default function AdminGroupsPage() {
                                             <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '1.1rem', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                 <span>Thành viên trong nhóm</span>
                                                 <span style={{ fontSize: '0.85rem', background: '#e2e8f0', padding: '4px 12px', borderRadius: '20px', color: '#475569', fontWeight: 700 }}>
-                                                    <span>{allUsers.filter(u => (u.groupIds || []).includes(selectedGroupForMembers.id)).length + whitelistEmails.filter(w => (w.groupIds || []).includes(selectedGroupForMembers.id) && !allUsers.some(u => (u.email || '').toLowerCase() === w.email.toLowerCase())).length} người</span>
+                                                    <span>{currentMembers.length} người</span>
                                                 </span>
                                             </div>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                                 {(() => {
-                                                    const members = allUsers.filter(u => (u.groupIds || []).includes(selectedGroupForMembers.id));
-                                                    const registeredEmails = allUsers.map(u => (u.email || '').toLowerCase());
-                                                    const wlMembers = whitelistEmails.filter(w =>
-                                                        (w.groupIds || []).includes(selectedGroupForMembers.id) &&
-                                                        !registeredEmails.includes(w.email.toLowerCase())
-                                                    );
+                                                    const members = currentMembers;
 
-                                                    if (members.length === 0 && wlMembers.length === 0) return <div style={{ padding: '32px 16px', textAlign: 'center', color: '#94a3b8', fontSize: '0.9rem', background: '#f8fafc' }}>Nhóm này chưa có thành viên nào.</div>;
+                                                    if (members.length === 0) return <div style={{ padding: '32px 16px', textAlign: 'center', color: '#94a3b8', fontSize: '0.9rem', background: '#f8fafc' }}>Nhóm này chưa có thành viên nào.</div>;
 
                                                     // Sắp xếp: Admin -> Teacher/Staff -> User, user cũ -> mới
                                                     const sortedMembers = [...members].sort((a, b) => {
@@ -850,33 +762,7 @@ export default function AdminGroupsPage() {
                                                         </div>
                                                     ));
 
-                                                    // Show whitelist members with badge
-                                                    const wlMemberRows = wlMembers.map((wl, idx) => (
-                                                        <div key={`wl-member-${wl.email}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: '#fff', border: '1px solid #f1f5f9', borderRadius: '16px', transition: 'all 0.2s ease', boxShadow: '0 2px 4px rgba(0,0,0,0.01)' }}>
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1, paddingRight: '8px' }}>
-                                                                <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                                                    <Mail size={24} color="#22c55e" />
-                                                                </div>
-                                                                <div style={{ minWidth: 0, flex: 1 }}>
-                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
-                                                                        <div style={{ fontWeight: 700, fontSize: '1rem', color: '#0f172a', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{wl.email}</div>
-                                                                        <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '8px', background: '#fef3c7', color: '#92400e', fontWeight: 700 }}>Chưa đăng nhập</span>
-                                                                    </div>
-                                                                    <div style={{ fontSize: '0.9rem', color: '#64748b' }}>Pre-approved • {wl.role === 'teacher' ? 'Giáo viên' : wl.role === 'admin' ? 'Admin' : wl.role === 'staff' ? 'Nhân viên VP' : 'Học viên'}</div>
-                                                                </div>
-                                                            </div>
-                                                            <button
-                                                                onClick={() => handleRemoveWhitelistMember(wl)}
-                                                                disabled={isUpdatingMember}
-                                                                style={{ flexShrink: 0, width: '40px', height: '40px', borderRadius: '12px', background: '#fee2e2', color: '#ef4444', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: isUpdatingMember ? 'not-allowed' : 'pointer', transition: 'all 0.2s' }}
-                                                                title="Xóa khỏi nhóm"
-                                                            >
-                                                                <UserMinus size={20} />
-                                                            </button>
-                                                        </div>
-                                                    ));
-
-                                                    return [...sortedMemberRows, ...wlMemberRows];
+                                                    return sortedMemberRows;
                                                 })()}
                                             </div>
                                         </div>

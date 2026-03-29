@@ -3,7 +3,7 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, BookOpen, Users, LogOut, Home, Menu, X, Layers, User as UserIcon, FileText, ClipboardCheck, Settings, Mail, MessageSquare, Gift, MessageSquareText, Gamepad2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../config/firebase';
-import { doc, getDoc, setDoc, collection, getCountFromServer, query, where, getDocs } from 'firebase/firestore';
+import { dashboardService, usersService } from '../../models';
 import { getUnreadFeedbackCount } from '../../services/feedbackService';
 import { getPendingGamesCount } from '../../services/miniGameService';
 import Avatar from '../../components/common/Avatar';
@@ -31,15 +31,14 @@ export default function AdminLayout() {
 
         // Load honorific settings
         if (user?.uid) {
-            const userRef = doc(db, `users/${user.uid}`);
-            getDoc(userRef).then(snap => {
-                if (snap.exists()) {
-                    const data = snap.data();
+            usersService.findOne(user.uid).then(res => {
+                const data = res.data || res;
+                if (data) {
                     if (data.teacherTitle) setTeacherTitle(data.teacherTitle);
                     if (data.studentTitle) setStudentTitle(data.studentTitle);
                     if (data.emailPreferences) setEmailPreferences(data.emailPreferences);
                 }
-            }).catch(err => console.warn('Could not load user settings:', err));
+            }).catch(err => console.warn('Could not load user settings via API:', err));
         }
 
         // Load unread feedback count
@@ -58,30 +57,18 @@ export default function AdminLayout() {
         if (isStaff) return;
         async function fetchCounts() {
             try {
-                const [topicsSnap, teacherTopicsSnap, grammarSnap, usersSnap, groupsSnap, systemExamsSnap, teacherExamsSnap] = await Promise.all([
-                    getCountFromServer(collection(db, 'topics')),
-                    getDocs(collection(db, 'teacher_topics')),
-                    getDocs(collection(db, 'grammar_exercises')),
-                    getCountFromServer(query(collection(db, 'users'), where('status', '==', 'approved'))),
-                    getCountFromServer(collection(db, 'user_groups')),
-                    getCountFromServer(query(collection(db, 'exams'), where('createdByRole', '==', 'admin'))),
-                    getDocs(query(collection(db, 'exams'), where('createdByRole', '==', 'teacher'))),
-                ]);
-                let tchTopics = 0;
-                teacherTopicsSnap.forEach(d => { if (!d.data().isDeleted) tchTopics++; });
-                let sysGrammar = 0, tchGrammar = 0;
-                grammarSnap.forEach(d => { const data = d.data(); if (data.isDeleted) return; if (data.teacherId) tchGrammar++; else sysGrammar++; });
-                let tchExams = 0;
-                teacherExamsSnap.forEach(d => { if (!d.data().isDeleted) tchExams++; });
+                const result = await dashboardService.getStats();
+                const { stats } = result;
+                
                 setSidebarCounts({
-                    topics: topicsSnap.data().count,
-                    teacherTopics: tchTopics,
-                    grammar: sysGrammar,
-                    teacherGrammar: tchGrammar,
-                    systemExams: systemExamsSnap.data().count,
-                    teacherExams: tchExams,
-                    users: usersSnap.data().count,
-                    groups: groupsSnap.data().count,
+                    topics: stats.topics,
+                    teacherTopics: stats.teacherTopics,
+                    grammar: stats.grammarExercises,
+                    teacherGrammar: stats.teacherGrammarExercises,
+                    systemExams: stats.systemExams,
+                    teacherExams: stats.teacherExams,
+                    users: stats.users,
+                    groups: stats.groups,
                 });
             } catch (e) { console.warn('Sidebar counts error:', e); }
         }
@@ -93,10 +80,9 @@ export default function AdminLayout() {
         else setStudentTitle(value);
         if (user?.uid) {
             try {
-                const userRef = doc(db, `users/${user.uid}`);
-                await setDoc(userRef, { [field]: value }, { merge: true });
+                await usersService.update(user.uid, { [field]: value });
             } catch (err) {
-                console.warn('Could not save honorific to Firestore:', err);
+                console.warn('Could not save honorific to API:', err);
             }
         }
     };
@@ -114,9 +100,9 @@ export default function AdminLayout() {
         setEmailPreferences(updated);
         if (user?.uid) {
             try {
-                await setDoc(doc(db, `users/${user.uid}`), { emailPreferences: updated }, { merge: true });
+                await usersService.update(user.uid, { emailPreferences: updated });
             } catch (err) {
-                console.warn('Could not save email preference:', err);
+                console.warn('Could not save email preference to API:', err);
             }
         }
     };

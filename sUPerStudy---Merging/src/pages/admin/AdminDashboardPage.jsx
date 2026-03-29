@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../config/firebase';
-import { collection, getDocs, getCountFromServer, query, where, collectionGroup } from 'firebase/firestore';
+import { dashboardService } from '../../models';
 import { useAppSettings } from '../../contexts/AppSettingsContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { updateAppSettings } from '../../services/appSettingsService';
@@ -43,361 +42,11 @@ export default function AdminDashboardPage() {
         async function loadStats() {
             setLoading(true);
             try {
-                // Get counts for each collection
-                const usersSnap = await getDocs(collection(db, 'users'));
-                const usersList = usersSnap.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
-                const approvedUsersCount = usersList.filter(u => u.status === 'approved').length;
+                const result = await dashboardService.getStats();
 
-                const [
-                    topicsCountSnap,
-                    grammarDocsSnap,
-                    grammarSubSnap,
-                    examSubSnap,
-                    wordProgressSnap,
-                    grammarProgressSnap,
-                    systemExamsCountSnap,
-                    teacherTopicsSnap,
-                    teacherExamsSnap,
-                    groupsSnap,
-                    examAssignmentsSnap,
-                    grammarAssignmentsSnap,
-                    vocabGrammarAssignmentsSnap
-                ] = await Promise.all([
-                    getCountFromServer(collection(db, 'topics')),
-                    getDocs(collection(db, 'grammar_exercises')),
-                    getDocs(collection(db, 'grammar_submissions')),
-                    getDocs(collection(db, 'exam_submissions')),
-                    getDocs(collectionGroup(db, 'word_progress')),
-                    getDocs(collectionGroup(db, 'grammar_progress')),
-                    getCountFromServer(query(collection(db, 'exams'), where('createdByRole', '==', 'admin'))),
-                    getDocs(collection(db, 'teacher_topics')),
-                    getDocs(query(collection(db, 'exams'), where('createdByRole', '==', 'teacher'))),
-                    getDocs(collection(db, 'user_groups')),
-                    getDocs(collection(db, 'exam_assignments')),
-                    getDocs(collection(db, 'grammar_assignments')),
-                    getDocs(collection(db, 'assignments')),
-                ]);
-
-                // Aggregate Teacher Data
-                const teacherContentCount = {};
-                const processTeacherDocs = (snap, isArray = false) => {
-                    snap.forEach(docSnap => {
-                        const data = isArray ? docSnap : docSnap.data();
-                        if (data.isDeleted) return;
-                        const tid = data.teacherId || data.createdBy;
-                        if (tid) {
-                            teacherContentCount[tid] = (teacherContentCount[tid] || 0) + 1;
-                        }
-                    });
-                };
-
-                let systemGrammarCount = 0;
-                let teacherGrammarCount = 0;
-                const teacherGrammarData = [];
-
-                grammarDocsSnap.forEach(docSnap => {
-                    const data = docSnap.data();
-                    if (data.isDeleted) return;
-                    if (data.teacherId) {
-                        teacherGrammarCount++;
-                        teacherGrammarData.push(data);
-                    } else {
-                        systemGrammarCount++;
-                    }
-                });
-
-                processTeacherDocs(teacherTopicsSnap);
-                processTeacherDocs(teacherGrammarData, true);
-                processTeacherDocs(teacherExamsSnap);
-
-                const topTeachers = Object.entries(teacherContentCount)
-                    .map(([uid, count]) => {
-                        const user = usersList.find(u => u.uid === uid);
-                        return {
-                            id: uid,
-                            name: user?.displayName || user?.email || 'Giáo viên ẩn danh',
-                            count
-                        };
-                    })
-                    .sort((a, b) => b.count - a.count);
-
-                const groupDocs = [];
-                groupsSnap.forEach(docSnap => {
-                    const data = { id: docSnap.id, ...docSnap.data() };
-                    if (!data.isHidden) groupDocs.push(data);
-                });
-
-                // Build sets for filtering by visible groups
-                const visibleGroupIds = new Set(groupDocs.map(g => g.id));
-                const visibleStudentIds = new Set(
-                    usersList.filter(u => u.role === 'user' && (u.groupIds || []).some(gid => visibleGroupIds.has(gid))).map(u => u.uid)
-                );
-
-                // Aggregate Student Activity for Groups (last 30 days only)
-                const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-                const getDocTs = (docSnap) => {
-                    const d = docSnap.data();
-                    const ts = d.createdAt || d.lastStudied;
-                    return ts?.toMillis ? ts.toMillis() : (ts?.seconds ? ts.seconds * 1000 : 0);
-                };
-                const activeStudentIds = new Set();
-                grammarProgressSnap.forEach(docSnap => {
-                    if (getDocTs(docSnap) >= sevenDaysAgo) {
-                        const pathParts = docSnap.ref.path.split('/');
-                        if (pathParts.length >= 2) activeStudentIds.add(pathParts[1]);
-                    }
-                });
-                grammarSubSnap.forEach(docSnap => {
-                    if (getDocTs(docSnap) >= sevenDaysAgo) activeStudentIds.add(docSnap.data().studentId);
-                });
-                examSubSnap.forEach(docSnap => {
-                    if (getDocTs(docSnap) >= sevenDaysAgo) activeStudentIds.add(docSnap.data().studentId);
-                });
-                wordProgressSnap.forEach(docSnap => {
-                    if (getDocTs(docSnap) >= sevenDaysAgo) {
-                        const pathParts = docSnap.ref.path.split('/');
-                        if (pathParts.length >= 2) activeStudentIds.add(pathParts[1]);
-                    }
-                });
-
-                const topClasses = groupDocs
-                    .map(group => {
-                        const totalStudents = usersList.filter(u =>
-                            u.role === 'user' && (u.groupIds || []).includes(group.id)
-                        ).length;
-
-                        const teacherUser = usersList.find(u => u.uid === (group.teacherId || group.createdBy))
-                            || usersList.find(u => u.role === 'teacher' && (u.groupIds || []).includes(group.id));
-                        const teacherName = teacherUser?.displayName || teacherUser?.email || '';
-
-                        if (totalStudents === 0) return { id: group.id, name: group.name, teacherName, count: 0, total: 0, ratio: 0 };
-
-                        const activeStudents = usersList.filter(u =>
-                            u.role === 'user' &&
-                            (u.groupIds || []).includes(group.id) &&
-                            activeStudentIds.has(u.uid)
-                        ).length;
-
-                        return {
-                            id: group.id,
-                            name: group.name,
-                            teacherName,
-                            count: activeStudents,
-                            total: totalStudents,
-                            ratio: (activeStudents / totalStudents) * 100
-                        };
-                    })
-                    .filter(c => c.total > 0)
-                    .sort((a, b) => b.ratio - a.ratio || b.total - a.total)
-                    .slice(0, 5);
-
-                // === NEW CHARTS DATA ===
-
-                // 1. Weekly Activity Trend (last 8 weeks)
-                const now = Date.now();
-                const weekMs = 7 * 24 * 60 * 60 * 1000;
-                const weeklyBuckets = Array.from({ length: 8 }, (_, i) => {
-                    const weekStart = now - (7 - i) * weekMs;
-                    const d = new Date(weekStart);
-                    return { label: `${d.getDate()}/${d.getMonth() + 1}`, grammar: 0, exam: 0, vocab: 0, total: 0 };
-                });
-                const getTs = (doc) => {
-                    const d = doc.data();
-                    const ts = d.createdAt || d.lastStudied;
-                    return ts?.toMillis ? ts.toMillis() : (ts?.seconds ? ts.seconds * 1000 : 0);
-                };
-                // Count number of assignments created by teachers per week
-                vocabGrammarAssignmentsSnap.forEach(d => {
-                    const data = d.data();
-                    if (data.isDeleted) return;
-                    const ts = getTs(d);
-                    const weekIdx = Math.floor((ts - (now - 8 * weekMs)) / weekMs);
-                    if (weekIdx >= 0 && weekIdx < 8) {
-                        if (data.isGrammar) {
-                            weeklyBuckets[weekIdx].grammar++;
-                        } else {
-                            weeklyBuckets[weekIdx].vocab++;
-                        }
-                        weeklyBuckets[weekIdx].total++;
-                    }
-                });
-                examAssignmentsSnap.forEach(d => {
-                    const data = d.data();
-                    if (data.isDeleted) return;
-                    const ts = getTs(d);
-                    const weekIdx = Math.floor((ts - (now - 8 * weekMs)) / weekMs);
-                    if (weekIdx >= 0 && weekIdx < 8) {
-                        weeklyBuckets[weekIdx].exam++;
-                        weeklyBuckets[weekIdx].total++;
-                    }
-                });
-
-                // 2. Active Users (last 6 months)
-                const monthBuckets = Array.from({ length: 6 }, (_, i) => {
-                    const d = new Date();
-                    d.setMonth(d.getMonth() - (5 - i));
-                    return { label: `T${d.getMonth() + 1}/${d.getFullYear().toString().slice(2)}`, month: d.getMonth(), year: d.getFullYear(), _activeSet: new Set() };
-                });
-                const addActivityToMonth = (ts, studentId) => {
-                    if (!ts || !studentId) return;
-                    const d = new Date(ts);
-                    const bucket = monthBuckets.find(b => b.month === d.getMonth() && b.year === d.getFullYear());
-                    if (bucket) bucket._activeSet.add(studentId);
-                };
-                grammarSubSnap.forEach(d => {
-                    const data = d.data();
-                    const ts = data.createdAt?.toMillis ? data.createdAt.toMillis() : (data.createdAt?.seconds ? data.createdAt.seconds * 1000 : 0);
-                    addActivityToMonth(ts, data.studentId);
-                });
-                examSubSnap.forEach(d => {
-                    const data = d.data();
-                    const ts = data.createdAt?.toMillis ? data.createdAt.toMillis() : (data.createdAt?.seconds ? data.createdAt.seconds * 1000 : 0);
-                    addActivityToMonth(ts, data.studentId);
-                });
-                wordProgressSnap.forEach(d => {
-                    const data = d.data();
-                    const ts = data.createdAt?.toMillis ? data.createdAt.toMillis() : (data.createdAt?.seconds ? data.createdAt.seconds * 1000 : 0);
-                    const pathParts = d.ref.path.split('/');
-                    if (pathParts.length >= 2) addActivityToMonth(ts, pathParts[1]);
-                });
-                // Convert Sets to counts and clean up
-                monthBuckets.forEach(b => { b.count = b._activeSet.size; delete b._activeSet; delete b.month; delete b.year; });
-
-                // 3. Teacher Completion Rate Ranking
-                // Build groupId → teacherId map (teachers store groupIds on their user doc)
-                const groupToTeacher = {};
-                usersList.filter(u => u.role === 'teacher').forEach(t => {
-                    (t.groupIds || []).forEach(gid => { groupToTeacher[gid] = t.uid; });
-                });
-
-                // Build student lookup maps for completion checking
-                const studentVocabTopics = {}; // studentId → Set<topicId>
-                wordProgressSnap.forEach(d => {
-                    const pathParts = d.ref.path.split('/');
-                    if (pathParts.length < 2) return;
-                    const sid = pathParts[1];
-                    const data = d.data();
-                    if (data.topicId) {
-                        if (!studentVocabTopics[sid]) studentVocabTopics[sid] = new Set();
-                        studentVocabTopics[sid].add(data.topicId);
-                    }
-                });
-                const studentGrammarExercises = {}; // studentId → Set<exerciseId>
-                grammarProgressSnap.forEach(d => {
-                    const pathParts = d.ref.path.split('/');
-                    if (pathParts.length < 2) return;
-                    const sid = pathParts[1];
-                    const data = d.data();
-                    if (data.exerciseId) {
-                        if (!studentGrammarExercises[sid]) studentGrammarExercises[sid] = new Set();
-                        studentGrammarExercises[sid].add(data.exerciseId);
-                    }
-                });
-                const studentExamIds = {}; // studentId → Set<examId>
-                examSubSnap.forEach(d => {
-                    const data = d.data();
-                    if (data.examId && data.studentId) {
-                        const st = data.status;
-                        if (st === 'submitted' || st === 'graded' || st === 'released' || st === 'grading') {
-                            if (!studentExamIds[data.studentId]) studentExamIds[data.studentId] = new Set();
-                            studentExamIds[data.studentId].add(data.examId);
-                        }
-                    }
-                });
-
-                // Build groupId → studentUids map
-                const groupStudentsMap = {};
-                groupDocs.forEach(g => {
-                    groupStudentsMap[g.id] = usersList.filter(u =>
-                        u.role === 'user' && (u.groupIds || []).includes(g.id)
-                    ).map(u => u.uid);
-                });
-
-                // Per-teacher: { expected, completed }
-                const teacherCompletion = {};
-                const addToTeacher = (tid, expected, completed) => {
-                    if (!tid) return;
-                    if (!teacherCompletion[tid]) teacherCompletion[tid] = { expected: 0, completed: 0 };
-                    teacherCompletion[tid].expected += expected;
-                    teacherCompletion[tid].completed += completed;
-                };
-
-                // Vocab + Grammar assignments
-                vocabGrammarAssignmentsSnap.forEach(d => {
-                    const data = d.data();
-                    if (data.isDeleted) return;
-                    const gid = data.groupId;
-                    if (!gid || !visibleGroupIds.has(gid)) return;
-                    const tid = groupToTeacher[gid];
-                    const students = groupStudentsMap[gid] || [];
-                    const topicId = data.topicId;
-                    if (!topicId || students.length === 0) return;
-                    let completed = 0;
-                    students.forEach(sid => {
-                        if (data.isGrammar) {
-                            if (studentGrammarExercises[sid]?.has(topicId)) completed++;
-                        } else {
-                            if (studentVocabTopics[sid]?.has(topicId)) completed++;
-                        }
-                    });
-                    addToTeacher(tid, students.length, completed);
-                });
-
-                // Exam assignments
-                examAssignmentsSnap.forEach(d => {
-                    const data = d.data();
-                    if (data.isDeleted) return;
-                    if (data.targetType !== 'group') return;
-                    const gid = data.targetId;
-                    if (!gid || !visibleGroupIds.has(gid)) return;
-                    const tid = groupToTeacher[gid];
-                    const students = groupStudentsMap[gid] || [];
-                    const examId = data.examId;
-                    if (!examId || students.length === 0) return;
-                    let completed = 0;
-                    students.forEach(sid => {
-                        if (studentExamIds[sid]?.has(examId)) completed++;
-                    });
-                    addToTeacher(tid, students.length, completed);
-                });
-
-                const teacherCompletionRank = Object.entries(teacherCompletion)
-                    .map(([tid, { expected, completed }]) => {
-                        const teacher = usersList.find(u => u.uid === tid);
-                        return {
-                            name: teacher?.displayName || 'GV ' + tid.slice(0, 5),
-                            rate: expected > 0 ? Math.round((completed / expected) * 100) : 0,
-                            completed,
-                            expected
-                        };
-                    })
-                    .filter(t => t.expected > 0)
-                    .sort((a, b) => b.rate - a.rate || b.completed - a.completed);
-
-
-
-
-                setChartData({
-                    topTeachers,
-                    topClasses,
-                    weeklyActivity: weeklyBuckets,
-                    userGrowth: monthBuckets,
-                    teacherCompletionRank
-                });
-
-                setStats({
-                    users: approvedUsersCount,
-                    groups: groupsSnap.size,
-                    topics: topicsCountSnap.data().count,
-                    teacherTopics: teacherTopicsSnap.size,
-                    grammarExercises: systemGrammarCount,
-                    teacherGrammarExercises: teacherGrammarCount,
-                    systemExams: systemExamsCountSnap.data().count,
-                    teacherExams: teacherExamsSnap.size
-                });
-
-                // Cache raw data for AI chat
-                rawDataRef.current = { usersList, grammarSubSnap, examSubSnap, groupDocs, topTeachers, topClasses, teacherContentCount, visibleStudentIds, visibleGroupIds };
+                setChartData(result.chartData);
+                setStats(result.stats);
+                rawDataRef.current = { aiSummary: result.aiSummary };
             } catch (error) {
                 console.error("Error loading stats", error);
             }
@@ -426,73 +75,8 @@ export default function AdminDashboardPage() {
 
     // === AI CHAT FUNCTIONS ===
     function buildDataSummary() {
-        if (!rawDataRef.current) return 'Dữ liệu chưa sẵn sàng.';
-        const { usersList, grammarSubSnap, examSubSnap, groupDocs, topTeachers, topClasses, teacherContentCount, visibleStudentIds, visibleGroupIds } = rawDataRef.current;
-
-        const teachers = usersList.filter(u => u.role === 'teacher');
-        const students = usersList.filter(u => u.role === 'user' && u.status === 'approved' && visibleStudentIds.has(u.uid));
-        let s = `=== DỮ LIỆU HỆ THỐNG - CHỈ CÁC LỚP ĐANG HOẠT ĐỘNG (${new Date().toLocaleDateString('vi-VN')}) ===\n`;
-        s += `Giáo viên: ${teachers.length}, Học viên (lớp đang hoạt động): ${students.length}, Nhóm đang hoạt động: ${groupDocs.length}\n\n`;
-
-        s += `--- GIÁO VIÊN ---\n`;
-        teachers.forEach(t => {
-            const groups = groupDocs.filter(g => g.teacherId === t.uid || g.createdBy === t.uid);
-            const content = teacherContentCount[t.uid] || 0;
-            s += `• ${t.displayName || t.email} | Nhóm: ${groups.map(g => g.name).join(', ') || 'không'} | Bài tạo: ${content}\n`;
-        });
-
-        s += `\n--- THỐNG KÊ BÀI NỘP THEO GIÁO VIÊN (lớp đang hoạt động) ---\n`;
-        const teacherExamStats = {};
-        examSubSnap.forEach(d => {
-            const data = d.data();
-            if (!visibleStudentIds.has(data.studentId)) return;
-            const tid = data.teacherId || data.assignedBy;
-            if (!tid) return;
-            if (!teacherExamStats[tid]) teacherExamStats[tid] = { total: 0, onTime: 0, overdue: 0, totalScore: 0, scored: 0 };
-            teacherExamStats[tid].total++;
-            if (data.status === 'overdue') teacherExamStats[tid].overdue++;
-            else teacherExamStats[tid].onTime++;
-            if (data.score != null) { teacherExamStats[tid].totalScore += data.score; teacherExamStats[tid].scored++; }
-        });
-        Object.entries(teacherExamStats).forEach(([tid, st]) => {
-            const t = usersList.find(u => u.uid === tid);
-            const avg = st.scored > 0 ? (st.totalScore / st.scored).toFixed(1) : 'N/A';
-            s += `• ${t?.displayName || tid} | Tổng bài nộp: ${st.total} | Đúng hạn: ${st.onTime} (${st.total > 0 ? Math.round(st.onTime / st.total * 100) : 0}%) | Quá hạn: ${st.overdue} | Điểm TB: ${avg}\n`;
-        });
-
-        s += `\n--- NHÓM HỌC ---\n`;
-        groupDocs.forEach(g => {
-            const members = students.filter(u => (u.groupIds || []).includes(g.id));
-            s += `• ${g.name} | Sĩ số: ${members.length} | GV: ${usersList.find(u => u.uid === (g.teacherId || g.createdBy))?.displayName || 'N/A'}\n`;
-        });
-
-        const errorCats = {};
-        const errorCorrect = {};
-        examSubSnap.forEach(d => {
-            const data = d.data();
-            if (!visibleStudentIds.has(data.studentId)) return;
-            if (data.answers && Array.isArray(data.answers)) {
-                data.answers.forEach(a => {
-                    const cat = a.errorCategory || 'other';
-                    errorCats[cat] = (errorCats[cat] || 0) + 1;
-                    if (a.isCorrect) errorCorrect[cat] = (errorCorrect[cat] || 0) + 1;
-                });
-            }
-        });
-        if (Object.keys(errorCats).length > 0) {
-            s += `\n--- PHÂN LOẠI LỖI ---\n`;
-            Object.entries(errorCats).sort((a, b) => b[1] - a[1]).forEach(([cat, count]) => {
-                const acc = Math.round(((errorCorrect[cat] || 0) / count) * 100);
-                s += `• ${cat}: ${count} câu, ${acc}% đúng\n`;
-            });
-        }
-
-        s += `\n--- TOP GIÁO VIÊN (nội dung) ---\n`;
-        topTeachers.forEach((t, i) => { s += `${i + 1}. ${t.name}: ${t.count} bài\n`; });
-        s += `\n--- TOP LỚP (năng động) ---\n`;
-        topClasses.forEach((c, i) => { s += `${i + 1}. ${c.name}: ${c.ratio.toFixed(1)}% active (${c.count}/${c.total})\n`; });
-
-        return s;
+        if (!rawDataRef.current || !rawDataRef.current.aiSummary) return 'Dữ liệu chưa sẵn sàng.';
+        return rawDataRef.current.aiSummary;
     }
 
     async function handleAskAI() {
@@ -519,6 +103,45 @@ export default function AdminDashboardPage() {
         <div className="admin-page">
             <h1 className="admin-page-title">Tổng quan hệ thống</h1>
             <p className="admin-page-subtitle">Xem tổng quan hoạt động, thống kê và biểu đồ của toàn hệ thống.</p>
+
+            {/* <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginTop: '24px' }}>
+                <div className="admin-card" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#eff6ff', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <UsersRound size={24} />
+                    </div>
+                    <div>
+                        <div style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 500 }}>NHÓM</div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#0f172a' }}>{stats.groups || 0}</div>
+                    </div>
+                </div>
+                <div className="admin-card" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#fdf4ff', color: '#d946ef', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Users size={24} />
+                    </div>
+                    <div>
+                        <div style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 500 }}>NGƯỜI DÙNG</div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#0f172a' }}>{stats.users || 0}</div>
+                    </div>
+                </div>
+                <div className="admin-card" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#fffbeb', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <CheckCircle size={24} />
+                    </div>
+                    <div>
+                        <div style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 500 }}>BÀI THI</div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#0f172a' }}>{(stats.systemExams || 0) + (stats.teacherExams || 0)}</div>
+                    </div>
+                </div>
+                <div className="admin-card" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#ecfdf5', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Award size={24} />
+                    </div>
+                    <div>
+                        <div style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 500 }}>BÀI HỌC</div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#0f172a' }}>{(stats.topics || 0) + (stats.teacherTopics || 0) + (stats.grammarExercises || 0) + (stats.teacherGrammarExercises || 0)}</div>
+                    </div>
+                </div>
+            </div>*/}
 
             {/* Dashboard Charts Area */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginTop: '24px' }} className="admin-charts-area">

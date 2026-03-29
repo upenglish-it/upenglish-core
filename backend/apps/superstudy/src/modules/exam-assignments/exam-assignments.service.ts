@@ -69,6 +69,14 @@ export class ExamAssignmentsService {
    * (Notification creation should be handled by a NotificationsService invoked from the caller/controller layer)
    */
   async create(data: Record<string, any>) {
+    // Handle legacy Firestore timestamp format if sent by frontend
+    if (data.dueDate && typeof data.dueDate === 'object' && data.dueDate.seconds) {
+      data.dueDate = new Date(data.dueDate.seconds * 1000);
+    }
+    if (data.scheduledStart && typeof data.scheduledStart === 'object' && data.scheduledStart.seconds) {
+      data.scheduledStart = new Date(data.scheduledStart.seconds * 1000);
+    }
+
     const assignment = await this.assignmentsModel.create({
       ...data,
       isDeleted: false,

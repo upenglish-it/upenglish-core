@@ -45,11 +45,11 @@ export class SSTExamQuestions {
   @Prop({ type: String, enum: ExamQuestionTypesC, required: true })
   public readonly type: ExamQuestionTypesT;
 
-  @Prop({ type: String, enum: ExamQuestionPurposesC, default: 'main' })
-  public readonly purpose: ExamQuestionPurposesT;
+  @Prop({ type: String, default: 'main' })
+  public readonly purpose: string;
 
-  @Prop({ type: String, enum: ExamQuestionTargetSkillsC, default: null })
-  public readonly targetSkill: ExamQuestionTargetSkillsT;
+  @Prop({ type: String, default: null })
+  public readonly targetSkill: string;
 
   @Prop({ type: Number, default: 1 })
   public readonly points: number;
@@ -72,8 +72,8 @@ export class SSTExamQuestions {
   @Prop({ type: Array, default: [] })
   public readonly variations: Record<string, any>[];
 
-  @Prop({ type: String, enum: ExamQuestionErrorCategoriesC, default: null })
-  public readonly errorCategory: ExamQuestionErrorCategoriesT;
+  @Prop({ type: String, default: null })
+  public readonly errorCategory: string;
 
   @Prop({ type: Number, default: 0 })
   public readonly order: number;
@@ -107,14 +107,14 @@ export class SSTExamQuestions {
   @Prop({ type: Boolean, default: false })
   public readonly useAIGrading: boolean;
 
-  @Prop({ ref: () => Accounts, type: String, required: true })
-  public readonly createdBy: Accounts;
+  @Prop({ ref: () => Accounts, type: String, required: false })
+  public readonly createdBy?: Accounts;
 
-  @Prop({ ref: () => Properties, type: String, required: true })
-  public readonly properties: Properties;
+  @Prop({ ref: () => Properties, type: String, required: false })
+  public readonly properties?: Properties;
 
-  @Prop({ ref: () => PropertiesBranches, type: String, required: true })
-  public readonly propertiesBranches: PropertiesBranches;
+  @Prop({ ref: () => PropertiesBranches, type: String, required: false })
+  public readonly propertiesBranches?: PropertiesBranches;
 }
 
 export type ExamQuestionTypesT = (typeof ExamQuestionTypesC)[number];

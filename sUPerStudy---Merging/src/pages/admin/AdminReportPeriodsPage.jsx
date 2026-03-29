@@ -126,6 +126,9 @@ export default function AdminReportPeriodsPage() {
             if (activePeriod) {
                 setExpandedPeriodId(activePeriod.id);
                 loadTeacherStats(activePeriod);
+                if (activePeriod.ratingStartDate && activePeriod.ratingEndDate) {
+                    loadRatingOverview(activePeriod.id);
+                }
             }
         } catch (err) {
             console.error('Error loading report periods:', err);
@@ -133,13 +136,14 @@ export default function AdminReportPeriodsPage() {
     }
 
     async function loadTeacherStats(period) {
-        if (teacherStats[period.id] || statsLoading[period.id]) return;
+        if (teacherStats[period.id] !== undefined || statsLoading[period.id]) return;
         setStatsLoading(prev => ({ ...prev, [period.id]: true }));
         try {
             const stats = await getReportStatsForPeriod(period.startDate, period.endDate, period.id);
-            setTeacherStats(prev => ({ ...prev, [period.id]: stats }));
+            setTeacherStats(prev => ({ ...prev, [period.id]: stats || [] }));
         } catch (err) {
             console.error('Error loading teacher stats:', err);
+            setTeacherStats(prev => ({ ...prev, [period.id]: [] }));
         }
         setStatsLoading(prev => ({ ...prev, [period.id]: false }));
     }
@@ -150,22 +154,27 @@ export default function AdminReportPeriodsPage() {
         } else {
             setExpandedPeriodId(period.id);
             loadTeacherStats(period);
+            if (period.ratingStartDate && period.ratingEndDate) {
+                loadRatingOverview(period.id);
+            }
         }
     }
 
     // ─── Teacher Rating Functions ───
     async function loadRatingOverview(periodId) {
-        if (ratingOverview[periodId] || ratingLoading[periodId]) return;
+        if (ratingOverview[periodId] !== undefined || ratingLoading[periodId]) return;
         setRatingLoading(prev => ({ ...prev, [periodId]: true }));
         try {
             const [data, sums] = await Promise.all([
                 getAllRatingsForPeriod(periodId),
                 getAllSummariesForPeriod(periodId),
             ]);
-            setRatingOverview(prev => ({ ...prev, [periodId]: data }));
-            setRatingSummaries(prev => ({ ...prev, [periodId]: sums }));
+            setRatingOverview(prev => ({ ...prev, [periodId]: data || [] }));
+            setRatingSummaries(prev => ({ ...prev, [periodId]: sums || [] }));
         } catch (err) {
             console.error('Error loading rating overview:', err);
+            setRatingOverview(prev => ({ ...prev, [periodId]: [] }));
+            setRatingSummaries(prev => ({ ...prev, [periodId]: [] }));
         }
         setRatingLoading(prev => ({ ...prev, [periodId]: false }));
     }
@@ -1060,11 +1069,6 @@ export default function AdminReportPeriodsPage() {
                                             const isGenerating = generatingPeriodId === period.id;
                                             const isSending = sendingPeriodId === period.id;
                                             const isSent = sentSuccessPeriodId === period.id;
-
-                                            // Auto-load on first render
-                                            if (!pRatings && !isRatingLoading) {
-                                                setTimeout(() => loadRatingOverview(period.id), 0);
-                                            }
 
                                             return (
                                                 <div style={{ marginTop: '24px' }}>

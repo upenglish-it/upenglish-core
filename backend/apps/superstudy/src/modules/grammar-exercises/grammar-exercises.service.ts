@@ -59,7 +59,11 @@ export class GrammarExercisesService {
   }
 
   async create(data: Record<string, any>) {
-    const ex = await this.exercisesModel.create({ ...data, isDeleted: false, cachedQuestionCount: 0 });
+    const payload: Record<string, any> = { ...data, isDeleted: false, cachedQuestionCount: 0, title: data.name };
+    if (data.id) payload._id = data.id;
+    else if (data._id) payload._id = data._id;
+
+    const ex = await this.exercisesModel.create(payload);
     return ex.toObject();
   }
 

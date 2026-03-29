@@ -33,6 +33,8 @@ import { AnonymousFeedbackModule } from './modules/anonymous-feedback/anonymous-
 import { MiniGamesModule } from './modules/mini-games/mini-games.module';
 import { ReportPeriodsModule } from './modules/report-periods/report-periods.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { ContentProposalsModule } from './modules/content-proposals/content-proposals.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 const DatabaseProvider = {
   provide: 'DATABASE_CONNECTION',
@@ -80,6 +82,8 @@ const DatabaseProvider = {
     MiniGamesModule,
     ReportPeriodsModule,
     AuthModule,
+    ContentProposalsModule,
+    DashboardModule,
   ],
 
   providers: [

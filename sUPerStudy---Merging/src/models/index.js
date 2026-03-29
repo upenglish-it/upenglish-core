@@ -21,3 +21,5 @@ export { teacherFoldersService } from "./teacher-folders";
 export { teacherTopicsService } from "./teacher-topics";
 export { userGroupsService } from "./user-groups";
 export { wordProgressService } from "./word-progress";
+export { contentProposalsService } from "./content-proposal";
+export { dashboardService } from "./dashboard";

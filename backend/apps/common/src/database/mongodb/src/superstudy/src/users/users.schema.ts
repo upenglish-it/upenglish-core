@@ -74,7 +74,7 @@ export class SSTUsers {
   @Prop({ type: String, default: null })
   public readonly displayName: string;
 
-  @Prop({ type: String, enum: UserGenderC, default: null })
+  @Prop({ type: String, default: null })
   public readonly gender: UserGenderT;
 
   @Prop({ type: String, default: null })
@@ -93,14 +93,14 @@ export class SSTUsers {
   @Prop({ type: String, default: null })
   public readonly adminLanguage: string;
 
-  @Prop({ ref: () => Accounts, type: String, required: true })
-  public readonly createdBy: Accounts;
+  @Prop({ ref: () => Accounts, type: String, required: false })
+  public readonly createdBy?: Accounts;
 
-  @Prop({ ref: () => Properties, type: String, required: true })
-  public readonly properties: Properties;
+  @Prop({ ref: () => Properties, type: String, required: false })
+  public readonly properties?: Properties;
 
-  @Prop({ ref: () => PropertiesBranches, type: String, required: true })
-  public readonly propertiesBranches: PropertiesBranches;
+  @Prop({ ref: () => Array<PropertiesBranches>, type: Array, required: false })
+  public readonly propertiesBranches?: Array<PropertiesBranches>;
 }
 
 export type UserStatusT = (typeof UserStatusC)[number];

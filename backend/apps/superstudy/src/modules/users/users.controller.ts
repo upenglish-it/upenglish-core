@@ -17,6 +17,18 @@ export class UsersController {
     return this.usersService.findAll({ role, status });
   }
 
+  @ApiOperation({ summary: 'List all accounts straight from ISMS mappings' })
+  @Get('isms-accounts')
+  getAllIsmsAccounts(@Query('q') q?: string, @Query('limit') limit?: number) {
+    return this.usersService.getAllIsmsAccounts(q, limit);
+  }
+
+  @ApiOperation({ summary: 'Get current members of a group' })
+  @Get('group/:groupId/members')
+  getGroupMembers(@Param('groupId') groupId: string) {
+    return this.usersService.getUsersInGroup(groupId);
+  }
+
   @ApiOperation({ summary: 'Get user by ID' })
   @Get(':id')
   findOne(@Param('id') id: string) {

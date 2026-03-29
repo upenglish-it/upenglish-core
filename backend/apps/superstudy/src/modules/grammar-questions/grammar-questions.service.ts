@@ -28,13 +28,17 @@ export class GrammarQuestionsService {
     if (!exercise) throw new NotFoundException(`Grammar exercise ${data.exerciseId} not found`);
 
     const existingCount = await this.questionsModel.countDocuments({ exerciseId: data.exerciseId });
-    const question = await this.questionsModel.create({
+    const payload: Record<string, any> = {
       createdBy: exercise.createdBy,
       properties: exercise.properties,
       propertiesBranches: exercise.propertiesBranches,
       ...data,
       order: existingCount,
-    });
+    };
+    if (data.id) payload._id = data.id;
+    else if (data._id) payload._id = data._id;
+
+    const question = await this.questionsModel.create(payload);
 
     // Update cachedQuestionCount on exercise
     this.exercisesModel

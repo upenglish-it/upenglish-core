@@ -64,8 +64,8 @@ export class SSTExamAssignments {
   @Prop({ type: Object, default: {} })
   public readonly studentDeadlines: Record<string, any>;
 
-  @Prop({ type: String, enum: ExamAssignmentTeacherGendersC, default: null })
-  public readonly teacherGender: ExamAssignmentTeacherGendersT;
+  @Prop({ type: String, default: null })
+  public readonly teacherGender: string;
 
   @Prop({ type: String, default: null })
   public readonly assignedBy: string;
@@ -102,11 +102,11 @@ export class SSTExamAssignments {
   @Prop({ ref: () => Accounts, type: String, required: true })
   public readonly createdBy: Accounts;
 
-  @Prop({ ref: () => Properties, type: String, required: true })
-  public readonly properties: Properties;
+  @Prop({ ref: () => Properties, type: String, required: false })
+  public readonly properties?: Properties;
 
-  @Prop({ ref: () => PropertiesBranches, type: String, required: true })
-  public readonly propertiesBranches: PropertiesBranches;
+  @Prop({ ref: () => PropertiesBranches, type: String, required: false })
+  public readonly propertiesBranches?: PropertiesBranches;
 }
 
 export type ExamAssignmentTypesT = (typeof ExamAssignmentTypesC)[number];

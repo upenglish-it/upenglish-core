@@ -8,6 +8,14 @@ export const usersService = {
   findAll: (query) =>
     api.get(`${BASE}`, query),
 
+  /** List all accounts from ISMS */
+  findIsmsAccounts: (q = '', limit = 50) =>
+    api.get(`${BASE}/isms-accounts`, { q, limit }),
+
+  /** Get current members of a group */
+  getGroupMembers: (groupId) =>
+    api.get(`${BASE}/group/${groupId}/members`),
+
   /** List users in a specific group, filtered by role */
   findByGroup: (groupId, role) =>
     api.get(`${BASE}`, { groupId, role }),
