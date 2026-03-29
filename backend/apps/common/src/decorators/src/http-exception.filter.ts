@@ -12,12 +12,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
     // console.log('getResponse', exception.getResponse());
 
     if (status === 404) {
+      const resp = exception.getResponse();
+      const exceptionMessage = typeof resp === 'object' && resp['message'] ? resp['message'] : 'API not found';
       response.status(status).json(
         ResponseHandlerService({
           success: false,
           httpCode: exception.getStatus(),
           statusCode: STATUS_CODE.NOT_FOUND,
-          message: `API not found`,
+          message: exceptionMessage,
         }),
       );
     }

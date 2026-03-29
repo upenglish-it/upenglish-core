@@ -1,6 +1,7 @@
 import { db } from '../config/firebase';
 import { collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, deleteField, query, where, orderBy } from 'firebase/firestore';
 import { createNotificationForAdmins, createNotification } from './notificationService';
+import { contentProposalsService } from '../models';
 
 // ========== CONTENT PROPOSALS ==========
 // Collection: content_proposals
@@ -10,15 +11,13 @@ import { createNotificationForAdmins, createNotification } from './notificationS
  * @param {Object} data { type, level, sourceId, sourceFolderId, sourceCollection, teacherId, teacherName, teacherEmail, proposalName, proposalDescription, icon, color }
  */
 export async function submitProposal(data) {
-    const proposalRef = doc(collection(db, 'content_proposals'));
-    await setDoc(proposalRef, {
+    const proposalParams = {
         ...data,
         status: 'pending',
         adminNote: '',
-        createdAt: serverTimestamp(),
-        reviewedAt: null,
-        reviewedBy: null
-    });
+    };
+    const proposalData = await contentProposalsService.create(proposalParams);
+    const newId = proposalData._id || proposalData.id || proposalData;
 
     // Notify all admins about this new proposal
     const typeLabels = { vocab: 'Từ vựng', grammar: 'Kỹ năng', exam: 'Bài tập và Kiểm tra' };
@@ -46,25 +45,20 @@ export async function submitProposal(data) {
         console.error('Error sending proposal notification:', e);
     }
 
-    return proposalRef.id;
+    return newId;
 }
 
 /**
  * Get pending proposals filtered by type (vocab / grammar / exam).
  */
 export async function getPendingProposals(type = null) {
-    let q;
-    if (type) {
-        q = query(collection(db, 'content_proposals'), where('status', '==', 'pending'), where('type', '==', type));
-    } else {
-        q = query(collection(db, 'content_proposals'), where('status', '==', 'pending'));
-    }
-    const snapshot = await getDocs(q);
-    const proposals = [];
-    snapshot.forEach(docSnap => proposals.push({ id: docSnap.id, ...docSnap.data() }));
-    return proposals.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+    const params = { status: 'pending' };
+    if (type) params.type = type;
+    const result = await contentProposalsService.findAll(params);
+    let proposals = Array.isArray(result) ? result : (result?.data || []);
+    return proposals.map(p => ({ ...p, id: p._id || p.id })).sort((a, b) => {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return timeB - timeA;
     });
 }
@@ -73,30 +67,22 @@ export async function getPendingProposals(type = null) {
  * Get proposals submitted by a specific teacher.
  */
 export async function getTeacherProposals(teacherId) {
-    const q = query(collection(db, 'content_proposals'), where('teacherId', '==', teacherId));
-    const snapshot = await getDocs(q);
-    const proposals = [];
-    snapshot.forEach(docSnap => proposals.push({ id: docSnap.id, ...docSnap.data() }));
-    return proposals;
+    const result = await contentProposalsService.findAll({ teacherId });
+    let proposals = Array.isArray(result) ? result : (result?.data || []);
+    return proposals.map(p => ({ ...p, id: p._id || p.id }));
 }
 
 /**
  * Get the proposal status for a specific source item.
  */
 export async function getProposalForSource(sourceId, type) {
-    const q = query(
-        collection(db, 'content_proposals'),
-        where('sourceId', '==', sourceId),
-        where('type', '==', type)
-    );
-    const snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-        // Return latest proposal (there might be rejected + re-submitted)
-        const proposals = [];
-        snapshot.forEach(docSnap => proposals.push({ id: docSnap.id, ...docSnap.data() }));
+    const result = await contentProposalsService.findAll({ sourceId, type });
+    let proposals = Array.isArray(result) ? result : (result?.data || []);
+    if (proposals.length > 0) {
+        proposals = proposals.map(p => ({ ...p, id: p._id || p.id }));
         proposals.sort((a, b) => {
-            const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-            const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
             return timeB - timeA;
         });
         return proposals[0];
@@ -136,11 +122,10 @@ export async function findExistingOfficialCopy(sourceId, type, level = 'item') {
  * @param {string} mode - 'create_new' (default) or 'overwrite'
  */
 export async function approveProposal(proposalId, adminUid, mode = 'create_new') {
-    const proposalRef = doc(db, 'content_proposals', proposalId);
-    const proposalSnap = await getDoc(proposalRef);
-    if (!proposalSnap.exists()) throw new Error('Proposal not found');
+    const proposalData = await contentProposalsService.findOne(proposalId);
+    if (!proposalData) throw new Error('Proposal not found');
+    const proposal = { ...proposalData, id: proposalData._id || proposalData.id };
 
-    const proposal = proposalSnap.data();
     if (proposal.status !== 'pending') throw new Error('Proposal already reviewed');
 
     try {
@@ -158,11 +143,11 @@ export async function approveProposal(proposalId, adminUid, mode = 'create_new')
             }
         }
 
-        // Mark as approved
-        await updateDoc(proposalRef, {
+        // Mark as approved via API
+        await contentProposalsService.update(proposal.id, {
             status: 'approved',
             approveMode: mode,
-            reviewedAt: serverTimestamp(),
+            reviewedAt: new Date().toISOString(),
             reviewedBy: adminUid
         });
 
@@ -207,14 +192,13 @@ export async function approveProposal(proposalId, adminUid, mode = 'create_new')
  * Reject a proposal with an optional note.
  */
 export async function rejectProposal(proposalId, adminUid, adminNote = '') {
-    const proposalRef = doc(db, 'content_proposals', proposalId);
-    const proposalSnap = await getDoc(proposalRef);
-    const proposal = proposalSnap.exists() ? proposalSnap.data() : {};
+    const proposalData = await contentProposalsService.findOne(proposalId).catch(() => null);
+    const proposal = proposalData ? { ...proposalData, id: proposalData._id || proposalData.id } : {};
 
-    await updateDoc(proposalRef, {
+    await contentProposalsService.update(proposalId, {
         status: 'rejected',
         adminNote,
-        reviewedAt: serverTimestamp(),
+        reviewedAt: new Date().toISOString(),
         reviewedBy: adminUid
     });
 

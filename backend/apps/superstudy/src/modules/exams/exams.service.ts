@@ -77,13 +77,17 @@ export class ExamsService {
   }
 
   async create(data: Record<string, any>) {
-    const exam = await this.examsModel.create({
+    const payload: Record<string, any> = {
       ...data,
       isDeleted: false,
       cachedQuestionCount: 0,
       cachedQuestionTimeTotalSeconds: 0,
       cachedQuestionTimeMissingCount: 0,
-    });
+    };
+    if (data.id) payload._id = data.id;
+    else if (data._id) payload._id = data._id;
+
+    const exam = await this.examsModel.create(payload);
     return exam.toObject();
   }
 

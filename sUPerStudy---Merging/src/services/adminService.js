@@ -10,7 +10,8 @@ import { deleteContextAudio } from './contextAudioService';
 export async function getAdminTopics() {
     const result = await topicsService.findAll();
     // Backend already excludes deleted topics by default
-    return Array.isArray(result) ? result : (result?.data || []);
+    const topics = Array.isArray(result) ? result : (result?.data || []);
+    return topics.map(t => ({ ...t, id: t._id || t.id }));
 }
 
 // Fetch word counts for multiple topics
@@ -153,7 +154,19 @@ export async function syncLocalDataToFirestore() {
 export async function getAllUsers() {
     const result = await usersService.findAll();
     const users = Array.isArray(result) ? result : (result?.data || []);
-    return users.map(u => ({ ...u, uid: u.id || u._id }));
+    return users.map(u => ({ ...u, uid: u.id || u._id, id: u._id || u.id }));
+}
+
+export async function searchIsmsAccounts(q = '', limit = 50) {
+    const result = await usersService.findIsmsAccounts(q, limit);
+    const accounts = Array.isArray(result) ? result : (result?.data || []);
+    return accounts.map(a => ({ ...a, uid: a.uid || a.id || a._id }));
+}
+
+export async function getGroupMembers(groupId) {
+    const result = await usersService.getGroupMembers(groupId);
+    const users = Array.isArray(result) ? result : (result?.data || []);
+    return users.map(u => ({ ...u, uid: u.id || u._id, id: u._id || u.id }));
 }
 
 export async function updateUserRole(uid, newRole) {
@@ -185,7 +198,7 @@ export async function getGroups(includeHidden = false) {
     if (!includeHidden) {
         groups = groups.filter(g => !g.isHidden);
     }
-    return groups.sort((a, b) => {
+    return groups.map(g => ({ ...g, id: g._id || g.id })).sort((a, b) => {
         const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return tA - tB;
@@ -416,7 +429,7 @@ export async function getAdminAllGrammarExercises() {
     const result = await grammarExercisesService.findAll();
     let exercises = Array.isArray(result) ? result : (result?.data || []);
     exercises = exercises.filter(e => !e.isDeleted);
-    return exercises.sort((a, b) => {
+    return exercises.map(e => ({ ...e, id: e._id || e.id })).sort((a, b) => {
         const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return timeB - timeA;
@@ -492,7 +505,7 @@ export async function restoreExamToAdmin(examId) {
 export async function getExamFolders() {
     const result = await adminFoldersService.getExamFolders();
     const folders = Array.isArray(result) ? result : (result?.data || []);
-    return folders.sort((a, b) => (a.order || 0) - (b.order || 0));
+    return folders.map(f => ({ ...f, id: f._id || f.id })).sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
 export async function saveExamFolder(folderData) {

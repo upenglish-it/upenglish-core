@@ -11,9 +11,12 @@ export class TeacherTopicsService {
     private readonly teacherTopicsModel: ReturnModelType<typeof SSTTeacherTopics>,
   ) {}
 
-  async findAll(teacherId: string) {
+  async findAll(teacherId?: string) {
+    const query: any = { isDeleted: { $ne: true } };
+    if (teacherId) query.teacherId = teacherId;
+    
     const topics = await this.teacherTopicsModel
-      .find({ teacherId, isDeleted: { $ne: true } })
+      .find(query)
       .lean();
     return topics.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }
@@ -49,11 +52,11 @@ export class TeacherTopicsService {
 
   async create(data: Record<string, any>) {
     console.log(data);
-    const topic = await this.teacherTopicsModel.create({
-      ...data,
-      isDeleted: false,
-      cachedWordCount: 0,
-    });
+    const payload: Record<string, any> = { ...data, isDeleted: false, cachedWordCount: 0 };
+    if (data.id) payload._id = data.id;
+    else if (data._id) payload._id = data._id;
+
+    const topic = await this.teacherTopicsModel.create(payload);
     console.log(topic);
     return topic.toObject();
   }

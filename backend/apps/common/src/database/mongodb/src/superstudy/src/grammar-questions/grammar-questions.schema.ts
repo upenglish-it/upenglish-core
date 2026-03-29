@@ -98,14 +98,14 @@ export class SSTGrammarQuestions {
   @Prop({ type: Number, default: null })
   public readonly timeLimitSeconds: number;
 
-  @Prop({ ref: () => Accounts, type: String, required: true })
-  public readonly createdBy: Accounts;
+  @Prop({ ref: () => Accounts, type: String, required: false })
+  public readonly createdBy?: Accounts;
 
-  @Prop({ ref: () => Properties, type: String, required: true })
-  public readonly properties: Properties;
+  @Prop({ ref: () => Properties, type: String, required: false })
+  public readonly properties?: Properties;
 
-  @Prop({ ref: () => PropertiesBranches, type: String, required: true })
-  public readonly propertiesBranches: PropertiesBranches;
+  @Prop({ ref: () => PropertiesBranches, type: String, required: false })
+  public readonly propertiesBranches?: PropertiesBranches;
 }
 
 export type GrammarQuestionErrorCategoriesT = (typeof GrammarQuestionErrorCategoriesC)[number];

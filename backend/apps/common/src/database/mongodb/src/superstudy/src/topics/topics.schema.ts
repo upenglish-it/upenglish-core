@@ -1,4 +1,4 @@
-export const TopicStatusC = ['draft', 'published', 'archived'] as const;
+export const TopicStatusC = ['draft', 'published', 'archived', 'active'] as const;
 
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
@@ -25,6 +25,10 @@ export class SSTTopics {
 
   @Prop({ type: String, default: null })
   public readonly description: string;
+
+  /** The array of vocabulary words for this topic */
+  @Prop({ type: Array, default: [] })
+  public readonly words: Record<string, any>[];
 
   @Prop({ type: String, enum: TopicStatusC, default: 'draft' })
   public readonly status: TopicStatusT;

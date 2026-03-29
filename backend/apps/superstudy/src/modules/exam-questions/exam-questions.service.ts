@@ -53,10 +53,11 @@ export class ExamQuestionsService {
       sectionId: data.sectionId,
     });
 
-    const question = await this.questionsModel.create({
-      ...data,
-      order: existingCount,
-    });
+    const payload: Record<string, any> = { ...data, order: existingCount };
+    if (data.id) payload._id = data.id;
+    else if (data._id) payload._id = data._id;
+
+    const question = await this.questionsModel.create(payload);
 
     // Fire-and-forget: recalc exam question cache
     this.recalcExamCache(data.examId).catch(() => {});

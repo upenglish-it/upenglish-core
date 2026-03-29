@@ -27,14 +27,16 @@ function getEnvValue(key) {
 }
 
 function getPrimaryModel() {
-    if (MODEL_PROFILE === 'PREMIUM') return getEnvValue('PREMIUM_MODEL_PRIMARY') || getEnvValue('STANDARD_MODEL_PRIMARY');
-    if (MODEL_PROFILE === 'FREE') return getEnvValue('FREE_MODEL_PRIMARY') || getEnvValue('STANDARD_MODEL_PRIMARY');
-    return getEnvValue('STANDARD_MODEL_PRIMARY');
+    const fallback = 'google:gemini-1.5-flash';
+    if (MODEL_PROFILE === 'PREMIUM') return getEnvValue('PREMIUM_MODEL_PRIMARY') || getEnvValue('STANDARD_MODEL_PRIMARY') || fallback;
+    if (MODEL_PROFILE === 'FREE') return getEnvValue('FREE_MODEL_PRIMARY') || getEnvValue('STANDARD_MODEL_PRIMARY') || fallback;
+    return getEnvValue('STANDARD_MODEL_PRIMARY') || fallback;
 }
 
 function getMediaListeningModel() {
-    if (MODEL_PROFILE === 'PREMIUM') return getEnvValue('PREMIUM_MEDIA_LISTENING') || getEnvValue('STANDARD_MEDIA_LISTENING');
-    return getEnvValue('STANDARD_MEDIA_LISTENING');
+    const fallback = 'google:gemini-1.5-flash';
+    if (MODEL_PROFILE === 'PREMIUM') return getEnvValue('PREMIUM_MEDIA_LISTENING') || getEnvValue('STANDARD_MEDIA_LISTENING') || fallback;
+    return getEnvValue('STANDARD_MEDIA_LISTENING') || fallback;
 }
 
 // ============================================================
