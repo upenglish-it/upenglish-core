@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { getAdminTopicWords, saveAdminTopicWords, getAdminTopics, deleteAdminTopicWord, recalcTopicWordCount } from '../../services/adminService';
+import { getAdminTopicWords, saveAdminTopicWords, saveAdminTopicWord, getAdminTopics, deleteAdminTopicWord, recalcTopicWordCount } from '../../services/adminService';
 import { generateFullWordData } from '../../services/aiService';
-import { prepareVocabImage, generateVocabImageLocal, uploadVocabImageBlob, deleteVocabImage } from '../../services/vocabImageService';
+import { prepareVocabImage, generateVocabImageLocal, uploadVocabImageBlob, deleteVocabImageIfUnused } from '../../services/vocabImageService';
 import { ArrowLeft, Plus, Edit, Trash2, Save, X, GripVertical, Bot, Sparkles, RefreshCw, ChevronDown, Zap, CheckCircle, AlertTriangle, FileJson, Search, Image as ImageIcon, Upload, Wand2 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
@@ -124,6 +124,8 @@ export default function AdminTopicWordsPage() {
             return;
         }
 
+        setSaving(true);
+
         // Upload pending image blob to Firebase if exists
         let finalFormData = { ...wordFormData, word: trimmedWord };
         if (pendingImageBlob) {
@@ -131,6 +133,7 @@ export default function AdminTopicWordsPage() {
                 const uploadedUrl = await uploadVocabImageBlob(pendingImageBlob);
                 finalFormData.image = uploadedUrl;
             } catch (err) {
+                setSaving(false);
                 setAlertMessage({ type: 'error', text: 'Lỗi upload ảnh: ' + err.message });
                 return;
             }
@@ -140,32 +143,52 @@ export default function AdminTopicWordsPage() {
         if (isEditing) {
             const idx = newWords.findIndex(w => w.word === originalWord);
             if (idx !== -1) {
-                if (trimmedWord !== originalWord) {
-                    try {
-                        await deleteAdminTopicWord(topicId, originalWord);
-                    } catch (err) {
-                        console.error("Error deleting old word record during rename:", err);
-                    }
-                }
                 newWords[idx] = finalFormData;
             }
         } else {
             if (newWords.some(w => w.word.toLowerCase() === trimmedWord.toLowerCase())) {
+                setSaving(false);
                 setAlertMessage({ type: 'error', text: "Từ này đã tồn tại trong danh sách." });
                 return;
             }
-            newWords.push(finalFormData);
+            newWords.push({ ...finalFormData, index: newWords.length });
         }
 
-        await performAutoSave(newWords, isEditing ? "Đã cập nhật từ vựng thành công!" : "Đã thêm từ vựng mới thành công!");
-
-        // Delete pending old images from Firebase Storage
-        for (const imgUrl of pendingDeleteImages) {
-            await deleteVocabImage(imgUrl);
+        if (isEditing && typeof newWords.find(w => w.word === trimmedWord)?.index !== 'number') {
+            const existingIndex = words.find(w => w.word === originalWord)?.index;
+            finalFormData = {
+                ...finalFormData,
+                index: existingIndex ?? newWords.findIndex(w => w.word === trimmedWord)
+            };
+            const idx = newWords.findIndex(w => w.word === trimmedWord);
+            if (idx !== -1) {
+                newWords[idx] = finalFormData;
+            }
         }
+
+        try {
+            await saveAdminTopicWord(topicId, finalFormData);
+            if (isEditing && trimmedWord !== originalWord) {
+                await deleteAdminTopicWord(topicId, originalWord);
+            }
+            setWords(newWords);
+            setAlertMessage({ type: 'success', text: isEditing ? "Đã cập nhật từ vựng thành công!" : "Đã thêm từ vựng mới thành công!" });
+            setWordFormOpen(false);
+        } catch (error) {
+            console.error(error);
+            setAlertMessage({ type: 'error', text: "Lỗi đồng bộ dữ liệu: " + error.message });
+            setSaving(false);
+            return;
+        }
+
         setPendingDeleteImages([]);
         setPendingImageBlob(null);
-        setWordFormOpen(false);
+        setSaving(false);
+
+        pendingDeleteImages.forEach(imgUrl => {
+            deleteVocabImageIfUnused(imgUrl).catch(err => console.error('Error deleting old vocab image:', err));
+        });
+        recalcTopicWordCount(topicId, 'topics').catch(() => {});
     }
 
     async function handleAIFill() {
@@ -223,8 +246,8 @@ export default function AdminTopicWordsPage() {
 
         setIsGeneratingBulk(true);
         try {
-            // Processing in one batch up to 15 items
-            const wordsToGen = lines.slice(0, 15);
+            // Processing in one batch up to 50 items
+            const wordsToGen = lines.slice(0, 50);
             // Dynamic import specifically for new basic generator
             const { generateBasicWordsDetails } = await import('../../services/aiService');
             parsedWords = await generateBasicWordsDetails(wordsToGen, bulkAiLevel, topicName || topicId);
@@ -314,6 +337,7 @@ export default function AdminTopicWordsPage() {
         const updatedWords = [...words];
         let successCount = 0;
         let errorCount = 0;
+        const wordsToSave = [];
 
         for (let i = 0; i < wordsNeedingContent.length; i++) {
             const w = wordsNeedingContent[i];
@@ -329,6 +353,7 @@ export default function AdminTopicWordsPage() {
                 const idx = updatedWords.findIndex(uw => uw.word === w.word);
                 if (idx !== -1) {
                     updatedWords[idx] = { ...updatedWords[idx], ...enriched };
+                    wordsToSave.push(updatedWords[idx]);
                 }
                 successCount++;
             } catch (err) {
@@ -339,18 +364,21 @@ export default function AdminTopicWordsPage() {
 
         setWords(updatedWords);
 
-        // Auto-save to Firestore
-        try {
-            await saveAdminTopicWords(topicId, updatedWords);
-        } catch (err) {
-            console.error('Error saving after content generation:', err);
+        for (const wordToSave of wordsToSave) {
+            try {
+                await saveAdminTopicWord(topicId, wordToSave);
+            } catch (err) {
+                console.error('Error saving updated word:', err);
+                errorCount++;
+                successCount--;
+            }
         }
 
         setIsGeneratingContent(false);
         if (errorCount === 0) {
             setAlertMessage({ type: 'success', text: `Đã sinh nội dung học cho ${successCount} từ và lưu thành công! ✅` });
         } else {
-            setAlertMessage({ type: 'error', text: `Hoàn thành ${successCount}/${successCount + errorCount} từ. ${errorCount} từ bị lỗi.` });
+            setAlertMessage({ type: 'error', text: `Hoàn thành ${Math.max(0, successCount)}/${wordsToSave.length} từ. ${errorCount} từ bị lỗi lưu/sinh nội dung.` });
         }
     }
 
@@ -428,6 +456,8 @@ export default function AdminTopicWordsPage() {
                 <div className="admin-search-box">
                     <Search size={16} className="search-icon" />
                     <input
+                        id="admin-topic-word-search"
+                        name="adminTopicWordSearch"
                         type="text"
                         placeholder="Tìm từ vựng hoặc nghĩa..."
                         value={wordSearchTerm}
@@ -490,7 +520,7 @@ export default function AdminTopicWordsPage() {
                             <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '16px', fontSize: '0.9rem', color: '#475569' }}>
                                 <p style={{ margin: '0 0 8px 0', fontWeight: 600 }}>Hướng dẫn nhập tự động bằng AI:</p>
                                 <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                                    <li>Chỉ cần dán các <strong>từ tiếng Anh</strong> (mỗi từ 1 dòng, tối đa 15 từ/lần)</li>
+                                    <li>Chỉ cần dán các <strong>từ tiếng Anh</strong> (mỗi từ 1 dòng, tối đa 50 từ/lần)</li>
                                     <li>Hoặc có thể kèm theo nghĩa để AI dịch chính xác hơn (VD: <code style={{ color: '#ec4899' }}>apple, quả táo</code>)</li>
                                     <li>AI sẽ tự động điền Từ loại, Nghĩa tiếng Việt và Phiên âm cho từng từ.</li>
                                 </ul>
@@ -545,6 +575,8 @@ export default function AdminTopicWordsPage() {
 
                             <div className="admin-form-group">
                                 <textarea
+                                    id="admin-topic-bulk-import"
+                                    name="adminTopicBulkImport"
                                     className="admin-form-input admin-form-textarea"
                                     rows="10"
                                     style={{ fontFamily: 'monospace' }}
@@ -697,11 +729,11 @@ export default function AdminTopicWordsPage() {
                             <form onSubmit={handleWordFormSubmit}>
                                 <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
                                     <div className="admin-form-group" style={{ flex: '1 1 120px', minWidth: '120px', margin: 0 }}>
-                                        <label>Từ tiếng Anh</label>
-                                        <input type="text" className="admin-form-input" style={{ height: '42px' }} required value={wordFormData.word} onChange={e => setWordFormData({ ...wordFormData, word: e.target.value })} placeholder="Ví dụ: negotiate" />
+                                        <label htmlFor="admin-topic-word">Từ tiếng Anh</label>
+                                        <input id="admin-topic-word" name="adminTopicWord" type="text" className="admin-form-input" style={{ height: '42px' }} required value={wordFormData.word} onChange={e => setWordFormData({ ...wordFormData, word: e.target.value })} placeholder="Ví dụ: negotiate" />
                                     </div>
                                     <div className="admin-form-group" style={{ flex: '0 0 80px', width: '80px', margin: 0 }}>
-                                        <label>Loại từ</label>
+                                        <div style={{ marginBottom: '8px', fontWeight: 600, color: '#334155', fontSize: '0.9rem' }}>Loại từ</div>
                                         <div style={{ position: 'relative' }}>
                                             <button
                                                 type="button"
@@ -748,7 +780,7 @@ export default function AdminTopicWordsPage() {
                                         </div>
                                     </div>
                                     <div className="admin-form-group" style={{ flex: '0 0 70px', width: '70px', margin: 0 }}>
-                                        <label>Trình độ</label>
+                                        <div style={{ marginBottom: '8px', fontWeight: 600, color: '#334155', fontSize: '0.9rem' }}>Trình độ</div>
                                         <div style={{ position: 'relative' }}>
                                             <button
                                                 type="button"
@@ -800,8 +832,8 @@ export default function AdminTopicWordsPage() {
                                 </div>
 
                                 <div className="admin-form-group">
-                                    <label>Nghĩa tiếng Việt</label>
-                                    <input type="text" className="admin-form-input" required value={wordFormData.vietnameseMeaning} onChange={e => setWordFormData({ ...wordFormData, vietnameseMeaning: e.target.value })} placeholder="thương lượng" />
+                                    <label htmlFor="admin-topic-word-meaning">Nghĩa tiếng Việt</label>
+                                    <input id="admin-topic-word-meaning" name="adminTopicWordMeaning" type="text" className="admin-form-input" required value={wordFormData.vietnameseMeaning} onChange={e => setWordFormData({ ...wordFormData, vietnameseMeaning: e.target.value })} placeholder="thương lượng" />
                                 </div>
 
                                 {/* Image Section */}
@@ -847,7 +879,7 @@ export default function AdminTopicWordsPage() {
 
                                     {/* Right: Controls */}
                                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        <input type="file" accept="image/*" ref={imageInputRef} style={{ display: 'none' }} onChange={async (e) => {
+                                        <input id="admin-topic-word-image-file" name="adminTopicWordImageFile" type="file" accept="image/*" ref={imageInputRef} style={{ display: 'none' }} onChange={async (e) => {
                                             const file = e.target.files?.[0];
                                             if (!file) return;
                                             setIsUploadingImage(true);
@@ -910,6 +942,8 @@ export default function AdminTopicWordsPage() {
                                             </button>
                                         </div>
                                         <textarea
+                                            id="admin-topic-word-image-prompt"
+                                            name="adminTopicWordImagePrompt"
                                             value={imagePrompt || `A clear, simple illustration representing the concept "${wordFormData.word || '...'}" (${wordFormData.vietnameseMeaning || '...'}). Flat design style, educational illustration, clean white background, no text, no letters, vibrant colors, centered composition.`}
                                             onChange={e => setImagePrompt(e.target.value)}
                                             placeholder="Prompt tạo ảnh AI..."
@@ -926,31 +960,31 @@ export default function AdminTopicWordsPage() {
                                 </p>
 
                                 <div className="admin-form-group">
-                                    <label>Phiên âm (IPA)</label>
-                                    <input type="text" className="admin-form-input" value={wordFormData.phonetic || ''} onChange={e => setWordFormData({ ...wordFormData, phonetic: e.target.value })} placeholder="/nɪˈɡoʊ.ʃi.eɪt/" />
+                                    <label htmlFor="admin-topic-word-phonetic">Phiên âm (IPA)</label>
+                                    <input id="admin-topic-word-phonetic" name="adminTopicWordPhonetic" type="text" className="admin-form-input" value={wordFormData.phonetic || ''} onChange={e => setWordFormData({ ...wordFormData, phonetic: e.target.value })} placeholder="/nɪˈɡoʊ.ʃi.eɪt/" />
                                 </div>
 
                                 <div className="admin-form-group">
-                                    <label>Giải thích (Việt)</label>
-                                    <textarea className="admin-form-input" rows={2} value={wordFormData.explanation || ''} onChange={e => setWordFormData({ ...wordFormData, explanation: e.target.value })} placeholder="Giải thích chi tiết bằng tiếng Việt..." />
+                                    <label htmlFor="admin-topic-word-explanation">Giải thích (Việt)</label>
+                                    <textarea id="admin-topic-word-explanation" name="adminTopicWordExplanation" className="admin-form-input" rows={2} value={wordFormData.explanation || ''} onChange={e => setWordFormData({ ...wordFormData, explanation: e.target.value })} placeholder="Giải thích chi tiết bằng tiếng Việt..." />
                                 </div>
 
                                 <div className="admin-form-group">
-                                    <label>Mẹo phát âm</label>
-                                    <input type="text" className="admin-form-input" value={wordFormData.pronunciationTip || ''} onChange={e => setWordFormData({ ...wordFormData, pronunciationTip: e.target.value })} placeholder="Nhấn trọng âm ở âm tiết thứ 2..." />
+                                    <label htmlFor="admin-topic-word-pronunciation-tip">Mẹo phát âm</label>
+                                    <input id="admin-topic-word-pronunciation-tip" name="adminTopicWordPronunciationTip" type="text" className="admin-form-input" value={wordFormData.pronunciationTip || ''} onChange={e => setWordFormData({ ...wordFormData, pronunciationTip: e.target.value })} placeholder="Nhấn trọng âm ở âm tiết thứ 2..." />
                                 </div>
 
                                 <div className="admin-form-group">
-                                    <label>Từ gây nhiễu - Listening (3 từ, cách nhau bởi dấu phẩy)</label>
-                                    <input type="text" className="admin-form-input"
+                                    <label htmlFor="admin-topic-word-distractors">Từ gây nhiễu - Listening (3 từ, cách nhau bởi dấu phẩy)</label>
+                                    <input id="admin-topic-word-distractors" name="adminTopicWordDistractors" type="text" className="admin-form-input"
                                         value={(wordFormData.distractors || []).join(', ')}
                                         onChange={e => setWordFormData({ ...wordFormData, distractors: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
                                         placeholder="navigate, negligent, nominate" />
                                 </div>
 
                                 <div className="admin-form-group">
-                                    <label>Câu ví dụ (Anh)</label>
-                                    <input type="text" className="admin-form-input"
+                                    <label htmlFor="admin-topic-word-example-en">Câu ví dụ (Anh)</label>
+                                    <input id="admin-topic-word-example-en" name="adminTopicWordExampleEn" type="text" className="admin-form-input"
                                         value={wordFormData.exampleSentences?.[0]?.en || ''}
                                         onChange={e => {
                                             const es = [...(wordFormData.exampleSentences || [{ en: '', vi: '' }])];
@@ -960,8 +994,8 @@ export default function AdminTopicWordsPage() {
                                         placeholder="They spent weeks negotiating the contract." />
                                 </div>
                                 <div className="admin-form-group">
-                                    <label>Câu ví dụ (Việt)</label>
-                                    <input type="text" className="admin-form-input"
+                                    <label htmlFor="admin-topic-word-example-vi">Câu ví dụ (Việt)</label>
+                                    <input id="admin-topic-word-example-vi" name="adminTopicWordExampleVi" type="text" className="admin-form-input"
                                         value={wordFormData.exampleSentences?.[0]?.vi || ''}
                                         onChange={e => {
                                             const es = [...(wordFormData.exampleSentences || [{ en: '', vi: '' }])];
@@ -1011,30 +1045,30 @@ export default function AdminTopicWordsPage() {
                                     Câu hỏi điền từ — học viên chọn từ phù hợp để ghép với từ đang học. Dùng "___" để đánh dấu chỗ trống.
                                 </p>
                                 <div className="admin-form-group">
-                                    <label>Câu tiếng Anh (chứa ___)</label>
-                                    <input type="text" className="admin-form-input"
+                                    <label htmlFor="admin-topic-word-collocation-sentence">Câu tiếng Anh (chứa ___)</label>
+                                    <input id="admin-topic-word-collocation-sentence" name="adminTopicWordCollocationSentence" type="text" className="admin-form-input"
                                         value={wordFormData.collocationExercise?.sentence || ''}
                                         onChange={e => setWordFormData({ ...wordFormData, collocationExercise: { ...(wordFormData.collocationExercise || {}), sentence: e.target.value } })}
                                         placeholder="We must ___ the deadline for the project." />
                                 </div>
                                 <div className="admin-form-group">
-                                    <label>Dịch Việt câu trên</label>
-                                    <input type="text" className="admin-form-input"
+                                    <label htmlFor="admin-topic-word-collocation-sentence-vi">Dịch Việt câu trên</label>
+                                    <input id="admin-topic-word-collocation-sentence-vi" name="adminTopicWordCollocationSentenceVi" type="text" className="admin-form-input"
                                         value={wordFormData.collocationExercise?.sentenceVi || ''}
                                         onChange={e => setWordFormData({ ...wordFormData, collocationExercise: { ...(wordFormData.collocationExercise || {}), sentenceVi: e.target.value } })}
                                         placeholder="Chúng ta phải hoàn thành đúng hạn chót cho dự án." />
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                                     <div className="admin-form-group">
-                                        <label>Đáp án đúng</label>
-                                        <input type="text" className="admin-form-input"
+                                        <label htmlFor="admin-topic-word-collocation-answer">Đáp án đúng</label>
+                                        <input id="admin-topic-word-collocation-answer" name="adminTopicWordCollocationAnswer" type="text" className="admin-form-input"
                                             value={wordFormData.collocationExercise?.answer || ''}
                                             onChange={e => setWordFormData({ ...wordFormData, collocationExercise: { ...(wordFormData.collocationExercise || {}), answer: e.target.value } })}
                                             placeholder="meet" />
                                     </div>
                                     <div className="admin-form-group">
-                                        <label>Các lựa chọn (cách nhau bởi dấu phẩy)</label>
-                                        <input type="text" className="admin-form-input"
+                                        <label htmlFor="admin-topic-word-collocation-options">Các lựa chọn (cách nhau bởi dấu phẩy)</label>
+                                        <input id="admin-topic-word-collocation-options" name="adminTopicWordCollocationOptions" type="text" className="admin-form-input"
                                             value={(wordFormData.collocationExercise?.options || []).join(', ')}
                                             onChange={e => setWordFormData({ ...wordFormData, collocationExercise: { ...(wordFormData.collocationExercise || {}), options: e.target.value.split(',').map(s => s.trim()).filter(Boolean) } })}
                                             placeholder="meet, do, make, take" />
@@ -1045,15 +1079,15 @@ export default function AdminTopicWordsPage() {
                                 <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '8px', fontWeight: 600 }}>Sắp xếp câu (Sentence Sequence)</p>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                                     <div className="admin-form-group">
-                                        <label>Câu tiếng Anh</label>
-                                        <input type="text" className="admin-form-input"
+                                        <label htmlFor="admin-topic-word-sequence-en">Câu tiếng Anh</label>
+                                        <input id="admin-topic-word-sequence-en" name="adminTopicWordSequenceEn" type="text" className="admin-form-input"
                                             value={wordFormData.sentenceSequence?.en || ''}
                                             onChange={e => setWordFormData({ ...wordFormData, sentenceSequence: { ...(wordFormData.sentenceSequence || {}), en: e.target.value } })}
                                             placeholder="We negotiated with the client." />
                                     </div>
                                     <div className="admin-form-group">
-                                        <label>Dịch Việt</label>
-                                        <input type="text" className="admin-form-input"
+                                        <label htmlFor="admin-topic-word-sequence-vi">Dịch Việt</label>
+                                        <input id="admin-topic-word-sequence-vi" name="adminTopicWordSequenceVi" type="text" className="admin-form-input"
                                             value={wordFormData.sentenceSequence?.vi || ''}
                                             onChange={e => setWordFormData({ ...wordFormData, sentenceSequence: { ...(wordFormData.sentenceSequence || {}), vi: e.target.value } })}
                                             placeholder="Chúng tôi đã đàm phán với khách hàng." />
@@ -1061,8 +1095,8 @@ export default function AdminTopicWordsPage() {
                                 </div>
 
                                 <div className="admin-modal-actions" style={{ marginTop: '24px', flexDirection: 'row' }}>
-                                    <button type="button" className="admin-btn admin-btn-secondary" style={{ flex: 1 }} onClick={() => setWordFormOpen(false)} disabled={isAI || isUploadingImage || isGeneratingImage}>Hủy</button>
-                                    <button type="submit" className="admin-btn admin-btn-primary" style={{ flex: 1 }} disabled={isAI || isUploadingImage || isGeneratingImage}>{isEditing ? 'Cập nhật' : 'Thêm'}</button>
+                                    <button type="button" className="admin-btn admin-btn-secondary" style={{ flex: 1 }} onClick={() => setWordFormOpen(false)} disabled={saving || isAI || isUploadingImage || isGeneratingImage}>Hủy</button>
+                                    <button type="submit" className="admin-btn admin-btn-primary" style={{ flex: 1 }} disabled={saving || isAI || isUploadingImage || isGeneratingImage}>{saving ? 'Đang lưu...' : (isEditing ? 'Cập nhật' : 'Thêm')}</button>
                                 </div>
                             </form>
                         </div>

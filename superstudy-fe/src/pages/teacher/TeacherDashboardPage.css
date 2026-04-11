@@ -1,0 +1,793 @@
+.teacher-dashboard-page {
+    width: 100%;
+}
+
+.teacher-dashboard-loading {
+    min-height: 320px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}
+
+.teacher-dashboard-loading p {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.teacher-dashboard-hero {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    padding: 28px 32px;
+    border-radius: 30px;
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    background:
+        radial-gradient(circle at top right, rgba(245, 158, 11, 0.16), transparent 34%),
+        radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.1), transparent 28%),
+        linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.94));
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+}
+
+.teacher-dashboard-hero::after {
+    content: '';
+    position: absolute;
+    inset: auto -90px -120px auto;
+    width: 250px;
+    height: 250px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(245, 158, 11, 0.12), transparent 70%);
+    pointer-events: none;
+}
+
+.teacher-dashboard-hero-content {
+    position: relative;
+    z-index: 1;
+}
+
+.teacher-dashboard-hero-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.teacher-dashboard-kicker {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: rgba(245, 158, 11, 0.12);
+    color: #b45309;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.teacher-dashboard-title {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #0f172a;
+    font-size: 1.9rem;
+    line-height: 1.08;
+    letter-spacing: -0.03em;
+    font-family: 'Lexend', sans-serif;
+}
+
+.teacher-dashboard-title svg {
+    color: #f59e0b;
+}
+
+.teacher-dashboard-subtitle {
+    margin: 0;
+    max-width: 720px;
+    color: #64748b;
+    font-size: 0.96rem;
+    line-height: 1.7;
+}
+
+.teacher-dashboard-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.teacher-dashboard-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.88);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    color: #334155;
+    font-size: 0.84rem;
+    font-weight: 600;
+}
+
+.teacher-dashboard-pill.subtle {
+    background: rgba(248, 250, 252, 0.92);
+}
+
+.teacher-dashboard-pill.tone-highlight {
+    background: rgba(254, 243, 199, 0.82);
+    border-color: rgba(245, 158, 11, 0.24);
+    color: #b45309;
+}
+
+.teacher-dashboard-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 18px;
+    border-radius: 14px;
+    border: 1px solid transparent;
+    font-size: 0.88rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    text-decoration: none;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+.teacher-dashboard-btn:hover {
+    transform: translateY(-1px);
+}
+
+.teacher-dashboard-btn.primary {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: #fff;
+    box-shadow: 0 14px 28px rgba(245, 158, 11, 0.25);
+}
+
+.teacher-dashboard-btn.secondary {
+    background: rgba(255, 255, 255, 0.92);
+    color: #475569;
+    border-color: #e2e8f0;
+}
+
+.teacher-dashboard-btn.secondary:hover {
+    color: #0f172a;
+    border-color: #cbd5e1;
+    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.06);
+}
+
+.teacher-dashboard-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.teacher-dashboard-stat-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 20px;
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04);
+}
+
+.teacher-dashboard-stat-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border-radius: 16px;
+}
+
+.teacher-dashboard-stat-content {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.teacher-dashboard-stat-value {
+    color: #0f172a;
+    font-size: 1.65rem;
+    font-weight: 800;
+    line-height: 1.05;
+}
+
+.teacher-dashboard-stat-label {
+    color: #334155;
+    font-size: 0.83rem;
+    font-weight: 700;
+}
+
+.teacher-dashboard-stat-helper {
+    color: #94a3b8;
+    font-size: 0.76rem;
+    line-height: 1.5;
+}
+
+.teacher-dashboard-stat-card.tone-primary .teacher-dashboard-stat-icon {
+    background: #eff6ff;
+    color: #2563eb;
+}
+
+.teacher-dashboard-stat-card.tone-success .teacher-dashboard-stat-icon {
+    background: #ecfdf5;
+    color: #16a34a;
+}
+
+.teacher-dashboard-stat-card.tone-warning .teacher-dashboard-stat-icon {
+    background: #fffbeb;
+    color: #d97706;
+}
+
+.teacher-dashboard-stat-card.tone-danger .teacher-dashboard-stat-icon {
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+.teacher-dashboard-stat-card.tone-neutral .teacher-dashboard-stat-icon {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.teacher-dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 20px;
+}
+
+.teacher-dashboard-panel {
+    padding: 24px;
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.05);
+}
+
+.teacher-dashboard-panel-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.teacher-dashboard-panel-header h2 {
+    margin: 0 0 6px;
+    color: #0f172a;
+    font-size: 1.1rem;
+    line-height: 1.3;
+    font-weight: 800;
+    font-family: 'Lexend', sans-serif;
+}
+
+.teacher-dashboard-panel-header p {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.88rem;
+    line-height: 1.65;
+}
+
+.teacher-dashboard-section-kicker {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    padding: 6px 10px;
+    margin-bottom: 8px;
+    border-radius: 999px;
+    background: #fff7ed;
+    color: #c2410c;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.teacher-dashboard-inline-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #d97706;
+    font-size: 0.84rem;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.teacher-dashboard-inline-link:hover {
+    color: #b45309;
+}
+
+.teacher-dashboard-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.teacher-dashboard-list-empty {
+    grid-column: 1 / -1;
+    padding: 16px;
+    border-radius: 18px;
+    border: 1px dashed #cbd5e1;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+
+.teacher-dashboard-list-item {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px;
+    border-radius: 20px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    text-decoration: none;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.teacher-dashboard-list-item:hover {
+    transform: translateY(-2px);
+    border-color: #fdba74;
+    box-shadow: 0 16px 30px rgba(245, 158, 11, 0.08);
+}
+
+.teacher-dashboard-list-item-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.teacher-dashboard-list-item h3 {
+    margin: 0 0 4px;
+    color: #0f172a;
+    font-size: 0.98rem;
+    font-weight: 800;
+}
+
+.teacher-dashboard-list-item p {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+
+.teacher-dashboard-list-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.teacher-dashboard-badge,
+.teacher-dashboard-metric-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.teacher-dashboard-badge.highlight,
+.teacher-dashboard-metric-chip.warning {
+    background: #fffbeb;
+    color: #b45309;
+    border: 1px solid #fde68a;
+}
+
+.teacher-dashboard-badge.danger,
+.teacher-dashboard-metric-chip.danger {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+}
+
+.teacher-dashboard-badge.success,
+.teacher-dashboard-metric-chip.success {
+    background: #ecfdf5;
+    color: #16a34a;
+    border: 1px solid #bbf7d0;
+}
+
+.teacher-dashboard-badge.neutral {
+    background: #f1f5f9;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+}
+
+.teacher-dashboard-metric-chip.neutral {
+    background: #f8fafc;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+}
+
+.teacher-dashboard-pulse-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.teacher-dashboard-pulse-card {
+    padding: 16px;
+    border-radius: 18px;
+    border: 1px solid #e2e8f0;
+    background: linear-gradient(180deg, #ffffff, #f8fafc);
+}
+
+.teacher-dashboard-pulse-label {
+    color: #94a3b8;
+    font-size: 0.76rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.teacher-dashboard-pulse-card strong {
+    display: block;
+    margin: 8px 0 6px;
+    color: #0f172a;
+    font-size: 1.3rem;
+    line-height: 1;
+}
+
+.teacher-dashboard-pulse-card span {
+    color: #64748b;
+    font-size: 0.82rem;
+    line-height: 1.55;
+}
+
+.teacher-dashboard-period-box {
+    margin-bottom: 20px;
+    padding: 16px 18px;
+    border-radius: 20px;
+    background: #fffaf0;
+    border: 1px solid #fde68a;
+}
+
+.teacher-dashboard-period-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.teacher-dashboard-period-header span:first-child {
+    color: #b45309;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.teacher-dashboard-period-box strong {
+    color: #0f172a;
+    font-size: 1rem;
+    font-weight: 800;
+}
+
+.teacher-dashboard-period-box p,
+.teacher-dashboard-period-foot {
+    margin: 8px 0 0;
+    color: #64748b;
+    font-size: 0.84rem;
+    line-height: 1.6;
+}
+
+.teacher-dashboard-empty,
+.teacher-dashboard-error {
+    text-align: center;
+    padding: 44px 24px;
+}
+
+.teacher-dashboard-empty-icon {
+    font-size: 3rem;
+    margin-bottom: 12px;
+}
+
+.teacher-dashboard-empty h3,
+.teacher-dashboard-error h2 {
+    margin: 0 0 8px;
+    color: #334155;
+    font-size: 1.15rem;
+    font-weight: 800;
+}
+
+.teacher-dashboard-empty p,
+.teacher-dashboard-error p {
+    margin: 0 auto;
+    max-width: 560px;
+    color: #94a3b8;
+    font-size: 0.9rem;
+    line-height: 1.65;
+}
+
+.teacher-dashboard-error .teacher-dashboard-btn {
+    margin-top: 18px;
+}
+
+@media (max-width: 960px) {
+    .teacher-dashboard-list {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .teacher-dashboard-pulse-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 640px) {
+    .teacher-dashboard-hero {
+        padding: 22px;
+    }
+
+    .teacher-dashboard-title {
+        font-size: 1.55rem;
+    }
+
+    .teacher-dashboard-panel,
+    .teacher-dashboard-empty,
+    .teacher-dashboard-error {
+        padding: 18px;
+    }
+
+    .teacher-dashboard-panel-header,
+    .teacher-dashboard-period-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .teacher-dashboard-btn {
+        width: 100%;
+    }
+
+    .teacher-dashboard-list-item-top {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+@media (max-width: 640px) {
+    .teacher-dashboard-hero {
+        gap: 16px;
+        padding: 18px;
+        border-radius: 24px;
+    }
+
+    .teacher-dashboard-hero::after {
+        width: 170px;
+        height: 170px;
+        inset: auto -56px -80px auto;
+    }
+
+    .teacher-dashboard-hero-content {
+        gap: 10px;
+    }
+
+    .teacher-dashboard-kicker {
+        padding: 5px 10px;
+        font-size: 0.64rem;
+        letter-spacing: 0.05em;
+    }
+
+    .teacher-dashboard-title {
+        gap: 8px;
+        font-size: 1.3rem;
+        line-height: 1.05;
+    }
+
+    .teacher-dashboard-title svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    .teacher-dashboard-subtitle {
+        font-size: 0.84rem;
+        line-height: 1.55;
+    }
+
+    .teacher-dashboard-pills {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        gap: 8px;
+        padding-bottom: 2px;
+        scrollbar-width: none;
+    }
+
+    .teacher-dashboard-pills::-webkit-scrollbar {
+        display: none;
+    }
+
+    .teacher-dashboard-pill {
+        flex: 0 0 auto;
+        gap: 6px;
+        padding: 8px 11px;
+        font-size: 0.72rem;
+    }
+
+    .teacher-dashboard-pill svg {
+        width: 13px;
+        height: 13px;
+    }
+
+    .teacher-dashboard-btn {
+        width: 100%;
+        min-width: 0;
+        min-height: 42px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        font-size: 0.78rem;
+        line-height: 1.25;
+    }
+
+    .teacher-dashboard-stats-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .teacher-dashboard-stat-card {
+        gap: 10px;
+        padding: 14px;
+        border-radius: 18px;
+    }
+
+    .teacher-dashboard-stat-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+    }
+
+    .teacher-dashboard-stat-icon svg {
+        width: 16px;
+        height: 16px;
+    }
+
+    .teacher-dashboard-stat-value {
+        font-size: 1.18rem;
+    }
+
+    .teacher-dashboard-stat-label {
+        font-size: 0.76rem;
+    }
+
+    .teacher-dashboard-stat-helper {
+        display: none;
+    }
+
+    .teacher-dashboard-grid {
+        gap: 12px;
+    }
+
+    .teacher-dashboard-panel,
+    .teacher-dashboard-empty,
+    .teacher-dashboard-error {
+        padding: 18px;
+        border-radius: 20px;
+    }
+
+    .teacher-dashboard-panel-header {
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+
+    .teacher-dashboard-panel-header h2 {
+        font-size: 1rem;
+        margin-bottom: 4px;
+    }
+
+    .teacher-dashboard-panel-header p {
+        font-size: 0.8rem;
+        line-height: 1.55;
+    }
+
+    .teacher-dashboard-section-kicker {
+        padding: 5px 8px;
+        margin-bottom: 6px;
+        font-size: 0.64rem;
+    }
+
+    .teacher-dashboard-inline-link {
+        font-size: 0.76rem;
+    }
+
+    .teacher-dashboard-list {
+        gap: 10px;
+    }
+
+    .teacher-dashboard-list-empty {
+        padding: 12px;
+        border-radius: 14px;
+        font-size: 0.78rem;
+        line-height: 1.5;
+    }
+
+    .teacher-dashboard-list-item {
+        gap: 8px;
+        padding: 12px;
+        border-radius: 16px;
+    }
+
+    .teacher-dashboard-list-item h3 {
+        font-size: 0.9rem;
+    }
+
+    .teacher-dashboard-list-item p {
+        font-size: 0.78rem;
+        line-height: 1.5;
+    }
+
+    .teacher-dashboard-badge,
+    .teacher-dashboard-metric-chip {
+        padding: 5px 8px;
+        font-size: 0.68rem;
+    }
+
+    .teacher-dashboard-pulse-card {
+        padding: 12px;
+        border-radius: 16px;
+    }
+
+    .teacher-dashboard-pulse-label {
+        font-size: 0.68rem;
+    }
+
+    .teacher-dashboard-pulse-card strong {
+        margin: 6px 0 4px;
+        font-size: 1.08rem;
+    }
+
+    .teacher-dashboard-pulse-card span {
+        font-size: 0.76rem;
+        line-height: 1.45;
+    }
+
+    .teacher-dashboard-period-box {
+        margin-top: 0;
+        margin-bottom: 14px;
+        padding: 12px 14px;
+        border-radius: 16px;
+    }
+
+    .teacher-dashboard-period-header span:first-child,
+    .teacher-dashboard-period-box p,
+    .teacher-dashboard-period-foot {
+        font-size: 0.78rem;
+        line-height: 1.5;
+    }
+
+    .teacher-dashboard-period-box strong {
+        font-size: 0.92rem;
+    }
+
+    .teacher-dashboard-empty,
+    .teacher-dashboard-error {
+        padding-top: 28px;
+        padding-bottom: 28px;
+    }
+
+    .teacher-dashboard-empty-icon {
+        font-size: 2.3rem;
+        margin-bottom: 10px;
+    }
+
+    .teacher-dashboard-empty h3,
+    .teacher-dashboard-error h2 {
+        font-size: 1rem;
+    }
+
+    .teacher-dashboard-empty p,
+    .teacher-dashboard-error p {
+        font-size: 0.82rem;
+        line-height: 1.55;
+    }
+}

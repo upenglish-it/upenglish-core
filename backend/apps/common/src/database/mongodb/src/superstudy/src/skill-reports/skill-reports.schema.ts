@@ -3,13 +3,13 @@ const SkillReportStatusC = ['draft', 'sent'] as const;
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
 // NestJs Imports
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 // Schemas
 import { Accounts, Properties, PropertiesBranches } from '../../../isms';
 
 export const SSTSkillReportsCN = 'sst-skill-reports';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: SSTSkillReportsCN } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: SSTSkillReportsCN } })
 export class SSTSkillReports {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public readonly _id: string;
@@ -23,11 +23,17 @@ export class SSTSkillReports {
   @Prop({ type: String, required: true })
   public readonly teacherId: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: '' })
   public readonly startDate: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, default: '' })
   public readonly endDate: string;
+
+  @Prop({ type: String, default: '' })
+  public readonly periodId?: string;
+
+  @Prop({ type: String, default: '' })
+  public readonly periodLabel?: string;
 
   @Prop({ type: Object, required: true })
   public readonly skillData: Record<string, any>;
@@ -35,8 +41,11 @@ export class SSTSkillReports {
   @Prop({ type: Object, required: true })
   public readonly aiReport: Record<string, any>;
 
-  @Prop({ type: Object, required: true })
-  public readonly finalReport: Record<string, any>;
+  @Prop({ required: true, allowMixed: Severity.ALLOW })
+  public readonly finalReport: Record<string, any> | string;
+
+  @Prop({ type: Array, default: [] })
+  public readonly redFlagsSummary?: Record<string, any>[];
 
   @Prop({ type: String, enum: SkillReportStatusC, required: true })
   public readonly status: SkillReportStatusT;

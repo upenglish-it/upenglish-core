@@ -1,5 +1,26 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  Res,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import type { Request, Response } from 'express';
 import { MiniGamesService } from './mini-games.service';
 
 @ApiTags('Mini Games')
@@ -36,6 +57,101 @@ export class MiniGamesController {
   @Get('pending/count')
   getPendingGamesCount() {
     return this.service.getPendingGamesCount();
+  }
+
+  @ApiOperation({ summary: 'Upload a single HTML mini game build' })
+  @Post(':id/assets/single')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+      required: ['file'],
+    },
+  })
+  uploadSingleHtmlAsset(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req: Request,
+  ) {
+    return this.service.uploadSingleHtmlAsset(id, file, this.service.buildPublicBaseUrl(req));
+  }
+
+  @ApiOperation({ summary: 'Upload a bundle asset file for a mini game dist build' })
+  @Post(':id/assets/bundle')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        path: { type: 'string' },
+        bundleVersion: { type: 'string' },
+      },
+      required: ['file', 'path', 'bundleVersion'],
+    },
+  })
+  uploadBundleAsset(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body('path') assetPath: string,
+    @Body('bundleVersion') bundleVersion: string,
+  ) {
+    return this.service.uploadBundleAsset(id, bundleVersion, assetPath, file);
+  }
+
+  @ApiOperation({ summary: 'Upload a mini game thumbnail' })
+  @Post(':id/assets/thumbnail')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+      required: ['file'],
+    },
+  })
+  uploadThumbnail(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req: Request,
+  ) {
+    return this.service.uploadThumbnail(id, file, this.service.buildPublicBaseUrl(req));
+  }
+
+  @ApiOperation({ summary: 'Serve a mini game thumbnail' })
+  @Get(':id/assets/thumbnail')
+  async serveThumbnail(
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    return this.service.serveThumbnail(id, res);
+  }
+
+  @ApiOperation({ summary: 'Serve a single-file mini game asset' })
+  @Get(':id/assets/single/index.html')
+  async serveSingleHtml(
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    return this.service.serveSingleHtml(id, res);
+  }
+
+  @ApiOperation({ summary: 'Serve a bundled mini game asset' })
+  @Get(':id/assets/bundles/:bundleVersion/:entryPath(*)')
+  async serveBundleAsset(
+    @Param('id') id: string,
+    @Param('bundleVersion') bundleVersion: string,
+    @Param('entryPath') entryPath: string,
+    @Res() res: Response,
+  ) {
+    return this.service.serveBundleAsset(id, bundleVersion, entryPath, res);
   }
 
   @ApiOperation({ summary: 'Get game by id' })

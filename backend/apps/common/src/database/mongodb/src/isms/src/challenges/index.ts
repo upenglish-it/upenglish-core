@@ -1,11 +1,11 @@
-// import { Prop, modelOptions } from '@typegoose/typegoose';
+// import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 // import { Accounts } from '../accounts';
 // import { Properties } from '../properties';
 // import { PropertiesBranches } from '../properties/branches';
 // import { ChallengesAttendeeResponses } from './attendee-reponses';
 // import { SYSTEM_ID } from 'apps/common/src/utils';
 
-// @modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: 'challenges' } })
+// @modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: 'challenges' } })
 // export class Challenges {
 //   @Prop({
 //     type: String,

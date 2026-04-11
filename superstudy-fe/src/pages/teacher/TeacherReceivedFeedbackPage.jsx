@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { MessageSquareText, CheckCheck, Loader, Send, X, Filter, Trash2 } from 'lucide-react';
+import { MessageSquareText, CheckCheck, Loader, Send, X, Trash2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getMyReceivedFeedback, markFeedbackAsRead, submitFeedback, hideFeedbackForUser } from '../../services/feedbackService';
 import { usersService } from '../../models/users';
+import FeedbackImageCard from '../../components/common/FeedbackImageCard';
 
 const CATEGORIES = [
     { value: 'suggestion', label: 'Đề xuất', emoji: '💡', color: '#4f46e5', bg: '#eff6ff' },
@@ -33,12 +34,27 @@ function timeAgo(ts) {
     return '';
 }
 
+function feedbackTimestampValue(ts) {
+    if (!ts) return 0;
+    if (typeof ts.toMillis === 'function') return ts.toMillis();
+    if (typeof ts.toDate === 'function') return ts.toDate().getTime();
+    return new Date(ts).getTime() || 0;
+}
+
+function sortFeedbackList(list) {
+    return [...list].sort((a, b) => {
+        if (!!a.isRead !== !!b.isRead) {
+            return a.isRead ? 1 : -1;
+        }
+        return feedbackTimestampValue(b.createdAt) - feedbackTimestampValue(a.createdAt);
+    });
+}
+
 export default function TeacherFeedbackPage() {
     const { user } = useAuth();
     const [feedbackList, setFeedbackList] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    // Send modal
     const [showSendModal, setShowSendModal] = useState(false);
     const [fbCategory, setFbCategory] = useState('suggestion');
     const [fbMessage, setFbMessage] = useState('');
@@ -53,19 +69,27 @@ export default function TeacherFeedbackPage() {
 
     useEffect(() => {
         if (!user?.uid) return;
-        loadFeedback();
-    }, [user?.uid]);
 
-    async function loadFeedback() {
-        setLoading(true);
-        try {
-            const data = await getMyReceivedFeedback(user.uid);
-            setFeedbackList(data);
-        } catch (err) {
-            console.error('Error loading feedback:', err);
+        let isActive = true;
+
+        async function loadFeedback() {
+            if (isActive) setLoading(true);
+            try {
+                const data = await getMyReceivedFeedback(user.uid);
+                if (isActive) setFeedbackList(data);
+            } catch (err) {
+                console.error('Error loading feedback:', err);
+            } finally {
+                if (isActive) setLoading(false);
+            }
         }
-        setLoading(false);
-    }
+
+        loadFeedback();
+
+        return () => {
+            isActive = false;
+        };
+    }, [user?.uid]);
 
     async function handleMarkRead(fb) {
         try {
@@ -82,22 +106,25 @@ export default function TeacherFeedbackPage() {
         try {
             const [staffRes, teacherRes] = await Promise.all([
                 usersService.findAll({ role: 'staff' }),
-                usersService.findAll({ role: 'teacher' })
+                usersService.findAll({ role: 'teacher' }),
             ]);
-            
+
             const staffData = staffRes?.data || staffRes || [];
             const teacherData = teacherRes?.data || teacherRes || [];
-            
             const list = [];
+
             [...staffData, ...teacherData].forEach(d => {
                 const uid = d._id || d.id || d.uid;
                 if (uid !== user.uid) {
                     list.push({ uid, displayName: d.displayName || d.email, email: d.email, role: d.role });
                 }
             });
+
             list.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
             setStaffTeacherList(list);
-        } catch (err) { console.error('Error loading users:', err); }
+        } catch (err) {
+            console.error('Error loading users:', err);
+        }
         setLoadingUsers(false);
     }
 
@@ -107,24 +134,36 @@ export default function TeacherFeedbackPage() {
         setFbSending(true);
         try {
             await submitFeedback({
-                message: fbMessage, category: fbCategory,
-                senderUid: user.uid, senderName: user.displayName || '', senderEmail: user.email || '', senderRole: user.role || 'teacher',
+                message: fbMessage,
+                category: fbCategory,
+                senderUid: user.uid,
+                senderName: user.displayName || '',
+                senderEmail: user.email || '',
+                senderRole: user.role || 'teacher',
                 targetType: fbTargetType,
                 targetUid: fbTargetType === 'direct' ? fbTargetUser.uid : undefined,
                 targetName: fbTargetType === 'direct' ? fbTargetUser.displayName : undefined,
                 targetEmail: fbTargetType === 'direct' ? fbTargetUser.email : undefined,
+                targetRole: fbTargetType === 'direct' ? fbTargetUser.role : undefined,
             });
-            setFbSuccess(true); setFbMessage(''); setFbTargetUser(null);
-            setTimeout(() => { setFbSuccess(false); setShowSendModal(false); }, 1800);
-        } catch (err) { console.error('Error sending feedback:', err); }
+            setFbSuccess(true);
+            setFbMessage('');
+            setFbTargetUser(null);
+            setTimeout(() => {
+                setFbSuccess(false);
+                setShowSendModal(false);
+            }, 1800);
+        } catch (err) {
+            console.error('Error sending feedback:', err);
+        }
         setFbSending(false);
     }
 
     const unreadCount = feedbackList.filter(f => !f.isRead).length;
+    const sortedFeedbackList = sortFeedbackList(feedbackList);
 
     return (
         <div className="admin-page">
-            {/* Header */}
             <div className="admin-page-header">
                 <div>
                     <h1 className="admin-page-title" style={{ margin: 0, fontSize: 'clamp(1.1rem, 4vw, 1.5rem)' }}>
@@ -137,17 +176,16 @@ export default function TeacherFeedbackPage() {
                     </h1>
                     <p className="admin-page-subtitle">Xem và gửi góp ý ẩn danh cho đồng nghiệp.</p>
                 </div>
-                <div className="admin-header-actions">
-                    <button className="admin-btn admin-btn-primary" onClick={() => { setShowSendModal(true); loadStaffTeachers(); }} style={{ whiteSpace: 'nowrap', fontSize: '0.82rem' }}>
-                        <Send size={15} /> Gửi góp ý
-                    </button>
-                </div>
             </div>
 
-            {/* Received feedback section */}
-            <h3 style={{ fontSize: '0.92rem', fontWeight: 700, color: '#475569', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                📩 Góp ý nhận được
-            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                <h3 style={{ fontSize: '0.92rem', fontWeight: 700, color: '#475569', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    📩 Góp ý nhận được
+                </h3>
+                <button className="admin-btn admin-btn-primary" onClick={() => { setShowSendModal(true); loadStaffTeachers(); }} style={{ whiteSpace: 'nowrap', fontSize: '0.82rem', marginLeft: 'auto' }}>
+                    <Send size={15} /> Gửi góp ý
+                </button>
+            </div>
 
             {loading ? (
                 <div className="admin-card" style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b' }}>
@@ -164,12 +202,11 @@ export default function TeacherFeedbackPage() {
                 </div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {feedbackList.map(fb => {
+                    {sortedFeedbackList.map(fb => {
                         const cat = CATEGORIES.find(c => c.value === fb.category) || CATEGORIES[0];
                         const roleInfo = ROLE_LABELS[fb.senderRole] || ROLE_LABELS.user;
                         return (
                             <div key={fb.id} className="admin-card" style={{ padding: '16px', paddingRight: '44px', background: fb.isRead ? '#fff' : '#fefce8', transition: 'all 0.2s', position: 'relative' }}>
-                                {/* Right action buttons */}
                                 <div style={{ position: 'absolute', top: '50%', right: '10px', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
                                     {!fb.isRead && (
                                         <button onClick={() => handleMarkRead(fb)} title="Đánh dấu đã đọc" style={{
@@ -187,7 +224,7 @@ export default function TeacherFeedbackPage() {
                                     </button>
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                    <div style={{
+                                    <div className="feedback-card-emoji" style={{
                                         width: '38px', height: '38px', borderRadius: '12px',
                                         background: cat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
                                         fontSize: '1.1rem', flexShrink: 0,
@@ -204,6 +241,7 @@ export default function TeacherFeedbackPage() {
                                             📅 {formatDate(fb.createdAt)}{timeAgo(fb.createdAt) && ` · ${timeAgo(fb.createdAt)}`}
                                         </div>
                                         <p style={{ margin: 0, fontSize: '0.92rem', color: '#1e293b', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{fb.message}</p>
+                                        <FeedbackImageCard imageUrl={fb.imageUrl} imageName={fb.imageName} />
                                     </div>
                                 </div>
                             </div>
@@ -212,7 +250,6 @@ export default function TeacherFeedbackPage() {
                 </div>
             )}
 
-            {/* Hide confirmation modal */}
             {hideTarget && (
                 <div className="teacher-modal-overlay" onClick={() => setHideTarget(null)}>
                     <div className="teacher-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px', width: '90%', textAlign: 'center', padding: '32px 24px' }}>
@@ -227,7 +264,6 @@ export default function TeacherFeedbackPage() {
                 </div>
             )}
 
-            {/* Send Feedback Modal */}
             {showSendModal && (
                 <div className="teacher-modal-overlay" onClick={() => !fbSending && setShowSendModal(false)}>
                     <div className="teacher-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '520px', width: '92%' }}>
@@ -251,7 +287,6 @@ export default function TeacherFeedbackPage() {
                                     Góp ý của bạn sẽ được gửi ẩn danh.
                                 </p>
 
-                                {/* Target picker */}
                                 <div style={{ marginBottom: '16px' }}>
                                     <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '8px' }}>Gửi cho</label>
                                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: fbTargetType === 'direct' ? '12px' : '0' }}>
@@ -260,7 +295,7 @@ export default function TeacherFeedbackPage() {
                                             background: fbTargetType === 'admin' ? '#eff6ff' : '#f1f5f9',
                                             color: fbTargetType === 'admin' ? '#4f46e5' : '#64748b',
                                             border: `2px solid ${fbTargetType === 'admin' ? '#4f46e5' : 'transparent'}`,
-                                        }}>👑 Ban quản lý</button>
+                                        }}>📑 Ban quản lý</button>
                                         <button onClick={() => { setFbTargetType('direct'); loadStaffTeachers(); }} style={{
                                             padding: '8px 16px', borderRadius: '12px', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', transition: 'all 0.2s',
                                             background: fbTargetType === 'direct' ? '#f0fdf4' : '#f1f5f9',
@@ -281,45 +316,44 @@ export default function TeacherFeedbackPage() {
                                                 }}
                                             />
                                             <div style={{ maxHeight: '140px', overflowY: 'auto', padding: '4px' }}>
-                                            {loadingUsers ? (
-                                                <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: '0.82rem' }}>Đang tải...</div>
-                                            ) : (() => {
-                                                const filtered = staffTeacherList.filter(u => {
-                                                    if (!targetSearch.trim()) return true;
-                                                    const q = targetSearch.toLowerCase();
-                                                    return (u.displayName || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
-                                                });
-                                                return filtered.length === 0 ? (
-                                                    <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: '0.82rem' }}>
-                                                        {staffTeacherList.length === 0 ? 'Không có người nhận' : 'Không tìm thấy'}
-                                                    </div>
-                                                ) : filtered.map(u => {
-                                                const uRole = ROLE_LABELS[u.role] || { label: u.role, color: '#64748b', bg: '#f8fafc' };
-                                                return (
-                                                    <button key={u.uid} onClick={() => setFbTargetUser(u)} style={{
-                                                        display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 12px', borderRadius: '10px',
-                                                        border: 'none', cursor: 'pointer', transition: 'all 0.15s', textAlign: 'left',
-                                                        background: fbTargetUser?.uid === u.uid ? '#f0fdf4' : 'transparent',
-                                                        fontWeight: fbTargetUser?.uid === u.uid ? 600 : 400,
-                                                    }}>
-                                                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: uRole.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, color: uRole.color, flexShrink: 0 }}>
-                                                            {(u.displayName || '?')[0].toUpperCase()}
+                                                {loadingUsers ? (
+                                                    <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: '0.82rem' }}>Đang tải...</div>
+                                                ) : (() => {
+                                                    const filtered = staffTeacherList.filter(u => {
+                                                        if (!targetSearch.trim()) return true;
+                                                        const q = targetSearch.toLowerCase();
+                                                        return (u.displayName || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+                                                    });
+                                                    return filtered.length === 0 ? (
+                                                        <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: '0.82rem' }}>
+                                                            {staffTeacherList.length === 0 ? 'Không có người nhận' : 'Không tìm thấy'}
                                                         </div>
-                                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                                            <div style={{ fontSize: '0.85rem', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.displayName}</div>
-                                                            <div style={{ fontSize: '0.72rem', color: uRole.color }}>{uRole.label}</div>
-                                                        </div>
-                                                        {fbTargetUser?.uid === u.uid && <CheckCheck size={16} color="#16a34a" />}
-                                                    </button>
-                                                );
-                                            });
-                                            })()}
+                                                    ) : filtered.map(u => {
+                                                        const uRole = ROLE_LABELS[u.role] || { label: u.role, color: '#64748b', bg: '#f8fafc' };
+                                                        return (
+                                                            <button key={u.uid} onClick={() => setFbTargetUser(u)} style={{
+                                                                display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 12px', borderRadius: '10px',
+                                                                border: 'none', cursor: 'pointer', transition: 'all 0.15s', textAlign: 'left',
+                                                                background: fbTargetUser?.uid === u.uid ? '#f0fdf4' : 'transparent',
+                                                                fontWeight: fbTargetUser?.uid === u.uid ? 600 : 400,
+                                                            }}>
+                                                                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: uRole.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, color: uRole.color, flexShrink: 0 }}>
+                                                                    {(u.displayName || '?')[0].toUpperCase()}
+                                                                </div>
+                                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                                    <div style={{ fontSize: '0.85rem', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.displayName}</div>
+                                                                    <div style={{ fontSize: '0.72rem', color: uRole.color }}>{uRole.label}</div>
+                                                                </div>
+                                                                {fbTargetUser?.uid === u.uid && <CheckCheck size={16} color="#16a34a" />}
+                                                            </button>
+                                                        );
+                                                    });
+                                                })()}
                                             </div>
                                         </div>
                                     )}
                                 </div>
 
-                                {/* Category */}
                                 <div style={{ marginBottom: '16px' }}>
                                     <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '8px' }}>Phân loại</label>
                                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -335,18 +369,23 @@ export default function TeacherFeedbackPage() {
                                     </div>
                                 </div>
 
-                                {/* Message */}
                                 <div style={{ marginBottom: '20px' }}>
                                     <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '8px' }}>Nội dung</label>
-                                    <textarea value={fbMessage} onChange={e => setFbMessage(e.target.value)}
-                                        placeholder="Viết nội dung góp ý tại đây..." rows={4}
+                                    <textarea
+                                        value={fbMessage}
+                                        onChange={e => setFbMessage(e.target.value)}
+                                        placeholder="Viết nội dung góp ý tại đây..."
+                                        rows={4}
                                         style={{ width: '100%', padding: '14px 16px', border: '1.5px solid #e2e8f0', borderRadius: '14px', fontSize: '0.92rem', outline: 'none', resize: 'vertical', lineHeight: 1.6, fontFamily: 'inherit', boxSizing: 'border-box' }}
                                     />
                                 </div>
 
-                                <button onClick={handleSendFeedback} disabled={!fbMessage.trim() || fbSending || (fbTargetType === 'direct' && !fbTargetUser)}
+                                <button
+                                    onClick={handleSendFeedback}
+                                    disabled={!fbMessage.trim() || fbSending || (fbTargetType === 'direct' && !fbTargetUser)}
                                     className="admin-btn admin-btn-primary"
-                                    style={{ width: '100%', justifyContent: 'center', padding: '12px', opacity: fbSending ? 0.7 : 1 }}>
+                                    style={{ width: '100%', justifyContent: 'center', padding: '12px', opacity: fbSending ? 0.7 : 1 }}
+                                >
                                     {fbSending ? <><Loader size={16} className="spin" /> Đang gửi...</> : <><Send size={16} /> Gửi góp ý</>}
                                 </button>
                             </>
@@ -355,7 +394,16 @@ export default function TeacherFeedbackPage() {
                 </div>
             )}
 
-            <style>{`.spin { animation: spin 1s linear infinite; } @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }`}</style>
+            <style>{`
+                .spin { animation: spin 1s linear infinite; }
+                @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+
+                @media (max-width: 640px) {
+                    .feedback-card-emoji {
+                        display: none !important;
+                    }
+                }
+            `}</style>
         </div>
     );
 }

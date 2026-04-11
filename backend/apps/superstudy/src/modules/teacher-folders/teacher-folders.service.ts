@@ -188,4 +188,38 @@ export class TeacherFoldersService {
     if (!deleted) throw new NotFoundException(`Folder "${id}" not found`);
     return { deleted: true, id };
   }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // getSharedAndPublicFolders — mirrors getSharedAndPublicTeacherTopicFolders()
+  // Returns public folders + explicitly shared folders by folderAccessIds.
+  // ═════════════════════════════════════════════════════════════════════════
+
+  async getSharedAndPublicFolders(type: TeacherFolderType, folderAccessIds: string[] = []) {
+    const model = this.model(type) as any;
+    const idSet = new Set<string>();
+    const results: any[] = [];
+
+    // 1. All public folders
+    const publicDocs = await model.find({ isPublic: true, isDeleted: { $ne: true } }).lean();
+    for (const doc of publicDocs) {
+      if (!idSet.has(String(doc._id))) {
+        idSet.add(String(doc._id));
+        results.push({ ...doc, isTeacherFolder: true });
+      }
+    }
+
+    // 2. Explicitly shared folders by ID
+    const explicitIds = [...new Set((folderAccessIds || []).filter(Boolean))];
+    if (explicitIds.length > 0) {
+      const sharedDocs = await model.find({ _id: { $in: explicitIds }, isDeleted: { $ne: true } }).lean();
+      for (const doc of sharedDocs) {
+        if (!idSet.has(String(doc._id))) {
+          idSet.add(String(doc._id));
+          results.push({ ...doc, isTeacherFolder: true });
+        }
+      }
+    }
+
+    return results.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  }
 }

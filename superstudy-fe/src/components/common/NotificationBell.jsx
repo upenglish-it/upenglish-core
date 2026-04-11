@@ -38,6 +38,15 @@ export default function NotificationBell() {
 
     const unreadCount = notifications.filter(n => !n.isRead).length;
 
+    const formatNotificationTime = (createdAt) => {
+        if (!createdAt) return 'Vừa xong';
+        const rawDate = createdAt?.toDate ? createdAt.toDate() : createdAt;
+        const parsedDate = rawDate instanceof Date ? rawDate : new Date(rawDate);
+        return Number.isNaN(parsedDate.getTime())
+            ? 'Vừa xong'
+            : parsedDate.toLocaleString('vi-VN');
+    };
+
     const handleNotificationClick = async (notification) => {
         if (!notification.isRead) {
             await markNotificationAsRead(notification.id);
@@ -105,7 +114,7 @@ export default function NotificationBell() {
                                         <div className="notification-title">{notif.title}</div>
                                         <div className="notification-message">{notif.message}</div>
                                         <div className="notification-time">
-                                            {notif.createdAt?.toDate ? new Date(notif.createdAt.toDate()).toLocaleString('vi-VN') : 'Vừa xong'}
+                                            {formatNotificationTime(notif.createdAt)}
                                         </div>
                                     </div>
                                     {!notif.isRead && <div className="notification-dot" />}

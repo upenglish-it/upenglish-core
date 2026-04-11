@@ -6,12 +6,15 @@ import { getGroups, toggleResourcePublic, toggleTeacherVisible, getResourceShare
 import { getStudentsInGroup } from '../../services/teacherService';
 
 import { getPendingProposals, approveProposal, rejectProposal, findExistingOfficialCopy } from '../../services/contentProposalService';
+import { duplicateAdminExam } from '../../services/duplicateService';
 import { useAuth } from '../../contexts/AuthContext';
-import { Edit, Trash2, X, Plus, List, Search, Clock, ClipboardCheck, FolderOpen, GripVertical, Check, Share2, Globe, ChevronDown, ChevronRight, AlertTriangle, Users, Mail, UserPlus, Lock, CheckCircle, XCircle, Landmark, Send, FileText, Filter, ArrowRightLeft, GraduationCap } from 'lucide-react';
+import { Edit, Trash2, X, Plus, List, Search, Clock, ClipboardCheck, FolderOpen, GripVertical, Check, Share2, Globe, ChevronDown, ChevronRight, AlertTriangle, Users, Mail, UserPlus, Lock, CheckCircle, XCircle, Landmark, Send, FileText, Filter, ArrowRightLeft, GraduationCap, Copy } from 'lucide-react';
 import { convertExamToGrammar } from '../../services/conversionService';
 import CustomSelect from '../../components/common/CustomSelect';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import EmailAutocomplete from '../../components/common/EmailAutocomplete';
+import { findFolderIdForItem, reorderIdsByVisibleSubset, toggleIdInList, syncItemFolderAssignment } from '../../utils/folderManagement';
+import { truncateText } from '../../utils/textDisplay';
 import '../../components/common/ShareModal.css';
 
 export default function AdminExamsPage() {
@@ -33,6 +36,8 @@ export default function AdminExamsPage() {
     });
     const [isEditing, setIsEditing] = useState(false);
     const [examToDelete, setExamToDelete] = useState(null);
+    const [examToDuplicate, setExamToDuplicate] = useState(null);
+    const [isDuplicating, setIsDuplicating] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [alertMessage, setAlertMessage] = useState(null);
 
@@ -48,6 +53,7 @@ export default function AdminExamsPage() {
 
     // Share States
     const [shareModalOpen, setShareModalOpen] = useState(false);
+    const [adminShareTab, setAdminShareTab] = useState('internal');
     const [linkCopied, setLinkCopied] = useState(false);
     const [resourceToShare, setResourceToShare] = useState(null); // { id, name, type, isPublic }
     const [shareGroups, setShareGroups] = useState([]);
@@ -72,6 +78,7 @@ export default function AdminExamsPage() {
     const [quickAssignSelectedStudentIds, setQuickAssignSelectedStudentIds] = useState([]);
     const [quickAssignStudentsLoading, setQuickAssignStudentsLoading] = useState(false);
     const [studentDropdownOpen, setStudentDropdownOpen] = useState(false);
+    const [quickAssignScheduledStart, setQuickAssignScheduledStart] = useState('');
 
     // Proposal States
     const [pendingProposals, setPendingProposals] = useState([]);
@@ -98,8 +105,8 @@ export default function AdminExamsPage() {
         }
     }, [alertMessage]);
 
-    async function loadData() {
-        setLoading(true);
+    async function loadData(silent = false) {
+        if (!silent) setLoading(true);
         try {
             const [allExams, foldersData] = await Promise.all([
                 getExams(),
@@ -177,8 +184,13 @@ export default function AdminExamsPage() {
     }
 
     function openEditForm(exam) {
-        const currentFolder = folders.find(f => (f.examIds || []).includes(exam.id));
-        setFormData({ ...exam, sections: exam.sections || [{ id: crypto.randomUUID(), title: 'Section 1', context: '', order: 0 }], folderId: currentFolder ? currentFolder.id : '', examType: exam.examType || 'homework', timingMode: exam.timingMode || 'exam' });
+        setFormData({
+            ...exam,
+            sections: exam.sections || [{ id: crypto.randomUUID(), title: 'Section 1', context: '', order: 0 }],
+            folderId: findFolderIdForItem(folders, exam.id, 'examIds'),
+            examType: exam.examType || 'homework',
+            timingMode: exam.timingMode || 'exam'
+        });
         setIsEditing(true);
         setFormOpen(true);
     }
@@ -194,26 +206,17 @@ export default function AdminExamsPage() {
                 examToSave.timeLimitMinutes = 0;
             }
             const finalExamId = await saveExam({ ...examToSave, createdBy: examToSave.createdBy || user?.uid, createdByRole: examToSave.createdByRole || 'admin' });
-
-            const currentFolder = folders.find(f => (f.examIds || []).includes(finalExamId));
-            const targetFolderId = folderId;
-
-            if (currentFolder && currentFolder.id !== targetFolderId) {
-                const updatedOldFolder = { ...currentFolder, examIds: (currentFolder.examIds || []).filter(eid => eid !== finalExamId) };
-                await saveExamFolder(updatedOldFolder);
-            }
-
-            if (targetFolderId && (!currentFolder || currentFolder.id !== targetFolderId)) {
-                const targetFolder = folders.find(f => f.id === targetFolderId);
-                if (targetFolder) {
-                    const updatedNewFolder = { ...targetFolder, examIds: Array.from(new Set([...(targetFolder.examIds || []), finalExamId])) };
-                    await saveExamFolder(updatedNewFolder);
-                }
-            }
+            await syncItemFolderAssignment({
+                itemId: finalExamId,
+                targetFolderId: folderId,
+                folders,
+                itemIdsKey: 'examIds',
+                saveFolder: saveExamFolder
+            });
 
             setFormOpen(false);
             setAlertMessage({ type: 'success', text: isEditing ? "Cập nhật thành công!" : "Tạo bài tập và kiểm tra mới thành công!" });
-            loadData();
+            loadData(true);
         } catch (error) {
             setAlertMessage({ type: 'error', text: "Lỗi lưu: " + error.message });
         }
@@ -230,6 +233,21 @@ export default function AdminExamsPage() {
             setAlertMessage({ type: 'error', text: "Lỗi xóa: " + error.message });
         }
         setExamToDelete(null);
+    }
+
+    async function handleConfirmDuplicate() {
+        if (!examToDuplicate || isDuplicating) return;
+        setIsDuplicating(true);
+        try {
+            await duplicateAdminExam(examToDuplicate.id, user?.uid);
+            setAlertMessage({ type: 'success', text: `Đã nhân đôi đề thi "${examToDuplicate.name}" thành công!` });
+            await loadData(true);
+        } catch (error) {
+            setAlertMessage({ type: 'error', text: 'Lỗi nhân đôi đề thi: ' + error.message });
+        } finally {
+            setIsDuplicating(false);
+            setExamToDuplicate(null);
+        }
     }
 
     async function handleConfirmConvertToGrammar() {
@@ -273,7 +291,7 @@ export default function AdminExamsPage() {
             await saveExamFolder({ ...folderFormData, id: finalId });
             setFolderFormOpen(false);
             setAlertMessage({ type: 'success', text: isEditingFolder ? "Cập nhật folder thành công!" : "Thêm folder mới thành công!" });
-            loadData();
+            loadData(true);
         } catch (error) {
             setAlertMessage({ type: 'error', text: "Lỗi lưu folder: " + error.message });
         }
@@ -292,12 +310,7 @@ export default function AdminExamsPage() {
     }
 
     function toggleExamInFolder(examId) {
-        setFolderFormData(prev => {
-            const current = new Set(prev.examIds || []);
-            if (current.has(examId)) current.delete(examId);
-            else current.add(examId);
-            return { ...prev, examIds: Array.from(current) };
-        });
+        setFolderFormData(prev => ({ ...prev, examIds: toggleIdInList(prev.examIds, examId) }));
     }
 
     async function handleFolderDragEnd(result) {
@@ -314,7 +327,7 @@ export default function AdminExamsPage() {
                 await updateExamFoldersOrder(reordered);
             } catch (error) {
                 setAlertMessage({ type: 'error', text: 'Lỗi sắp xếp folder: ' + error.message });
-                loadData();
+                loadData(true);
             }
             return;
         }
@@ -323,15 +336,22 @@ export default function AdminExamsPage() {
             const folderId = source.droppableId.replace('folder-exams-', '');
             const folder = folders.find(f => f.id === folderId);
             if (!folder) return;
-            const ids = Array.from(folder.examIds || []);
-            const [movedId] = ids.splice(source.index, 1);
-            ids.splice(destination.index, 0, movedId);
+            const ids = reorderIdsByVisibleSubset({
+                allIds: folder.examIds || [],
+                sourceIndex: source.index,
+                destinationIndex: destination.index,
+                searchTerm,
+                getItem: id => exams.find(exam => exam.id === id),
+                matchesSearch: (exam, term) =>
+                    (exam.name || '').toLowerCase().includes(term) ||
+                    (exam.description || '').toLowerCase().includes(term)
+            });
             setFolders(prev => prev.map(f => f.id === folderId ? { ...f, examIds: ids } : f));
             try {
                 await saveExamFolder({ ...folder, examIds: ids });
             } catch (error) {
                 setAlertMessage({ type: 'error', text: 'Lỗi sắp xếp bài: ' + error.message });
-                loadData();
+                loadData(true);
             }
             return;
         }
@@ -426,7 +446,7 @@ export default function AdminExamsPage() {
         try {
             await toggleResourcePublic(resourceToShare.type, resourceToShare.id, newPublicStatus);
             setResourceToShare({ ...resourceToShare, isPublic: newPublicStatus });
-            loadData();
+            loadData(true);
         } catch (err) {
             setAlertMessage({ type: 'error', text: 'Lỗi cập nhật public: ' + err.message });
         }
@@ -440,7 +460,7 @@ export default function AdminExamsPage() {
             await toggleTeacherVisible(type, resource.id, newStatus);
             setResourceToShare(prev => prev ? { ...prev, teacherVisible: newStatus } : prev);
             setAlertMessage({ type: 'success', text: newStatus ? 'Đã bật cho GV sử dụng!' : 'Đã tắt quyền GV sử dụng.' });
-            loadData();
+            loadData(true);
         } catch (err) {
             setAlertMessage({ type: 'error', text: 'Lỗi cập nhật: ' + err.message });
         }
@@ -552,7 +572,7 @@ export default function AdminExamsPage() {
                 await approveProposal(proposal.id, 'admin', 'create_new');
                 setAlertMessage({ type: 'success', text: 'Đã duyệt và tạo bài tập và kiểm tra chính thức thành công!' });
                 loadProposals();
-                loadData();
+                loadData(true);
                 setIsApproving(false);
             }
         } catch (err) {
@@ -571,7 +591,7 @@ export default function AdminExamsPage() {
             setProposalToApprove(null);
             setExistingOfficialCopy(null);
             loadProposals();
-            loadData();
+            loadData(true);
         } catch (err) {
             setAlertMessage({ type: 'error', text: 'Lỗi duyệt: ' + err.message });
         }
@@ -598,7 +618,7 @@ export default function AdminExamsPage() {
             setTransferModalOpen(false);
             setTransferTarget(null);
             setShareModalOpen(false);
-            loadData();
+            loadData(true);
         } catch (err) {
             setAlertMessage({ type: 'error', text: 'Lỗi chuyển quyền: ' + err.message });
         }
@@ -644,42 +664,37 @@ export default function AdminExamsPage() {
     });
 
     // --- RENDER EXAM ROW ---
-    function renderExamRow(exam, nested = false) {
+    function renderExamRow(exam, nested = false, indentPx = 0) {
         return (
             <tr key={exam.id} className={nested ? "table-row-nested" : ""} style={!nested ? { marginLeft: 0, width: '100%', borderLeft: '1px solid #e2e8f0' } : {}}>
                 <td></td>
                 <td data-label="Bài tập và Kiểm tra">
-                    <div className="admin-topic-cell">
+                    <div className="admin-topic-cell" style={indentPx ? { paddingLeft: `${indentPx}px` } : undefined}>
                         <div className="admin-topic-icon" style={{ background: `${exam.color || '#6366f1'}20`, width: nested ? '32px' : '40px', height: nested ? '32px' : '40px', fontSize: nested ? '0.9rem' : '1rem' }}>
                             {exam.icon || '📋'}
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '10px' }}>
-                                <div className="admin-topic-name" style={{ fontWeight: 600 }}>{exam.name}</div>
-                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', width: '100%', gap: '10px' }}>
+                                <div className="admin-topic-name" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                     {exam.isPublic && (
                                         <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0', whiteSpace: 'nowrap' }}>Public</span>
                                     )}
                                     {exam.teacherVisible && !exam.isPublic && (
                                         <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '2px' }}><GraduationCap size={9} /> GV</span>
                                     )}
+                                    <span>{exam.name}</span>
                                 </div>
                             </div>
                             <div className="admin-text-muted" style={{ maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.75rem', marginBottom: '2px' }}>
-                                {exam.description}
-                            </div>
-
-                            {/* Compact Info for Mobile */}
-                            <div className="mobile-show" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.7rem', color: '#64748b', flexWrap: 'wrap' }}>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><List size={10} /> {questionCounts[exam.id] || 0} câu</span>
-                                <span>&middot;</span>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><Clock size={10} /> {exam.timingMode === 'section' ? `Theo section (${(exam.sections || []).reduce((s, sec) => s + (sec.timeLimitMinutes || 0), 0)}p)` : exam.timingMode === 'question' ? `Theo câu (${Math.round((exam.cachedQuestionTimeTotalSeconds || 0) / 60)}p)` : `Theo bài (${exam.timeLimitMinutes || 0}p)`}</span>
-                                <span>&middot;</span>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><ClipboardCheck size={10} /> {exam.sections?.length || 0} {(exam.sections?.length || 0) === 1 ? 'section' : 'sections'}</span>
-                                <span>&middot;</span>
-                                <span className="active" style={{ color: '#059669', fontWeight: 600 }}>Active</span>
+                                {truncateText(exam.description)}
                             </div>
                         </div>
+                    </div>
+                    {/* Compact Info for Mobile - outside admin-topic-cell for proper centering */}
+                    <div className="mobile-show admin-mobile-card-meta" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.7rem', color: '#64748b', flexWrap: 'wrap' }}>
+                        <span className="admin-mobile-meta-pill" style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><List size={10} /> {questionCounts[exam.id] || 0} câu</span>
+                        <span className="admin-mobile-meta-pill" style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><Clock size={10} /> {exam.timingMode === 'section' ? `Theo section (${(exam.sections || []).reduce((s, sec) => s + (sec.timeLimitMinutes || 0), 0)}p)` : exam.timingMode === 'question' ? `Theo câu (${Math.round((exam.cachedQuestionTimeTotalSeconds || 0) / 60)}p)` : `Theo bài (${exam.timeLimitMinutes || 0}p)`}</span>
+                        <span className="admin-mobile-meta-pill" style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><ClipboardCheck size={10} /> {exam.sections?.length || 0} {(exam.sections?.length || 0) === 1 ? 'section' : 'sections'}</span>
                     </div>
                 </td>
                 <td data-label="Thông tin" className="mobile-hide">
@@ -687,28 +702,26 @@ export default function AdminExamsPage() {
                         <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>
                             {questionCounts[exam.id] || 0} câu hỏi
                         </span>
-                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '0.65rem', background: '#e0e7ff', color: '#4f46e5', padding: '1px 4px', borderRadius: '3px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '2px' }}>
-                                <Clock size={10} /> {exam.timingMode === 'section' ? `Theo section (${(exam.sections || []).reduce((s, sec) => s + (sec.timeLimitMinutes || 0), 0)}ph)` : exam.timingMode === 'question' ? `Theo câu (${Math.round((exam.cachedQuestionTimeTotalSeconds || 0) / 60)}ph)` : `Theo bài (${exam.timeLimitMinutes || 0}ph)`}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 500 }}>
+                                {exam.timingMode === 'section' ? `Tính giờ theo section (${(exam.sections || []).reduce((s, sec) => s + (sec.timeLimitMinutes || 0), 0)}p)` : exam.timingMode === 'question' ? `Tính giờ theo câu (${Math.round((exam.cachedQuestionTimeTotalSeconds || 0) / 60)}p)` : `Tính giờ theo bài (${exam.timeLimitMinutes || 0}p)`}
                             </span>
                             {exam.timingMode === 'section' && (exam.sections || []).some(s => !s.timeLimitMinutes || s.timeLimitMinutes <= 0) && (
-                                <span style={{ fontSize: '0.6rem', background: '#fef2f2', color: '#dc2626', padding: '1px 4px', borderRadius: '3px', fontWeight: 700, border: '1px solid #fecaca' }}>⚠ {(exam.sections || []).filter(s => !s.timeLimitMinutes || s.timeLimitMinutes <= 0).length} section chưa hẹn giờ</span>
+                                <span style={{ fontSize: '0.72rem', color: '#dc2626', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>⚠ {(exam.sections || []).filter(s => !s.timeLimitMinutes || s.timeLimitMinutes <= 0).length} section chưa hẹn giờ</span>
                             )}
                             {exam.timingMode === 'question' && (exam.cachedQuestionTimeMissingCount > 0) && (
-                                <span style={{ fontSize: '0.6rem', background: '#fff7ed', color: '#ea580c', padding: '1px 4px', borderRadius: '3px', fontWeight: 700, border: '1px solid #fed7aa' }}>⚠ {exam.cachedQuestionTimeMissingCount} câu hỏi chưa hẹn giờ</span>
+                                <span style={{ fontSize: '0.72rem', color: '#ea580c', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>⚠ {exam.cachedQuestionTimeMissingCount} câu hỏi chưa hẹn giờ</span>
                             )}
-                            <span style={{ fontSize: '0.65rem', background: '#fef3c7', color: '#d97706', padding: '1px 4px', borderRadius: '3px', fontWeight: 600 }}>
+                            <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 500 }}>
                                 {exam.sections?.length || 0} {(exam.sections?.length || 0) === 1 ? 'section' : 'sections'}
                             </span>
                         </div>
                     </div>
                 </td>
-                <td data-label="Trạng thái" className="mobile-hide" style={{ textAlign: 'center' }}>
-                    <span className="admin-status-badge active" style={{ fontSize: '0.6rem', padding: '1px 5px' }}>Đang hoạt động</span>
-                </td>
-                <td className="text-right">
+                <td data-label="Hành động" className="text-right">
                     <div className="admin-table-actions">
                         <Link to={`/admin/exams/${exam.id}`} className="admin-action-btn" title="Quản lý câu hỏi"><List size={14} /></Link>
+                        <button className="admin-action-btn" onClick={() => setExamToDuplicate(exam)} title="Nhân đôi"><Copy size={14} /></button>
                         <button className="admin-action-btn" onClick={() => setExamToConvert(exam)} title="Chuyển thành Bài kỹ năng"><ArrowRightLeft size={14} /></button>
                         <button className="admin-action-btn" onClick={() => openShareModal(exam, 'exam')} title="Chia sẻ"><Share2 size={14} /></button>
                         <button className="admin-action-btn" onClick={() => openEditForm(exam)} title="Sửa"><Edit size={14} /></button>
@@ -748,7 +761,7 @@ export default function AdminExamsPage() {
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <div className="admin-search-box" style={{ flex: 1, minWidth: '200px' }}>
                     <Search size={16} className="search-icon" />
-                    <input type="text" placeholder="Tìm tên bài tập và kiểm tra, tên folder..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                    <input id="admin-exam-search" name="adminExamSearch" type="text" placeholder="Tìm tên bài tập và kiểm tra, tên folder..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                 </div>
                 <div className="admin-public-filter">
                     <button className={`admin-filter-btn${publicFilter === 'all' ? ' active' : ''}`} onClick={() => setPublicFilter('all')}>
@@ -769,13 +782,12 @@ export default function AdminExamsPage() {
                 ) : (
                     <div className="admin-table-container">
                         <DragDropContext onDragEnd={handleFolderDragEnd}>
-                            <table className="admin-table">
+                            <table className="admin-table admin-content-table">
                                 <thead>
                                     <tr>
                                         <th style={{ width: '40px' }}></th>
                                         <th>Tên mục</th>
                                         <th>Thông tin</th>
-                                        <th style={{ textAlign: 'center' }}>Trạng thái</th>
                                         <th className="text-right">Hành động</th>
                                     </tr>
                                 </thead>
@@ -827,15 +839,8 @@ export default function AdminExamsPage() {
                                                                         <div className="admin-topic-cell" style={{ width: '100%' }}>
                                                                             <div className="admin-topic-icon" style={{ background: '#fef9c3', width: '32px', height: '32px', fontSize: '0.9rem' }}>📁</div>
                                                                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '10px' }}>
-                                                                                    <div className="admin-topic-name" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem', fontWeight: 600 }}>
-                                                                                        {folder.name}
-                                                                                        <div className="mobile-show" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: '#64748b' }}>
-                                                                                            <ClipboardCheck size={12} />
-                                                                                            <span>{folderExams.length}</span>
-                                                                                        </div>
-                                                                                    </div>
-                                                                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                                                <div style={{ display: 'flex', alignItems: 'center', width: '100%', gap: '10px' }}>
+                                                                                    <div className="admin-topic-name" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem', fontWeight: 600, flexWrap: 'wrap' }}>
                                                                                         {folder.isPublic && (
                                                                                             <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
                                                                                                 <Globe size={10} /> Public
@@ -846,17 +851,17 @@ export default function AdminExamsPage() {
                                                                                                 <GraduationCap size={10} /> GV
                                                                                             </span>
                                                                                         )}
+                                                                                        <span>{folder.name}</span>
                                                                                     </div>
                                                                                 </div>
                                                                                 <div className="admin-text-muted" style={{ fontSize: '0.8rem', maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                                                    {folder.description || <span style={{ fontStyle: 'italic', color: '#cbd5e1' }}>Không có mô tả</span>}
+                                                                                    {folder.description ? truncateText(folder.description) : <span style={{ fontStyle: 'italic', color: '#cbd5e1' }}>Không có mô tả</span>}
                                                                                 </div>
                                                                             </div>
                                                                         </div>
                                                                     </td>
                                                                     <td className="mobile-hide"></td>
-                                                                    <td data-label="Trạng thái" className="mobile-hide"></td>
-                                                                    <td className="text-right">
+                                                                    <td data-label="Hành động" className="text-right">
                                                                         <div className="admin-table-actions">
                                                                             <button className="admin-action-btn mobile-show"
                                                                                 style={{
@@ -882,9 +887,9 @@ export default function AdminExamsPage() {
                                                         </Draggable>
                                                         {isExpanded && (
                                                             folderExams.length === 0 ? (
-                                                                <tr key={`${folder.id}-empty`} className="admin-empty-nested-row">
+                                                                <tr key={`${folder.id}-empty`} className="admin-empty-nested-row admin-content-empty-row">
                                                                     <td></td>
-                                                                    <td colSpan="4">
+                                                                    <td colSpan="3">
                                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', color: '#64748b' }}>
                                                                             <AlertTriangle size={14} style={{ opacity: 0.7 }} />
                                                                             <span style={{ fontSize: '0.85rem' }}>Folder này chưa có bài tập và kiểm tra nào. Bấm "Sửa Folder" để thêm.</span>
@@ -892,101 +897,100 @@ export default function AdminExamsPage() {
                                                                     </td>
                                                                 </tr>
                                                             ) : (
-                                                                <Droppable droppableId={`folder-exams-${folder.id}`} type="exam">
-                                                                    {(examDropProvided) => (
-                                                                        <>
-                                                                        {folderExams.map((exam, exIdx) => (
-                                                                            <Draggable key={exam.id} draggableId={`exam-${exam.id}`} index={exIdx}>
-                                                                                {(examDragProv, examSnapshot) => (
-                                                                                    <tr
-                                                                                        ref={(node) => { examDragProv.innerRef(node); if (exIdx === 0) examDropProvided.innerRef(node); }}
-                                                                                        {...examDragProv.draggableProps}
-                                                                                        {...(exIdx === 0 ? examDropProvided.droppableProps : {})}
-                                                                                        className="table-row-nested"
-                                                                                        style={{
-                                                                                            ...examDragProv.draggableProps.style,
-                                                                                            backgroundColor: examSnapshot.isDragging ? '#f0f9ff' : undefined,
-                                                                                            boxShadow: examSnapshot.isDragging ? '0 4px 12px rgba(0,0,0,0.08)' : undefined
-                                                                                        }}
-                                                                                    >
-                                                                                        <td>
-                                                                                            <div {...examDragProv.dragHandleProps} style={{ cursor: 'grab', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                                                                <GripVertical size={14} />
-                                                                                            </div>
-                                                                                        </td>
-                                                                                        <td data-label="Bài tập và Kiểm tra">
-                                                                                            <div className="admin-topic-cell">
-                                                                                                <div className="admin-topic-icon" style={{ background: `${exam.color || '#6366f1'}20`, width: '32px', height: '32px', fontSize: '0.9rem' }}>
-                                                                                                    {exam.icon || '📋'}
-                                                                                                </div>
-                                                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
-                                                                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '10px' }}>
-                                                                                                        <div className="admin-topic-name" style={{ fontWeight: 600 }}>{exam.name}</div>
-                                                                                                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                                                                                                            {exam.isPublic && (
-                                                                                                                <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0', whiteSpace: 'nowrap' }}>Public</span>
-                                                                                                            )}
-                                                                                                            {exam.teacherVisible && !exam.isPublic && (
-                                                                                                                <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '2px' }}><GraduationCap size={9} /> GV</span>
-                                                                                                            )}
+                                                                <tr key={`${folder.id}-droppable`} className="admin-content-nested-wrapper">
+                                                                    <td colSpan="4" style={{ padding: 0 }}>
+                                                                        <table className="admin-content-nested-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                                                            <Droppable droppableId={`folder-exams-${folder.id}`} type="exam">
+                                                                                {(examDropProvided) => (
+                                                                                    <tbody ref={examDropProvided.innerRef} {...examDropProvided.droppableProps}>
+                                                                                        {folderExams.map((exam, exIdx) => (
+                                                                                            <Draggable key={exam.id} draggableId={`exam-${exam.id}`} index={exIdx}>
+                                                                                                {(examDragProv, examSnapshot) => (
+                                                                                                    <tr
+                                                                                                        ref={examDragProv.innerRef}
+                                                                                                        {...examDragProv.draggableProps}
+                                                                                                        className="table-row-nested"
+                                                                                                        style={{
+                                                                                                            ...examDragProv.draggableProps.style,
+                                                                                                            backgroundColor: examSnapshot.isDragging ? '#f0f9ff' : undefined,
+                                                                                                            boxShadow: examSnapshot.isDragging ? '0 4px 12px rgba(0,0,0,0.08)' : undefined
+                                                                                                        }}
+                                                                                                    >
+                                                                                                        <td>
+                                                                                                            <div {...examDragProv.dragHandleProps} style={{ cursor: 'grab', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                                                                <GripVertical size={14} />
+                                                                                                            </div>
+                                                                                                        </td>
+                                                                                                        <td data-label="Bài tập và Kiểm tra">
+                                                                                                            <div className="admin-topic-cell">
+                                                                                                                <div className="admin-topic-icon" style={{ background: `${exam.color || '#6366f1'}20`, width: '32px', height: '32px', fontSize: '0.9rem' }}>
+                                                                                                                    {exam.icon || '📋'}
+                                                                                                                </div>
+                                                                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
+                                                                                                                    <div style={{ display: 'flex', alignItems: 'center', width: '100%', gap: '10px' }}>
+                                                                                                                        <div className="admin-topic-name" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                                                                                            {exam.isPublic && (
+                                                                                                                                <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0', whiteSpace: 'nowrap' }}>Public</span>
+                                                                                                                            )}
+                                                                                                                            {exam.teacherVisible && !exam.isPublic && (
+                                                                                                                                <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '2px' }}><GraduationCap size={9} /> GV</span>
+                                                                                                                            )}
+                                                                                                                            <span>{exam.name}</span>
+                                                                                                                        </div>
+                                                                                                                    </div>
+                                                                                                                    <div className="admin-text-muted" style={{ maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.75rem', marginBottom: '2px' }}>
+                                                                                                                        {truncateText(exam.description)}
+                                                                                                                    </div>
+                                                                                                                </div>
+                                                                                                            </div>
+                                                                                                        <div className="mobile-show admin-mobile-card-meta" style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.7rem", color: "#64748b", flexWrap: "wrap" }}>
+                                                                                                            <span className="admin-mobile-meta-pill" style={{ display: "flex", alignItems: "center", gap: "3px" }}><List size={10} /> {questionCounts[exam.id] || 0} câu</span>
+                                                                                                            <span className="admin-mobile-meta-pill" style={{ display: "flex", alignItems: "center", gap: "3px" }}><Clock size={10} /> {exam.timingMode === "section" ? `Theo section (${(exam.sections || []).reduce((s, sec) => s + (sec.timeLimitMinutes || 0), 0)}p)` : exam.timingMode === "question" ? `Theo câu (${Math.round((exam.cachedQuestionTimeTotalSeconds || 0) / 60)}p)` : `Theo bài (${exam.timeLimitMinutes || 0}p)`}</span>
+                                                                                                            <span className="admin-mobile-meta-pill" style={{ display: "flex", alignItems: "center", gap: "3px" }}><ClipboardCheck size={10} /> {exam.sections?.length || 0} {(exam.sections?.length || 0) === 1 ? "section" : "sections"}</span>
                                                                                                         </div>
-                                                                                                    </div>
-                                                                                                    <div className="admin-text-muted" style={{ maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.75rem', marginBottom: '2px' }}>
-                                                                                                        {exam.description}
-                                                                                                    </div>
-                                                                                                    <div className="mobile-show" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.7rem', color: '#64748b', flexWrap: 'wrap' }}>
-                                                                                                        <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><List size={10} /> {questionCounts[exam.id] || 0} câu</span>
-                                                                                                        <span>&middot;</span>
-                                                                                                        <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><Clock size={10} /> {exam.timingMode === 'section' ? `Theo section (${(exam.sections || []).reduce((s, sec) => s + (sec.timeLimitMinutes || 0), 0)}p)` : exam.timingMode === 'question' ? `Theo câu (${Math.round((exam.cachedQuestionTimeTotalSeconds || 0) / 60)}p)` : `Theo bài (${exam.timeLimitMinutes || 0}p)`}</span>
-                                                                                                        <span>&middot;</span>
-                                                                                                        <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><ClipboardCheck size={10} /> {exam.sections?.length || 0} {(exam.sections?.length || 0) === 1 ? 'section' : 'sections'}</span>
-                                                                                                        <span>&middot;</span>
-                                                                                                        <span className="active" style={{ color: '#059669', fontWeight: 600 }}>Active</span>
-                                                                                                    </div>
-                                                                                                </div>
-                                                                                            </div>
-                                                                                        </td>
-                                                                                        <td data-label="Thông tin" className="mobile-hide">
-                                                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                                                                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>
-                                                                                                    {questionCounts[exam.id] || 0} câu hỏi
-                                                                                                </span>
-                                                                                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                                                                                                    <span style={{ fontSize: '0.65rem', background: '#e0e7ff', color: '#4f46e5', padding: '1px 4px', borderRadius: '3px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '2px' }}>
-                                                                                                        <Clock size={10} /> {exam.timingMode === 'section' ? `Theo section (${(exam.sections || []).reduce((s, sec) => s + (sec.timeLimitMinutes || 0), 0)}ph)` : exam.timingMode === 'question' ? `Theo câu (${Math.round((exam.cachedQuestionTimeTotalSeconds || 0) / 60)}ph)` : `Theo bài (${exam.timeLimitMinutes || 0}ph)`}
-                                                                                                    </span>
-                                                                                                    {exam.timingMode === 'section' && (exam.sections || []).some(s => !s.timeLimitMinutes || s.timeLimitMinutes <= 0) && (
-                                                                                                        <span style={{ fontSize: '0.6rem', background: '#fef2f2', color: '#dc2626', padding: '1px 4px', borderRadius: '3px', fontWeight: 700, border: '1px solid #fecaca' }}>⚠ {(exam.sections || []).filter(s => !s.timeLimitMinutes || s.timeLimitMinutes <= 0).length} section chưa hẹn giờ</span>
-                                                                                                    )}
-                                                                                                    {exam.timingMode === 'question' && (exam.cachedQuestionTimeMissingCount > 0) && (
-                                                                                                        <span style={{ fontSize: '0.6rem', background: '#fff7ed', color: '#ea580c', padding: '1px 4px', borderRadius: '3px', fontWeight: 700, border: '1px solid #fed7aa' }}>⚠ {exam.cachedQuestionTimeMissingCount} câu hỏi chưa hẹn giờ</span>
-                                                                                                    )}
-                                                                                                    <span style={{ fontSize: '0.65rem', background: '#fef3c7', color: '#d97706', padding: '1px 4px', borderRadius: '3px', fontWeight: 600 }}>
-                                                                                                        {exam.sections?.length || 0} {(exam.sections?.length || 0) === 1 ? 'section' : 'sections'}
-                                                                                                    </span>
-                                                                                                </div>
-                                                                                            </div>
-                                                                                        </td>
-                                                                                        <td data-label="Trạng thái" className="mobile-hide" style={{ textAlign: 'center' }}>
-                                                                                            <span className="admin-status-badge active" style={{ fontSize: '0.6rem', padding: '1px 5px' }}>Đang hoạt động</span>
-                                                                                        </td>
-                                                                                        <td className="text-right">
-                                                                                            <div className="admin-table-actions">
-                                                                                                <Link to={`/admin/exams/${exam.id}`} className="admin-action-btn" title="Quản lý câu hỏi"><List size={14} /></Link>
-                                                                                                <button className="admin-action-btn" onClick={() => setExamToConvert(exam)} title="Chuyển thành Bài kỹ năng"><ArrowRightLeft size={14} /></button>
-                                                                                                <button className="admin-action-btn" onClick={() => openShareModal(exam, 'exam')} title="Chia sẻ"><Share2 size={14} /></button>
-                                                                                                <button className="admin-action-btn" onClick={() => openEditForm(exam)} title="Sửa"><Edit size={14} /></button>
-                                                                                                <button className="admin-action-btn danger" onClick={() => setExamToDelete(exam)} title="Xóa"><Trash2 size={14} /></button>
-                                                                                            </div>
-                                                                                        </td>
-                                                                                    </tr>
+                                                                                                        </td>
+                                                                            <td data-label="Thông tin" className="mobile-hide">
+                                                                                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                                                                    <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#475569" }}>
+                                                                                        {questionCounts[exam.id] || 0} câu hỏi
+                                                                                    </span>
+                                                                                    <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                                                                        <span style={{ fontSize: "0.78rem", color: "#64748b", fontWeight: 500 }}>
+                                                                                            {exam.timingMode === "section" ? `Tính giờ theo section (${(exam.sections || []).reduce((s, sec) => s + (sec.timeLimitMinutes || 0), 0)}p)` : exam.timingMode === "question" ? `Tính giờ theo câu (${Math.round((exam.cachedQuestionTimeTotalSeconds || 0) / 60)}p)` : `Tính giờ theo bài (${exam.timeLimitMinutes || 0}p)`}
+                                                                                        </span>
+                                                                                        {exam.timingMode === "section" && (exam.sections || []).some(s => !s.timeLimitMinutes || s.timeLimitMinutes <= 0) && (
+                                                                                            <span style={{ fontSize: "0.72rem", color: "#dc2626", fontWeight: 700 }}>⚠ {(exam.sections || []).filter(s => !s.timeLimitMinutes || s.timeLimitMinutes <= 0).length} section chưa hẹn giờ</span>
+                                                                                        )}
+                                                                                        {exam.timingMode === "question" && (exam.cachedQuestionTimeMissingCount > 0) && (
+                                                                                            <span style={{ fontSize: "0.72rem", color: "#ea580c", fontWeight: 700 }}>⚠ {exam.cachedQuestionTimeMissingCount} câu hỏi chưa hẹn giờ</span>
+                                                                                        )}
+                                                                                        <span style={{ fontSize: "0.78rem", color: "#94a3b8", fontWeight: 500 }}>
+                                                                                            {exam.sections?.length || 0} {(exam.sections?.length || 0) === 1 ? "section" : "sections"}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </td>
+                                                                                                        <td data-label="Hành động" className="text-right">
+                                                                                                            <div className="admin-table-actions">
+                                                                                                                <Link to={`/admin/exams/${exam.id}`} className="admin-action-btn" title="Quản lý câu hỏi"><List size={14} /></Link>
+                                                                                                                <button className="admin-action-btn" onClick={() => setExamToDuplicate(exam)} title="Nhân đôi"><Copy size={14} /></button>
+                                                                                                                <button className="admin-action-btn" onClick={() => setExamToConvert(exam)} title="Chuyển thành Bài kỹ năng"><ArrowRightLeft size={14} /></button>
+                                                                                                                <button className="admin-action-btn" onClick={() => openShareModal(exam, 'exam')} title="Chia sẻ"><Share2 size={14} /></button>
+                                                                                                                <button className="admin-action-btn" onClick={() => openEditForm(exam)} title="Sửa"><Edit size={14} /></button>
+                                                                                                                <button className="admin-action-btn danger" onClick={() => setExamToDelete(exam)} title="Xóa"><Trash2 size={14} /></button>
+                                                                                                            </div>
+                                                                                                        </td>
+                                                                                                    </tr>
+                                                                                                )}
+                                                                                            </Draggable>
+                                                                                        ))}
+                                                                                        {examDropProvided.placeholder}
+                                                                                    </tbody>
                                                                                 )}
-                                                                            </Draggable>
-                                                                        ))}
-                                                                        {examDropProvided.placeholder}
-                                                                        </>
-                                                                    )}
-                                                                </Droppable>
+                                                                            </Droppable>
+                                                                        </table>
+                                                                    </td>
+                                                                </tr>
                                                             )
                                                         )}
                                                     </React.Fragment>
@@ -1007,21 +1011,21 @@ export default function AdminExamsPage() {
                                             <>
                                                 <tr className="admin-unassigned-header">
                                                     <td></td>
-                                                    <td colSpan="4">
+                                                    <td colSpan="3">
                                                         <div className="admin-unassigned-label">
                                                             <AlertTriangle size={16} />
                                                             Bài tập và Kiểm tra chưa phân loại ({unassigned.length})
                                                         </div>
                                                     </td>
                                                 </tr>
-                                                {unassigned.map(exam => renderExamRow(exam, false))}
+                                                {unassigned.map(exam => renderExamRow(exam, true, 25))}
                                             </>
                                         );
                                     })()}
 
                                     {filteredExams.length === 0 && filteredFolders.length === 0 && (
                                         <tr>
-                                            <td colSpan="5">
+                                            <td colSpan="4">
                                                 <div className="admin-empty-state">
                                                     <ClipboardCheck size={48} color="#cbd5e1" style={{ marginBottom: '16px' }} />
                                                     <p>{searchTerm ? 'Không tìm thấy kết quả.' : 'Chưa có bài tập và kiểm tra nào. Bấm "Tạo bài tập và kiểm tra mới" để bắt đầu.'}</p>
@@ -1288,6 +1292,25 @@ export default function AdminExamsPage() {
             )}
 
             {/* DELETE EXAM CONFIRM */}
+            {examToDuplicate && (
+                <div className="admin-modal-overlay">
+                    <div className="admin-modal" style={{ maxWidth: '450px' }}>
+                        <h2 className="admin-modal-title" style={{ color: '#6366f1' }}><Copy size={24} /> Nhân đôi đề thi</h2>
+                        <p className="admin-modal-desc">
+                            Bạn có muốn tạo một bản sao mới của đề thi <strong>{examToDuplicate.name}</strong>?
+                            <br /><br />
+                            Bản sao sẽ giữ nguyên section, câu hỏi và media nhưng không tự bật public hay chia sẻ cho giáo viên.
+                        </p>
+                        <div className="admin-modal-actions">
+                            <button className="admin-btn admin-btn-secondary" onClick={() => setExamToDuplicate(null)} disabled={isDuplicating}>Hủy</button>
+                            <button className="admin-btn admin-btn-primary" onClick={handleConfirmDuplicate} disabled={isDuplicating}>
+                                {isDuplicating ? 'Đang nhân đôi...' : 'Xác nhận nhân đôi'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {examToDelete && (
                 <div className="admin-modal-overlay">
                     <div className="admin-modal">
@@ -1322,7 +1345,7 @@ export default function AdminExamsPage() {
             {/* SHARE MODAL */}
             {shareModalOpen && resourceToShare && (
                 <div className="teacher-modal-overlay">
-                    <div className="teacher-modal wide" style={{ maxWidth: '600px', overflow: 'auto' }}>
+                    <div className="teacher-modal wide admin-share-modal">
                         <div style={{ position: 'sticky', top: '0px', zIndex: 100, display: 'flex', justifyContent: 'flex-end', height: 0, overflow: 'visible', pointerEvents: 'none' }}>
                             <button className="teacher-modal-close" onClick={() => setShareModalOpen(false)} style={{ pointerEvents: 'auto', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, background: 'rgba(241, 245, 249, 0.95)', backdropFilter: 'blur(4px)', border: 'none', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                                 <X size={20} />
@@ -1341,6 +1364,8 @@ export default function AdminExamsPage() {
 
                             <div style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                                 <input
+                                    id="admin-exam-share-link"
+                                    name="adminExamShareLink"
                                     type="text"
                                     readOnly
                                     value={`${window.location.origin}/preview/superstudy?shareId=${resourceToShare.id}&shareType=${resourceToShare.type === 'exam_folder' ? 'admin_folder' : 'admin_exam'}`}
@@ -1411,7 +1436,7 @@ export default function AdminExamsPage() {
                                             </div>
                                             <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><UserPlus size={14} /> Chia sẻ cho GV cụ thể</div>
                                             <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-                                                <EmailAutocomplete value={teacherShareEmail} onChange={setTeacherShareEmail} onSelect={(email) => handleAddTeacherShare(email)} placeholder="Email giáo viên..." roleFilter="teacher" />
+                                                <EmailAutocomplete inputId="admin-exam-teacher-share-email" inputName="adminExamTeacherShareEmail" value={teacherShareEmail} onChange={setTeacherShareEmail} onSelect={(email) => handleAddTeacherShare(email)} placeholder="Email giáo viên..." roleFilter="teacher" />
                                                 <button onClick={() => handleAddTeacherShare(teacherShareEmail)} disabled={isTeacherSharing || !teacherShareEmail} style={{ flexShrink: 0, padding: '8px 12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', cursor: isTeacherSharing ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>Thêm</button>
                                             </div>
                                             {sharedTeachers.length > 0 && (
@@ -1437,7 +1462,7 @@ export default function AdminExamsPage() {
                                                 </div>
                                                 <p style={{ fontSize: '0.75rem', color: '#7c3aed', margin: '0 0 8px 0' }}>Nội dung sẽ mất tag "Chính thức" và thuộc về giáo viên.</p>
                                                 <div style={{ display: 'flex', gap: '8px' }}>
-                                                    <EmailAutocomplete value={transferEmail} onChange={setTransferEmail} onSelect={(email) => { const collName = resourceToShare.type === 'exam_folder' ? 'exam_folders' : 'exams'; handleConfirmTransfer(email, collName, resourceToShare.id, resourceToShare.name || resourceToShare.title); }} placeholder="Email giáo viên nhận..." roleFilter="teacher" />
+                                                    <EmailAutocomplete inputId="admin-exam-transfer-email" inputName="adminExamTransferEmail" value={transferEmail} onChange={setTransferEmail} onSelect={(email) => { const collName = resourceToShare.type === 'exam_folder' ? 'exam_folders' : 'exams'; handleConfirmTransfer(email, collName, resourceToShare.id, resourceToShare.name || resourceToShare.title); }} placeholder="Email giáo viên nhận..." roleFilter="teacher" />
                                                     <button onClick={() => { const collName = resourceToShare.type === 'exam_folder' ? 'exam_folders' : 'exams'; handleConfirmTransfer(transferEmail, collName, resourceToShare.id, resourceToShare.name || resourceToShare.title); }} disabled={isTransferring || !transferEmail.trim()} style={{ flexShrink: 0, padding: '8px 14px', background: '#8b5cf6', color: '#fff', border: 'none', borderRadius: '6px', cursor: (isTransferring || !transferEmail.trim()) ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: '0.82rem', opacity: (isTransferring || !transferEmail.trim()) ? 0.5 : 1 }}>
                                                         {isTransferring ? 'Đang chuyển...' : 'Chuyển'}
                                                     </button>
@@ -1462,7 +1487,7 @@ export default function AdminExamsPage() {
                                                         {allGroups.length === 0 ? <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: 0 }}>Chưa có nhóm nào.</p> : null}
                                                         {allGroups.map(g => (
                                                             <label key={g.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '0.85rem', color: '#475569', cursor: 'pointer', background: '#f8fafc', padding: '8px', borderRadius: '6px' }}>
-                                                                <input type="checkbox" checked={shareGroups.includes(g.id)} disabled={isSharing} onChange={() => handleToggleGroupShare(g.id)} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
+                                                                <input id={`admin-exam-share-group-${g.id}`} name={`adminExamShareGroup-${g.id}`} type="checkbox" checked={shareGroups.includes(g.id)} disabled={isSharing} onChange={() => handleToggleGroupShare(g.id)} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
                                                                 <span style={{ flex: 1 }}>{g.name}</span>
                                                             </label>
                                                         ))}
@@ -1471,7 +1496,7 @@ export default function AdminExamsPage() {
                                                 <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
                                                     <h4 style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', fontWeight: 600, color: '#334155', margin: '0 0 12px 0' }}><Mail size={16} /> Chia sẻ cá nhân</h4>
                                                     <form onSubmit={handleAddShareEmail} style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-                                                        <EmailAutocomplete value={shareEmail} onChange={setShareEmail} onSubmit={(email) => handleAddShareEmail(email)} disabled={isSharing} roleFilter="student" />
+                                                    <EmailAutocomplete inputId="admin-exam-student-share-email" inputName="adminExamStudentShareEmail" value={shareEmail} onChange={setShareEmail} onSubmit={(email) => handleAddShareEmail(email)} disabled={isSharing} roleFilter="student" />
                                                         <button type="submit" disabled={isSharing} style={{ flexShrink: 0, padding: '8px 12px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: '6px', cursor: isSharing ? 'not-allowed' : 'pointer' }}><UserPlus size={16} /></button>
                                                     </form>
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '150px', overflowY: 'auto' }}>
@@ -1504,13 +1529,8 @@ export default function AdminExamsPage() {
                                             )}
                                             {teacherManagedGroups.length > 0 ? (
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                                        <div style={{ flex: '1 1 140px', minWidth: 0, position: 'relative', zIndex: 20 }}>
-                                                            <CustomSelect value={quickAssignGroupId} onChange={v => { setQuickAssignGroupId(v); setQuickAssignSelectedStudentIds([]); setStudentDropdownOpen(false); if (v) { setQuickAssignStudentsLoading(true); getStudentsInGroup(v).then(students => { setQuickAssignStudents(students); setQuickAssignStudentsLoading(false); }).catch(() => setQuickAssignStudentsLoading(false)); } else { setQuickAssignStudents([]); } }} placeholder="-- Chọn lớp --" options={teacherManagedGroups.map(g => ({ value: g.id, label: g.name, icon: '🏫' }))} style={{ margin: 0 }} />
-                                                        </div>
-                                                        <div style={{ flex: '1 1 140px', minWidth: 0 }}>
-                                                            <input type="datetime-local" value={quickAssignDueDate} onChange={e => setQuickAssignDueDate(e.target.value)} style={{ width: '100%', padding: '6px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.88rem', color: '#1e293b', minHeight: '38px', boxSizing: 'border-box' }} />
-                                                        </div>
+                                                    <div style={{ position: 'relative', zIndex: 20 }}>
+                                                        <CustomSelect value={quickAssignGroupId} onChange={v => { setQuickAssignGroupId(v); setQuickAssignSelectedStudentIds([]); setStudentDropdownOpen(false); if (v) { setQuickAssignStudentsLoading(true); getStudentsInGroup(v).then(students => { setQuickAssignStudents(students); setQuickAssignStudentsLoading(false); }).catch(() => setQuickAssignStudentsLoading(false)); } else { setQuickAssignStudents([]); } }} placeholder="-- Chọn lớp --" options={teacherManagedGroups.map(g => ({ value: g.id, label: g.name, icon: '🏫' }))} style={{ margin: 0 }} />
                                                     </div>
                                                     {quickAssignGroupId && (
                                                         <div style={{ position: 'relative', zIndex: 15 }}>
@@ -1525,7 +1545,7 @@ export default function AdminExamsPage() {
                                                                 <div style={{ marginTop: '4px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', maxHeight: '200px', overflowY: 'auto' }}>
                                                                     <div style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9' }}>
                                                                         <label style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', cursor: 'pointer', borderRadius: '6px', background: '#f8fafc', fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>
-                                                                            <input type="checkbox" checked={quickAssignSelectedStudentIds.length === 0} onChange={() => setQuickAssignSelectedStudentIds([])} style={{ marginRight: '8px', cursor: 'pointer' }} />
+                                                                            <input id="admin-exam-select-all-students" name="adminExamSelectAllStudents" type="checkbox" checked={quickAssignSelectedStudentIds.length === 0} onChange={() => setQuickAssignSelectedStudentIds([])} style={{ marginRight: '8px', cursor: 'pointer' }} />
                                                                             Cả lớp ({quickAssignStudents.length} học viên)
                                                                         </label>
                                                                     </div>
@@ -1534,7 +1554,7 @@ export default function AdminExamsPage() {
                                                                             const isChecked = quickAssignSelectedStudentIds.includes(s.uid);
                                                                             return (
                                                                                 <label key={s.uid} style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', cursor: 'pointer', borderRadius: '6px', background: isChecked ? '#eff6ff' : 'transparent', transition: 'background 0.15s' }}>
-                                                                                    <input type="checkbox" checked={isChecked} onChange={() => { setQuickAssignSelectedStudentIds(prev => isChecked ? prev.filter(id => id !== s.uid) : [...prev, s.uid]); }} style={{ marginRight: '8px', cursor: 'pointer', width: '15px', height: '15px' }} />
+                                                                                    <input id={`admin-exam-student-${s.uid}`} name={`adminExamStudent-${s.uid}`} type="checkbox" checked={isChecked} onChange={() => { setQuickAssignSelectedStudentIds(prev => isChecked ? prev.filter(id => id !== s.uid) : [...prev, s.uid]); }} style={{ marginRight: '8px', cursor: 'pointer', width: '15px', height: '15px' }} />
                                                                                     <div>
                                                                                         <div style={{ fontSize: '0.82rem', color: isChecked ? '#1d4ed8' : '#334155', fontWeight: isChecked ? 500 : 400 }}>{s.displayName || s.email?.split('@')[0] || 'Học viên'}</div>
                                                                                         {s.email && <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{s.email}</div>}
@@ -1555,12 +1575,16 @@ export default function AdminExamsPage() {
                                                         </div>
                                                         {quickAssignScheduledStart && (
                                                             <div style={{ marginTop: '6px' }}>
-                                                                <input type="datetime-local" value={quickAssignScheduledStart === 'pending' ? '' : quickAssignScheduledStart} onChange={e => setQuickAssignScheduledStart(e.target.value)} style={{ width: '100%', padding: '6px 12px', borderRadius: '8px', border: '1.5px solid #f59e0b', fontSize: '0.85rem', color: '#1e293b', background: '#fffbeb', boxSizing: 'border-box' }} />
+                                                                <input id="admin-exam-quick-assign-start" name="adminExamQuickAssignStart" type="datetime-local" value={quickAssignScheduledStart === 'pending' ? '' : quickAssignScheduledStart} onChange={e => setQuickAssignScheduledStart(e.target.value)} style={{ width: '100%', padding: '6px 12px', borderRadius: '8px', border: '1.5px solid #f59e0b', fontSize: '0.85rem', color: '#1e293b', background: '#fffbeb', boxSizing: 'border-box' }} />
                                                                 {quickAssignScheduledStart && quickAssignScheduledStart !== 'pending' && quickAssignDueDate && new Date(quickAssignScheduledStart) >= new Date(quickAssignDueDate) && (
                                                                     <p style={{ color: '#ef4444', fontSize: '0.75rem', margin: '4px 0 0', fontWeight: 600 }}>⚠ Ngày bắt đầu phải trước hạn nộp!</p>
                                                                 )}
                                                             </div>
                                                         )}
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#334155', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>📅 Hạn nộp bài</div>
+                                                        <input id="admin-exam-quick-assign-due-date" name="adminExamQuickAssignDueDate" type="datetime-local" value={quickAssignDueDate} onChange={e => setQuickAssignDueDate(e.target.value)} style={{ width: '100%', padding: '6px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.88rem', color: '#1e293b', minHeight: '38px', boxSizing: 'border-box' }} />
                                                     </div>
                                                     <button type="button" onClick={handleQuickAssign} disabled={isQuickAssigning || !quickAssignGroupId || !quickAssignDueDate || quickAssignScheduledStart === 'pending' || (quickAssignScheduledStart && quickAssignScheduledStart !== 'pending' && quickAssignDueDate && new Date(quickAssignScheduledStart) >= new Date(quickAssignDueDate))} className="admin-btn admin-btn-primary" style={{ width: '100%', padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: 'linear-gradient(135deg, #f59e0b, #d97706)', border: 'none', opacity: (isQuickAssigning || !quickAssignGroupId || !quickAssignDueDate || quickAssignScheduledStart === 'pending') ? 0.6 : 1 }}>
                                                         <Send size={14} /> {isQuickAssigning ? 'Đang giao...' : 'Giao bài'}

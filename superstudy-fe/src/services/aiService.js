@@ -1237,3 +1237,165 @@ async function fetchChatWithFileGoogle({ systemPrompt, userContent, fileBase64, 
     const textPart = parts.find(p => p.text !== undefined && !p.thought);
     return { text: textPart?.text || parts[parts.length - 1]?.text || '' };
 }
+
+
+// ============================================================
+// IMAGE ATTACHMENT HELPERS (Grading & Context Variants)
+// ============================================================
+
+const _DATA_IMAGE_HINT_PATTERN = /\b(chart|graph|table|diagram|flowchart|timeline|schedule|map|figure|statistics?|statistical|data|dataset|percent(?:age)?|trend|compare|comparison|survey|report|bar|line|pie|column|axis|axes|spreadsheet|infographic|floor\s*plan)\b|bi[\u00ea\u00e8]̉u\s*\u0111[\u1ed3o]|\u0111[\u1ed3o]\s*th[\u1ecdi]|b[\u1ea3a]ng|s[\u01a1o]\s*\u0111[\u1ed3o]|d[\u1eefu]\s*li[\u1ec7e]u|s[\u1ed1o]\s*li[\u1ec7e]u|ph[\u1ea7a]n\s*tr[\u0103a]m|t[\u1ec9i]\s*l[\u1ec7e]|th[\u1ed1o]ng\s*k[\u00eae]|so\s*s[a\u00e1]nh|xu\s*h[\u01b0u]ng|l[\u1ecbi]ch\s*tr[\u00ec\u00ecnh]|b[\u1ea3a]n\s*\u0111[\u1ed3o]|c[\u1ed9o]t|\u0111[\u01b0\u01a1u]ng|tr[\u00f2o]n/i;
+
+function _stripHtmlAi(value) {
+    if (typeof value !== 'string') return '';
+    return value.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\u00A0/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function _normalizeMediaRes(value) {
+    if (!value) return null;
+    const n = String(value).trim().toUpperCase();
+    if (!n) return null;
+    return n.startsWith('MEDIA_RESOLUTION_') ? n : 'MEDIA_RESOLUTION_' + n;
+}
+
+function _dedupeStrings2(values) {
+    return [...new Set((values || []).filter(v => typeof v === 'string' && v.trim()))];
+}
+
+function _extractImgSrcs(html) {
+    if (typeof html !== 'string' || !html.includes('<img')) return [];
+    const regex = /<img\b[^>]*?\bsrc=["']([^"']+)["'][^>]*>/gi;
+    const urls = [];
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+        const src = match[1]?.trim();
+        if (src) urls.push(src);
+    }
+    return _dedupeStrings2(urls);
+}
+
+function _extractImgDescText(html) {
+    if (typeof html !== 'string' || !html.includes('<img')) return '';
+    const imgTags = html.match(/<img\b[^>]*>/gi) || [];
+    const descriptors = [];
+    imgTags.forEach(tag => {
+        const altM = tag.match(/\balt=["']([^"']+)["']/i);
+        const titleM = tag.match(/\btitle=["']([^"']+)["']/i);
+        if (altM?.[1]) descriptors.push(altM[1]);
+        if (titleM?.[1]) descriptors.push(titleM[1]);
+    });
+    return descriptors.join(' ');
+}
+
+function _inferCtxImgResolution({ contextHtml = '', questionHtml = '', purpose = '', specialRequirement = '', teacherReferenceAnswer = '' }) {
+    const hintText = [
+        _stripHtmlAi(contextHtml), _stripHtmlAi(questionHtml),
+        _stripHtmlAi(_extractImgDescText(contextHtml)), _stripHtmlAi(_extractImgDescText(questionHtml)),
+        _stripHtmlAi(purpose), _stripHtmlAi(specialRequirement), _stripHtmlAi(teacherReferenceAnswer)
+    ].filter(Boolean).join(' ');
+    return _normalizeMediaRes(_DATA_IMAGE_HINT_PATTERN.test(hintText) ? 'HIGH' : 'LOW');
+}
+
+function _inferImgMime(url) {
+    const cleanUrl = typeof url === 'string' ? url.split('?')[0].toLowerCase() : '';
+    if (cleanUrl.endsWith('.png')) return 'image/png';
+    if (cleanUrl.endsWith('.webp')) return 'image/webp';
+    if (cleanUrl.endsWith('.gif')) return 'image/gif';
+    if (cleanUrl.endsWith('.bmp')) return 'image/bmp';
+    if (cleanUrl.endsWith('.svg')) return 'image/svg+xml';
+    return 'image/jpeg';
+}
+
+function _parseDataImg(url) {
+    if (typeof url !== 'string') return null;
+    const match = url.match(/^data:(image\/[^;,]+);base64,(.+)$/i);
+    if (!match) return null;
+    return { mimeType: match[1], data: match[2] };
+}
+
+async function _fetchImgAttachment(url) {
+    const inlineImage = _parseDataImg(url);
+    if (inlineImage) return inlineImage;
+
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Image fetch failed (' + response.status + ')');
+    const blob = await response.blob();
+    const contentType = response.headers.get('content-type') || blob.type || '';
+    const mimeType = (contentType || _inferImgMime(url)).split(';')[0];
+    const data = await blobToBase64(blob);
+    return { mimeType, data };
+}
+
+/**
+ * Prepare image attachments for grading (context + question images).
+ */
+export async function prepareGradingImageAttachments({ contextHtml = '', questionHtml = '', purpose = '', specialRequirement = '', teacherReferenceAnswer = '' } = {}) {
+    const imageUrls = _dedupeStrings2([
+        ..._extractImgSrcs(contextHtml),
+        ..._extractImgSrcs(questionHtml)
+    ]);
+
+    if (!imageUrls.length) {
+        return { images: [], mediaResolution: null };
+    }
+
+    const mediaResolution = _inferCtxImgResolution({ contextHtml, questionHtml, purpose, specialRequirement, teacherReferenceAnswer });
+
+    let images;
+    try {
+        images = await Promise.all(imageUrls.map(url => _fetchImgAttachment(url)));
+    } catch (error) {
+        console.error('[AI Grading] Failed to load one or more context images for grading:', error);
+        throw new Error('Không thể tải đầy đủ hình ảnh trong ngữ cảnh để AI chấm. Vui lòng bấm \"AI chấm lại\".');
+    }
+
+    return {
+        images,
+        mediaResolution: images.length ? mediaResolution : null
+    };
+}
+
+/**
+ * Prepare image attachments for context-based variation generation.
+ */
+export async function prepareContextImageAttachments({ contextHtml = '', questionHtml = '', purpose = '', extraHintText = '', failureMessage = 'Không thể tải đầy đủ hình ảnh trong context để AI tạo variations. Vui lòng thử lại.' } = {}) {
+    const imageUrls = _dedupeStrings2([
+        ..._extractImgSrcs(contextHtml),
+        ..._extractImgSrcs(questionHtml)
+    ]);
+
+    if (!imageUrls.length) {
+        return { images: [], mediaResolution: null };
+    }
+
+    const mediaResolution = _inferCtxImgResolution({
+        contextHtml, questionHtml, purpose,
+        specialRequirement: extraHintText, teacherReferenceAnswer: ''
+    });
+
+    let images;
+    try {
+        images = await Promise.all(imageUrls.map(url => _fetchImgAttachment(url)));
+    } catch (error) {
+        console.error('[AI Variation] Failed to load one or more context images:', error);
+        throw new Error(failureMessage);
+    }
+
+    return {
+        images,
+        mediaResolution: images.length ? mediaResolution : null
+    };
+}
+
+/**
+ * Validate that there is enough data for AI to grade.
+ */
+export function assertGradingInputCompleteness({ questionText = '', contextText = '', purpose = '', specialRequirement = '', teacherReferenceAnswer = '', imageCount = 0 } = {}) {
+    const hasAnyGradingBasis = Boolean(
+        _stripHtmlAi(questionText) || _stripHtmlAi(contextText) || _stripHtmlAi(purpose) ||
+        _stripHtmlAi(specialRequirement) || _stripHtmlAi(teacherReferenceAnswer) || imageCount > 0
+    );
+
+    if (!hasAnyGradingBasis) {
+        throw new Error('AI chưa nhận đủ dữ liệu đề bài cần thiết để chấm. Vui lòng bấm \"AI chấm lại\".');
+    }
+}

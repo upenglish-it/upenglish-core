@@ -114,9 +114,10 @@ export default function CustomInputPage() {
             if (!finalListName) {
                 finalListName = `Danh sách ngày ${new Date().toLocaleDateString('vi-VN')}`;
             }
+            let customListId = null;
             if (user?.uid) {
                 try {
-                    await saveCustomList(user.uid, finalListName, validWords);
+                    customListId = await saveCustomList(user.uid, finalListName, validWords);
                 } catch (saveErr) {
                     console.error('Failed to save custom list:', saveErr);
                 }
@@ -126,8 +127,11 @@ export default function CustomInputPage() {
             navigate('/learn', {
                 state: {
                     words: validWords,
-                    topicId: 'custom',
-                    topicName: 'Từ tùy chỉnh',
+                    topicId: customListId || `custom_${Date.now()}`,
+                    topicName: finalListName,
+                    listType: 'custom',
+                    icon: '📝',
+                    color: 'var(--color-warning)',
                 },
             });
         } catch (err) {
@@ -204,11 +208,13 @@ export default function CustomInputPage() {
                 {/* Input Card */}
                 <div className="custom-input-card glass-card--static animate-slide-up">
                     <div className="custom-input-group">
-                        <label className="custom-input-label">
+                        <label className="custom-input-label" htmlFor="custom-list-name">
                             <PenLine size={14} />
                             Tên danh sách (Tùy chọn)
                         </label>
                         <input
+                            id="custom-list-name"
+                            name="listName"
                             type="text"
                             className="custom-input-field"
                             placeholder={`VD: Từ vựng Unit 1, Tiếng Anh Giao Tiếp...`}
@@ -218,11 +224,13 @@ export default function CustomInputPage() {
                     </div>
 
                     <div className="custom-input-group">
-                        <label className="custom-input-label">
+                        <label className="custom-input-label" htmlFor="custom-input-words">
                             <Sparkles size={14} />
                             Nhập từ vựng tiếng Anh
                         </label>
                         <textarea
+                            id="custom-input-words"
+                            name="inputWords"
                             ref={textareaRef}
                             className="custom-input-textarea"
                             placeholder={"Ví dụ:\nnegotiate, deadline, revenue\n\nHoặc mỗi từ một dòng:\nnegotiate\ndeadline\nrevenue"}

@@ -1,7 +1,15 @@
-import { db } from '../config/firebase';
-import { collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, deleteField, query, where, orderBy } from 'firebase/firestore';
 import { createNotificationForAdmins, createNotification } from './notificationService';
-import { contentProposalsService } from '../models';
+import {
+    adminFoldersService,
+    contentProposalsService,
+    teacherFoldersService,
+    teacherTopicsService,
+    topicsService,
+    grammarExercisesService,
+    grammarQuestionsService,
+    examsService,
+    examQuestionsService,
+} from '../models';
 
 // ========== CONTENT PROPOSALS ==========
 // Collection: content_proposals
@@ -95,6 +103,80 @@ export async function getProposalForSource(sourceId, type) {
  * Returns { id, name/title, collection } or null.
  */
 export async function findExistingOfficialCopy(sourceId, type, level = 'item') {
+    if (type === 'vocab') {
+        if (level === 'folder') {
+            const result = await adminFoldersService.getTopicFolders();
+            const folders = Array.isArray(result) ? result : (result?.data || []);
+            const folder = folders.find(f => (f._id || f.id) && f.copiedFrom === sourceId);
+            if (!folder) return null;
+            return {
+                id: folder._id || folder.id,
+                name: folder.name || 'KhÃ´ng rÃµ tÃªn',
+                collection: 'topic_folders'
+            };
+        }
+
+        const result = await topicsService.findAll();
+        const topics = Array.isArray(result) ? result : (result?.data || []);
+        const topic = topics.find(t => (t._id || t.id) && t.copiedFrom === sourceId);
+        if (!topic) return null;
+        return {
+            id: topic._id || topic.id,
+            name: topic.name || topic.title || 'KhÃ´ng rÃµ tÃªn',
+            collection: 'topics'
+        };
+    }
+
+    if (type === 'grammar') {
+        if (level === 'folder') {
+            const result = await adminFoldersService.getGrammarFolders();
+            const folders = Array.isArray(result) ? result : (result?.data || []);
+            const folder = folders.find(f => normalizeId(f) && f.copiedFrom === sourceId);
+            if (!folder) return null;
+            return {
+                id: normalizeId(folder),
+                name: folder.name || 'Khong ro ten',
+                collection: 'grammar_folders'
+            };
+        }
+
+        const result = await grammarExercisesService.findAll();
+        const exercises = Array.isArray(result) ? result : (result?.data || []);
+        const exercise = exercises.find(item => normalizeId(item) && item.copiedFrom === sourceId && item.createdByRole === 'admin');
+        if (!exercise) return null;
+        return {
+            id: normalizeId(exercise),
+            name: exercise.name || exercise.title || 'Khong ro ten',
+            collection: 'grammar_exercises'
+        };
+    }
+
+    if (type === 'exam') {
+        if (level === 'folder') {
+            const result = await adminFoldersService.getExamFolders();
+            const folders = Array.isArray(result) ? result : (result?.data || []);
+            const folder = folders.find(f => normalizeId(f) && f.copiedFrom === sourceId);
+            if (!folder) return null;
+            return {
+                id: normalizeId(folder),
+                name: folder.name || 'Khong ro ten',
+                collection: 'exam_folders'
+            };
+        }
+
+        const result = await examsService.findAll();
+        const exams = Array.isArray(result) ? result : (result?.data || []);
+        const exam = exams.find(item => normalizeId(item) && item.copiedFrom === sourceId && item.createdByRole === 'admin');
+        if (!exam) return null;
+        return {
+            id: normalizeId(exam),
+            name: exam.name || exam.title || 'Khong ro ten',
+            collection: 'exams'
+        };
+    }
+
+    return null;
+
     const collectionMap = {
         vocab: level === 'folder' ? 'topic_folders' : 'topics',
         grammar: level === 'folder' ? 'grammar_folders' : 'grammar_exercises',
@@ -236,13 +318,303 @@ export async function rejectProposal(proposalId, adminUid, adminNote = '') {
     }
 }
 
+function normalizeId(doc) {
+    return doc?._id || doc?.id || null;
+}
+
+function buildOfficialVocabTopicPayload(sourceData, proposal, overrides = {}) {
+    const {
+        _id,
+        id,
+        teacherId,
+        createdBy,
+        createdByRole,
+        sharedWith,
+        collaboratorIds,
+        collaboratorNames,
+        collaboratorRoles,
+        duplicatedFrom,
+        isDeleted,
+        deletedAt,
+        folderId,
+        transferredFromOfficial,
+        transferredAt,
+        ...cleanData
+    } = sourceData || {};
+
+    return {
+        ...cleanData,
+        ...overrides,
+        name: overrides.name || sourceData?.name || proposal?.proposalName,
+        createdByRole: 'admin',
+        copiedFrom: sourceData?.copiedFrom || sourceData?._id || sourceData?.id || proposal?.sourceId,
+        proposedBy: proposal?.teacherId || null,
+        proposedByName: proposal?.teacherName || '',
+        isDeleted: false,
+        deletedAt: null,
+        folderId: overrides.folderId ?? null,
+        sharedWithTeacherIds: overrides.sharedWithTeacherIds ?? [],
+    };
+}
+
+function buildOfficialVocabFolderPayload(folderData, topicIds, proposal, overrides = {}) {
+    const {
+        _id,
+        id,
+        teacherId,
+        createdBy,
+        createdByRole,
+        sharedWith,
+        collaboratorIds,
+        collaboratorNames,
+        collaboratorRoles,
+        copiedFrom,
+        isDeleted,
+        deletedAt,
+        topicIds: _topicIds,
+        transferredFromOfficial,
+        transferredAt,
+        ...cleanData
+    } = folderData || {};
+
+    return {
+        ...cleanData,
+        ...overrides,
+        name: overrides.name || folderData?.name || proposal?.proposalName,
+        topicIds,
+        copiedFrom: folderData?.copiedFrom || folderData?._id || folderData?.id || proposal?.sourceFolderId,
+        proposedBy: proposal?.teacherId || null,
+        proposedByName: proposal?.teacherName || '',
+        isDeleted: false,
+        deletedAt: null,
+        isPublic: overrides.isPublic ?? false,
+    };
+}
+
+function buildOfficialContentPayload(sourceData, proposal, overrides = {}) {
+    const {
+        _id,
+        id,
+        teacherId,
+        createdBy,
+        createdByRole,
+        sharedWith,
+        collaboratorIds,
+        collaboratorNames,
+        collaboratorRoles,
+        duplicatedFrom,
+        isDeleted,
+        deletedAt,
+        archived,
+        transferredFromOfficial,
+        transferredAt,
+        ...cleanData
+    } = sourceData || {};
+
+    return {
+        ...cleanData,
+        ...overrides,
+        title: overrides.title || sourceData?.title || sourceData?.name || proposal?.proposalName,
+        name: overrides.name || sourceData?.name || sourceData?.title || proposal?.proposalName,
+        createdByRole: 'admin',
+        copiedFrom: sourceData?.copiedFrom || sourceData?._id || sourceData?.id || proposal?.sourceId,
+        proposedBy: proposal?.teacherId || null,
+        proposedByName: proposal?.teacherName || '',
+        isDeleted: false,
+        deletedAt: null,
+        archived: overrides.archived ?? false,
+    };
+}
+
+function buildOfficialFolderPayload(folderData, itemField, itemIds, proposal, overrides = {}) {
+    const {
+        _id,
+        id,
+        teacherId,
+        createdBy,
+        createdByRole,
+        sharedWith,
+        collaboratorIds,
+        collaboratorNames,
+        collaboratorRoles,
+        copiedFrom,
+        isDeleted,
+        deletedAt,
+        transferredFromOfficial,
+        transferredAt,
+        ...cleanData
+    } = folderData || {};
+
+    return {
+        ...cleanData,
+        ...overrides,
+        name: overrides.name || folderData?.name || proposal?.proposalName,
+        [itemField]: itemIds,
+        copiedFrom: folderData?.copiedFrom || folderData?._id || folderData?.id || proposal?.sourceFolderId,
+        proposedBy: proposal?.teacherId || null,
+        proposedByName: proposal?.teacherName || '',
+        isDeleted: false,
+        deletedAt: null,
+        isPublic: overrides.isPublic ?? false,
+    };
+}
+
+function buildQuestionPayload(question, parentField, parentId, copiedFrom) {
+    const {
+        _id,
+        id,
+        examId,
+        exerciseId,
+        createdAt,
+        updatedAt,
+        ...cleanData
+    } = question || {};
+
+    return {
+        ...cleanData,
+        [parentField]: parentId,
+        copiedFrom,
+    };
+}
+
+async function getTeacherTopicFolderById(folderId) {
+    const result = await teacherFoldersService.getAllTopicFolders();
+    const folders = Array.isArray(result) ? result : (result?.data || []);
+    return folders.find(folder => normalizeId(folder) === folderId) || null;
+}
+
+async function getTeacherGrammarFolderById(folderId) {
+    const result = await teacherFoldersService.getAllGrammarFolders();
+    const folders = Array.isArray(result) ? result : (result?.data || []);
+    return folders.find(folder => normalizeId(folder) === folderId) || null;
+}
+
+async function getTeacherExamFolderById(folderId) {
+    const result = await teacherFoldersService.getAllExamFolders();
+    const folders = Array.isArray(result) ? result : (result?.data || []);
+    return folders.find(folder => normalizeId(folder) === folderId) || null;
+}
+
+async function getAdminGrammarFolderById(folderId) {
+    const result = await adminFoldersService.getGrammarFolders();
+    const folders = Array.isArray(result) ? result : (result?.data || []);
+    return folders.find(folder => normalizeId(folder) === folderId) || null;
+}
+
+async function getAdminExamFolderById(folderId) {
+    const result = await adminFoldersService.getExamFolders();
+    const folders = Array.isArray(result) ? result : (result?.data || []);
+    return folders.find(folder => normalizeId(folder) === folderId) || null;
+}
+
+async function copyVocabToPresetViaApi(sourceId, proposal) {
+    const sourceData = await teacherTopicsService.findOne(sourceId);
+    if (!sourceData) throw new Error('Source topic not found');
+
+    const payload = buildOfficialVocabTopicPayload(sourceData, proposal);
+    const created = await topicsService.create(payload);
+    return normalizeId(created?.data || created) || normalizeId(created);
+}
+
+async function copyVocabFolderToPresetViaApi(sourceFolderId, proposal) {
+    const folderData = await getTeacherTopicFolderById(sourceFolderId);
+    if (!folderData) throw new Error('Source folder not found');
+
+    const sourceTopicIds = Array.isArray(folderData.topicIds) ? folderData.topicIds : [];
+    const newTopicIds = [];
+
+    for (const topicId of sourceTopicIds) {
+        try {
+            const newId = await copyVocabToPresetViaApi(topicId, proposal);
+            if (newId) newTopicIds.push(newId);
+        } catch (e) {
+            console.error(`[VOCAB FOLDER COPY] Error copying topic ${topicId}:`, e);
+        }
+    }
+
+    const payload = buildOfficialVocabFolderPayload(folderData, newTopicIds, proposal);
+    const created = await adminFoldersService.saveTopicFolder(payload);
+    return normalizeId(created?.data || created) || normalizeId(created);
+}
+
+async function overwriteVocabPresetViaApi(sourceId, proposal) {
+    const existing = await findExistingOfficialCopy(sourceId, 'vocab');
+    if (!existing) return copyVocabToPresetViaApi(sourceId, proposal);
+
+    const sourceData = await teacherTopicsService.findOne(sourceId);
+    if (!sourceData) throw new Error('Source topic not found');
+
+    const payload = buildOfficialVocabTopicPayload(sourceData, proposal, {
+        archived: false,
+    });
+    await topicsService.update(existing.id, payload);
+    return existing.id;
+}
+
+async function overwriteVocabFolderPresetViaApi(sourceFolderId, proposal) {
+    const existing = await findExistingOfficialCopy(sourceFolderId, 'vocab', 'folder');
+    if (!existing) return copyVocabFolderToPresetViaApi(sourceFolderId, proposal);
+
+    const folderData = await getTeacherTopicFolderById(sourceFolderId);
+    if (!folderData) throw new Error('Source folder not found');
+
+    const rawTopicIds = Array.isArray(folderData.topicIds) ? folderData.topicIds : [];
+    const sourceTopicIds = [];
+    for (const topicId of rawTopicIds) {
+        try {
+            const topic = await teacherTopicsService.findOne(topicId);
+            if (topic && !topic.isDeleted) sourceTopicIds.push(topicId);
+        } catch (e) {
+            console.error(`[VOCAB FOLDER OVERWRITE] Error loading topic ${topicId}:`, e);
+        }
+    }
+
+    const oldFoldersResult = await adminFoldersService.getTopicFolders();
+    const oldFolders = Array.isArray(oldFoldersResult) ? oldFoldersResult : (oldFoldersResult?.data || []);
+    const oldFolder = oldFolders.find(folder => normalizeId(folder) === existing.id);
+    const oldTopicIds = Array.isArray(oldFolder?.topicIds) ? oldFolder.topicIds : [];
+
+    const newTopicIds = [];
+    for (const topicId of sourceTopicIds) {
+        try {
+            const newId = await overwriteVocabPresetViaApi(topicId, proposal);
+            if (newId) newTopicIds.push(newId);
+        } catch (e) {
+            console.error(`[VOCAB FOLDER OVERWRITE] Error overwriting topic ${topicId}:`, e);
+        }
+    }
+
+    const orphanedIds = oldTopicIds.filter(id => !newTopicIds.includes(id));
+    for (const orphanId of orphanedIds) {
+        try {
+            const topic = await topicsService.findOne(orphanId);
+            if (topic) {
+                const currentName = topic.name || '';
+                await topicsService.update(orphanId, {
+                    name: currentName.startsWith('[Archived]') ? currentName : `[Archived] ${currentName}`,
+                    archived: true,
+                    isDeleted: false,
+                    deletedAt: null,
+                    createdByRole: 'admin',
+                });
+            }
+        } catch (e) {
+            console.error(`[VOCAB FOLDER OVERWRITE] Error archiving topic ${orphanId}:`, e);
+        }
+    }
+
+    const payload = buildOfficialVocabFolderPayload(folderData, [...newTopicIds, ...orphanedIds], proposal);
+    await adminFoldersService.saveTopicFolder({ id: existing.id, ...payload });
+    return existing.id;
+}
+
 // ========== COPY HELPERS ==========
 
 async function copyItemToPreset(proposal) {
     const { type, sourceId } = proposal;
 
     if (type === 'vocab') {
-        await copyVocabToPreset(sourceId, proposal);
+        await copyVocabToPresetViaApi(sourceId, proposal);
     } else if (type === 'grammar') {
         await copyGrammarToPreset(sourceId, proposal);
     } else if (type === 'exam') {
@@ -254,7 +626,7 @@ async function copyFolderToPreset(proposal) {
     const { type, sourceFolderId } = proposal;
 
     if (type === 'vocab') {
-        await copyVocabFolderToPreset(sourceFolderId, proposal);
+        await copyVocabFolderToPresetViaApi(sourceFolderId, proposal);
     } else if (type === 'grammar') {
         await copyGrammarFolderToPreset(sourceFolderId, proposal);
     } else if (type === 'exam') {
@@ -265,137 +637,39 @@ async function copyFolderToPreset(proposal) {
 // --- VOCAB ---
 
 async function copyVocabToPreset(sourceId, proposal) {
-    // Read teacher topic
-    const sourceRef = doc(db, 'teacher_topics', sourceId);
-    const sourceSnap = await getDoc(sourceRef);
-    if (!sourceSnap.exists()) {
-        console.error('[VOCAB COPY] Source topic NOT FOUND in teacher_topics:', sourceId);
-        throw new Error('Source topic not found');
-    }
-
-    const sourceData = sourceSnap.data();
-    
-    // Use Firestore auto-generated ID for reliability
-    const presetRef = doc(collection(db, 'topics'));
-    const newId = presetRef.id;
-
-    // Create preset topic (spread all source data, strip teacher fields AND id)
-    const { id: _sourceId, teacherId, createdBy, createdByRole, sharedWith, collaboratorIds, collaboratorNames, collaboratorRoles, isDeleted, deletedAt, ...cleanData } = sourceData;
-    await setDoc(presetRef, {
-        ...cleanData,
-        name: sourceData.name || proposal.proposalName,
-        createdByRole: 'admin',
-        copiedFrom: sourceId,
-        proposedBy: proposal.teacherId,
-        proposedByName: proposal.teacherName,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-    });
-
-    // Copy words subcollection
-    const wordsSnap = await getDocs(collection(db, `teacher_topics/${sourceId}/words`));
-    const batch = writeBatch(db);
-    wordsSnap.forEach(wordDoc => {
-        const wordData = wordDoc.data();
-        const wordRef = doc(db, `topics/${newId}/words`, wordDoc.id);
-        batch.set(wordRef, { ...wordData });
-    });
-    await batch.commit();
-
-    return newId;
+    return copyVocabToPresetViaApi(sourceId, proposal);
 }
 
 async function copyVocabFolderToPreset(sourceFolderId, proposal) {
-    // Read source folder
-    const folderRef = doc(db, 'teacher_topic_folders', sourceFolderId);
-    const folderSnap = await getDoc(folderRef);
-    if (!folderSnap.exists()) throw new Error('Source folder not found');
-
-    const folderData = folderSnap.data();
-    const topicIds = folderData.topicIds || [];
-
-    // Copy each topic
-    const newTopicIds = [];
-    for (const topicId of topicIds) {
-        try {
-            const newId = await copyVocabToPreset(topicId, proposal);
-            newTopicIds.push(newId);
-        } catch (e) {
-            console.error(`[VOCAB FOLDER COPY] Error copying topic ${topicId}:`, e);
-        }
-    }
-
-    // Create preset folder
-    const newFolderId = `pf-${Date.now()}`;
-    const presetFolderRef = doc(db, 'topic_folders', newFolderId);
-    const { teacherId, createdBy, createdByRole, sharedWith, collaboratorIds, collaboratorNames, collaboratorRoles, isDeleted, deletedAt, topicIds: _ids, ...cleanFolderData } = folderData;
-    
-    const folderWriteData = {
-        ...cleanFolderData,
-        name: folderData.name || proposal.proposalName,
-        topicIds: newTopicIds,
-        copiedFrom: sourceFolderId,
-        proposedBy: proposal.teacherId,
-        proposedByName: proposal.teacherName,
-        updatedAt: serverTimestamp()
-    };
-    await setDoc(presetFolderRef, folderWriteData);
-
-    return newFolderId;
+    return copyVocabFolderToPresetViaApi(sourceFolderId, proposal);
 }
 
 // --- GRAMMAR ---
 
 async function copyGrammarToPreset(sourceId, proposal) {
-    const sourceRef = doc(db, 'grammar_exercises', sourceId);
-    const sourceSnap = await getDoc(sourceRef);
-    if (!sourceSnap.exists()) throw new Error('Source grammar exercise not found');
+    const sourceData = await grammarExercisesService.findOne(sourceId);
+    if (!sourceData) throw new Error('Source grammar exercise not found');
 
-    const sourceData = sourceSnap.data();
-    const newExerciseRef = doc(collection(db, 'grammar_exercises'));
-    const newId = newExerciseRef.id;
+    const payload = buildOfficialContentPayload(sourceData, proposal);
+    const created = await grammarExercisesService.create(payload);
+    const newId = normalizeId(created?.data || created) || normalizeId(created);
 
-    // Create new exercise as admin/preset (spread all source data, strip teacher fields)
-    const { id: _sourceId, teacherId, createdBy, createdByRole, sharedWith, collaboratorIds, collaboratorNames, collaboratorRoles, isDeleted, deletedAt, ...cleanData } = sourceData;
-    await setDoc(newExerciseRef, {
-        ...cleanData,
-        title: sourceData.title || sourceData.name || proposal.proposalName,
-        name: sourceData.name || sourceData.title || proposal.proposalName,
-        createdByRole: 'admin',
-        copiedFrom: sourceId,
-        proposedBy: proposal.teacherId,
-        proposedByName: proposal.teacherName,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-    });
-
-    // Copy grammar questions
-    const questionsQ = query(collection(db, 'grammar_questions'), where('exerciseId', '==', sourceId));
-    const questionsSnap = await getDocs(questionsQ);
-    const batch = writeBatch(db);
-    questionsSnap.forEach(qDoc => {
-        const qData = qDoc.data();
-        const newQRef = doc(collection(db, 'grammar_questions'));
-        batch.set(newQRef, {
-            ...qData,
-            exerciseId: newId,
-            copiedFrom: qDoc.id,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-        });
-    });
-    await batch.commit();
+    const questionsResult = await grammarQuestionsService.findAll(sourceId);
+    const questions = Array.isArray(questionsResult) ? questionsResult : (questionsResult?.data || []);
+    for (const question of questions) {
+        await grammarQuestionsService.create(
+            buildQuestionPayload(question, 'exerciseId', newId, normalizeId(question)),
+        );
+    }
 
     return newId;
 }
 
 async function copyGrammarFolderToPreset(sourceFolderId, proposal) {
-    const folderRef = doc(db, 'teacher_grammar_folders', sourceFolderId);
-    const folderSnap = await getDoc(folderRef);
-    if (!folderSnap.exists()) throw new Error('Source grammar folder not found');
+    const folderData = await getTeacherGrammarFolderById(sourceFolderId);
+    if (!folderData) throw new Error('Source grammar folder not found');
 
-    const folderData = folderSnap.data();
-    const exerciseIds = folderData.exerciseIds || [];
+    const exerciseIds = Array.isArray(folderData.exerciseIds) ? folderData.exerciseIds : [];
 
     const newExerciseIds = [];
     for (const exId of exerciseIds) {
@@ -407,73 +681,37 @@ async function copyGrammarFolderToPreset(sourceFolderId, proposal) {
         }
     }
 
-    const newFolderId = `gf-${Date.now()}`;
-    const presetFolderRef = doc(db, 'grammar_folders', newFolderId);
-    const { teacherId, createdBy, createdByRole, sharedWith, collaboratorIds, collaboratorNames, collaboratorRoles, isDeleted, deletedAt, exerciseIds: _ids, ...cleanFolderData } = folderData;
-    await setDoc(presetFolderRef, {
-        ...cleanFolderData,
-        name: folderData.name || proposal.proposalName,
-        exerciseIds: newExerciseIds,
-        copiedFrom: sourceFolderId,
-        proposedBy: proposal.teacherId,
-        proposedByName: proposal.teacherName,
-        updatedAt: serverTimestamp()
-    });
-
-    return newFolderId;
+    const payload = buildOfficialFolderPayload(folderData, 'exerciseIds', newExerciseIds, proposal);
+    const created = await adminFoldersService.saveGrammarFolder(payload);
+    return normalizeId(created?.data || created) || normalizeId(created);
 }
 
 // --- EXAM ---
 
 async function copyExamToPreset(sourceId, proposal) {
-    const sourceRef = doc(db, 'exams', sourceId);
-    const sourceSnap = await getDoc(sourceRef);
-    if (!sourceSnap.exists()) throw new Error('Source exam not found');
+    const sourceData = await examsService.findOne(sourceId);
+    if (!sourceData) throw new Error('Source exam not found');
 
-    const sourceData = sourceSnap.data();
-    const newExamRef = doc(collection(db, 'exams'));
-    const newId = newExamRef.id;
+    const payload = buildOfficialContentPayload(sourceData, proposal);
+    const created = await examsService.create(payload);
+    const newId = normalizeId(created?.data || created) || normalizeId(created);
 
-    // Create new exam as admin/preset
-    const { id: _sourceId, teacherId, createdBy, createdByRole, sharedWith, collaboratorIds, collaboratorNames, collaboratorRoles, isDeleted, deletedAt, ...cleanData } = sourceData;
-    await setDoc(newExamRef, {
-        ...cleanData,
-        title: sourceData.title || proposal.proposalName,
-        createdByRole: 'admin',
-        copiedFrom: sourceId,
-        proposedBy: proposal.teacherId,
-        proposedByName: proposal.teacherName,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-    });
-
-    // Copy exam questions
-    const questionsQ = query(collection(db, 'exam_questions'), where('examId', '==', sourceId));
-    const questionsSnap = await getDocs(questionsQ);
-    const batch = writeBatch(db);
-    questionsSnap.forEach(qDoc => {
-        const qData = qDoc.data();
-        const newQRef = doc(collection(db, 'exam_questions'));
-        batch.set(newQRef, {
-            ...qData,
-            examId: newId,
-            copiedFrom: qDoc.id,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-        });
-    });
-    await batch.commit();
+    const questionsResult = await examQuestionsService.findAll(sourceId);
+    const questions = Array.isArray(questionsResult) ? questionsResult : (questionsResult?.data || []);
+    for (const question of questions) {
+        await examQuestionsService.create(
+            buildQuestionPayload(question, 'examId', newId, normalizeId(question)),
+        );
+    }
 
     return newId;
 }
 
 async function copyExamFolderToPreset(sourceFolderId, proposal) {
-    const folderRef = doc(db, 'teacher_exam_folders', sourceFolderId);
-    const folderSnap = await getDoc(folderRef);
-    if (!folderSnap.exists()) throw new Error('Source exam folder not found');
+    const folderData = await getTeacherExamFolderById(sourceFolderId);
+    if (!folderData) throw new Error('Source exam folder not found');
 
-    const folderData = folderSnap.data();
-    const examIds = folderData.examIds || [];
+    const examIds = Array.isArray(folderData.examIds) ? folderData.examIds : [];
 
     const newExamIds = [];
     for (const exId of examIds) {
@@ -485,20 +723,9 @@ async function copyExamFolderToPreset(sourceFolderId, proposal) {
         }
     }
 
-    const newFolderId = `ef-${Date.now()}`;
-    const presetFolderRef = doc(db, 'exam_folders', newFolderId);
-    const { teacherId, createdBy, createdByRole, sharedWith, collaboratorIds, collaboratorNames, collaboratorRoles, isDeleted, deletedAt, examIds: _ids, ...cleanFolderData } = folderData;
-    await setDoc(presetFolderRef, {
-        ...cleanFolderData,
-        name: folderData.name || proposal.proposalName,
-        examIds: newExamIds,
-        copiedFrom: sourceFolderId,
-        proposedBy: proposal.teacherId,
-        proposedByName: proposal.teacherName,
-        updatedAt: serverTimestamp()
-    });
-
-    return newFolderId;
+    const payload = buildOfficialFolderPayload(folderData, 'examIds', newExamIds, proposal);
+    const created = await adminFoldersService.saveExamFolder(payload);
+    return normalizeId(created?.data || created) || normalizeId(created);
 }
 
 // ========== OVERWRITE HELPERS ==========
@@ -506,7 +733,7 @@ async function copyExamFolderToPreset(sourceFolderId, proposal) {
 async function overwriteItemToPreset(proposal) {
     const { type, sourceId } = proposal;
     if (type === 'vocab') {
-        await overwriteVocabPreset(sourceId, proposal);
+        await overwriteVocabPresetViaApi(sourceId, proposal);
     } else if (type === 'grammar') {
         await overwriteGrammarPreset(sourceId, proposal);
     } else if (type === 'exam') {
@@ -517,7 +744,7 @@ async function overwriteItemToPreset(proposal) {
 async function overwriteFolderToPreset(proposal) {
     const { type, sourceFolderId } = proposal;
     if (type === 'vocab') {
-        await overwriteVocabFolderPreset(sourceFolderId, proposal);
+        await overwriteVocabFolderPresetViaApi(sourceFolderId, proposal);
     } else if (type === 'grammar') {
         await overwriteGrammarFolderPreset(sourceFolderId, proposal);
     } else if (type === 'exam') {
@@ -528,122 +755,11 @@ async function overwriteFolderToPreset(proposal) {
 // --- VOCAB OVERWRITE ---
 
 async function overwriteVocabPreset(sourceId, proposal) {
-    const existing = await findExistingOfficialCopy(sourceId, 'vocab');
-    if (!existing) return copyVocabToPreset(sourceId, proposal);
-
-    const targetId = existing.id;
-    const sourceRef = doc(db, 'teacher_topics', sourceId);
-    const sourceSnap = await getDoc(sourceRef);
-    if (!sourceSnap.exists()) throw new Error('Source topic not found');
-
-    const sourceData = sourceSnap.data();
-    const { id: _sourceId, teacherId, createdBy, createdByRole, sharedWith, collaboratorIds, collaboratorNames, collaboratorRoles, copiedFrom, isDeleted, deletedAt, archived, ...cleanData } = sourceData;
-
-    await updateDoc(doc(db, 'topics', targetId), {
-        ...cleanData,
-        name: sourceData.name || proposal.proposalName,
-        isDeleted: deleteField(),
-        deletedAt: deleteField(),
-        archived: deleteField(),
-        updatedAt: serverTimestamp()
-    });
-
-    // Smart merge words: update existing, add new, delete removed (preserves IDs for student progress)
-    const oldWordsSnap = await getDocs(collection(db, `topics/${targetId}/words`));
-    const newWordsSnap = await getDocs(collection(db, `teacher_topics/${sourceId}/words`));
-
-    const oldWordIds = new Set(oldWordsSnap.docs.map(d => d.id));
-    const newWordIds = new Set(newWordsSnap.docs.map(d => d.id));
-    const newWordsMap = new Map(newWordsSnap.docs.map(d => [d.id, d.data()]));
-
-    const batch = writeBatch(db);
-
-    // Update existing + add new words
-    for (const [wordId, wordData] of newWordsMap) {
-        const wordRef = doc(db, `topics/${targetId}/words`, wordId);
-        batch.set(wordRef, { ...wordData }, { merge: true });
-    }
-
-    // Delete words that no longer exist in teacher's version
-    for (const oldId of oldWordIds) {
-        if (!newWordIds.has(oldId)) {
-            batch.delete(doc(db, `topics/${targetId}/words`, oldId));
-        }
-    }
-
-    await batch.commit();
-
-    return targetId;
+    return overwriteVocabPresetViaApi(sourceId, proposal);
 }
 
 async function overwriteVocabFolderPreset(sourceFolderId, proposal) {
-    const existing = await findExistingOfficialCopy(sourceFolderId, 'vocab', 'folder');
-    if (!existing) return copyVocabFolderToPreset(sourceFolderId, proposal);
-
-    const folderRef = doc(db, 'teacher_topic_folders', sourceFolderId);
-    const folderSnap = await getDoc(folderRef);
-    if (!folderSnap.exists()) throw new Error('Source folder not found');
-
-    const folderData = folderSnap.data();
-    const rawTopicIds = folderData.topicIds || [];
-
-    // Filter out soft-deleted teacher topics
-    const topicIds = [];
-    for (const tid of rawTopicIds) {
-        const tSnap = await getDoc(doc(db, 'teacher_topics', tid));
-        if (tSnap.exists() && !tSnap.data().isDeleted) {
-            topicIds.push(tid);
-        }
-    }
-
-    // Get old official folder's current item IDs
-    const oldFolderSnap = await getDoc(doc(db, 'topic_folders', existing.id));
-    const oldTopicIds = oldFolderSnap.exists() ? (oldFolderSnap.data().topicIds || []) : [];
-
-    const newTopicIds = [];
-    for (const topicId of topicIds) {
-        try {
-            const newId = await overwriteVocabPreset(topicId, proposal);
-            newTopicIds.push(newId);
-        } catch (e) {
-            console.error(`Error overwriting topic ${topicId}:`, e);
-        }
-    }
-
-    // Archive orphaned items (in old folder but not in new results)
-    const orphanedIds = oldTopicIds.filter(id => !newTopicIds.includes(id));
-    for (const orphanId of orphanedIds) {
-        try {
-            const orphanSnap = await getDoc(doc(db, 'topics', orphanId));
-            if (orphanSnap.exists()) {
-                const orphanData = orphanSnap.data();
-                const currentName = orphanData.name || '';
-                if (!currentName.startsWith('[Archived]')) {
-                    await updateDoc(doc(db, 'topics', orphanId), {
-                        name: `[Archived] ${currentName}`,
-                        archived: true,
-                        createdByRole: 'admin',
-                        isDeleted: deleteField(),
-                        deletedAt: deleteField(),
-                        updatedAt: serverTimestamp()
-                    });
-                }
-            }
-        } catch (e) {
-            console.error(`Error archiving topic ${orphanId}:`, e);
-        }
-    }
-
-    const { teacherId: _t, createdBy: _c, createdByRole: _r, sharedWith: _s, collaboratorIds: _ci, collaboratorNames: _cn, collaboratorRoles: _cr, isDeleted: _d, deletedAt: _da, topicIds: _ids, ...cleanFolderData } = folderData;
-    const finalTopicIds = [...newTopicIds, ...orphanedIds];
-    await updateDoc(doc(db, 'topic_folders', existing.id), {
-        ...cleanFolderData,
-        name: folderData.name || proposal.proposalName,
-        topicIds: finalTopicIds,
-        updatedAt: serverTimestamp()
-    });
-
-    return existing.id;
+    return overwriteVocabFolderPresetViaApi(sourceFolderId, proposal);
 }
 
 // --- GRAMMAR OVERWRITE ---
@@ -653,6 +769,50 @@ async function overwriteGrammarPreset(sourceId, proposal) {
     if (!existing) return copyGrammarToPreset(sourceId, proposal);
 
     const targetId = existing.id;
+    const sourceDataViaApi = await grammarExercisesService.findOne(sourceId).catch(() => null);
+    if (!sourceDataViaApi) throw new Error('Source grammar exercise not found');
+
+    await grammarExercisesService.update(
+        targetId,
+        buildOfficialContentPayload(sourceDataViaApi, proposal, { archived: false }),
+    );
+
+    const oldQuestionsResult = await grammarQuestionsService.findAll(targetId);
+    const oldQuestions = Array.isArray(oldQuestionsResult) ? oldQuestionsResult : (oldQuestionsResult?.data || []);
+    const newQuestionsResult = await grammarQuestionsService.findAll(sourceId);
+    const newQuestions = Array.isArray(newQuestionsResult) ? newQuestionsResult : (newQuestionsResult?.data || []);
+
+    const oldBySourceViaApi = new Map();
+    oldQuestions.forEach(question => {
+        if (question?.copiedFrom) oldBySourceViaApi.set(question.copiedFrom, question);
+    });
+    const matchedOldIdsViaApi = new Set();
+
+    for (const question of newQuestions) {
+        const sourceQuestionId = normalizeId(question);
+        const existingQuestion = oldBySourceViaApi.get(sourceQuestionId);
+        if (existingQuestion) {
+            matchedOldIdsViaApi.add(normalizeId(existingQuestion));
+            await grammarQuestionsService.update(
+                normalizeId(existingQuestion),
+                buildQuestionPayload(question, 'exerciseId', targetId, sourceQuestionId),
+            );
+        } else {
+            await grammarQuestionsService.create(
+                buildQuestionPayload(question, 'exerciseId', targetId, sourceQuestionId),
+            );
+        }
+    }
+
+    for (const oldQuestion of oldQuestions) {
+        const oldQuestionId = normalizeId(oldQuestion);
+        if (!matchedOldIdsViaApi.has(oldQuestionId)) {
+            await grammarQuestionsService.remove(oldQuestionId);
+        }
+    }
+
+    return targetId;
+
     const sourceRef = doc(db, 'grammar_exercises', sourceId);
     const sourceSnap = await getDoc(sourceRef);
     if (!sourceSnap.exists()) throw new Error('Source grammar exercise not found');
@@ -729,6 +889,58 @@ async function overwriteGrammarFolderPreset(sourceFolderId, proposal) {
     const existing = await findExistingOfficialCopy(sourceFolderId, 'grammar', 'folder');
     if (!existing) return copyGrammarFolderToPreset(sourceFolderId, proposal);
 
+    const folderDataViaApi = await getTeacherGrammarFolderById(sourceFolderId);
+    if (!folderDataViaApi) throw new Error('Source grammar folder not found');
+
+    const rawExerciseIdsViaApi = Array.isArray(folderDataViaApi.exerciseIds) ? folderDataViaApi.exerciseIds : [];
+    const exerciseIdsViaApi = [];
+    for (const eid of rawExerciseIdsViaApi) {
+        const exercise = await grammarExercisesService.findOne(eid).catch(() => null);
+        if (exercise && !exercise.isDeleted) {
+            exerciseIdsViaApi.push(eid);
+        }
+    }
+
+    const oldFolderViaApi = await getAdminGrammarFolderById(existing.id);
+    const oldExerciseIdsViaApi = Array.isArray(oldFolderViaApi?.exerciseIds) ? oldFolderViaApi.exerciseIds : [];
+
+    const newExerciseIdsViaApi = [];
+    for (const exId of exerciseIdsViaApi) {
+        try {
+            const newId = await overwriteGrammarPreset(exId, proposal);
+            newExerciseIdsViaApi.push(newId);
+        } catch (e) {
+            console.error(`Error overwriting grammar exercise ${exId}:`, e);
+        }
+    }
+
+    const orphanedIdsViaApi = oldExerciseIdsViaApi.filter(id => !newExerciseIdsViaApi.includes(id));
+    for (const orphanId of orphanedIdsViaApi) {
+        try {
+            const orphanData = await grammarExercisesService.findOne(orphanId).catch(() => null);
+            if (orphanData) {
+                const currentTitle = orphanData.name || orphanData.title || '';
+                if (!currentTitle.startsWith('[Archived]')) {
+                    await grammarExercisesService.update(orphanId, {
+                        title: `[Archived] ${currentTitle}`,
+                        name: `[Archived] ${currentTitle}`,
+                        archived: true,
+                        createdByRole: 'admin',
+                    });
+                }
+            }
+        } catch (e) {
+            console.error(`Error archiving grammar exercise ${orphanId}:`, e);
+        }
+    }
+
+    await adminFoldersService.saveGrammarFolder({
+        id: existing.id,
+        ...buildOfficialFolderPayload(folderDataViaApi, 'exerciseIds', [...newExerciseIdsViaApi, ...orphanedIdsViaApi], proposal),
+    });
+
+    return existing.id;
+
     const folderRef = doc(db, 'teacher_grammar_folders', sourceFolderId);
     const folderSnap = await getDoc(folderRef);
     if (!folderSnap.exists()) throw new Error('Source grammar folder not found');
@@ -802,6 +1014,50 @@ async function overwriteExamPreset(sourceId, proposal) {
     if (!existing) return copyExamToPreset(sourceId, proposal);
 
     const targetId = existing.id;
+    const sourceDataViaApi = await examsService.findOne(sourceId).catch(() => null);
+    if (!sourceDataViaApi) throw new Error('Source exam not found');
+
+    await examsService.update(
+        targetId,
+        buildOfficialContentPayload(sourceDataViaApi, proposal, { archived: false }),
+    );
+
+    const oldQuestionsResult = await examQuestionsService.findAll(targetId);
+    const oldQuestions = Array.isArray(oldQuestionsResult) ? oldQuestionsResult : (oldQuestionsResult?.data || []);
+    const newQuestionsResult = await examQuestionsService.findAll(sourceId);
+    const newQuestions = Array.isArray(newQuestionsResult) ? newQuestionsResult : (newQuestionsResult?.data || []);
+
+    const oldBySourceViaApi = new Map();
+    oldQuestions.forEach(question => {
+        if (question?.copiedFrom) oldBySourceViaApi.set(question.copiedFrom, question);
+    });
+    const matchedOldIdsViaApi = new Set();
+
+    for (const question of newQuestions) {
+        const sourceQuestionId = normalizeId(question);
+        const existingQuestion = oldBySourceViaApi.get(sourceQuestionId);
+        if (existingQuestion) {
+            matchedOldIdsViaApi.add(normalizeId(existingQuestion));
+            await examQuestionsService.update(
+                normalizeId(existingQuestion),
+                buildQuestionPayload(question, 'examId', targetId, sourceQuestionId),
+            );
+        } else {
+            await examQuestionsService.create(
+                buildQuestionPayload(question, 'examId', targetId, sourceQuestionId),
+            );
+        }
+    }
+
+    for (const oldQuestion of oldQuestions) {
+        const oldQuestionId = normalizeId(oldQuestion);
+        if (!matchedOldIdsViaApi.has(oldQuestionId)) {
+            await examQuestionsService.remove(oldQuestionId);
+        }
+    }
+
+    return targetId;
+
     const sourceRef = doc(db, 'exams', sourceId);
     const sourceSnap = await getDoc(sourceRef);
     if (!sourceSnap.exists()) throw new Error('Source exam not found');
@@ -875,6 +1131,59 @@ async function overwriteExamPreset(sourceId, proposal) {
 async function overwriteExamFolderPreset(sourceFolderId, proposal) {
     const existing = await findExistingOfficialCopy(sourceFolderId, 'exam', 'folder');
     if (!existing) return copyExamFolderToPreset(sourceFolderId, proposal);
+
+    const folderDataViaApi = await getTeacherExamFolderById(sourceFolderId);
+    if (!folderDataViaApi) throw new Error('Source exam folder not found');
+
+    const rawExamIdsViaApi = Array.isArray(folderDataViaApi.examIds) ? folderDataViaApi.examIds : [];
+    const examIdsViaApi = [];
+    for (const exId of rawExamIdsViaApi) {
+        const exam = await examsService.findOne(exId).catch(() => null);
+        if (exam && !exam.isDeleted) {
+            examIdsViaApi.push(exId);
+        }
+    }
+
+    const oldFolderViaApi = await getAdminExamFolderById(existing.id);
+    const oldExamIdsViaApi = Array.isArray(oldFolderViaApi?.examIds) ? oldFolderViaApi.examIds : [];
+
+    const newExamIdsViaApi = [];
+    for (const exId of examIdsViaApi) {
+        try {
+            const newId = await overwriteExamPreset(exId, proposal);
+            newExamIdsViaApi.push(newId);
+        } catch (e) {
+            console.error(`Error overwriting exam ${exId}:`, e);
+        }
+    }
+
+    const orphanedIdsViaApi = oldExamIdsViaApi.filter(id => !newExamIdsViaApi.includes(id));
+
+    for (const orphanId of orphanedIdsViaApi) {
+        try {
+            const orphanData = await examsService.findOne(orphanId).catch(() => null);
+            if (orphanData) {
+                const currentTitle = orphanData.name || orphanData.title || '';
+                if (!currentTitle.startsWith('[Archived]')) {
+                    await examsService.update(orphanId, {
+                        title: `[Archived] ${currentTitle}`,
+                        name: `[Archived] ${currentTitle}`,
+                        archived: true,
+                        createdByRole: 'admin',
+                    });
+                }
+            }
+        } catch (e) {
+            console.error(`Error archiving exam ${orphanId}:`, e);
+        }
+    }
+
+    await adminFoldersService.saveExamFolder({
+        id: existing.id,
+        ...buildOfficialFolderPayload(folderDataViaApi, 'examIds', [...newExamIdsViaApi, ...orphanedIdsViaApi], proposal),
+    });
+
+    return existing.id;
 
     const folderRef = doc(db, 'teacher_exam_folders', sourceFolderId);
     const folderSnap = await getDoc(folderRef);

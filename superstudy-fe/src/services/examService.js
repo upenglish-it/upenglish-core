@@ -1,12 +1,54 @@
-import { db, storage } from '../config/firebase';
-import { collection, doc, getDocs, getDoc, setDoc, deleteDoc, updateDoc, writeBatch, serverTimestamp, query, where, orderBy, documentId, getCountFromServer, deleteField } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
 import { gradeGrammarSubmissionWithAI, gradeFillInBlankBlanksWithAI } from './aiGrammarService';
 import { getPromptById } from './promptService';
 import { normalizeForComparison } from '../utils/textNormalization';
 import { evaluateAudioAnswer, chatCompletion, isSilentAudio } from './aiService';
 import { deleteContextAudio } from './contextAudioService';
-import { examsService, examQuestionsService, examAssignmentsService, examSubmissionsService, teacherFoldersService, adminFoldersService } from '../models';
+import { examsService, examQuestionsService, examAssignmentsService, examSubmissionsService, teacherFoldersService, adminFoldersService, usersService } from '../models';
+import { deletePublicAsset, uploadPublicAsset } from './uploadService';
+
+function unwrapApiResult(response) {
+    return response?.data || response || null;
+}
+
+function nowIso() {
+    return new Date().toISOString();
+}
+
+async function getExamRecord(examId) {
+    if (!examId) return null;
+    try {
+        return unwrapApiResult(await examsService.findOne(examId));
+    } catch {
+        return null;
+    }
+}
+
+async function getSubmissionRecord(submissionId) {
+    if (!submissionId) return null;
+    try {
+        return unwrapApiResult(await examSubmissionsService.findOne(submissionId));
+    } catch {
+        return null;
+    }
+}
+
+async function getAssignmentRecord(assignmentId) {
+    if (!assignmentId) return null;
+    try {
+        return unwrapApiResult(await examAssignmentsService.findOne(assignmentId));
+    } catch {
+        return null;
+    }
+}
+
+async function getUserRecord(userId) {
+    if (!userId) return null;
+    try {
+        return unwrapApiResult(await usersService.findOne(userId));
+    } catch {
+        return null;
+    }
+}
 
 /**
  * Upload an audio answer blob to Firebase Storage.
@@ -17,9 +59,11 @@ import { examsService, examQuestionsService, examAssignmentsService, examSubmiss
  */
 export async function uploadAudioAnswer(audioBlob, submissionId, questionId) {
     const ext = audioBlob.type?.includes('mp4') ? 'mp4' : audioBlob.type?.includes('aac') ? 'aac' : 'webm';
-    const storageRef = ref(storage, `audio_answers/${submissionId}/${questionId}.${ext}`);
-    await uploadBytes(storageRef, audioBlob, { contentType: audioBlob.type || 'audio/webm' });
-    return getDownloadURL(storageRef);
+    const upload = await uploadPublicAsset(audioBlob, `audio_answers/${submissionId}`, {
+        fileName: `${questionId}.${ext}`,
+        contentType: audioBlob.type || 'audio/webm',
+    });
+    return upload?.url || '';
 }
 
 /**
@@ -45,9 +89,11 @@ export async function uploadOptionImage(file) {
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.85));
     const timestamp = Date.now();
     const rand = Math.random().toString(36).substring(2, 8);
-    const storageRef = ref(storage, `option_images/${timestamp}_${rand}.webp`);
-    await uploadBytes(storageRef, blob, { contentType: 'image/webp' });
-    return getDownloadURL(storageRef);
+    const upload = await uploadPublicAsset(blob, 'option_images', {
+        fileName: `${timestamp}_${rand}.webp`,
+        contentType: 'image/webp',
+    });
+    return upload?.url || '';
 }
 
 /**
@@ -88,9 +134,11 @@ export async function generateAndUploadOptionImage(prompt) {
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.85));
     const timestamp = Date.now();
     const rand = Math.random().toString(36).substring(2, 8);
-    const storageRef = ref(storage, `option_images/${timestamp}_${rand}.webp`);
-    await uploadBytes(storageRef, blob, { contentType: 'image/webp' });
-    return getDownloadURL(storageRef);
+    const upload = await uploadPublicAsset(blob, 'option_images', {
+        fileName: `${timestamp}_${rand}.webp`,
+        contentType: 'image/webp',
+    });
+    return upload?.url || '';
 }
 
 /**
@@ -100,8 +148,7 @@ export async function generateAndUploadOptionImage(prompt) {
 export async function deleteOptionImage(url) {
     if (!url || typeof url !== 'string' || !url.includes('option_images')) return;
     try {
-        const imageRef = ref(storage, url);
-        await deleteObject(imageRef);
+        await deletePublicAsset(url);
     } catch (e) {
         console.error('Error deleting option image from Storage:', e);
     }
@@ -132,9 +179,11 @@ export async function uploadContextImage(file, maxWidth = 800) {
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.85));
     const timestamp = Date.now();
     const rand = Math.random().toString(36).substring(2, 8);
-    const storageRef = ref(storage, `context_images/${timestamp}_${rand}.webp`);
-    await uploadBytes(storageRef, blob, { contentType: 'image/webp' });
-    return getDownloadURL(storageRef);
+    const upload = await uploadPublicAsset(blob, 'context_images', {
+        fileName: `${timestamp}_${rand}.webp`,
+        contentType: 'image/webp',
+    });
+    return upload?.url || '';
 }
 
 /**
@@ -150,8 +199,7 @@ export async function deleteContextImages(html) {
     const uniqueUrls = [...new Set(urls)];
     await Promise.allSettled(uniqueUrls.map(async url => {
         try {
-            const imageRef = ref(storage, url);
-            await deleteObject(imageRef);
+            await deletePublicAsset(url);
         } catch (e) {
             console.error('Error deleting context image:', e);
         }
@@ -271,53 +319,37 @@ export async function getDeletedExams() {
 export async function getExamQuestions(examId) {
     const result = await examQuestionsService.findAll(examId);
     let questions = Array.isArray(result) ? result : (result?.data || []);
+    questions = questions.map(q => ({ ...q, id: q.id || q._id }));
     return questions.sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
 export async function getExamQuestionsBySection(examId, sectionId) {
     const result = await examQuestionsService.findBySection(examId, sectionId);
     let questions = Array.isArray(result) ? result : (result?.data || []);
+    questions = questions.map(q => ({ ...q, id: q.id || q._id }));
     return questions.sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
 export async function getExamQuestionCounts(examIds) {
-    const counts = {};
-    await Promise.all(examIds.map(async (examId) => {
-        try {
-            const q = query(collection(db, 'exam_questions'), where('examId', '==', examId));
-            const snapshot = await getCountFromServer(q);
-            counts[examId] = snapshot.data().count;
-        } catch (e) {
-            console.error(`Error counting questions for exam ${examId}:`, e);
-            counts[examId] = 0;
-        }
-    }));
-    return counts;
+    if (!examIds || examIds.length === 0) return {};
+    try {
+        const result = await examQuestionsService.getCounts(examIds);
+        return result?.data || result || {};
+    } catch (e) {
+        console.error(`Error counting questions:`, e);
+        return {};
+    }
 }
 
 export async function getExamQuestionTimeTotals(examIds) {
-    const totals = {};
-    await Promise.all(examIds.map(async (examId) => {
-        try {
-            const q = query(collection(db, 'exam_questions'), where('examId', '==', examId));
-            const snapshot = await getDocs(q);
-            let totalSeconds = 0;
-            let missingCount = 0;
-            snapshot.forEach(docSnap => {
-                const data = docSnap.data();
-                if (data.timeLimitSeconds && data.timeLimitSeconds >= 5) {
-                    totalSeconds += data.timeLimitSeconds;
-                } else {
-                    missingCount++;
-                }
-            });
-            totals[examId] = { totalSeconds, missingCount, questionCount: snapshot.size };
-        } catch (e) {
-            console.error(`Error getting question time totals for exam ${examId}:`, e);
-            totals[examId] = { totalSeconds: 0, missingCount: 0, questionCount: 0 };
-        }
-    }));
-    return totals;
+    if (!examIds || examIds.length === 0) return {};
+    try {
+        const result = await examQuestionsService.getTimeTotals(examIds);
+        return result?.data || result || {};
+    } catch (e) {
+        console.error(`Error getting question time totals:`, e);
+        return {};
+    }
 }
 
 /**
@@ -342,7 +374,8 @@ export async function saveExamQuestion(questionData) {
         resultId = id;
     } else {
         const result = await examQuestionsService.create(data);
-        resultId = result?.id || result;
+        const normalized = result?.data || result;
+        resultId = normalized?.id || normalized?._id || normalized;
     }
 
     // Fire-and-forget: auto-classify errorCategory in background
@@ -450,7 +483,7 @@ export async function createExamAssignment(assignmentData) {
         }
     }
 
-    return assignmentRef.id;
+    return assignmentId;
 }
 
 export async function getExamAssignment(id) {
@@ -504,6 +537,35 @@ export async function getExamAssignmentsForStudent(studentId, groupIds = []) {
     }
 }
 
+export async function getExamAssignmentsForStudents(studentIds = []) {
+    const uniqueStudentIds = [...new Set((studentIds || []).filter(Boolean))];
+    if (uniqueStudentIds.length === 0) return [];
+
+    try {
+        const results = await Promise.all(
+            uniqueStudentIds.map(studentId => examAssignmentsService.findAll({ studentId }))
+        );
+        const assignments = results.flatMap(result => Array.isArray(result) ? result : (result?.data || []));
+        const deduped = new Map();
+
+        assignments
+            .filter(assignment => !assignment.isDeleted)
+            .forEach(assignment => {
+                const assignmentId = assignment.id || assignment._id;
+                if (assignmentId) deduped.set(assignmentId, assignment);
+            });
+
+        return Array.from(deduped.values()).sort((a, b) => {
+            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return timeB - timeA;
+        });
+    } catch (error) {
+        console.error('Error fetching exam assignments for students:', error);
+        return [];
+    }
+}
+
 export async function deleteExamAssignment(assignmentId) {
     await examAssignmentsService.softDelete(assignmentId);
 }
@@ -539,43 +601,29 @@ export async function getDeletedExamAssignmentsForGroup(groupId) {
  * Auto-purge soft-deleted items older than 30 days for a group.
  * Call on page load.
  */
+/**
+ * Auto-purge soft-deleted items older than 30 days for a group.
+ * Delegates exam_assignments cleanup to the backend.
+ */
 export async function cleanupExpiredDeletedItems(groupId) {
-    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-    const cutoff = Date.now() - THIRTY_DAYS_MS;
-
     try {
-        // Clean up regular assignments
-        const assignmentsRef = collection(db, 'assignments');
-        const aq = query(assignmentsRef, where('groupId', '==', groupId));
-        const aSnap = await getDocs(aq);
-        const deletePromises = [];
-        aSnap.forEach(docSnap => {
-            const data = docSnap.data();
-            if (data.isDeleted && data.deletedAt) {
-                const deletedMs = data.deletedAt.toMillis ? data.deletedAt.toMillis() : new Date(data.deletedAt).getTime();
-                if (deletedMs < cutoff) {
-                    deletePromises.push(deleteDoc(docSnap.ref));
-                }
-            }
-        });
+        // Fetch deleted exam assignments from backend
+        const result = await examAssignmentsService.findDeletedByGroup(groupId);
+        const deletedAssignments = Array.isArray(result) ? result : (result?.data || []);
+        const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+        const cutoff = Date.now() - THIRTY_DAYS_MS;
 
-        // Clean up exam assignments
-        const eq = query(collection(db, 'exam_assignments'), where('targetType', '==', 'group'), where('targetId', '==', groupId));
-        const eSnap = await getDocs(eq);
-        for (const docSnap of eSnap.docs) {
-            const data = docSnap.data();
-            if (data.isDeleted && data.deletedAt) {
-                const deletedMs = data.deletedAt.toMillis ? data.deletedAt.toMillis() : new Date(data.deletedAt).getTime();
-                if (deletedMs < cutoff) {
-                    // Permanently delete with submissions
-                    deletePromises.push(permanentlyDeleteExamAssignment(docSnap.id));
-                }
-            }
-        }
+        const purgePromises = deletedAssignments
+            .filter(a => {
+                if (!a.deletedAt) return false;
+                const deletedMs = typeof a.deletedAt === 'string' ? new Date(a.deletedAt).getTime() : a.deletedAt;
+                return deletedMs < cutoff;
+            })
+            .map(a => permanentlyDeleteExamAssignment(a._id || a.id));
 
-        if (deletePromises.length > 0) {
-            await Promise.allSettled(deletePromises);
-            console.log(`[Cleanup] Purged ${deletePromises.length} expired soft-deleted items for group ${groupId}`);
+        if (purgePromises.length > 0) {
+            await Promise.allSettled(purgePromises);
+            console.log(`[Cleanup] Purged ${purgePromises.length} expired exam assignments for group ${groupId}`);
         }
     } catch (error) {
         console.error("Error during cleanup of expired deleted items:", error);
@@ -585,37 +633,8 @@ export async function cleanupExpiredDeletedItems(groupId) {
 export async function updateExamAssignmentDueDate(assignmentId, newDueDate) {
     if (!assignmentId || !newDueDate) throw new Error("Missing assignment ID or new due date");
     try {
-        const assignmentRef = doc(db, 'exam_assignments', assignmentId);
-        const assignmentSnap = await getDoc(assignmentRef);
-        await updateDoc(assignmentRef, {
-            dueDate: newDueDate,
-            updatedAt: serverTimestamp()
-        });
-
-        if (assignmentSnap.exists()) {
-            const aData = assignmentSnap.data();
-            const examName = aData.examName || aData.examTitle || 'bài';
-            const dueDateStr = (newDueDate.toDate ? newDueDate.toDate() : new Date(newDueDate)).toLocaleString('vi-VN');
-            const targetId = aData.targetType === 'group' ? aData.targetId : null;
-            if (targetId) {
-                try {
-                    const { createNotificationForGroupStudents, queueEmailForGroupStudents, buildEmailHtml } = await import('./notificationService');
-                    const appUrl = 'https://upenglishvietnam.com/preview/superstudy';
-                    await createNotificationForGroupStudents(targetId, { type: 'deadline_extended', title: '⏰ Gia hạn deadline', message: `Bài "${examName}" được gia hạn đến ${dueDateStr}.`, link: '/dashboard?tab=exams' });
-                    await queueEmailForGroupStudents(targetId, {
-                        subject: `Gia hạn: ${examName}`,
-                        html: buildEmailHtml({
-                            emoji: '⏰', heading: 'Gia hạn deadline', headingColor: '#f59e0b',
-                            greeting: 'Chào bạn 👋',
-                            body: `<p>Bài <strong>"${examName}"</strong> đã được thầy/cô gia hạn thêm thời gian làm bài. Tranh thủ hoàn thành nhé!</p>`,
-                            highlight: `<strong>📅 Hạn mới: ${dueDateStr}</strong>`,
-                            highlightBg: '#fffbeb', highlightBorder: '#f59e0b',
-                            ctaText: 'Vào làm bài', ctaLink: `${appUrl}/dashboard?tab=exams`, ctaColor: '#f59e0b', ctaColor2: '#fbbf24'
-                        })
-                    });
-                } catch (e) { console.error('Error sending exam deadline extension notification:', e); }
-            }
-        }
+        const dueDateStr = (newDueDate.toDate ? newDueDate.toDate() : new Date(newDueDate)).toISOString();
+        await examAssignmentsService.updateDueDate(assignmentId, { dueDate: dueDateStr });
     } catch (error) {
         console.error("Error updating exam assignment due date:", error);
         throw error;
@@ -625,37 +644,10 @@ export async function updateExamAssignmentDueDate(assignmentId, newDueDate) {
 export async function updateExamAssignmentStudentDeadline(assignmentId, studentId, newDueDate) {
     if (!assignmentId || !studentId || !newDueDate) throw new Error("Missing parameters");
     try {
-        const assignmentRef = doc(db, 'exam_assignments', assignmentId);
-        const assignmentSnap = await getDoc(assignmentRef);
-        await updateDoc(assignmentRef, {
-            [`studentDeadlines.${studentId}`]: newDueDate,
-            updatedAt: serverTimestamp()
+        const dueDateISO = (newDueDate.toDate ? newDueDate.toDate() : new Date(newDueDate)).toISOString();
+        await examAssignmentsService.update(assignmentId, {
+            [`studentDeadlines.${studentId}`]: dueDateISO,
         });
-
-        if (assignmentSnap.exists()) {
-            const aData = assignmentSnap.data();
-            const examName = aData.examName || aData.examTitle || 'bài';
-            const dueDateStr = (newDueDate.toDate ? newDueDate.toDate() : new Date(newDueDate)).toLocaleString('vi-VN');
-            try {
-                const { createNotification, queueEmail, buildEmailHtml } = await import('./notificationService');
-                const studentSnap = await getDoc(doc(db, 'users', studentId));
-                const appUrl = 'https://upenglishvietnam.com/preview/superstudy';
-                await createNotification({ userId: studentId, type: 'deadline_extended', title: '⏰ Gia hạn deadline', message: `Bài "${examName}" được gia hạn cho bạn đến ${dueDateStr}.`, link: '/dashboard?tab=exams' });
-                if (studentSnap.exists() && studentSnap.data().email) {
-                    await queueEmail(studentSnap.data().email, {
-                        subject: `Gia hạn: ${examName}`,
-                        html: buildEmailHtml({
-                            emoji: '⏰', heading: 'Gia hạn deadline', headingColor: '#f59e0b',
-                            greeting: 'Chào bạn 👋',
-                            body: `<p>Bài <strong>"${examName}"</strong> đã được thầy/cô gia hạn riêng cho bạn, thêm thời gian làm bài. Cố gắng hoàn thành nhé!</p>`,
-                            highlight: `<strong>📅 Hạn mới: ${dueDateStr}</strong>`,
-                            highlightBg: '#fffbeb', highlightBorder: '#f59e0b',
-                            ctaText: 'Vào làm bài', ctaLink: `${appUrl}/dashboard?tab=exams`, ctaColor: '#f59e0b', ctaColor2: '#fbbf24'
-                        })
-                    });
-                }
-            } catch (e) { console.error('Error sending exam individual deadline notification:', e); }
-        }
     } catch (error) {
         console.error("Error updating exam student deadline:", error);
         throw error;
@@ -665,10 +657,9 @@ export async function updateExamAssignmentStudentDeadline(assignmentId, studentI
 export async function removeExamAssignmentStudentDeadline(assignmentId, studentId) {
     if (!assignmentId || !studentId) throw new Error("Missing parameters");
     try {
-        const assignmentRef = doc(db, 'exam_assignments', assignmentId);
-        await updateDoc(assignmentRef, {
-            [`studentDeadlines.${studentId}`]: deleteField(),
-            updatedAt: serverTimestamp()
+        // Backend uses $unset pattern — send null to signal removal
+        await examAssignmentsService.update(assignmentId, {
+            [`studentDeadlines.${studentId}`]: null,
         });
     } catch (error) {
         console.error("Error removing exam student deadline:", error);
@@ -832,9 +823,9 @@ ${questionSummaries}`;
  * @returns {Promise<string>} The generated summary
  */
 export async function regenerateExamSummaryForSubmission(submissionId, questions, teacherTitle = '', studentTitle = '') {
-    const snap = await getDoc(doc(db, 'exam_submissions', submissionId));
-    if (!snap.exists()) throw new Error('Submission not found');
-    const submission = snap.data();
+    const submissionRes = await examSubmissionsService.findOne(submissionId);
+    const submission = submissionRes?.data || submissionRes;
+    if (!submission) throw new Error('Submission not found');
     const results = submission.results || {};
 
     const TYPE_LABELS = {
@@ -876,8 +867,9 @@ export async function regenerateExamSummaryForSubmission(submissionId, questions
     let cefrLevel = '';
     if (submission.examId) {
         try {
-            const examSnap = await getDoc(doc(db, 'exams', submission.examId));
-            if (examSnap.exists()) cefrLevel = examSnap.data().cefrLevel || '';
+            const examRes = await examsService.findOne(submission.examId);
+            const examData = examRes?.data || examRes;
+            if (examData) cefrLevel = examData.cefrLevel || '';
         } catch (e) { /* ignore */ }
     }
 
@@ -893,11 +885,8 @@ export async function regenerateExamSummaryForSubmission(submissionId, questions
         cefrLevel
     });
 
-    // Save to Firestore
-    await updateDoc(doc(db, 'exam_submissions', submissionId), {
-        examSummary: summary,
-        updatedAt: serverTimestamp()
-    });
+    // Save via backend
+    await examSubmissionsService.update(submissionId, { examSummary: summary });
 
     return summary;
 }
@@ -913,17 +902,16 @@ export async function regenerateExamSummaryForSubmission(submissionId, questions
  * @returns {Promise<Object>} The grading results
  */
 export async function gradeExamSubmission(submissionId, submission, questions, sections = [], teacherTitle = '', studentTitle = '') {
-    // Re-read the latest submission data from Firestore to avoid race conditions
+    // Re-read the latest submission data from backend storage to avoid race conditions
     // (e.g., audioUrl saved after grading was triggered but before it actually grades that question)
     try {
-        const freshSnap = await getDoc(doc(db, 'exam_submissions', submissionId));
-        if (freshSnap.exists()) {
-            const freshData = freshSnap.data();
+        const freshData = await getSubmissionRecord(submissionId);
+        if (freshData) {
             // Merge: use fresh answers from Firestore (they are the most up-to-date)
             submission = { ...submission, ...freshData, answers: freshData.answers || submission.answers };
         }
     } catch (e) {
-        console.warn('Could not re-read submission from Firestore, using passed-in data:', e);
+        console.warn('Could not re-read submission from backend, using passed-in data:', e);
     }
 
     // Preserve existing results (e.g. teacherOverride) from previous grading
@@ -937,20 +925,17 @@ export async function gradeExamSubmission(submissionId, submission, questions, s
     let cefrLevel = '';
     if (!finalTeacherTitle && submission.examId) {
         try {
-            const examRef = doc(db, 'exams', submission.examId);
-            const examSnap = await getDoc(examRef);
-            if (examSnap.exists()) {
-                const examData = examSnap.data();
+            const examData = await getExamRecord(submission.examId);
+            if (examData) {
                 cefrLevel = examData.cefrLevel || '';
                 if (examData.teacherTitle) {
                     finalTeacherTitle = examData.teacherTitle;
                     if (examData.studentTitle) finalStudentTitle = examData.studentTitle;
                 } else if (examData.createdBy) {
-                    const userRef = doc(db, 'users', examData.createdBy);
-                    const userSnap = await getDoc(userRef);
-                    if (userSnap.exists()) {
-                        if (userSnap.data().teacherTitle) finalTeacherTitle = userSnap.data().teacherTitle;
-                        if (userSnap.data().studentTitle) finalStudentTitle = userSnap.data().studentTitle;
+                    const userData = await getUserRecord(examData.createdBy);
+                    if (userData) {
+                        if (userData.teacherTitle) finalTeacherTitle = userData.teacherTitle;
+                        if (userData.studentTitle) finalStudentTitle = userData.studentTitle;
                     }
                 }
             }
@@ -1213,9 +1198,8 @@ export async function gradeExamSubmission(submissionId, submission, questions, s
                         for (let poll = 0; poll < 3; poll++) {
                             await new Promise(r => setTimeout(r, 3000)); // wait 3s between polls
                             try {
-                                const pollSnap = await getDoc(doc(db, 'exam_submissions', submissionId));
-                                if (pollSnap.exists()) {
-                                    const pollData = pollSnap.data();
+                                const pollData = await getSubmissionRecord(submissionId);
+                                if (pollData) {
                                     const pollAnswer = pollData.answers?.[sectionId]?.[questionId]?.answer;
                                     if (pollAnswer?.audioUrl) {
                                         audioAnswer = pollAnswer;
@@ -1439,27 +1423,26 @@ export async function gradeExamSubmission(submissionId, submission, questions, s
         maxTotalScore,
         answers: updatedAnswers,
         status: 'graded',
-        gradedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        gradedAt: nowIso(),
+        updatedAt: nowIso(),
         examSummary
     };
 
     // Auto-release if all questions are auto-graded
     if (isFullyAutoGraded) {
         updateData.resultsReleased = true;
-        updateData.releasedAt = serverTimestamp();
+        updateData.releasedAt = nowIso();
         updateData.releasedBy = 'system';
         updateData.releasedByName = 'Hệ thống (tự động)';
     }
 
-    await updateDoc(doc(db, 'exam_submissions', submissionId), updateData);
+    await examSubmissionsService.update(submissionId, updateData);
 
     // Send auto-release notifications
     if (isFullyAutoGraded) {
         try {
-            const subSnap = await getDoc(doc(db, 'exam_submissions', submissionId));
-            if (subSnap.exists()) {
-                const subData = subSnap.data();
+            const subData = await getSubmissionRecord(submissionId);
+            if (subData) {
                 const studentId = subData.studentId;
                 const assignmentId = subData.assignmentId;
 
@@ -1467,9 +1450,8 @@ export async function gradeExamSubmission(submissionId, submission, questions, s
                 let targetId = null;
 
                 if (assignmentId) {
-                    const asgnSnap = await getDoc(doc(db, 'exam_assignments', assignmentId));
-                    if (asgnSnap.exists()) {
-                        const asgnData = asgnSnap.data();
+                    const asgnData = await getAssignmentRecord(assignmentId);
+                    if (asgnData) {
                         examName = asgnData.examName || asgnData.examTitle || examName;
                         if (asgnData.targetType === 'group') {
                             targetId = asgnData.targetId;
@@ -1492,10 +1474,10 @@ export async function gradeExamSubmission(submissionId, submission, questions, s
 
                 // Email to student
                 try {
-                    const studentSnap = await getDoc(doc(db, 'users', studentId));
-                    if (studentSnap.exists() && studentSnap.data().email) {
+                    const studentData = await getUserRecord(studentId);
+                    if (studentData?.email) {
                         const appUrl = 'https://upenglishvietnam.com/preview/superstudy';
-                        await queueEmail(studentSnap.data().email, {
+                        await queueEmail(studentData.email, {
                             subject: `Bài "${examName}" đã có kết quả${scoreText ? ` — ${scoreText} điểm` : ''}`,
                             html: buildEmailHtml({
                                 emoji: '📊', heading: 'Kết quả đã sẵn sàng!', headingColor: '#10b981',
@@ -1524,10 +1506,8 @@ export async function gradeExamSubmission(submissionId, submission, questions, s
  * Updates the result for that question in Firestore without re-grading the entire exam.
  */
 export async function gradeSingleQuestion(submissionId, questionId, question, sections = [], teacherTitle = '', studentTitle = '') {
-    // Read latest submission from Firestore
-    const subSnap = await getDoc(doc(db, 'exam_submissions', submissionId));
-    if (!subSnap.exists()) throw new Error('Submission not found');
-    const submission = subSnap.data();
+    const submission = await getSubmissionRecord(submissionId);
+    if (!submission) throw new Error('Submission not found');
 
     // Find which section this question belongs to
     let sectionId = null;
@@ -1550,9 +1530,8 @@ export async function gradeSingleQuestion(submissionId, questionId, question, se
     let cefrLevel = '';
     if (!finalTeacherTitle && submission.examId) {
         try {
-            const examSnap = await getDoc(doc(db, 'exams', submission.examId));
-            if (examSnap.exists()) {
-                const examData = examSnap.data();
+            const examData = await getExamRecord(submission.examId);
+            if (examData) {
                 cefrLevel = examData.cefrLevel || '';
                 if (examData.teacherTitle) {
                     finalTeacherTitle = examData.teacherTitle;
@@ -1682,7 +1661,7 @@ export async function gradeSingleQuestion(submissionId, questionId, question, se
     const updateData = {
         [`results.${questionId}`]: resultEntry,
         totalScore: newTotalScore,
-        updatedAt: serverTimestamp()
+        updatedAt: nowIso()
     };
     // Save AI transcript if available
     if (answerUpdates) {
@@ -1691,10 +1670,10 @@ export async function gradeSingleQuestion(submissionId, questionId, question, se
     // Set status to graded if still submitted
     if (submission.status === 'submitted') {
         updateData.status = 'graded';
-        updateData.gradedAt = serverTimestamp();
+        updateData.gradedAt = nowIso();
     }
 
-    await updateDoc(doc(db, 'exam_submissions', submissionId), updateData);
+    await examSubmissionsService.update(submissionId, updateData);
 
     return resultEntry;
 }
@@ -1704,12 +1683,11 @@ export async function gradeSingleQuestion(submissionId, questionId, question, se
  * Teacher overrides the AI score and/or feedback for a specific question in a submission.
  */
 export async function overrideExamQuestionScore(submissionId, questionId, newScore, note, newFeedback, teacherUid, overriderName = 'Giáo viên') {
-    const submissionRef = doc(db, 'exam_submissions', submissionId);
-    const submissionSnap = await getDoc(submissionRef);
-    if (!submissionSnap.exists()) throw new Error('Submission not found');
+    const submissionRes = await examSubmissionsService.findOne(submissionId);
+    const data = submissionRes?.data || submissionRes;
+    if (!data) throw new Error('Submission not found');
 
-    const data = submissionSnap.data();
-    const results = data.results || {};
+    const results = { ...(data.results || {}) };
     const currentResult = results[questionId];
     if (!currentResult) throw new Error('Question result not found');
 
@@ -1726,19 +1704,14 @@ export async function overrideExamQuestionScore(submissionId, questionId, newSco
             overriddenAt: new Date().toISOString()
         }
     };
-
-    // Allow overriding the AI's general feedback as well
-    if (newFeedback !== undefined) {
-        results[questionId].feedback = newFeedback;
-    }
+    if (newFeedback !== undefined) results[questionId].feedback = newFeedback;
 
     const newTotalScore = Math.round(((data.totalScore || 0) + scoreDiff) * 10) / 10;
 
-    await updateDoc(submissionRef, {
+    await examSubmissionsService.update(submissionId, {
         results,
         totalScore: newTotalScore,
-        examSummary: '',
-        updatedAt: serverTimestamp()
+        examSummary: ''
     });
 
     return { results, totalScore: newTotalScore };
@@ -1748,109 +1721,11 @@ export async function overrideExamQuestionScore(submissionId, questionId, newSco
  * Releases results for a submission so the student can view them.
  */
 export async function releaseExamSubmissionResults(submissionId, releaserUid, releaserName = 'Giáo viên') {
-    const submissionRef = doc(db, 'exam_submissions', submissionId);
-    await updateDoc(submissionRef, {
-        resultsReleased: true,
-        releasedAt: serverTimestamp(),
+    // Backend handles the release update + optional notification via the /release endpoint
+    await examSubmissionsService.release(submissionId, {
         releasedBy: releaserUid,
         releasedByName: releaserName,
-        updatedAt: serverTimestamp()
     });
-
-    try {
-        const subSnap = await getDoc(submissionRef);
-        if (subSnap.exists()) {
-            const subData = subSnap.data();
-            const assignmentId = subData.assignmentId;
-            const studentId = subData.studentId;
-
-            let examName = 'Bài tập và Kiểm tra';
-            let targetId = null;
-
-            if (assignmentId) {
-                const asgnSnap = await getDoc(doc(db, 'exam_assignments', assignmentId));
-                if (asgnSnap.exists()) {
-                    const asgnData = asgnSnap.data();
-                    examName = asgnData.examTitle || examName;
-                    if (asgnData.targetType === 'group') {
-                        targetId = asgnData.targetId;
-                    }
-                }
-            }
-
-            const { createNotification, createNotificationForGroupTeachers } = await import('./notificationService');
-
-            const notifScoreText = subData.totalScore != null && subData.maxTotalScore ? ` Điểm: ${Math.round(subData.totalScore * 10) / 10}/${subData.maxTotalScore}.` : '';
-
-            // Notify Student (in-app)
-            await createNotification({
-                userId: studentId,
-                type: 'exam_graded',
-                title: '📊 Bài đã có kết quả!',
-                message: `Bài "${examName}" của bạn đã được ${releaserName} chấm điểm.${notifScoreText}`,
-                link: `/exam-result?submissionId=${submissionId}`
-            });
-
-            // Email to student
-            try {
-                const studentSnap = await getDoc(doc(db, 'users', studentId));
-                if (studentSnap.exists() && studentSnap.data().email) {
-                    const { queueEmail, buildEmailHtml } = await import('./notificationService');
-                    const scoreText = subData.totalScore != null && subData.maxTotalScore ? `${Math.round(subData.totalScore * 10) / 10}/${subData.maxTotalScore}` : '';
-                    const appUrl = 'https://upenglishvietnam.com/preview/superstudy';
-                    await queueEmail(studentSnap.data().email, {
-                        subject: `Bài "${examName}" đã có kết quả${scoreText ? ` — ${scoreText} điểm` : ''}`,
-                        html: buildEmailHtml({
-                            emoji: '📊', heading: 'Kết quả đã sẵn sàng!', headingColor: '#10b981',
-                            greeting: `Chào bạn 👋`,
-                            body: `<p>Tin vui nè! Thầy/cô <strong>${releaserName}</strong> đã chấm xong bài của bạn rồi.${scoreText ? ` Điểm: <strong style="color:#10b981;font-size:1.1rem;">${scoreText}</strong>.` : ''} Vào xem kết quả chi tiết ngay nhé!</p>`,
-                            highlight: `<strong style="color:#1e293b;font-size:1.05rem;">${examName}</strong>${scoreText ? `<br/><span style="font-size:1.3rem;font-weight:900;color:#10b981;">${scoreText}</span> <span style="color:#64748b;font-size:0.85rem;">điểm</span>` : ''}`,
-                            highlightBg: '#f0fdf4', highlightBorder: '#10b981',
-                            ctaText: 'Xem kết quả ngay', ctaLink: `${appUrl}/exam-result?submissionId=${submissionId}`, ctaColor: '#10b981', ctaColor2: '#34d399'
-                        })
-                    });
-                }
-            } catch (emailErr) {
-                console.error('Error sending result email:', emailErr);
-            }
-
-            // Notify Teachers if it's a group assignment
-            if (targetId) {
-                // Let's get the student's name if possible
-                const studentSnap2 = await getDoc(doc(db, 'users', studentId));
-                let studentName = 'Học viên';
-                if (studentSnap2.exists()) {
-                    const studentData = studentSnap2.data();
-                    studentName = studentData.displayName || studentData.email || 'Học viên';
-                }
-
-                await createNotificationForGroupTeachers(targetId, {
-                    type: 'exam_graded_by_other',
-                    title: 'Có bài vừa được chấm',
-                    message: `${releaserName} vừa chấm bài "${examName}" cho ${studentName}.`,
-                    link: `/teacher/exam-submissions/${assignmentId}/${studentId}`
-                });
-
-                // Email to group teachers
-                try {
-                    const { queueEmailForGroupTeachers, buildEmailHtml } = await import('./notificationService');
-                    const appUrl2 = 'https://upenglishvietnam.com/preview/superstudy';
-                    await queueEmailForGroupTeachers(targetId, {
-                        subject: `Bài "${examName}" đã được chấm`,
-                        html: buildEmailHtml({
-                            emoji: '📝', heading: 'Có bài vừa được chấm', headingColor: '#3b82f6',
-                            body: `<p><strong>${releaserName}</strong> vừa chấm xong bài <strong>"${examName}"</strong> cho học viên <strong>${studentName}</strong>. Bạn có thể vào xem chi tiết kết quả.</p>`,
-                            ctaText: 'Xem chi tiết', ctaLink: `${appUrl2}/teacher/exam-submissions/${assignmentId}/${studentId}`, ctaColor: '#3b82f6', ctaColor2: '#60a5fa'
-                        })
-                    }, 'exam_graded_by_other');
-                } catch (emailErr) {
-                    console.error('Error sending graded email to teachers:', emailErr);
-                }
-            }
-        }
-    } catch (err) {
-        console.error("Failed to send release notifications:", err);
-    }
 }
 
 // ========== EXAM FOLDERS ==========
@@ -1979,28 +1854,18 @@ export async function getDeletedTeacherExamFolders(teacherId) {
 // ========== SHARING (Admin) ==========
 
 export async function toggleExamPublic(examId, isPublic) {
-    await updateDoc(doc(db, 'exams', examId), { isPublic, updatedAt: serverTimestamp() });
+    const { sharingService } = await import('../models');
+    await sharingService.togglePublic({ resourceType: 'exam', resourceId: examId, isPublic });
 }
 
 export async function shareExamToTeacher(examId, teacherUid) {
-    const examRef = doc(db, 'exams', examId);
-    const examSnap = await getDoc(examRef);
-    if (!examSnap.exists()) throw new Error('Exam not found');
-
-    const sharedWith = examSnap.data().sharedWith || [];
-    if (!sharedWith.includes(teacherUid)) {
-        sharedWith.push(teacherUid);
-        await updateDoc(examRef, { sharedWith, updatedAt: serverTimestamp() });
-    }
+    const { sharingService } = await import('../models');
+    await sharingService.addTeacherShare({ resourceType: 'exam', resourceId: examId, teacherId: teacherUid });
 }
 
 export async function unshareExamFromTeacher(examId, teacherUid) {
-    const examRef = doc(db, 'exams', examId);
-    const examSnap = await getDoc(examRef);
-    if (!examSnap.exists()) throw new Error('Exam not found');
-
-    const sharedWith = (examSnap.data().sharedWith || []).filter(uid => uid !== teacherUid);
-    await updateDoc(examRef, { sharedWith, updatedAt: serverTimestamp() });
+    const { sharingService } = await import('../models');
+    await sharingService.removeTeacherShare({ resourceType: 'exam', resourceId: examId, teacherId: teacherUid });
 }
 
 /**
@@ -2016,79 +1881,45 @@ export async function unshareExamFromTeacher(examId, teacherUid) {
 export async function checkAndNotifyHalfSubmitted(assignmentId, groupId, examName, examType) {
     if (!assignmentId || !groupId) return;
     try {
-        // 1. Read assignment to check flag + assignedStudentIds
-        const assignmentRef = doc(db, 'exam_assignments', assignmentId);
-        const assignmentSnap = await getDoc(assignmentRef);
-        if (!assignmentSnap.exists()) return;
-        const aData = assignmentSnap.data();
-        if (aData.halfSubmittedNotified) return; // already notified
+        // 1. Get assignment to check flag
+        const asgnRes = await examAssignmentsService.findOne(assignmentId);
+        const aData = asgnRes?.data || asgnRes;
+        if (!aData || aData.halfSubmittedNotified) return;
 
-        // 2. Count finished submissions (submitted or graded)
-        const subsQ = query(
-            collection(db, 'exam_submissions'),
-            where('assignmentId', '==', assignmentId)
-        );
-        const subsSnap = await getDocs(subsQ);
-        const submittedCount = subsSnap.docs.filter(d => {
-            const s = d.data().status;
-            return s === 'submitted' || s === 'graded';
-        }).length;
+        // 2. Count finished submissions via backend
+        const subsRes = await examSubmissionsService.findByAssignment(assignmentId);
+        const subs = Array.isArray(subsRes) ? subsRes : (subsRes?.data || []);
+        const submittedCount = subs.filter(s => s.status === 'submitted' || s.status === 'graded').length;
 
-        // 3. Count total expected students
+        // 3. Determine total expected students
         let totalStudents = 0;
-        if (aData.assignedStudentIds && Array.isArray(aData.assignedStudentIds) && aData.assignedStudentIds.length > 0) {
+        if (aData.assignedStudentIds?.length > 0) {
             totalStudents = aData.assignedStudentIds.length;
         } else {
-            // Count all students in the group
-            const usersQ = query(
-                collection(db, 'users'),
-                where('groupIds', 'array-contains', groupId),
-                where('role', '==', 'user')
-            );
-            const usersSnap = await getDocs(usersQ);
-            totalStudents = usersSnap.size;
+            const { usersService } = await import('../models');
+            const usersRes = await usersService.findAll({ groupId, role: 'user' });
+            const users = Array.isArray(usersRes) ? usersRes : (usersRes?.data || []);
+            totalStudents = users.length;
         }
 
         if (totalStudents <= 0) return;
 
-        // 4. Check if threshold reached (≥50%)
+        // 4. Check threshold (≥50%)
         const threshold = Math.ceil(totalStudents * 0.5);
         if (submittedCount < threshold) return;
 
-        // 5. Set flag first to prevent race conditions
-        await updateDoc(assignmentRef, { halfSubmittedNotified: true });
+        // 5. Set flag via backend
+        await examAssignmentsService.update(assignmentId, { halfSubmittedNotified: true });
 
-        // 6. Send notifications
+        // 6. Send notifications (notification service is still wired)
         const typeLabel = examType === 'test' ? 'bài kiểm tra' : 'bài tập';
-        const { createNotificationForGroupTeachers, queueEmailForGroupTeachers, buildEmailHtml } =
-            await import('./notificationService');
-
-        // In-app
+        const { createNotificationForGroupTeachers } = await import('./notificationService');
         await createNotificationForGroupTeachers(groupId, {
             type: 'half_submitted',
             title: '📊 50% học viên đã nộp bài',
             message: `Đã có ${submittedCount}/${totalStudents} học viên nộp ${typeLabel} "${examName}".`,
             link: `/teacher/exam-submissions/${assignmentId}`
         });
-
-        // Email
-        const appUrl = 'https://upenglishvietnam.com/preview/superstudy';
-        await queueEmailForGroupTeachers(groupId, {
-            subject: `📊 50% học viên đã nộp: ${examName}`,
-            html: buildEmailHtml({
-                emoji: '📊',
-                heading: '50% học viên đã nộp bài',
-                headingColor: '#059669',
-                body: `<p>Đã có <strong>${submittedCount}/${totalStudents}</strong> học viên nộp ${typeLabel} <strong>"${examName}"</strong>. Bạn có thể bắt đầu chấm bài ngay! 🎯</p>`,
-                highlight: `<strong style="font-size:1.05rem;">📋 ${submittedCount}/${totalStudents} bài đã nộp</strong>`,
-                highlightBg: '#ecfdf5',
-                highlightBorder: '#059669',
-                ctaText: 'Xem bài nộp',
-                ctaLink: `${appUrl}/teacher/exam-submissions/${assignmentId}`,
-                ctaColor: '#059669',
-                ctaColor2: '#10b981'
-            })
-        }, 'half_submitted');
 
         console.log(`[HalfSubmitted] Notified teachers: ${submittedCount}/${totalStudents} for assignment ${assignmentId}`);
     } catch (error) {
@@ -2103,20 +1934,18 @@ export async function checkAndNotifyHalfSubmitted(assignmentId, groupId, examNam
  * Teacher requests the student to re-answer a question.
  */
 export async function toggleFollowUpRequest(submissionId, questionId, teacherUid, teacherName, enable = true) {
-    const submissionRef = doc(db, 'exam_submissions', submissionId);
     if (enable) {
-        await updateDoc(submissionRef, {
+        await examSubmissionsService.update(submissionId, {
             [`followUpRequested.${questionId}`]: {
                 requestedAt: new Date().toISOString(),
                 requestedBy: teacherUid,
                 requestedByName: teacherName
-            },
-            updatedAt: serverTimestamp()
+            }
         });
     } else {
-        await updateDoc(submissionRef, {
-            [`followUpRequested.${questionId}`]: deleteField(),
-            updatedAt: serverTimestamp()
+        // Send null to trigger $unset on the backend
+        await examSubmissionsService.update(submissionId, {
+            [`followUpRequested.${questionId}`]: null
         });
     }
 }
@@ -2125,13 +1954,11 @@ export async function toggleFollowUpRequest(submissionId, questionId, teacherUid
  * Save a follow-up answer from the student.
  */
 export async function saveFollowUpAnswer(submissionId, sectionId, questionId, answer) {
-    const submissionRef = doc(db, 'exam_submissions', submissionId);
-    await updateDoc(submissionRef, {
+    await examSubmissionsService.update(submissionId, {
         [`followUpAnswers.${sectionId}.${questionId}`]: {
             answer,
             submittedAt: new Date().toISOString()
-        },
-        updatedAt: serverTimestamp()
+        }
     });
 }
 
@@ -2141,27 +1968,134 @@ export async function saveFollowUpAnswer(submissionId, sectionId, questionId, an
  * @param {Array<{sectionId, questionId, answer}>} answers
  */
 export async function saveAllFollowUpAnswers(submissionId, answers) {
-    const submissionRef = doc(db, 'exam_submissions', submissionId);
-    const updates = { updatedAt: serverTimestamp() };
+    const updates = {};
     const now = new Date().toISOString();
     for (const { sectionId, questionId, answer } of answers) {
-        updates[`followUpAnswers.${sectionId}.${questionId}`] = {
-            answer,
-            submittedAt: now
-        };
+        updates[`followUpAnswers.${sectionId}.${questionId}`] = { answer, submittedAt: now };
     }
-    await updateDoc(submissionRef, updates);
+    await examSubmissionsService.update(submissionId, updates);
 }
 
 /**
+ * Hydrate a follow-up audio answer with a transcript.
+ * Fetches the audio from the stored URL, transcribes it, saves the transcript back,
+ * and returns the transcript string so the UI can display it immediately.
+ */
+export async function hydrateFollowUpAudioTranscript(submissionId, sectionId, questionId, question, sections = [], teacherTitle = 'thầy/cô', studentTitle = 'em') {
+    const submission = await getSubmissionRecord(submissionId);
+    if (!submission) throw new Error('Submission not found');
+
+    // Resolve teacher/student titles from exam if not provided
+    let finalTeacherTitle = teacherTitle;
+    let finalStudentTitle = studentTitle;
+    if ((!finalTeacherTitle || finalTeacherTitle === 'thầy/cô') && submission.examId) {
+        try {
+            const examData = await getExamRecord(submission.examId);
+            if (examData) {
+                if (examData.teacherTitle) {
+                    finalTeacherTitle = examData.teacherTitle;
+                    if (examData.studentTitle) finalStudentTitle = examData.studentTitle;
+                } else if (examData.createdBy) {
+                    const userData = await getUserRecord(examData.createdBy);
+                    if (userData) {
+                        if (userData.teacherTitle) finalTeacherTitle = userData.teacherTitle;
+                        if (userData.studentTitle) finalStudentTitle = userData.studentTitle;
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn('Could not fetch teacher titles for follow-up transcript:', err);
+        }
+    }
+
+    const followUpAnswerData = submission.followUpAnswers?.[sectionId]?.[questionId];
+    const answer = followUpAnswerData?.answer;
+    if (!followUpAnswerData || !answer?.audioUrl || answer?.transcript) {
+        return answer?.transcript || '';
+    }
+
+    const varIdx = submission.variationMap?.[questionId] || 0;
+    const variation = question.variations?.[varIdx] || question.variations?.[0];
+    if (!variation) return '';
+
+    let sectionContext = '';
+    (sections || []).forEach(s => {
+        if (s.id === sectionId) {
+            sectionContext = s.context || '';
+            if (s.contextScript) sectionContext += `\n\n[SCRIPT]:\n${s.contextScript}`;
+        }
+    });
+
+    let gradingCriteria = question.specialRequirement || '';
+    if (question.promptId) {
+        try {
+            const linkedPrompt = await getPromptById(question.promptId);
+            if (linkedPrompt) {
+                gradingCriteria = gradingCriteria
+                    ? `${linkedPrompt.content}\n\nYÊU CẦU BỔ SUNG:\n${gradingCriteria}`
+                    : linkedPrompt.content;
+            }
+        } catch (e) {
+            console.warn('Could not resolve linked prompt for follow-up transcript:', e);
+        }
+    }
+
+    const maxScore = submission.results?.[questionId]?.maxScore ?? question.points ?? 1;
+
+    // Transcribe the audio answer
+    let transcript = '';
+    try {
+        const audioResp = await fetch(answer.audioUrl);
+        const audioBlob = await audioResp.blob();
+        const detectedSilent = await isSilentAudio(audioBlob).catch(() => false);
+        if (!detectedSilent) {
+            const audioResult = await evaluateAudioAnswer(
+                audioBlob,
+                variation,
+                question.purpose || '',
+                gradingCriteria,
+                maxScore,
+                sectionContext,
+                finalTeacherTitle,
+                finalStudentTitle,
+                0,
+                1,
+                '',
+                question.useDefaultGradingCriteria !== false
+            );
+            transcript = audioResult.transcript || '';
+        }
+    } catch (err) {
+        console.warn('Could not transcribe follow-up audio:', err);
+        return '';
+    }
+
+    if (!transcript) return '';
+
+    const updates = {
+        [`followUpAnswers.${sectionId}.${questionId}`]: {
+            ...followUpAnswerData,
+            answer: { ...answer, transcript }
+        },
+        updatedAt: nowIso()
+    };
+
+    if (submission.followUpResults?.[questionId]) {
+        updates[`followUpResults.${questionId}.transcript`] = transcript;
+    }
+
+    await examSubmissionsService.update(submissionId, updates);
+    return transcript;
+}
+
+/**
+
  * Grade a follow-up answer using AI.
  * References the original answer, score, and feedback for better contextual grading.
  */
 export async function gradeFollowUpAnswer(submissionId, questionId, question, sections = [], teacherTitle = 'thầy/cô', studentTitle = 'em') {
-    const submissionRef = doc(db, 'exam_submissions', submissionId);
-    const snap = await getDoc(submissionRef);
-    if (!snap.exists()) throw new Error('Submission not found');
-    const submission = snap.data();
+    const submission = await getSubmissionRecord(submissionId);
+    if (!submission) throw new Error('Submission not found');
 
     const originalResult = submission.results?.[questionId];
     const sectionId = question.sectionId;
@@ -2328,7 +2262,7 @@ BÀI SỬA: "${followUpText}"
     }
 
     // Save follow-up results (does NOT affect original totalScore)
-    await updateDoc(submissionRef, {
+    await examSubmissionsService.update(submissionId, {
         [`followUpResults.${questionId}`]: {
             score,
             maxScore,
@@ -2336,7 +2270,7 @@ BÀI SỬA: "${followUpText}"
             isCorrect,
             gradedAt: new Date().toISOString()
         },
-        updatedAt: serverTimestamp()
+        updatedAt: nowIso()
     });
 
     return { score, maxScore, feedback, isCorrect };
@@ -2346,11 +2280,10 @@ BÀI SỬA: "${followUpText}"
  * Teacher overrides a follow-up question score/feedback.
  */
 export async function overrideFollowUpScore(submissionId, questionId, newScore, note, newFeedback, teacherUid, overriderName = 'Giáo viên') {
-    const submissionRef = doc(db, 'exam_submissions', submissionId);
-    const snap = await getDoc(submissionRef);
-    if (!snap.exists()) throw new Error('Submission not found');
+    const submissionRes = await examSubmissionsService.findOne(submissionId);
+    const data = submissionRes?.data || submissionRes;
+    if (!data) throw new Error('Submission not found');
 
-    const data = snap.data();
     const currentResult = data.followUpResults?.[questionId];
     if (!currentResult) throw new Error('Follow-up result not found');
 
@@ -2364,13 +2297,10 @@ export async function overrideFollowUpScore(submissionId, questionId, newScore, 
             overriddenAt: new Date().toISOString()
         }
     };
-    if (newFeedback !== undefined) {
-        updatedResult.feedback = newFeedback;
-    }
+    if (newFeedback !== undefined) updatedResult.feedback = newFeedback;
 
-    await updateDoc(submissionRef, {
-        [`followUpResults.${questionId}`]: updatedResult,
-        updatedAt: serverTimestamp()
+    await examSubmissionsService.update(submissionId, {
+        [`followUpResults.${questionId}`]: updatedResult
     });
 
     return updatedResult;
@@ -2380,39 +2310,9 @@ export async function overrideFollowUpScore(submissionId, questionId, newScore, 
  * Release follow-up results so the student can see them.
  */
 export async function releaseFollowUpResults(submissionId, releaserUid, releaserName = 'Giáo viên') {
-    const submissionRef = doc(db, 'exam_submissions', submissionId);
-    await updateDoc(submissionRef, {
-        followUpResultsReleased: true,
-        followUpReleasedAt: serverTimestamp(),
-        followUpReleasedBy: releaserUid,
-        followUpReleasedByName: releaserName,
-        updatedAt: serverTimestamp()
+    // Backend handles the release flag update via the /release-follow-up endpoint
+    await examSubmissionsService.releaseFollowUp(submissionId, {
+        releasedBy: releaserUid,
+        releasedByName: releaserName,
     });
-
-    // Notify student
-    try {
-        const subSnap = await getDoc(submissionRef);
-        if (subSnap.exists()) {
-            const subData = subSnap.data();
-            const studentId = subData.studentId;
-            const assignmentId = subData.assignmentId;
-
-            let examName = 'Bài tập và Kiểm tra';
-            if (assignmentId) {
-                const asgnSnap = await getDoc(doc(db, 'exam_assignments', assignmentId));
-                if (asgnSnap.exists()) examName = asgnSnap.data().examTitle || examName;
-            }
-
-            const { createNotification } = await import('./notificationService');
-            await createNotification({
-                userId: studentId,
-                type: 'follow_up_graded',
-                title: '📝 Bài sửa đã có kết quả!',
-                message: `Bài sửa cho "${examName}" đã được ${releaserName} chấm xong. Vào xem nhé!`,
-                link: `/exam-result?assignmentId=${assignmentId}&studentId=${studentId}`
-            });
-        }
-    } catch (e) {
-        console.error('Error sending follow-up release notification:', e);
-    }
 }

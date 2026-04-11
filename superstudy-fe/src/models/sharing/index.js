@@ -77,4 +77,8 @@ export const sharingService = {
   /** Remove a specific teacher from an admin resource's shared list */
   removeTeacherShare: (body) =>
     api.delete(`${BASE}/teacher-share/remove`, { data: body }),
+
+  /** Get teachers explicitly shared on an admin resource */
+  getTeacherShares: (resourceType, resourceId) =>
+    api.get(`${BASE}/teacher-share`, { resourceType, resourceId }),
 };

@@ -18,7 +18,7 @@ export class SSTUserGroups {
   @Prop({ type: String, default: null })
   public readonly description: string;
 
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly folderAccess: string[];
 
   /** Hidden groups are not displayed in teacher/student group lists */
@@ -33,15 +33,15 @@ export class SSTUserGroups {
   public readonly enableRewardPoints: boolean;
 
   /** Topic IDs that students in this group have access to */
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly topicAccess: string[];
 
   /** Grammar exercise IDs that students in this group have access to */
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly grammarAccess: string[];
 
   /** Exam IDs that students in this group have access to */
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly examAccess: string[];
 
   @Prop({ ref: () => Accounts, type: String, required: false })

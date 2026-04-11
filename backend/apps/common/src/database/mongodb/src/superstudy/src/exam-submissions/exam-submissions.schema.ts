@@ -3,13 +3,13 @@ export const ExamSubmissionStatusC = ['in_progress', 'submitted', 'graded'] as c
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
 // NestJs Imports
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 // Schemas
 import { Accounts, Properties, PropertiesBranches } from '../../../isms';
 
 export const SSTExamSubmissionsCN = 'sst-exam-submissions';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: SSTExamSubmissionsCN } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: SSTExamSubmissionsCN } })
 export class SSTExamSubmissions {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public readonly _id: string;

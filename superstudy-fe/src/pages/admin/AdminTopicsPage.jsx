@@ -1,17 +1,19 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { Link } from 'react-router-dom';
 import { getAdminTopics, saveAdminTopic, deleteAdminTopic, getFolders, saveFolder, deleteFolder, getGroups, toggleResourcePublic, toggleTeacherVisible, getResourceSharedEntities, shareResourceToEmail, unshareResourceFromUser, shareResourceToGroup, unshareResourceFromGroup, getAdminTopicContentStatus, updateTopicFoldersOrder, getAdminTopicWordCounts, recalcTopicWordCount, transferOfficialToTeacher, shareResourceToTeacher, unshareResourceFromTeacher, getResourceSharedTeachers } from '../../services/adminService';
 import { createAssignment, getAssignmentsForTopic } from '../../services/teacherService';
 import { getPendingProposals, approveProposal, rejectProposal, findExistingOfficialCopy } from '../../services/contentProposalService';
+import { duplicateAdminTopic } from '../../services/duplicateService';
 import { useAuth } from '../../contexts/AuthContext';
-import { BookOpen, Edit, Trash2, X, Plus, List, FolderOpen, GripVertical, Check, CheckCircle, Share2, Globe, Users, Mail, UserPlus, Lock, Search, AlertTriangle, ChevronDown, ChevronRight, Clock, Send, XCircle, Landmark, FileText, Filter, GraduationCap } from 'lucide-react';
+import { BookOpen, Edit, Trash2, X, Plus, List, FolderOpen, GripVertical, Check, CheckCircle, Share2, Globe, Users, Mail, UserPlus, Lock, Search, AlertTriangle, ChevronDown, ChevronRight, Clock, Send, XCircle, Landmark, FileText, Filter, GraduationCap, Copy } from 'lucide-react';
 import CustomSelect from '../../components/common/CustomSelect';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import EmailAutocomplete from '../../components/common/EmailAutocomplete';
+import { findFolderIdForItem, reorderIdsByVisibleSubset, toggleIdInList, syncItemFolderAssignment } from '../../utils/folderManagement';
 import '../../components/common/ShareModal.css';
 
-function CustomDropdown({ value, options, onChange, placeholder = "Chọn một mục" }) {
+function CustomDropdown({ value, options, onChange, placeholder = "Chọn một mục", inputId, inputName, ariaLabel }) {
     const [isOpen, setIsOpen] = React.useState(false);
     const [coords, setCoords] = React.useState({ top: 0, left: 0, width: 0 });
     const selectedOption = options.find(opt => opt.value === value);
@@ -46,6 +48,9 @@ function CustomDropdown({ value, options, onChange, placeholder = "Chọn một 
     return (
         <div ref={dropdownRef} className="admin-custom-dropdown" style={{ position: 'relative', width: '100%' }}>
             <div
+                id={inputId}
+                name={inputName}
+                aria-label={ariaLabel || placeholder}
                 className={`admin-form-input ${isOpen ? 'active' : ''}`}
                 onClick={toggleDropdown}
                 style={{
@@ -115,6 +120,9 @@ export default function AdminTopicsPage() {
     const [topicFormData, setTopicFormData] = useState({ id: '', name: '', description: '', icon: '', color: '#3b82f6', status: 'active' });
     const [isEditingTopic, setIsEditingTopic] = useState(false);
     const [topicToDelete, setTopicToDelete] = useState(null);
+    const [topicToDuplicate, setTopicToDuplicate] = useState(null);
+    const [isDuplicating, setIsDuplicating] = useState(false);
+    const [isSavingTopic, setIsSavingTopic] = useState(false);
 
     // Folder States
     const [folderFormOpen, setFolderFormOpen] = useState(false);
@@ -222,14 +230,15 @@ export default function AdminTopicsPage() {
 
             // Make topics implicitly public if they are in a public folder
             const topicsWithInheritedPublic = topicsData.map(t => {
+                const normalizedTopic = { ...t, status: 'active' };
                 if (publicFolderTopicIds.has(t.id)) {
                     // Only inherit public if not explicitly disabled
                     if (t.isPublic !== false) {
-                        return { ...t, isPublic: true, isInPublicFolder: true };
+                        return { ...normalizedTopic, isPublic: true, isInPublicFolder: true };
                     }
-                    return { ...t, isInPublicFolder: true };
+                    return { ...normalizedTopic, isInPublicFolder: true };
                 }
-                return t;
+                return normalizedTopic;
             });
 
             setTopics(topicsWithInheritedPublic);
@@ -249,9 +258,7 @@ export default function AdminTopicsPage() {
     }
 
     function openEditTopicForm(topic) {
-        // Find if this topic is in any folder
-        const currentFolder = folders.find(f => (f.topicIds || []).includes(topic.id));
-        setTopicFormData({ ...topic, folderId: currentFolder ? currentFolder.id : '' });
+        setTopicFormData({ ...topic, folderId: findFolderIdForItem(folders, topic.id, 'topicIds') });
         setIsEditingTopic(true);
         setTopicFormOpen(true);
     }
@@ -260,57 +267,44 @@ export default function AdminTopicsPage() {
         e.preventDefault();
         let finalTopicId;
         if (isEditingTopic) {
-            // Khi đang sửa, giữ nguyên ID gốc — không tạo ID mới
+            // Khi Ä‘ang sá»­a, giá»¯ nguyÃªn ID gá»‘c â€” khÃ´ng táº¡o ID má»›i
             finalTopicId = topicFormData.id;
         } else {
             finalTopicId = topicFormData.id.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
             if (!finalTopicId) {
-                // Tự động tạo ID từ tên topic nếu để trống
+                // Tá»± Ä‘á»™ng táº¡o ID tá»« tÃªn topic náº¿u Ä‘á»ƒ trá»‘ng
                 const nameSlug = topicFormData.name.trim()
                     .toLowerCase()
                     .normalize('NFD')
                     .replace(/[\u0300-\u036f]/g, '')
-                    .replace(/đ/g, 'd')
+                    .replace(/Ä‘/g, 'd')
                     .replace(/[^a-z0-9\s-]/g, '')
                     .trim()
                     .replace(/\s+/g, '-');
                 if (!nameSlug) {
-                    setAlertMessage({ type: 'error', text: "Vui lòng nhập tên chủ đề hoặc ID tùy chỉnh." });
+            setAlertMessage({ type: 'error', text: "Vui lòng nhập tên chủ đề hoặc ID tùy chỉnh." });
                     return;
                 }
                 finalTopicId = nameSlug;
             }
         }
         try {
-            const topicToSave = { ...topicFormData };
+            const topicToSave = { ...topicFormData, status: 'active' };
             const targetFolderId = topicToSave.folderId;
             delete topicToSave.folderId; // Remove from topic doc itself if not wanted
 
-            await saveAdminTopic({ ...topicToSave, id: finalTopicId });
+            await saveAdminTopic(
+                { ...topicToSave, id: finalTopicId },
+                { isEditing: isEditingTopic }
+            );
 
-            // Handle Folder Reassignment
-            const currentFolder = folders.find(f => (f.topicIds || []).includes(finalTopicId));
-
-            if (currentFolder && currentFolder.id !== targetFolderId) {
-                // Remove from old folder
-                const updatedOldFolder = {
-                    ...currentFolder,
-                    topicIds: (currentFolder.topicIds || []).filter(tid => tid !== finalTopicId)
-                };
-                await saveFolder(updatedOldFolder);
-            }
-
-            if (targetFolderId && (!currentFolder || currentFolder.id !== targetFolderId)) {
-                // Add to new folder
-                const targetFolder = folders.find(f => f.id === targetFolderId);
-                if (targetFolder) {
-                    const updatedNewFolder = {
-                        ...targetFolder,
-                        topicIds: Array.from(new Set([...(targetFolder.topicIds || []), finalTopicId]))
-                    };
-                    await saveFolder(updatedNewFolder);
-                }
-            }
+            await syncItemFolderAssignment({
+                itemId: finalTopicId,
+                targetFolderId,
+                folders,
+                itemIdsKey: 'topicIds',
+                saveFolder
+            });
 
             setTopicFormOpen(false);
             setAlertMessage({ type: 'success', text: isEditingTopic ? "Cập nhật chủ đề thành công!" : "Thêm chủ đề mới thành công!" });
@@ -325,11 +319,26 @@ export default function AdminTopicsPage() {
         try {
             await deleteAdminTopic(topicToDelete.id);
             setTopics(prev => prev.filter(t => t.id !== topicToDelete.id));
-            setAlertMessage({ type: 'success', text: "Đã xóa chủ đề thành công!" });
+            setAlertMessage({ type: 'success', text: "Đã chuyển chủ đề vào trạng thái đã xóa." });
         } catch (error) {
             setAlertMessage({ type: 'error', text: "Lỗi xóa chủ đề: " + error.message });
         }
         setTopicToDelete(null);
+    }
+
+    async function handleConfirmDuplicateTopic() {
+        if (!topicToDuplicate || isDuplicating) return;
+        setIsDuplicating(true);
+        try {
+            await duplicateAdminTopic(topicToDuplicate.id, user?.uid);
+            setAlertMessage({ type: 'success', text: `Đã nhân đôi chủ đề "${topicToDuplicate.name}" thành công!` });
+            loadData();
+        } catch (error) {
+            setAlertMessage({ type: 'error', text: 'Lỗi nhân đôi chủ đề: ' + error.message });
+        } finally {
+            setIsDuplicating(false);
+            setTopicToDuplicate(null);
+        }
     }
 
     // --- FOLDER HANDLERS ---
@@ -379,15 +388,7 @@ export default function AdminTopicsPage() {
     }
 
     function toggleTopicInFolder(topicId) {
-        setFolderFormData(prev => {
-            const current = new Set(prev.topicIds || []);
-            if (current.has(topicId)) {
-                current.delete(topicId);
-            } else {
-                current.add(topicId);
-            }
-            return { ...prev, topicIds: Array.from(current) };
-        });
+        setFolderFormData(prev => ({ ...prev, topicIds: toggleIdInList(prev.topicIds, topicId) }));
     }
 
     async function handleFolderDragEnd(result) {
@@ -396,16 +397,22 @@ export default function AdminTopicsPage() {
         if (source.droppableId === destination.droppableId && source.index === destination.index) return;
 
         if (type === 'topic') {
-            // Reorder topics within a folder
             const folderId = source.droppableId.replace('folder-topics-', '');
             const folder = folders.find(f => f.id === folderId);
             if (!folder) return;
-            const ids = Array.from(folder.topicIds || []);
-            const [movedId] = ids.splice(source.index, 1);
-            ids.splice(destination.index, 0, movedId);
+            const ids = reorderIdsByVisibleSubset({
+                allIds: folder.topicIds || [],
+                sourceIndex: source.index,
+                destinationIndex: destination.index,
+                searchTerm,
+                getItem: id => topics.find(topic => topic.id === id),
+                matchesSearch: (topic, term) =>
+                    (topic.name || '').toLowerCase().includes(term) ||
+                    (topic.description || '').toLowerCase().includes(term)
+            });
             setFolders(prev => prev.map(f => f.id === folderId ? { ...f, topicIds: ids } : f));
             try { await saveFolder({ ...folder, topicIds: ids }); } catch (error) {
-                setAlertMessage({ type: 'error', text: 'Lỗi sắp xếp topic: ' + error.message });
+            setAlertMessage({ type: 'error', text: 'Lỗi sắp xếp topic: ' + error.message });
                 loadData();
             }
             return;
@@ -620,7 +627,7 @@ export default function AdminTopicsPage() {
             } else {
                 setIsApproving(true);
                 await approveProposal(proposal.id, 'admin', 'create_new');
-                setAlertMessage({ type: 'success', text: 'Đã duyệt và tạo bài học chính thức thành công!' });
+            setAlertMessage({ type: 'success', text: 'Đã duyệt và tạo bài học chính thức thành công!' });
                 loadProposals();
                 loadData();
                 setIsApproving(false);
@@ -732,7 +739,10 @@ export default function AdminTopicsPage() {
                 <div className="admin-search-box" style={{ flex: 1, minWidth: '200px' }}>
                     <Search size={16} className="search-icon" />
                     <input
+                        id="admin-topics-search"
+                        name="adminTopicsSearch"
                         type="text"
+                        aria-label="Tìm tên hoặc ID chủ đề, folder"
                         placeholder="Tìm tên hoặc ID chủ đề, folder..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
@@ -956,7 +966,8 @@ export default function AdminTopicsPage() {
                                                                                 </Link>
                                                                                 <button className="admin-action-btn" onClick={() => openShareModal(topic, 'topic')}><Share2 size={14} /></button>
                                                                                 <button className="admin-action-btn" onClick={() => openEditTopicForm(topic)}><Edit size={14} /></button>
-                                                                                <button className="admin-action-btn danger" onClick={() => setTopicToDelete(topic)}><Trash2 size={14} /></button>
+                                                                                <button className="admin-action-btn" onClick={() => setTopicToDuplicate(topic)} title="Nhân đôi"><Copy size={14} /></button>
+                                                                                 <button className="admin-action-btn danger" onClick={() => setTopicToDelete(topic)}><Trash2 size={14} /></button>
                                                                             </div>
                                                                         </td>
                                                                     </tr>
@@ -1041,7 +1052,8 @@ export default function AdminTopicsPage() {
                                                                 </Link>
                                                                 <button className="admin-action-btn" onClick={() => openShareModal(topic, 'topic')}><Share2 size={16} /></button>
                                                                 <button className="admin-action-btn" onClick={() => openEditTopicForm(topic)}><Edit size={16} /></button>
-                                                                <button className="admin-action-btn danger" onClick={() => setTopicToDelete(topic)}><Trash2 size={16} /></button>
+                                                                <button className="admin-action-btn" onClick={() => setTopicToDuplicate(topic)} title="Nhân đôi"><Copy size={16} /></button>
+                                                                                 <button className="admin-action-btn danger" onClick={() => setTopicToDelete(topic)}><Trash2 size={16} /></button>
                                                             </div>
                                                         </td>
                                                     </tr>
@@ -1149,7 +1161,7 @@ export default function AdminTopicsPage() {
                             Từ chối đề xuất <strong>{proposalToReject.proposalName}</strong> của giáo viên <strong>{proposalToReject.teacherName}</strong>?
                         </p>
                         <div className="admin-form-group">
-                            <label>Lý do từ chối (tuỳ chọn)</label>
+                            <label>Lý do từ chối (tùy chọn)</label>
                             <textarea
                                 className="admin-form-input admin-form-textarea"
                                 value={rejectNote}
@@ -1231,37 +1243,27 @@ export default function AdminTopicsPage() {
                             </h2>
                             <form onSubmit={handleTopicFormSubmit}>
                                 <div className="admin-form-group">
-                                    <label>Tên chủ đề</label>
-                                    <input type="text" className="admin-form-input" required value={topicFormData.name} onChange={e => setTopicFormData({ ...topicFormData, name: e.target.value })} placeholder="Ví dụ: Công nghệ thông tin" />
+                                    <label htmlFor="admin-topic-name">Tên chủ đề</label>
+                                    <input id="admin-topic-name" name="adminTopicName" type="text" className="admin-form-input" required value={topicFormData.name} onChange={e => setTopicFormData({ ...topicFormData, name: e.target.value })} placeholder="Ví dụ: Công nghệ thông tin" />
                                 </div>
                                 <div className="admin-form-group">
-                                    <label>Mô tả ngắn</label>
-                                    <textarea className="admin-form-input admin-form-textarea" required value={topicFormData.description} onChange={e => setTopicFormData({ ...topicFormData, description: e.target.value })} placeholder="Mô tả cho chủ đề này..." />
+                                    <label htmlFor="admin-topic-description">Mô tả ngắn</label>
+                                    <textarea id="admin-topic-description" name="adminTopicDescription" className="admin-form-input admin-form-textarea" required value={topicFormData.description} onChange={e => setTopicFormData({ ...topicFormData, description: e.target.value })} placeholder="Mô tả cho chủ đề này..." />
                                 </div>
                                 <div className="admin-form-row">
                                     <div className="admin-form-group" style={{ marginBottom: 0 }}>
-                                        <label>Biểu tượng (Emoji)</label>
-                                        <input type="text" className="admin-form-input" required value={topicFormData.icon} onChange={e => setTopicFormData({ ...topicFormData, icon: e.target.value })} placeholder="Ví dụ: 💻" />
+                                        <label htmlFor="admin-topic-icon">Biểu tượng (Emoji)</label>
+                                        <input id="admin-topic-icon" name="adminTopicIcon" type="text" className="admin-form-input" required value={topicFormData.icon} onChange={e => setTopicFormData({ ...topicFormData, icon: e.target.value })} placeholder="Ví dụ: 💻" />
                                     </div>
                                     <div className="admin-form-group" style={{ marginBottom: 0 }}>
-                                        <label>Màu nền (Hex)</label>
-                                        <input type="color" className="admin-form-input" style={{ padding: '4px', height: '42px' }} value={topicFormData.color} onChange={e => setTopicFormData({ ...topicFormData, color: e.target.value })} />
+                                        <label htmlFor="admin-topic-color">Màu nền (Hex)</label>
+                                        <input id="admin-topic-color" name="adminTopicColor" type="color" className="admin-form-input" style={{ padding: '4px', height: '42px' }} value={topicFormData.color} onChange={e => setTopicFormData({ ...topicFormData, color: e.target.value })} />
                                     </div>
                                 </div>
                                 <div className="admin-form-group">
-                                    <label>Trạng thái hiển thị</label>
+                                    <div style={{ marginBottom: '8px', fontWeight: 600, color: '#334155', fontSize: '0.9rem' }}>Folder (Phân loại)</div>
                                     <CustomDropdown
-                                        value={topicFormData.status || 'active'}
-                                        options={[
-                                            { value: 'active', label: 'Đang hoạt động (Hiển thị đầy đủ)' },
-                                            { value: 'coming_soon', label: 'Sắp ra mắt (Khóa học)' }
-                                        ]}
-                                        onChange={(val) => setTopicFormData({ ...topicFormData, status: val })}
-                                    />
-                                </div>
-                                <div className="admin-form-group">
-                                    <label>Folder (Phân loại)</label>
-                                    <CustomDropdown
+                                        ariaLabel="Folder chủ đề"
                                         value={topicFormData.folderId || ''}
                                         options={[
                                             { value: '', label: '-- Chưa phân loại --' },
@@ -1272,8 +1274,8 @@ export default function AdminTopicsPage() {
                                 </div>
                                 {!isEditingTopic && (
                                     <div className="admin-form-group">
-                                        <label>ID Tùy chỉnh (Tùy chọn)</label>
-                                        <input type="text" className="admin-form-input" value={topicFormData.id} onChange={e => setTopicFormData({ ...topicFormData, id: e.target.value })} placeholder="technology (tự động tạo nếu để trống)" />
+                                        <label htmlFor="admin-topic-id">ID Tùy chỉnh (Tùy chọn)</label>
+                                        <input id="admin-topic-id" name="adminTopicId" type="text" className="admin-form-input" value={topicFormData.id} onChange={e => setTopicFormData({ ...topicFormData, id: e.target.value })} placeholder="technology (tự động tạo nếu để trống)" />
                                         <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>Sử dụng chữ thường, không dấu, ngăn cách bằng dấu gạch ngang.</p>
                                     </div>
                                 )}
@@ -1299,11 +1301,36 @@ export default function AdminTopicsPage() {
                             </h2>
                             <p className="admin-modal-desc">
                                 Bạn có chắc chắn muốn xóa chủ đề <strong>{topicToDelete.name}</strong>?<br /><br />
-                                <strong>Lưu ý:</strong> Toàn bộ từ vựng bên trong cũng sẽ bị xóa vĩnh viễn và không thể khôi phục.
+                                <strong>Lưu ý:</strong> Chủ đề sẽ được soft delete giống grammar/exams. Dữ liệu từ vựng bên trong chưa bị xóa vĩnh viễn.
                             </p>
                             <div className="admin-modal-actions" style={{ flexDirection: 'row', marginTop: '24px' }}>
                                 <button className="admin-btn admin-btn-secondary" style={{ flex: 1 }} onClick={() => setTopicToDelete(null)}>Hủy</button>
-                                <button className="admin-btn admin-btn-primary" style={{ backgroundColor: '#ef4444', flex: 1 }} onClick={handleConfirmDeleteTopic}>Xóa vĩnh viễn</button>
+                                <button className="admin-btn admin-btn-primary" style={{ backgroundColor: '#ef4444', flex: 1 }} onClick={handleConfirmDeleteTopic}>Chuyển vào đã xóa</button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            {/* DUPLICATE TOPIC MODAL */}
+            {
+                topicToDuplicate && (
+                    <div className="teacher-modal-overlay" style={{ zIndex: 2000 }}>
+                        <div className="teacher-modal">
+                            <h2 className="admin-modal-title" style={{ color: '#6366f1', marginBottom: '16px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Copy size={24} /> Nhân đôi chủ đề
+                                </div>
+                            </h2>
+                            <p className="admin-modal-desc">
+                                Bạn có chắc chắn muốn nhân đôi chủ đề <strong>{topicToDuplicate.name}</strong>?<br /><br />
+                                Một bản sao mới sẽ được tạo với toàn bộ từ vựng bên trong.
+                            </p>
+                            <div className="admin-modal-actions" style={{ flexDirection: 'row', marginTop: '24px' }}>
+                                <button className="admin-btn admin-btn-secondary" style={{ flex: 1 }} onClick={() => setTopicToDuplicate(null)} disabled={isDuplicating}>Hủy</button>
+                                <button className="admin-btn admin-btn-primary" style={{ background: '#6366f1', flex: 1 }} onClick={handleConfirmDuplicateTopic} disabled={isDuplicating}>
+                                    {isDuplicating ? 'Đang nhân đôi...' : 'Nhân đôi'}
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -1325,12 +1352,12 @@ export default function AdminTopicsPage() {
                             </h2>
                             <form onSubmit={handleFolderFormSubmit}>
                                 <div className="admin-form-group">
-                                    <label>Tên Folder</label>
-                                    <input type="text" className="admin-form-input" required value={folderFormData.name} onChange={e => setFolderFormData({ ...folderFormData, name: e.target.value })} placeholder="Ví dụ: Giao tiếp văn phòng" />
+                                    <label htmlFor="admin-folder-name">Tên Folder</label>
+                                    <input id="admin-folder-name" name="adminFolderName" type="text" className="admin-form-input" required value={folderFormData.name} onChange={e => setFolderFormData({ ...folderFormData, name: e.target.value })} placeholder="Ví dụ: Giao tiếp văn phòng" />
                                 </div>
                                 <div className="admin-form-group">
-                                    <label>Mô tả ngắn</label>
-                                    <input type="text" className="admin-form-input" value={folderFormData.description} onChange={e => setFolderFormData({ ...folderFormData, description: e.target.value })} placeholder="Mô tả..." />
+                                    <label htmlFor="admin-folder-description">Mô tả ngắn</label>
+                                    <input id="admin-folder-description" name="adminFolderDescription" type="text" className="admin-form-input" value={folderFormData.description} onChange={e => setFolderFormData({ ...folderFormData, description: e.target.value })} placeholder="Mô tả..." />
                                 </div>
 
                                 <div className="admin-form-group" style={{ marginTop: '16px' }}>
@@ -1479,7 +1506,7 @@ export default function AdminTopicsPage() {
 
                             {/* Two columns */}
                             <div className="share-modal-columns">
-                                {/* ─── LEFT COLUMN: Nội bộ ─── */}
+                                {/* LEFT COLUMN: Nội bộ */}
                                 <div className={`share-modal-col ${adminShareTab === 'internal' ? 'active' : ''}`}>
                                     <div className="share-modal-col-header teacher">
                                         <Lock size={18} /> Nội bộ (Giáo viên)
@@ -1497,7 +1524,7 @@ export default function AdminTopicsPage() {
                                                     {resourceToShare.isPublic ? <Globe size={20} /> : <Lock size={20} />}
                                                 </div>
                                                 <div>
-                                                    <h4 style={{ fontWeight: 600, fontSize: '0.95rem', color: '#1e293b', margin: '0 0 4px 0' }}>{resourceToShare.isPublic ? 'Đang Công khai' : 'Hạn chế'}</h4>
+                                                    <h4 style={{ fontWeight: 600, fontSize: '0.95rem', color: '#1e293b', margin: '0 0 4px 0' }}>{resourceToShare.isPublic ? 'Đang công khai' : 'Hạn chế'}</h4>
                                                     <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>{resourceToShare.isPublic ? 'Bất kỳ ai cũng có thể tìm và học bài này mà không cần đăng nhập.' : 'Cần cấp quyền bên dưới hoặc gửi Link trực tiếp.'}</p>
                                                 </div>
                                             </div>
@@ -1559,7 +1586,7 @@ export default function AdminTopicsPage() {
                                     </div>
                                 </div>
 
-                                {/* ─── RIGHT COLUMN: Học viên ─── */}
+                                {/* RIGHT COLUMN: Học viên */}
                                 <div className={`share-modal-col ${adminShareTab === 'student' ? 'active' : ''}`}>
                                     <div className="share-modal-col-header student">
                                         <GraduationCap size={18} /> Học viên

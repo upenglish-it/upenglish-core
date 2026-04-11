@@ -1,11 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { db } from '../config/firebase';
-import { doc, getDoc } from 'firebase/firestore';
 import { generateWordListFromTopic, appendWordListToTopic } from '../services/aiService';
 import { saveCustomList, getSavedWords, toggleSavedWord } from '../services/savedService';
 import { getAllWordProgressMap, resetWordProgress, resetTopicProgress } from '../services/spacedRepetition';
+import { readUserStorageDoc } from '../services/userStorageService';
 import { ArrowLeft, Sparkles, BookOpen, Hash, AlignLeft, Bot, RefreshCw, Save, ChevronDown, X, Plus, Check, XCircle, CheckCheck, RotateCcw, Heart } from 'lucide-react';
 import './GenerateListPage.css';
 import './TopicSelectPage.css'; // Reuse modal styles from TopicSelectPage
@@ -19,16 +18,18 @@ export default function GenerateListPage() {
     const [count, setCount] = useState(10);
     const [type, setType] = useState('words'); // 'words' | 'phrases'
     const [level, setLevel] = useState(() => localStorage.getItem('userCefrLevel') || 'A2'); // CEFR level
+    const PREFERENCES_DOC_TYPE = 'preferences';
 
-    // Sync level from Firestore
+    // Sync level from user settings
     useEffect(() => {
         if (!user?.uid) return;
-        const prefsRef = doc(db, `users/${user.uid}/settings`, 'preferences');
-        getDoc(prefsRef).then(snap => {
-            if (snap.exists() && snap.data().cefrLevel) {
-                setLevel(snap.data().cefrLevel);
-            }
-        }).catch(() => { });
+        readUserStorageDoc(user.uid, PREFERENCES_DOC_TYPE)
+            .then((prefs) => {
+                if (prefs?.cefrLevel) {
+                    setLevel(prefs.cefrLevel);
+                }
+            })
+            .catch(() => { });
     }, [user?.uid]);
 
     const [appendInput, setAppendInput] = useState('');
@@ -314,10 +315,13 @@ export default function GenerateListPage() {
                             )}
 
                             <div className="generate-input-group">
-                                <label>1. Chủ đề tiếng Anh / Việt</label>
+                                <label htmlFor="generate-topic-input">1. Chủ đề tiếng Anh / Việt</label>
                                 <div className="generate-input-wrapper">
                                     <BookOpen size={18} className="text-muted" />
                                     <input
+                                        id="generate-topic-input"
+                                        name="topic"
+                                        aria-label="Topic"
                                         type="text"
                                         placeholder="VD: Phỏng vấn xin việc, Môi trường, Nấu ăn..."
                                         value={topic}
@@ -330,10 +334,13 @@ export default function GenerateListPage() {
 
                             <div style={{ display: 'flex', gap: 'var(--space-md)' }}>
                                 <div className="generate-input-group" style={{ flex: 1 }}>
-                                    <label>2. Số lượng</label>
+                                    <label htmlFor="generate-count-input">2. Số lượng</label>
                                     <div className="generate-input-wrapper">
                                         <Hash size={18} className="text-muted" />
                                         <input
+                                            id="generate-count-input"
+                                            name="count"
+                                            aria-label="Count"
                                             type="number"
                                             value={count}
                                             onChange={(e) => setCount(e.target.value)}
@@ -346,10 +353,24 @@ export default function GenerateListPage() {
                                 </div>
 
                                 <div className="generate-input-group" style={{ flex: 1 }}>
-                                    <label>3. Trình độ (CEFR)</label>
+                                    <span>3. Trình độ (CEFR)</span>
                                     <div className="generate-input-wrapper" style={{ zIndex: isLevelOpen ? 10 : 1 }}>
                                         <BookOpen size={18} className="text-muted" />
-                                        <div className={`custom-select ${isLevelOpen ? 'active' : ''}`} onClick={() => { setIsLevelOpen(!isLevelOpen); setIsTypeOpen(false); }}>
+                                        <div
+                                            id="generate-level-input"
+                                            role="button"
+                                            tabIndex={0}
+                                            aria-label="CEFR level"
+                                            className={`custom-select ${isLevelOpen ? 'active' : ''}`}
+                                            onClick={() => { setIsLevelOpen(!isLevelOpen); setIsTypeOpen(false); }}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                    e.preventDefault();
+                                                    setIsLevelOpen(!isLevelOpen);
+                                                    setIsTypeOpen(false);
+                                                }
+                                            }}
+                                        >
                                             <span className="custom-select-value">{levelOptions.find(o => o.value === level)?.label}</span>
                                             <ChevronDown size={16} className={`custom-select-arrow ${isLevelOpen ? 'open' : ''}`} />
                                         </div>
@@ -369,10 +390,24 @@ export default function GenerateListPage() {
                             </div>
 
                             <div className="generate-input-group">
-                                <label>4. Loại từ vựng</label>
+                                <span>4. Loại từ vựng</span>
                                 <div className="generate-input-wrapper" style={{ zIndex: isTypeOpen ? 10 : 1 }}>
                                     <AlignLeft size={18} className="text-muted" />
-                                    <div className={`custom-select ${isTypeOpen ? 'active' : ''}`} onClick={() => { setIsTypeOpen(!isTypeOpen); setIsLevelOpen(false); }}>
+                                    <div
+                                        id="generate-type-input"
+                                        role="button"
+                                        tabIndex={0}
+                                        aria-label="Vocabulary type"
+                                        className={`custom-select ${isTypeOpen ? 'active' : ''}`}
+                                        onClick={() => { setIsTypeOpen(!isTypeOpen); setIsLevelOpen(false); }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                e.preventDefault();
+                                                setIsTypeOpen(!isTypeOpen);
+                                                setIsLevelOpen(false);
+                                            }
+                                        }}
+                                    >
                                         <span className="custom-select-value">{typeOptions.find(o => o.value === type)?.label}</span>
                                         <ChevronDown size={16} className={`custom-select-arrow ${isTypeOpen ? 'open' : ''}`} />
                                     </div>
@@ -450,6 +485,9 @@ export default function GenerateListPage() {
                                 <h4 style={{ margin: '0 0 8px 0', fontSize: '1rem', color: 'var(--color-primary-light)' }}><Bot size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '6px' }} />Thêm từ</h4>
                                 <div className="add-word-inputs mt-1">
                                     <input
+                                        id="append-word-input"
+                                        name="appendWord"
+                                        aria-label="Append word"
                                         type="text"
                                         placeholder="Lượng từ / Nghĩa của từ muốn học"
                                         value={appendInput}

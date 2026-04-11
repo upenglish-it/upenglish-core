@@ -4,9 +4,9 @@ import {
   SSTReportPeriods, 
   SSTSettings, 
   SSTSkillReports, 
-  SSTUsers, 
   SSTUserGroups 
 } from 'apps/common/src/database/mongodb/src/superstudy';
+import { Accounts } from 'apps/common/src/database/mongodb/src/isms';
 import { ReportPeriodsService } from './report-periods.service';
 import { ReportPeriodsController } from './report-periods.controller';
 
@@ -16,8 +16,8 @@ import { ReportPeriodsController } from './report-periods.controller';
       SSTReportPeriods,
       SSTSettings,
       SSTSkillReports,
-      SSTUsers,
-      SSTUserGroups
+      SSTUserGroups,
+      Accounts,
     ])
   ],
   controllers: [ReportPeriodsController],

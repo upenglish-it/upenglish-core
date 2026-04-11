@@ -9,6 +9,7 @@ import { convertExamToGrammar } from '../../services/conversionService';
 import CustomSelect from '../../components/common/CustomSelect';
 import EmailAutocomplete from '../../components/common/EmailAutocomplete';
 import { usersService } from '../../models';
+import { getResolvedUserEmail, getResolvedUserLabel } from '../../utils/userIdentity';
 
 export default function AdminTeacherExamsPage() {
     const { user } = useAuth();
@@ -77,17 +78,27 @@ export default function AdminTeacherExamsPage() {
         loadData();
     }, []);
 
-    const fetchTeacherInfo = async (teacherId, currentMap) => {
+    const fetchTeacherInfo = async (teacherId, currentMap, fallbackName) => {
         if (!teacherId || currentMap[teacherId]) return;
         try {
-            const userSnap = await usersService.findOne(teacherId);
-            if (userSnap) {
-                setTeacherMap(prev => ({ ...prev, [teacherId]: userSnap }));
-            } else {
-                setTeacherMap(prev => ({ ...prev, [teacherId]: { email: 'Unknown user', displayName: 'Unknown' } }));
-            }
-        } catch (err) {
-            console.error("Error fetching teacher:", err);
+            const result = await usersService.findOne(teacherId);
+            const userSnap = result?.data || result;
+            setTeacherMap(prev => ({
+                ...prev,
+                [teacherId]: {
+                    ...userSnap,
+                    displayName: getResolvedUserLabel(userSnap, fallbackName, teacherId),
+                    email: getResolvedUserEmail(userSnap, fallbackName),
+                },
+            }));
+        } catch {
+            setTeacherMap(prev => ({
+                ...prev,
+                [teacherId]: {
+                    displayName: getResolvedUserLabel({}, fallbackName, teacherId),
+                    email: getResolvedUserEmail({}, fallbackName),
+                },
+            }));
         }
     };
 
@@ -110,6 +121,13 @@ export default function AdminTeacherExamsPage() {
             cleanupExpiredDeletedContent().catch(() => {});
 
             const tempTeacherMap = { ...teacherMap };
+            const fallbackNames = {};
+            [...examsData, ...foldersData, ...delExams, ...delFolders].forEach(item => {
+                const teacherId = item.createdBy || item.teacherId;
+                if (teacherId && item.createdByName && !fallbackNames[teacherId]) {
+                    fallbackNames[teacherId] = item.createdByName;
+                }
+            });
             const allTeacherIds = new Set([
                 ...examsData.map(ex => ex.createdBy),
                 ...foldersData.map(f => f.teacherId),
@@ -117,7 +135,7 @@ export default function AdminTeacherExamsPage() {
                 ...delExams.map(ex => ex.createdBy),
                 ...delFolders.map(f => f.teacherId)
             ]);
-            await Promise.all([...allTeacherIds].map(id => fetchTeacherInfo(id, tempTeacherMap)));
+            await Promise.all([...allTeacherIds].map(id => fetchTeacherInfo(id, tempTeacherMap, fallbackNames[id])));
 
             // Background: refresh stale question-time caches for question-mode exams
             const questionModeExams = examsData.filter(ex => ex.timingMode === 'question');
@@ -415,7 +433,7 @@ export default function AdminTeacherExamsPage() {
         const teacherUnassignedExams = filteredExams.filter(ex => (ex.createdBy || ex.teacherId) === teacherId && !tfIds.has(ex.id));
 
         teacherGroupedData[teacherId] = {
-            teacher: teacherMap[teacherId] || { id: teacherId, displayName: 'Unknown', email: teacherId },
+            teacher: teacherMap[teacherId] || { id: teacherId, displayName: 'Unknown', email: 'Unknown user' },
             folders: teacherFols,
             unassignedExams: teacherUnassignedExams
         };
@@ -440,6 +458,8 @@ export default function AdminTeacherExamsPage() {
                 <div className="admin-search-box">
                     <Search size={16} className="search-icon" />
                     <input
+                        id="admin-teacher-exams-search"
+                        name="adminTeacherExamsSearch"
                         type="text"
                         placeholder="Tìm tên đề thi, folder, tên GV hoặc email..."
                         value={searchTerm}

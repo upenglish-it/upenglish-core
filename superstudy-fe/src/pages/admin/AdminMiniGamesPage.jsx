@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Gamepad2, Eye, Check, X, Clock, ToggleLeft, ToggleRight, Search } from 'lucide-react';
+import { Gamepad2, Eye, Check, X, ToggleLeft, ToggleRight, Search, AlertTriangle, Trash2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getAllMiniGames, getPendingGames, approveGame, rejectGame, toggleMiniGame } from '../../services/miniGameService';
+import { approveGame, deleteMiniGame, getAllMiniGames, rejectGame, toggleMiniGame } from '../../services/miniGameService';
+import { buildMiniGameMockPayload, getMiniGameDefaultSource, getMiniGameLaunchUrl } from '../../services/miniGameRuntime';
 import GameLauncher from '../../components/games/GameLauncher';
 
 const STATUS_LABELS = {
@@ -25,44 +26,60 @@ export default function AdminMiniGamesPage() {
     const [reviewGame, setReviewGame] = useState(null);
     const [rejectNote, setRejectNote] = useState('');
     const [previewGame, setPreviewGame] = useState(null);
+    const [previewPayload, setPreviewPayload] = useState(null);
+    const [previewConfigGame, setPreviewConfigGame] = useState(null);
+    const [previewSource, setPreviewSource] = useState('vocabulary');
     const [searchQuery, setSearchQuery] = useState('');
     const [processing, setProcessing] = useState(false);
+    const [confirmApprove, setConfirmApprove] = useState(null);
+    const [confirmDelete, setConfirmDelete] = useState(null);
+    const [toast, setToast] = useState(null);
 
     useEffect(() => {
         setLoading(true);
         getAllMiniGames().then(setGames).catch(console.error).finally(() => setLoading(false));
     }, []);
 
+    useEffect(() => {
+        if (!toast) return;
+        const timeoutId = window.setTimeout(() => setToast(null), 4000);
+        return () => window.clearTimeout(timeoutId);
+    }, [toast]);
+
+    const showToast = (message, type = 'error') => {
+        setToast({ message, type });
+    };
+
     const refreshGames = () => {
         getAllMiniGames().then(setGames).catch(console.error);
     };
 
-    const filteredGames = games.filter(g => {
-        if (activeTab !== 'all' && g.status !== activeTab) return false;
-        if (searchQuery) {
-            const q = searchQuery.toLowerCase();
-            return (g.name || '').toLowerCase().includes(q) || (g.description || '').toLowerCase().includes(q) || (g.createdByName || '').toLowerCase().includes(q);
-        }
-        return true;
+    const filteredGames = games.filter(game => {
+        if (activeTab !== 'all' && game.status !== activeTab) return false;
+        if (!searchQuery) return true;
+        const q = searchQuery.toLowerCase();
+        return (game.name || '').toLowerCase().includes(q) || (game.description || '').toLowerCase().includes(q) || (game.createdByName || '').toLowerCase().includes(q);
     });
 
     const counts = {
         all: games.length,
-        pending_review: games.filter(g => g.status === 'pending_review').length,
-        approved: games.filter(g => g.status === 'approved').length,
-        rejected: games.filter(g => g.status === 'rejected').length,
+        pending_review: games.filter(game => game.status === 'pending_review').length,
+        approved: games.filter(game => game.status === 'approved').length,
+        rejected: games.filter(game => game.status === 'rejected').length,
     };
 
-    const handleApprove = async (game) => {
-        if (!window.confirm(`Duyệt game "${game.name}"? Game sẽ hiển thị cho giáo viên sử dụng.`)) return;
+    const handleApprove = async () => {
+        if (!confirmApprove) return;
         setProcessing(true);
         try {
-            await approveGame(game.id, user.uid);
+            await approveGame(confirmApprove.id, user.uid);
+            showToast(`Đã duyệt game "${confirmApprove.name}".`, 'success');
+            setConfirmApprove(null);
             setReviewGame(null);
             refreshGames();
         } catch (error) {
             console.error('Error approving game:', error);
-            alert('Lỗi khi duyệt game.');
+            showToast('Lỗi khi duyệt game.', 'error');
         } finally {
             setProcessing(false);
         }
@@ -70,7 +87,7 @@ export default function AdminMiniGamesPage() {
 
     const handleReject = async (game) => {
         if (!rejectNote.trim()) {
-            alert('Vui lòng nhập lý do từ chối để IT biết cần sửa gì.');
+            showToast('Vui lòng nhập lý do từ chối để IT biết cần sửa gì.', 'error');
             return;
         }
         setProcessing(true);
@@ -78,10 +95,11 @@ export default function AdminMiniGamesPage() {
             await rejectGame(game.id, user.uid, rejectNote.trim());
             setReviewGame(null);
             setRejectNote('');
+            showToast(`Đã từ chối game "${game.name}".`, 'success');
             refreshGames();
         } catch (error) {
             console.error('Error rejecting game:', error);
-            alert('Lỗi khi từ chối game.');
+            showToast('Lỗi khi từ chối game.', 'error');
         } finally {
             setProcessing(false);
         }
@@ -90,16 +108,60 @@ export default function AdminMiniGamesPage() {
     const handleToggle = async (game) => {
         try {
             await toggleMiniGame(game.id, !game.isActive);
+            showToast(game.isActive ? `Đã tắt game "${game.name}".` : `Đã bật game "${game.name}".`, 'success');
             refreshGames();
         } catch (error) {
             console.error('Error toggling game:', error);
+            showToast('Lỗi khi thay đổi trạng thái game.', 'error');
         }
     };
 
-    const formatDate = (ts) => {
-        if (!ts) return '—';
-        const d = ts.toDate ? ts.toDate() : new Date(ts);
-        return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const handleDelete = async () => {
+        if (!confirmDelete) return;
+        setProcessing(true);
+        try {
+            await deleteMiniGame(confirmDelete.id);
+            if (reviewGame?.id === confirmDelete.id) {
+                setReviewGame(null);
+                setRejectNote('');
+            }
+            if (previewGame?.id === confirmDelete.id) {
+                setPreviewGame(null);
+                setPreviewPayload(null);
+            }
+            if (previewConfigGame?.id === confirmDelete.id) {
+                setPreviewConfigGame(null);
+            }
+            if (confirmApprove?.id === confirmDelete.id) {
+                setConfirmApprove(null);
+            }
+            showToast(`Đã xóa game "${confirmDelete.name}".`, 'success');
+            setConfirmDelete(null);
+            refreshGames();
+        } catch (error) {
+            console.error('Error deleting game:', error);
+            showToast('Lỗi khi xóa game.', 'error');
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const openPreview = (game) => {
+        if (game.dataType === 'both') {
+            setPreviewConfigGame(game);
+            setPreviewSource(getMiniGameDefaultSource(game));
+            return;
+        }
+
+        setPreviewGame(game);
+        setPreviewPayload(buildMiniGameMockPayload(game, getMiniGameDefaultSource(game)));
+    };
+
+    const launchConfiguredPreview = () => {
+        if (!previewConfigGame) return;
+        setPreviewGame(previewConfigGame);
+        setPreviewPayload(buildMiniGameMockPayload(previewConfigGame, previewSource));
+        setPreviewConfigGame(null);
     };
 
     if (loading) {
@@ -112,10 +174,45 @@ export default function AdminMiniGamesPage() {
 
     return (
         <div>
+            {toast && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        top: '20px',
+                        right: '20px',
+                        zIndex: 10001,
+                        minWidth: '280px',
+                        maxWidth: '420px',
+                        padding: '14px 16px',
+                        borderRadius: '16px',
+                        border: `1px solid ${toast.type === 'error' ? '#fecaca' : '#bbf7d0'}`,
+                        background: toast.type === 'error' ? '#fef2f2' : '#ecfdf5',
+                        color: toast.type === 'error' ? '#991b1b' : '#166534',
+                        boxShadow: '0 18px 40px rgba(15, 23, 42, 0.16)',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '10px'
+                    }}
+                >
+                    <span style={{ fontSize: '1.1rem', lineHeight: 1.4 }}>
+                        {toast.type === 'error' ? '⚠️' : '✅'}
+                    </span>
+                    <div style={{ flex: 1, fontSize: '0.9rem', fontWeight: 600, lineHeight: 1.45 }}>
+                        {toast.message}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setToast(null)}
+                        style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', padding: '2px' }}
+                    >
+                        <X size={16} />
+                    </button>
+                </div>
+            )}
+
             <h1 className="admin-page-title" style={{ marginBottom: '4px', textAlign: 'center' }}>🎮 Mini Games</h1>
             <p className="admin-page-subtitle" style={{ textAlign: 'center' }}>Xem xét, duyệt và quản lý Mini Games từ bộ phận IT</p>
 
-            {/* Tabs */}
             <div className="admin-tabs-container" style={{ marginTop: '16px', marginBottom: '16px' }}>
                 {[
                     { key: 'pending_review', label: '⏳ Chờ duyệt' },
@@ -129,15 +226,13 @@ export default function AdminMiniGamesPage() {
                 ))}
             </div>
 
-            {/* Search */}
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
                 <div style={{ position: 'relative', maxWidth: '400px', flex: '1 1 300px' }}>
                     <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                    <input type="text" placeholder="Tìm game..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ width: '100%', padding: '10px 12px 10px 36px', border: '1.5px solid #e2e8f0', borderRadius: '12px', fontSize: '0.88rem', outline: 'none' }} />
+                    <input id="admin-mini-games-search" name="adminMiniGamesSearch" type="text" placeholder="Tìm game..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ width: '100%', padding: '10px 12px 10px 36px', border: '1.5px solid #e2e8f0', borderRadius: '12px', fontSize: '0.88rem', outline: 'none' }} />
                 </div>
             </div>
 
-            {/* Games grid */}
             {filteredGames.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '48px 20px', color: '#94a3b8' }}>
                     <div style={{ fontSize: '3rem', marginBottom: '12px' }}>🎮</div>
@@ -168,10 +263,9 @@ export default function AdminMiniGamesPage() {
                                     <span>• IT: {game.createdByName || 'N/A'}</span>
                                 </div>
 
-                                {/* Actions */}
                                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                                    {game.gameUrl && (
-                                        <button className="it-game-btn secondary" onClick={() => setPreviewGame(game)} style={{ padding: '6px 12px', fontSize: '0.78rem', flex: 'none' }}>
+                                    {getMiniGameLaunchUrl(game) && (
+                                        <button className="it-game-btn secondary" onClick={() => openPreview(game)} style={{ padding: '6px 12px', fontSize: '0.78rem', flex: 'none' }}>
                                             <Eye size={14} /> Xem
                                         </button>
                                     )}
@@ -186,9 +280,11 @@ export default function AdminMiniGamesPage() {
                                             {game.isActive ? 'Tắt' : 'Bật'}
                                         </button>
                                     )}
+                                    <button className="it-game-btn danger" onClick={() => setConfirmDelete(game)} style={{ padding: '6px 12px', fontSize: '0.78rem', flex: 'none' }}>
+                                        <Trash2 size={14} /> Xóa
+                                    </button>
                                 </div>
 
-                                {/* Reject note */}
                                 {game.status === 'rejected' && game.reviewNote && (
                                     <div style={{ marginTop: '8px', padding: '8px 10px', background: '#fef2f2', borderRadius: '8px', border: '1px solid #fecaca', fontSize: '0.78rem', color: '#991b1b' }}>
                                         <strong style={{ color: '#dc2626' }}>Từ chối:</strong> {game.reviewNote}
@@ -200,7 +296,6 @@ export default function AdminMiniGamesPage() {
                 </div>
             )}
 
-            {/* Review Modal */}
             {reviewGame && (
                 <div className="teacher-modal-overlay" onClick={() => setReviewGame(null)}>
                     <div className="teacher-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', width: '95%' }}>
@@ -228,9 +323,9 @@ export default function AdminMiniGamesPage() {
                             )}
                         </div>
 
-                        {reviewGame.gameUrl && (
+                        {getMiniGameLaunchUrl(reviewGame) && (
                             <div style={{ marginBottom: '16px' }}>
-                                <button className="it-game-btn primary" onClick={() => { setPreviewGame(reviewGame); }} style={{ width: '100%', padding: '10px', borderRadius: '12px' }}>
+                                <button className="it-game-btn primary" onClick={() => openPreview(reviewGame)} style={{ width: '100%', padding: '10px', borderRadius: '12px' }}>
                                     <Eye size={16} /> Test thử game
                                 </button>
                             </div>
@@ -247,7 +342,7 @@ export default function AdminMiniGamesPage() {
                             <button className="it-game-btn danger" onClick={() => handleReject(reviewGame)} disabled={processing} style={{ padding: '10px 20px' }}>
                                 <X size={16} /> Từ chối
                             </button>
-                            <button className="it-game-btn primary" onClick={() => handleApprove(reviewGame)} disabled={processing} style={{ padding: '10px 24px', background: 'linear-gradient(135deg, #16a34a, #22c55e)' }}>
+                            <button className="it-game-btn primary" onClick={() => setConfirmApprove(reviewGame)} disabled={processing} style={{ padding: '10px 24px', background: 'linear-gradient(135deg, #16a34a, #22c55e)' }}>
                                 <Check size={16} /> Duyệt
                             </button>
                         </div>
@@ -255,22 +350,103 @@ export default function AdminMiniGamesPage() {
                 </div>
             )}
 
-            {/* Game Preview */}
-            {previewGame && (
+            {confirmApprove && (
+                <div className="teacher-modal-overlay" onClick={() => !processing && setConfirmApprove(null)}>
+                    <div className="teacher-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', width: '95%', textAlign: 'center' }}>
+                        <div style={{
+                            width: '64px',
+                            height: '64px',
+                            margin: '0 auto 14px',
+                            borderRadius: '18px',
+                            background: '#ecfdf5',
+                            color: '#16a34a',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}>
+                            <AlertTriangle size={28} />
+                        </div>
+                        <h3 style={{ fontSize: '1.12rem', fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}>Duyệt game này?</h3>
+                        <p style={{ fontSize: '0.88rem', color: '#64748b', marginBottom: '20px', lineHeight: 1.55 }}>
+                            Duyệt game "<strong>{confirmApprove.name}</strong>" để giáo viên có thể nhìn thấy và sử dụng trong mục Mini Games.
+                        </p>
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                            <button className="it-game-btn secondary" onClick={() => setConfirmApprove(null)} disabled={processing} style={{ padding: '10px 20px' }}>Hủy</button>
+                            <button className="it-game-btn primary" onClick={handleApprove} disabled={processing} style={{ padding: '10px 20px', background: 'linear-gradient(135deg, #16a34a, #22c55e)' }}>
+                                <Check size={15} /> {processing ? 'Đang duyệt...' : 'Xác nhận duyệt'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {confirmDelete && (
+                <div className="teacher-modal-overlay" onClick={() => !processing && setConfirmDelete(null)}>
+                    <div className="teacher-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', width: '95%', textAlign: 'center' }}>
+                        <div style={{
+                            width: '64px',
+                            height: '64px',
+                            margin: '0 auto 14px',
+                            borderRadius: '18px',
+                            background: '#fef2f2',
+                            color: '#dc2626',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}>
+                            <Trash2 size={28} />
+                        </div>
+                        <h3 style={{ fontSize: '1.12rem', fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}>Xóa game này?</h3>
+                        <p style={{ fontSize: '0.88rem', color: '#64748b', marginBottom: '20px', lineHeight: 1.55 }}>
+                            Game "<strong>{confirmDelete.name}</strong>" sẽ bị xóa khỏi hệ thống mini game. Hành động này không thể hoàn tác.
+                        </p>
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                            <button className="it-game-btn secondary" onClick={() => setConfirmDelete(null)} disabled={processing} style={{ padding: '10px 20px' }}>Hủy</button>
+                            <button className="it-game-btn danger" onClick={handleDelete} disabled={processing} style={{ padding: '10px 20px' }}>
+                                <Trash2 size={15} /> {processing ? 'Đang xóa...' : 'Xác nhận xóa'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {previewConfigGame && (
+                <div className="teacher-modal-overlay" onClick={() => setPreviewConfigGame(null)}>
+                    <div className="teacher-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', width: '95%' }}>
+                        <div className="teacher-modal-header">
+                            <h3 className="teacher-modal-title"><Eye size={20} color="#4f46e5" /> Preview: {previewConfigGame.name}</h3>
+                            <button className="teacher-modal-close" onClick={() => setPreviewConfigGame(null)}><X size={18} /></button>
+                        </div>
+                        <p style={{ fontSize: '0.88rem', color: '#64748b', marginBottom: '12px' }}>
+                            Game này hỗ trợ cả vocab và grammar. Chọn nguồn mock data để preview:
+                        </p>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '18px' }}>
+                            <button type="button" onClick={() => setPreviewSource('vocabulary')} style={{ padding: '10px 12px', borderRadius: '12px', border: `1.5px solid ${previewSource === 'vocabulary' ? '#4f46e5' : '#e2e8f0'}`, background: previewSource === 'vocabulary' ? '#eef2ff' : '#fff', color: previewSource === 'vocabulary' ? '#4338ca' : '#475569', fontWeight: 700, cursor: 'pointer' }}>
+                                📚 Vocab
+                            </button>
+                            <button type="button" onClick={() => setPreviewSource('grammar')} style={{ padding: '10px 12px', borderRadius: '12px', border: `1.5px solid ${previewSource === 'grammar' ? '#4f46e5' : '#e2e8f0'}`, background: previewSource === 'grammar' ? '#eef2ff' : '#fff', color: previewSource === 'grammar' ? '#4338ca' : '#475569', fontWeight: 700, cursor: 'pointer' }}>
+                                📝 Grammar
+                            </button>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                            <button className="it-game-btn secondary" onClick={() => setPreviewConfigGame(null)} style={{ padding: '10px 18px' }}>Hủy</button>
+                            <button className="it-game-btn primary" onClick={launchConfiguredPreview} style={{ padding: '10px 18px' }}>
+                                <Eye size={15} /> Mở preview
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {previewGame && previewPayload && (
                 <GameLauncher
-                    gameUrl={previewGame.gameUrl}
+                    gameUrl={getMiniGameLaunchUrl(previewGame)}
                     gameName={`[Review] ${previewGame.name}`}
-                    gameData={{
-                        dataType: 'vocabulary',
-                        words: [
-                            { word: 'apple', meaning: 'quả táo', phonetic: '/ˈæp.əl/', example: 'I eat an apple every day.' },
-                            { word: 'book', meaning: 'quyển sách', phonetic: '/bʊk/', example: 'She reads a book.' },
-                            { word: 'cat', meaning: 'con mèo', example: 'The cat is sleeping.' },
-                            { word: 'desk', meaning: 'bàn làm việc' },
-                            { word: 'elephant', meaning: 'con voi', phonetic: '/ˈel.ɪ.fənt/' }
-                        ]
+                    gameData={previewPayload}
+                    onClose={() => {
+                        setPreviewGame(null);
+                        setPreviewPayload(null);
                     }}
-                    onClose={() => setPreviewGame(null)}
                 />
             )}
         </div>

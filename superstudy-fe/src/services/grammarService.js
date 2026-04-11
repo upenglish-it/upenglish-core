@@ -1,4 +1,4 @@
-import { grammarExercisesService, grammarQuestionsService } from '../models';
+import { grammarExercisesService, grammarQuestionsService, grammarSubmissionsService } from '../models';
 import { deleteQuestionImages, deleteContextImages } from './examService';
 import { deleteContextAudio } from './contextAudioService';
 
@@ -32,9 +32,12 @@ export async function recalcGrammarQuestionCache(exerciseId) {
 // --- EXERCISES ---
 
 export async function getGrammarExercises(teacherId = null) {
-    const result = await grammarExercisesService.findAll({ teacherId });
+    const result = await grammarExercisesService.findAll();
     let exercises = Array.isArray(result) ? result : (result?.data || []);
-    exercises = exercises.map(e => ({ ...e, id: e._id || e.id })).filter(e => !e.isDeleted);
+    exercises = exercises
+        .map(e => ({ ...e, id: e._id || e.id }))
+        .filter(e => !e.isDeleted)
+        .filter(e => teacherId ? e.teacherId === teacherId : true);
     return exercises.sort((a, b) => {
         const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -122,6 +125,7 @@ export async function getGrammarQuestionsByIds(questionIds = []) {
     try {
         // Fetch individually since there's no batch-by-IDs endpoint
         const promises = questionIds.map(id => grammarQuestionsService.findOne(id).catch(() => null));
+        const results = await Promise.all(promises);
         return results.filter(Boolean).map(q => {
             const data = q?.data || q;
             return { ...data, id: data._id || data.id };
@@ -207,41 +211,28 @@ export async function saveGrammarAssignment(assignmentData) {
 }
 
 // --- SUBMISSIONS ---
-// NOTE: grammar_submissions doesn't have a dedicated backend module.
-// Keep using Firestore for now until a backend module is built.
-
-import { db } from '../config/firebase';
-import { collection, doc, getDocs, getDoc, setDoc, updateDoc, query, where, serverTimestamp } from 'firebase/firestore';
 
 export async function getGrammarSubmission(assignmentId, studentId) {
-    const q = query(collection(db, 'grammar_submissions'),
-        where('assignmentId', '==', assignmentId),
-        where('studentId', '==', studentId)
-    );
-    const snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-        return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
-    }
-    return null;
+    const result = await grammarSubmissionsService.findByAssignmentAndStudent(assignmentId, studentId);
+    const data = result?.data || result;
+    return data ? { ...data, id: data._id || data.id } : null;
 }
 
 export async function getGrammarSubmissionsForAssignment(assignmentId) {
-    const q = query(collection(db, 'grammar_submissions'), where('assignmentId', '==', assignmentId));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const result = await grammarSubmissionsService.findByAssignment(assignmentId);
+    const list = Array.isArray(result) ? result : (result?.data || []);
+    return list.map(item => ({ ...item, id: item._id || item.id }));
 }
 
 export async function saveGrammarSubmission(submissionData) {
     const { id, ...data } = submissionData;
-    let submissionRef;
     if (id) {
-        submissionRef = doc(db, 'grammar_submissions', id);
-        await updateDoc(submissionRef, { ...data, updatedAt: serverTimestamp() });
+        await grammarSubmissionsService.update(id, data);
         return id;
     } else {
-        submissionRef = doc(collection(db, 'grammar_submissions'));
-        await setDoc(submissionRef, { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-        return submissionRef.id;
+        const result = await grammarSubmissionsService.create(data);
+        const created = result?.data || result;
+        return created?._id || created?.id || created;
     }
 }
 
@@ -298,7 +289,7 @@ export async function getDeletedTeacherGrammarFolders() {
     try {
         // Fetch deleted folders for a teacher — need teacherId
         // Since this is admin use, get all deleted
-        const result = await teacherFoldersService.getDeletedGrammarFolders('');
+        const result = await teacherFoldersService.getDeletedGrammarFolders();
         let folders = Array.isArray(result) ? result : (result?.data || []);
         return folders.sort((a, b) => {
             const tA = a.deletedAt ? new Date(a.deletedAt).getTime() : 0;
@@ -307,6 +298,23 @@ export async function getDeletedTeacherGrammarFolders() {
         });
     } catch (error) {
         console.error("Error fetching deleted teacher grammar folders:", error);
+        return [];
+    }
+}
+
+/**
+ * Get public and explicitly shared teacher grammar folders.
+ * Used by TeacherMiniGamesPage to load grammar data sources for teachers.
+ */
+export async function getSharedAndPublicTeacherGrammarFolders(folderAccessIds = []) {
+    try {
+        const result = await teacherFoldersService.getSharedAndPublicGrammarFolders(folderAccessIds);
+        let folders = Array.isArray(result) ? result : (result?.data || []);
+        return folders
+            .map(f => ({ ...f, id: f._id || f.id, isTeacherFolder: true }))
+            .sort((a, b) => (a.order || 0) - (b.order || 0));
+    } catch (error) {
+        console.error("Error fetching shared teacher grammar folders:", error);
         return [];
     }
 }

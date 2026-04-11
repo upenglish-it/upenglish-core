@@ -36,7 +36,7 @@ export class SSTTools {
   @Prop({ type: Number, default: 0 })
   public readonly order: number;
 
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly tags: string[];
 
   @Prop({ ref: () => Accounts, type: String, required: true })

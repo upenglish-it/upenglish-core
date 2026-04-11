@@ -44,6 +44,30 @@ export class ExamQuestionsService {
   }
 
   /**
+   * Returns time limit totals per examId.
+   * Mirrors examService.getExamQuestionTimeTotals
+   */
+  async getTimeTotals(examIds: string[]) {
+    const totals: Record<string, { totalSeconds: number; missingCount: number; questionCount: number }> = {};
+    await Promise.all(
+      examIds.map(async (examId) => {
+        const questions = await this.questionsModel.find({ examId }).lean();
+        let totalSeconds = 0;
+        let missingCount = 0;
+        for (const q of questions) {
+          if (q.timeLimitSeconds && q.timeLimitSeconds >= 5) {
+            totalSeconds += q.timeLimitSeconds;
+          } else {
+            missingCount++;
+          }
+        }
+        totals[examId] = { totalSeconds, missingCount, questionCount: questions.length };
+      }),
+    );
+    return totals;
+  }
+
+  /**
    * Create a new question — auto-sets order to current count for that section
    * Mirrors examService.saveExamQuestion (create branch)
    */
@@ -55,7 +79,9 @@ export class ExamQuestionsService {
 
     const payload: Record<string, any> = { ...data, order: existingCount };
     if (data.id) payload._id = data.id;
-    else if (data._id) payload._id = data._id;
+    delete payload.id;
+    delete payload._id;
+    if (data.id) payload._id = data.id;
 
     const question = await this.questionsModel.create(payload);
 

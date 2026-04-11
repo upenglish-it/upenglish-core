@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function ProtectedRoute({ children }) {
     const { user, loading, signOut, isExpired } = useAuth();
+    const location = useLocation();
 
     useEffect(() => {
         if (user && user.disabled) {
@@ -44,9 +45,12 @@ export default function ProtectedRoute({ children }) {
         return <Navigate to="/it" replace />;
     }
 
-    // Redirect admin/teacher to their panel by default unless they manually switched to App mode
+    // Allow teachers/admins to preview app pages without switching viewMode explicitly
+    const isPreview = location.state?.isPreview || new URLSearchParams(location.search).get('preview') === 'true';
+
+    // Redirect admin/teacher to their panel by default unless they manually switched to App mode or are previewing
     const viewMode = sessionStorage.getItem('viewMode');
-    if (viewMode !== 'app') {
+    if (viewMode !== 'app' && !isPreview) {
         if (user.role === 'admin') {
             return <Navigate to="/admin" replace />;
         }

@@ -310,6 +310,21 @@ div.ql-editor .ql-video {
     color: #1e293b !important;
 }
 
+/*
+ * Context preview headings inside ExamEditorPage should inherit the preview
+ * text color instead of falling back to the global theme heading color.
+ * This keeps teacher/admin preview consistent while still allowing inline
+ * heading colors saved from Quill to win when present.
+ */
+.section-preview-card .ql-editor h1,
+.section-preview-card .ql-editor h2,
+.section-preview-card .ql-editor h3,
+.section-preview-card .ql-editor h4,
+.section-preview-card .ql-editor h5,
+.section-preview-card .ql-editor h6 {
+    color: inherit;
+}
+
 /* Allow inline colors to override the !important above */
 .ql-editor span[style*="color"] {
     color: inherit;

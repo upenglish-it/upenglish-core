@@ -8,12 +8,66 @@ export class DashboardService {
     @Inject(getConnectionToken()) private readonly connection: mongoose.Connection
   ) {}
 
+  private normalizeEmail(value: any): string {
+    return String(value ?? '').trim().toLowerCase();
+  }
+
+  private normalizeAccountUser(account: any) {
+    const uid = String(account?.accountId || account?._id || '').trim();
+    const emailAddresses = Array.isArray(account?.emailAddresses) ? account.emailAddresses : [];
+    const email = this.normalizeEmail(account?.email || emailAddresses[0] || '');
+    const displayName = String(account?.displayName ?? '').trim()
+      || [account?.firstName, account?.lastName].filter(Boolean).join(' ').trim()
+      || email
+      || uid;
+
+    return {
+      uid,
+      id: uid,
+      email,
+      displayName,
+      role: account?.role === 'student' ? 'user' : account?.role,
+      status: account?.status ?? (account?.active === false ? 'pending' : 'approved'),
+      groupIds: Array.isArray(account?.groupIds) ? account.groupIds : [],
+      deleted: Boolean(account?.deleted),
+    };
+  }
+
+  private mergeUsers(accounts: any[]) {
+    const merged = new Map<string, any>();
+
+    for (const account of accounts || []) {
+      const normalized = this.normalizeAccountUser(account);
+      if (!normalized.uid) continue;
+      merged.set(normalized.uid, normalized);
+    }
+
+    return Array.from(merged.values());
+  }
+
   async getStats() {
     const db = this.connection.db;
-    
-    // Fetch base arrays
-    const usersListRaw = await db.collection<any>('sst-users').find({ deleted: { $ne: true } }).toArray();
-    const usersList = usersListRaw.map((u: any) => ({ uid: u._id.toString(), id: u._id.toString(), ...u }));
+
+    const accountsRaw = await db.collection<any>('accounts').find(
+      { deleted: { $ne: true } },
+      {
+        projection: {
+          _id: 1,
+          accountId: 1,
+          email: 1,
+          emailAddresses: 1,
+          displayName: 1,
+          firstName: 1,
+          lastName: 1,
+          role: 1,
+          status: 1,
+          active: 1,
+          groupIds: 1,
+          deleted: 1,
+        },
+      },
+    ).toArray();
+    const usersList = this.mergeUsers(accountsRaw);
     
     const approvedUsersCount = usersList.filter((u: any) => u.status === 'approved').length;
 
@@ -33,18 +87,64 @@ export class DashboardService {
         vocabGrammarAssignmentsSnap
     ] = await Promise.all([
         db.collection<any>('sst-topics').countDocuments({ deleted: { $ne: true } }),
-        db.collection<any>('sst-grammar-exercises').find({ deleted: { $ne: true } }).toArray(),
-        db.collection<any>('sst-grammar-submissions').find({ deleted: { $ne: true } }).toArray(),
-        db.collection<any>('sst-exam-submissions').find({ deleted: { $ne: true } }).toArray(),
-        db.collection<any>('sst-word-progress').find({ deleted: { $ne: true } }).toArray(),
-        db.collection<any>('sst-grammar-progress').find({ deleted: { $ne: true } }).toArray(),
+        db.collection<any>('sst-grammar-exercises').find(
+          { deleted: { $ne: true } },
+          { projection: { deleted: 1, teacherId: 1 } },
+        ).toArray(),
+        db.collection<any>('sst-grammar-submissions').find(
+          { deleted: { $ne: true } },
+          { projection: { deleted: 1, studentId: 1, createdAt: 1 } },
+        ).toArray(),
+        db.collection<any>('sst-exam-submissions').find(
+          { deleted: { $ne: true } },
+          {
+            projection: {
+              deleted: 1,
+              studentId: 1,
+              createdAt: 1,
+              teacherId: 1,
+              assignedBy: 1,
+              status: 1,
+              score: 1,
+              examId: 1,
+              'answers.errorCategory': 1,
+              'answers.isCorrect': 1,
+            },
+          },
+        ).toArray(),
+        db.collection<any>('sst-word-progress').find(
+          { deleted: { $ne: true } },
+          { projection: { deleted: 1, studentId: 1, userId: 1, createdAt: 1, lastStudied: 1, topicId: 1, ref_path: 1 } },
+        ).toArray(),
+        db.collection<any>('sst-grammar-progress').find(
+          { deleted: { $ne: true } },
+          { projection: { deleted: 1, studentId: 1, userId: 1, createdAt: 1, lastStudied: 1, exerciseId: 1, ref_path: 1 } },
+        ).toArray(),
         db.collection<any>('sst-exams').countDocuments({ createdByRole: 'admin', deleted: { $ne: true } }),
-        db.collection<any>('sst-teacher-topics').find({ deleted: { $ne: true } }).toArray(),
-        db.collection<any>('sst-exams').find({ createdByRole: 'teacher', deleted: { $ne: true } }).toArray(),
-        db.collection<any>('sst-user-groups').find({ deleted: { $ne: true } }).toArray(),
-        db.collection<any>('sst-exam-assignments').find({ deleted: { $ne: true } }).toArray(),
-        db.collection<any>('sst-assignments').find({ isGrammar: true, deleted: { $ne: true } }).toArray(),
-        db.collection<any>('sst-assignments').find({ deleted: { $ne: true } }).toArray(),
+        db.collection<any>('sst-teacher-topics').find(
+          { deleted: { $ne: true } },
+          { projection: { deleted: 1, teacherId: 1, createdBy: 1 } },
+        ).toArray(),
+        db.collection<any>('sst-exams').find(
+          { createdByRole: 'teacher', deleted: { $ne: true } },
+          { projection: { deleted: 1, createdBy: 1, createdByRole: 1 } },
+        ).toArray(),
+        db.collection<any>('sst-user-groups').find(
+          { deleted: { $ne: true } },
+          { projection: { deleted: 1, isHidden: 1, name: 1, teacherId: 1, createdBy: 1 } },
+        ).toArray(),
+        db.collection<any>('sst-exam-assignments').find(
+          { deleted: { $ne: true } },
+          { projection: { deleted: 1, targetType: 1, targetId: 1, examId: 1, createdAt: 1 } },
+        ).toArray(),
+        db.collection<any>('sst-assignments').find(
+          { isGrammar: true, deleted: { $ne: true } },
+          { projection: { deleted: 1, isGrammar: 1, groupId: 1, topicId: 1, createdAt: 1 } },
+        ).toArray(),
+        db.collection<any>('sst-assignments').find(
+          { deleted: { $ne: true } },
+          { projection: { deleted: 1, isGrammar: 1, groupId: 1, topicId: 1, createdAt: 1 } },
+        ).toArray(),
     ]);
 
     const teacherContentCount: Record<string, number> = {};

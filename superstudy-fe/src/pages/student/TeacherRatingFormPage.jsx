@@ -2,13 +2,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Star, Send, CheckCircle, ChevronRight, AlertCircle, Flame } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '../../config/firebase';
 import {
     RATING_CRITERIA,
     calculateTotalScore,
     getTeachersForStudent,
     getStudentRatingsForPeriod,
+    markRatingStreakBonusAwarded,
     submitRating,
     getActiveRatingPeriod,
 } from '../../services/teacherRatingService';
@@ -121,7 +120,7 @@ export default function TeacherRatingFormPage() {
         setSubmitting(true);
         setError('');
         try {
-            await submitRating({
+            const createdRatingId = await submitRating({
                 periodId: activePeriod.id,
                 teacherId: selectedTeacher.uid,
                 studentId: user.uid,
@@ -132,7 +131,7 @@ export default function TeacherRatingFormPage() {
             setSubmitted(true);
             // Update local state
             const submittedGroupId = selectedGroupId || selectedTeacher.ratingGroupId || '';
-            const updatedRatings = [...existingRatings, { teacherId: selectedTeacher.uid, groupId: submittedGroupId }];
+            const updatedRatings = [...existingRatings, { id: createdRatingId, teacherId: selectedTeacher.uid, groupId: submittedGroupId }];
             setExistingRatings(updatedRatings);
 
             // Check if all teachers in the SUBMITTED GROUP are now rated → award per-group streak bonus
@@ -141,12 +140,10 @@ export default function TeacherRatingFormPage() {
             const groupDone = teachersInGroup.length > 0 && teachersInGroup.every(t => updatedKeys.has(`${t.uid}_${t.ratingGroupId || ''}`));
             if (groupDone && activePeriod?.id) {
                 try {
-                    // Check if bonus already awarded for this group in this period
-                    const bonusFlagRef = doc(db, `users/${user.uid}/stats`, `rating_bonus_${activePeriod.id}_${submittedGroupId}`);
-                    const bonusFlagSnap = await getDoc(bonusFlagRef);
-                    if (!bonusFlagSnap.exists()) {
-                        // Tiered bonus: chia thời gian đánh giá thành 3 phần
-                        // 1/3 đầu → 3, 1/3 giữa → 2, 1/3 cuối → 1
+                    const bonusAlreadyAwarded = updatedRatings.some(r =>
+                        r.groupId === submittedGroupId && r.streakBonusAwarded
+                    );
+                    if (!bonusAlreadyAwarded) {
                         let baseDays = 1;
                         if (activePeriod.ratingStartDate && activePeriod.ratingEndDate) {
                             const start = new Date(activePeriod.ratingStartDate + 'T00:00:00');
@@ -158,9 +155,16 @@ export default function TeacherRatingFormPage() {
                             else if (progress <= 2 / 3) baseDays = 2;
                             else baseDays = 1;
                         }
-                        const bonus = baseDays; // per group, not multiplied
+                        const bonus = baseDays;
                         await awardStreakBonus(user.uid, bonus);
-                        await setDoc(bonusFlagRef, { awarded: true, bonus, baseDays, groupId: submittedGroupId, awardedAt: new Date().toISOString() });
+                        if (createdRatingId) {
+                            await markRatingStreakBonusAwarded(createdRatingId, bonus, baseDays);
+                        }
+                        setExistingRatings(prev => prev.map(r =>
+                            r.id === createdRatingId
+                                ? { ...r, streakBonusAwarded: true, streakBonus: bonus, streakBonusBaseDays: baseDays }
+                                : r
+                        ));
                         setStreakBonus(prev => prev + bonus);
                     }
                 } catch (bonusErr) {
@@ -590,3 +594,5 @@ export default function TeacherRatingFormPage() {
         </div>
     );
 }
+
+

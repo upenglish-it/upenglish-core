@@ -1,13 +1,14 @@
-const MiniGameDataTypesC = ['vocabulary', 'grammar', 'reading', 'listening', 'writing', 'speaking', 'custom'] as const;
+const MiniGameDataTypesC = ['vocabulary', 'grammar', 'reading', 'listening', 'writing', 'speaking', 'custom', 'both'] as const;
 const MiniGameStatusC = ['draft', 'pending_review', 'approved', 'rejected'] as const;
+const MiniGameDeliveryModesC = ['single_html', 'dist_bundle'] as const;
 
 import { SYSTEM_ID } from 'apps/common/src/utils';
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 import { Accounts, Properties, PropertiesBranches } from '../../../isms';
 
 export const SSTMiniGamesCN = 'sst-mini-games';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: SSTMiniGamesCN } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: SSTMiniGamesCN } })
 export class SSTMiniGames {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public readonly _id: string;
@@ -30,7 +31,13 @@ export class SSTMiniGames {
   @Prop({ type: Number, default: 0 })
   public readonly maxWords: number;
 
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: Number, default: 0 })
+  public readonly minItems: number;
+
+  @Prop({ type: Number, default: 0 })
+  public readonly maxItems: number;
+
+  @Prop({ type: [String], default: [] })
   public readonly tags: string[];
 
   @Prop({ type: String, default: '' })
@@ -41,6 +48,21 @@ export class SSTMiniGames {
 
   @Prop({ type: String, default: '' })
   public readonly gameUrl: string;
+
+  @Prop({ type: String, enum: MiniGameDeliveryModesC, default: 'single_html' })
+  public readonly deliveryMode: MiniGameDeliveryModeT;
+
+  @Prop({ type: String, default: '' })
+  public readonly launchUrl: string;
+
+  @Prop({ type: String, default: 'index.html' })
+  public readonly entryPath: string;
+
+  @Prop({ type: String, default: '' })
+  public readonly storagePrefix: string;
+
+  @Prop({ type: String, default: null })
+  public readonly bundleVersion: string | null;
 
   @Prop({ type: Date, default: null })
   public readonly submittedAt: Date;
@@ -75,3 +97,4 @@ export class SSTMiniGames {
 
 export type MiniGameDataTypesT = (typeof MiniGameDataTypesC)[number];
 export type MiniGameStatusT = (typeof MiniGameStatusC)[number];
+export type MiniGameDeliveryModeT = (typeof MiniGameDeliveryModesC)[number];

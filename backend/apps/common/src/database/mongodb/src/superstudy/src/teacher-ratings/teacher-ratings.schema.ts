@@ -1,13 +1,13 @@
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
 // NestJs Imports
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 // Schemas
 import { Accounts, Properties, PropertiesBranches } from '../../../isms';
 
 export const SSTTeacherRatingsCN = 'sst-teacher-ratings';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: SSTTeacherRatingsCN } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: SSTTeacherRatingsCN } })
 export class SSTTeacherRatings {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public readonly _id: string;
@@ -35,6 +35,18 @@ export class SSTTeacherRatings {
 
   @Prop({ type: Boolean, required: true })
   public readonly eliminated: boolean;
+
+  @Prop({ type: Boolean, default: false })
+  public readonly streakBonusAwarded?: boolean;
+
+  @Prop({ type: Number, default: 0 })
+  public readonly streakBonus?: number;
+
+  @Prop({ type: Number, default: 0 })
+  public readonly streakBonusBaseDays?: number;
+
+  @Prop({ type: String, default: '' })
+  public readonly streakBonusAwardedAt?: string;
 
   @Prop({ ref: () => Accounts, type: String, required: true })
   public readonly createdBy: Accounts;

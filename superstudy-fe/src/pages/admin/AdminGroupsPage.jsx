@@ -1,6 +1,4 @@
 import { useState, useEffect } from 'react';
-import { db } from '../../config/firebase';
-import { collection, getDocs } from 'firebase/firestore';
 import { getGroups, saveGroup, deleteGroup, getFolders, getGrammarFolders, addUserToGroup, removeUserFromGroup, searchIsmsAccounts, getGroupMembers } from '../../services/adminService';
 import { Link } from 'react-router-dom';
 import { Layers, Plus, Edit, Trash2, Tag, Save, X, FolderOpen, Users, Check, Search, UserPlus, UserMinus, User, Shield, Award, BarChart3, Mail, Briefcase, Eye, EyeOff, Gift } from 'lucide-react';
@@ -142,7 +140,10 @@ export default function AdminGroupsPage() {
     async function handleSubmit(e) {
         e.preventDefault();
 
-        let finalId = formData.id.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        const existingId = String(formData.id || '').trim();
+        let finalId = isEditing
+            ? existingId
+            : existingId.toLowerCase().replace(/[^a-z0-9]+/g, '-');
         if (!finalId && !isEditing) {
             finalId = formData.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
         }
@@ -153,7 +154,7 @@ export default function AdminGroupsPage() {
         }
 
         try {
-            await saveGroup({ ...formData, id: finalId });
+            await saveGroup({ ...formData, id: finalId }, { createOnly: !isEditing });
             setFormOpen(false);
             setAlertMessage({ type: 'success', text: isEditing ? "Cập nhật Nhóm thành công!" : "Tạo Nhóm thành công!" });
             loadData();
@@ -231,7 +232,10 @@ export default function AdminGroupsPage() {
                 <div className="admin-search-box">
                     <Search size={16} className="search-icon" />
                     <input
+                        id="admin-groups-search"
+                        name="adminGroupsSearch"
                         type="text"
+                        aria-label="Tìm tên hoặc ID nhóm"
                         placeholder="Tìm tên hoặc ID nhóm..."
                         value={groupSearchTerm}
                         onChange={e => setGroupSearchTerm(e.target.value)}
@@ -425,6 +429,8 @@ export default function AdminGroupsPage() {
                             <div className="admin-form-group">
                                 <label>Tên Nhóm <span className="text-danger">*</span></label>
                                 <input
+                                    id="admin-group-name"
+                                    name="adminGroupName"
                                     type="text"
                                     className="admin-form-input"
                                     placeholder="Ví dụ: Lớp IELTS nâng cao A"
@@ -436,6 +442,8 @@ export default function AdminGroupsPage() {
                             <div className="admin-form-group">
                                 <label>Mã ID (tùy chọn) <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 'normal' }}>- tự động tạo nếu để trống</span></label>
                                 <input
+                                    id="admin-group-id"
+                                    name="adminGroupId"
                                     type="text"
                                     className="admin-form-input"
                                     placeholder="ielts-nang-cao"
@@ -447,6 +455,8 @@ export default function AdminGroupsPage() {
                             <div className="admin-form-group">
                                 <label>Mô tả (tùy chọn)</label>
                                 <textarea
+                                    id="admin-group-description"
+                                    name="adminGroupDescription"
                                     className="admin-form-input admin-form-textarea"
                                     placeholder="Thông tin về nhóm này..."
                                     value={formData.description}
@@ -654,7 +664,10 @@ export default function AdminGroupsPage() {
                                             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                                                 <Search size={20} style={{ position: 'absolute', left: '16px', color: '#94a3b8', pointerEvents: 'none' }} />
                                                 <input
+                                                    id="admin-group-member-search"
+                                                    name="adminGroupMemberSearch"
                                                     type="text"
+                                                    aria-label="Tìm tên hoặc email thành viên"
                                                     style={{ width: '100%', padding: '14px 16px 14px 48px', background: '#fff', border: '2px solid #f1f5f9', borderRadius: '16px', fontSize: '1rem', fontWeight: 600, color: '#0f172a', transition: 'all 0.2s ease', outline: 'none' }}
                                                     placeholder="Tìm tên hoặc email..."
                                                     value={memberSearchQuery}

@@ -1,10 +1,10 @@
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 import { Courses } from '.';
 import { Properties } from '../properties';
 import { PropertiesBranches } from '../properties/branches';
 import { SYSTEM_ID } from 'apps/common/src/utils';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: 'courses-groups' } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: 'courses-groups' } })
 export class CoursesGroups {
   @Prop({
     type: String,

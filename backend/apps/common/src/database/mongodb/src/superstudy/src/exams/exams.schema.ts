@@ -4,13 +4,13 @@ export const TargetLevelsC = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] as const;
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
 // NestJs Imports
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 // Schemas
 import { Accounts, Properties, PropertiesBranches } from '../../../isms';
 
 export const SSTExamsCN = 'sst-exams';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: SSTExamsCN } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: SSTExamsCN } })
 export class SSTExams {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public readonly _id: string;
@@ -82,20 +82,20 @@ export class SSTExams {
   @Prop({ type: String, default: null })
   public readonly duplicatedFrom: string;
 
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly collaborators: string[];
 
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly collaboratorNames: string[];
 
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly collaboratorIds: string[];
 
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly collaboratorRoles: string[];
 
   /** Teacher IDs who have been individually shared this exam (admin sharing) */
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly sharedWithTeacherIds: string[];
 
   @Prop({ type: String, default: null })
@@ -107,7 +107,7 @@ export class SSTExams {
   @Prop({ type: String, default: null })
   public readonly proposedBy: string;
 
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly proposedByName: string[];
 
   @Prop({ type: String, default: null })

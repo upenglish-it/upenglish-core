@@ -9,9 +9,8 @@ import { getReviewCountsForUser } from '../../services/spacedRepetition';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAppSettings } from '../../contexts/AppSettingsContext';
 import { ArrowLeft, Users, FileText, CheckCircle, Clock, Calendar, BarChart3, Trash2, Plus, X, PieChart, Trophy, AlertTriangle, BookOpen, ChevronDown, ChevronRight, Check, UserCheck, User, List, Search, ClipboardList, GraduationCap, Send, RefreshCw, Info, CalendarClock, Flame, EyeOff, RotateCcw, Archive, Flag, Sparkles, FolderOpen } from 'lucide-react';
-import { Timestamp } from 'firebase/firestore';
 import { PieChart as RechartsPieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { getExams, getSharedExams, createExamAssignment, getExamAssignmentsForGroup, deleteExamAssignment, updateExamAssignmentDueDate, updateExamAssignmentStudentDeadline, getExamSubmissionsForAssignment, getExamSubmissionsForAssignments, overrideExamQuestionScore, releaseExamSubmissionResults, deleteExamSubmission, restoreExamAssignment, permanentlyDeleteExamAssignment, getDeletedExamAssignmentsForGroup, cleanupExpiredDeletedItems, gradeExamSubmission, getExam, getExamQuestions, getTeacherExamFolders, getExamFolders, getAllTeacherExamFolders } from '../../services/examService';
+import { getExams, getSharedExams, createExamAssignment, getExamAssignmentsForGroup, getExamAssignmentsForStudents, deleteExamAssignment, updateExamAssignmentDueDate, updateExamAssignmentStudentDeadline, getExamSubmissionsForAssignment, getExamSubmissionsForAssignments, overrideExamQuestionScore, releaseExamSubmissionResults, deleteExamSubmission, restoreExamAssignment, permanentlyDeleteExamAssignment, getDeletedExamAssignmentsForGroup, cleanupExpiredDeletedItems, gradeExamSubmission, getExam, getExamQuestions, getTeacherExamFolders, getExamFolders, getAllTeacherExamFolders } from '../../services/examService';
 
 import ConfirmModal from '../../components/common/ConfirmModal';
 import { getActiveReportPeriod, getGroupReportStatus, computePeriodStatus } from '../../services/reportPeriodService';
@@ -51,6 +50,24 @@ function getLatestDeadline(a) {
         });
     }
     return latest;
+}
+
+function getEntityId(entity) {
+    return entity?.uid || entity?.id || entity?._id || '';
+}
+
+function getTimeValue(value) {
+    if (!value) return 0;
+    if (typeof value?.toMillis === 'function') return value.toMillis();
+    if (typeof value?.toDate === 'function') return value.toDate().getTime();
+    if (typeof value?.seconds === 'number') return value.seconds * 1000;
+    const date = value instanceof Date ? value : new Date(value);
+    const time = date.getTime();
+    return Number.isNaN(time) ? 0 : time;
+}
+
+function getRecordTime(record) {
+    return getTimeValue(record?.updatedAt) || getTimeValue(record?.createdAt);
 }
 
 export default function TeacherGroupDetailPage() {
@@ -221,6 +238,13 @@ export default function TeacherGroupDetailPage() {
                 isAdminView ? getGrammarExercises() : (user?.uid ? getGrammarExercises(user.uid) : Promise.resolve([])),
                 isAdminView ? Promise.resolve([]) : getSharedAndPublicGrammarExercises(grp.grammarAccess || [])
             ]);
+            const normalizedStudents = stds
+                .map(student => ({
+                    ...student,
+                    uid: getEntityId(student),
+                    id: student.id || student._id || getEntityId(student),
+                }))
+                .filter(student => !!student.uid);
 
             const mergedGrammarMap = new Map();
             myGrammar.forEach(g => mergedGrammarMap.set(g.id, g));
@@ -245,7 +269,7 @@ export default function TeacherGroupDetailPage() {
             }
 
             setGroup(grp);
-            setStudents(stds);
+            setStudents(normalizedStudents);
             setAssignments(asgns);
             setTopics(tps);
             setFolders(flds);
@@ -277,13 +301,13 @@ export default function TeacherGroupDetailPage() {
             }
 
             // Fetch streak & last activity for all students
-            if (stds.length > 0) {
-                getStudentsStreakData(stds.map(s => s.uid))
+            if (normalizedStudents.length > 0) {
+                getStudentsStreakData(normalizedStudents.map(s => s.uid))
                     .then(setStudentsActivityData)
                     .catch(err => console.error('Error fetching students activity data:', err));
 
                 // Fetch review counts for all students (vocab + grammar)
-                Promise.all(stds.map(async (s) => {
+                Promise.all(normalizedStudents.map(async (s) => {
                     const [vocabData, grammarCount] = await Promise.all([
                         getReviewCountsForUser(s.uid),
                         getGrammarReviewCountForUser(s.uid)
@@ -321,30 +345,18 @@ export default function TeacherGroupDetailPage() {
             });
 
             // Also fetch individual exam assignments for all students in this group
-            let individualExamAssignments = [];
-            if (stds.length > 0) {
-                const studentIds = stds.map(s => s.uid);
-                for (let i = 0; i < studentIds.length; i += 10) {
-                    const batch = studentIds.slice(i, i + 10);
-                    try {
-                        const { getDocs: _getDocs, query: _query, collection: _coll, where: _where } = await import('firebase/firestore');
-                        const { db: _db } = await import('../../config/firebase');
-                        const q = _query(_coll(_db, 'exam_assignments'), _where('targetType', '==', 'individual'), _where('targetId', 'in', batch));
-                        const snap = await _getDocs(q);
-                        snap.forEach(d => individualExamAssignments.push({ id: d.id, ...d.data() }));
-                    } catch (err) {
-                        console.error('[ExamAssignments] Failed to load individual assignments:', err);
-                    }
-                }
-            }
+            const individualExamAssignments = normalizedStudents.length > 0
+                ? await getExamAssignmentsForStudents(normalizedStudents.map(student => student.uid)).catch(err => {
+                    console.error('[ExamAssignments] Failed to load individual assignments:', err);
+                    return [];
+                })
+                : [];
 
             // Merge group + individual, deduplicate by id, sort newest first
             const allExamAssignmentsMap = new Map();
             [...groupExamAssignments, ...individualExamAssignments].filter(a => !a.isDeleted).forEach(a => allExamAssignmentsMap.set(a.id, a));
             const allExamAssignments = Array.from(allExamAssignmentsMap.values()).sort((a, b) => {
-                const tA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-                const tB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
-                return tB - tA;
+                return getTimeValue(b.createdAt) - getTimeValue(a.createdAt);
             });
 
             const map = new Map();
@@ -356,7 +368,7 @@ export default function TeacherGroupDetailPage() {
             setExamAssignments(allExamAssignments);
 
             // Compute unreleased graded counts per assignment
-            const currentStudentUids = new Set(stds.map(s => s.uid));
+            const currentStudentUids = new Set(normalizedStudents.map(s => s.uid));
             if (allExamAssignments.length > 0) {
                 try {
                     const allAssignmentSubs = await getExamSubmissionsForAssignments(allExamAssignments.map(a => a.id));
@@ -370,9 +382,8 @@ export default function TeacherGroupDetailPage() {
                         if (!existing) {
                             latestSubMap.set(key, sub);
                         } else {
-                            // Keep the one with the later updatedAt/createdAt
-                            const existingTime = existing.updatedAt?.toMillis?.() || existing.createdAt?.toMillis?.() || 0;
-                            const newTime = sub.updatedAt?.toMillis?.() || sub.createdAt?.toMillis?.() || 0;
+                            const existingTime = getRecordTime(existing);
+                            const newTime = getRecordTime(sub);
                             if (newTime > existingTime) {
                                 latestSubMap.set(key, sub);
                             }
@@ -863,7 +874,7 @@ export default function TeacherGroupDetailPage() {
                 return;
             }
 
-            const dueDateTimestamp = Timestamp.fromDate(new Date(assignmentForm.dueDate));
+            const dueDateTimestamp = new Date(assignmentForm.dueDate).toISOString();
             const assignmentData = {
                 groupId,
                 topicId: cleanTopicId,
@@ -875,7 +886,7 @@ export default function TeacherGroupDetailPage() {
             };
 
             if (assignmentForm.scheduledStart && assignmentForm.scheduledStart !== 'pending') {
-                assignmentData.scheduledStart = Timestamp.fromDate(new Date(assignmentForm.scheduledStart));
+                assignmentData.scheduledStart = new Date(assignmentForm.scheduledStart).toISOString();
             }
 
             if (assignmentMode === 'individual') {
@@ -1073,7 +1084,7 @@ export default function TeacherGroupDetailPage() {
                 return;
             }
 
-            const dueDateTimestamp = Timestamp.fromDate(new Date(examAssignmentForm.dueDate));
+            const dueDateTimestamp = new Date(examAssignmentForm.dueDate).toISOString();
             const assignmentData = {
                 groupId,
                 examId: examAssignmentForm.examId,
@@ -1087,7 +1098,7 @@ export default function TeacherGroupDetailPage() {
             };
 
             if (examAssignmentForm.scheduledStart && examAssignmentForm.scheduledStart !== 'pending') {
-                assignmentData.scheduledStart = Timestamp.fromDate(new Date(examAssignmentForm.scheduledStart));
+                assignmentData.scheduledStart = new Date(examAssignmentForm.scheduledStart).toISOString();
             }
 
             // In individual mode, we might need a different handling if targetId is expected to be a single string.
@@ -1133,8 +1144,8 @@ export default function TeacherGroupDetailPage() {
                 if (!existing) {
                     latestMap.set(sub.studentId, sub);
                 } else {
-                    const existingTime = existing.updatedAt?.toMillis?.() || existing.createdAt?.toMillis?.() || 0;
-                    const newTime = sub.updatedAt?.toMillis?.() || sub.createdAt?.toMillis?.() || 0;
+                    const existingTime = getRecordTime(existing);
+                    const newTime = getRecordTime(sub);
                     if (newTime > existingTime) latestMap.set(sub.studentId, sub);
                 }
             });
@@ -1181,7 +1192,7 @@ export default function TeacherGroupDetailPage() {
         try {
             if (extendDeadlineMode === 'all') {
                 if (!extendDeadlineDate) { setExtendDeadlineLoading(false); return; }
-                const newTimestamp = Timestamp.fromDate(new Date(extendDeadlineDate));
+                const newTimestamp = new Date(extendDeadlineDate).toISOString();
                 if (extendDeadlineTarget.type === 'assignment') {
                     await updateAssignmentDueDate(extendDeadlineTarget.item.id, newTimestamp);
                     setAssignments(prev => prev.map(a =>
@@ -1198,7 +1209,7 @@ export default function TeacherGroupDetailPage() {
                 const entries = Object.entries(extendIndividualDates).filter(([, val]) => val);
                 if (entries.length === 0) { setExtendDeadlineLoading(false); return; }
                 const promises = entries.map(([studentId, dateStr]) => {
-                    const ts = Timestamp.fromDate(new Date(dateStr));
+                    const ts = new Date(dateStr).toISOString();
                     if (extendDeadlineTarget.type === 'assignment') {
                         return updateAssignmentStudentDeadline(extendDeadlineTarget.item.id, studentId, ts);
                     } else {
@@ -1209,7 +1220,7 @@ export default function TeacherGroupDetailPage() {
                 // Update local state with the new studentDeadlines
                 const newStudentDeadlines = { ...(extendDeadlineTarget.item.studentDeadlines || {}) };
                 entries.forEach(([studentId, dateStr]) => {
-                    newStudentDeadlines[studentId] = Timestamp.fromDate(new Date(dateStr));
+                    newStudentDeadlines[studentId] = new Date(dateStr).toISOString();
                 });
                 if (extendDeadlineTarget.type === 'assignment') {
                     setAssignments(prev => prev.map(a =>
@@ -1677,9 +1688,7 @@ export default function TeacherGroupDetailPage() {
                                     if (assignmentTypeFilter === 'grammar') return a.isGrammar;
                                     return true;
                                 }).sort((a, b) => {
-                                    const tA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-                                    const tB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
-                                    return tB - tA;
+            return getTimeValue(b.createdAt) - getTimeValue(a.createdAt);
                                 });
 
                                 const renderAssignmentCard = (a) => {
@@ -1883,9 +1892,7 @@ export default function TeacherGroupDetailPage() {
                                                                 {folderTopics.sort((a, b) => {
                                                                     const aAssign = assignments.find(x => x.topicId === a.id);
                                                                     const bAssign = assignments.find(x => x.topicId === b.id);
-                                                                    const aTime = aAssign?.createdAt?.toMillis ? aAssign.createdAt.toMillis() : 0;
-                                                                    const bTime = bAssign?.createdAt?.toMillis ? bAssign.createdAt.toMillis() : 0;
-                                                                    return bTime - aTime;
+                                                        return getTimeValue(bAssign?.createdAt) - getTimeValue(aAssign?.createdAt);
                                                                 }).map(topic => {
                                                                     const prog = studentTopicProgress[topic.id];
                                                                     if (!prog) return null;
@@ -1986,9 +1993,7 @@ export default function TeacherGroupDetailPage() {
                                             {Object.entries(studentGrammarProgress).sort(([aId], [bId]) => {
                                                 const aAssign = assignments.find(x => x.topicId === aId);
                                                 const bAssign = assignments.find(x => x.topicId === bId);
-                                                const aTime = aAssign?.createdAt?.toMillis ? aAssign.createdAt.toMillis() : 0;
-                                                const bTime = bAssign?.createdAt?.toMillis ? bAssign.createdAt.toMillis() : 0;
-                                                return bTime - aTime;
+                                                        return getTimeValue(bAssign?.createdAt) - getTimeValue(aAssign?.createdAt);
                                             }).map(([exId, prog]) => {
                                                 const exercise = grammarExercises.find(e => e.id === exId);
                                                 const exerciseName = exercise?.name || assignments.find(a => a.topicId === exId)?.topicName || 'Bài luyện kỹ năng';
@@ -2089,9 +2094,7 @@ export default function TeacherGroupDetailPage() {
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                             {[...examAssignments].sort((a, b) => {
-                                                const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-                                                const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
-                                                return bTime - aTime;
+                                        return getTimeValue(b.createdAt) - getTimeValue(a.createdAt);
                                             }).map(a => {
                                                 const sub = studentExamSubmissions.find(s => s.assignmentId === a.id);
                                                 const statusMap = {
@@ -2365,9 +2368,7 @@ export default function TeacherGroupDetailPage() {
 
                                                     // Sort items inside each folder by createdAt newest first
                                                     const sortItems = (arr) => arr.sort((a, b) => {
-                                                        const ta = a.createdAt?.seconds || a.createdAt?.toMillis?.() || 0;
-                                                        const tb = b.createdAt?.seconds || b.createdAt?.toMillis?.() || 0;
-                                                        return tb - ta;
+                                    return getTimeValue(b.createdAt) - getTimeValue(a.createdAt);
                                                     });
 
                                                     // Build ordered folder list
@@ -4344,9 +4345,7 @@ export default function TeacherGroupDetailPage() {
 
                                                         // Sort items inside each folder by createdAt newest first
                                                         const sortExams = (arr) => arr.sort((a, b) => {
-                                                            const ta = a.createdAt?.seconds || a.createdAt?.toMillis?.() || 0;
-                                                            const tb = b.createdAt?.seconds || b.createdAt?.toMillis?.() || 0;
-                                                            return tb - ta;
+                                    return getTimeValue(b.createdAt) - getTimeValue(a.createdAt);
                                                         });
 
                                                         // Build ordered folder list

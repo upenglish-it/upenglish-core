@@ -743,6 +743,8 @@ export default function TeacherTopicsPage() {
                 <div className="admin-search-box">
                     <Search size={16} className="search-icon" />
                     <input
+                        id="teacher-topics-search"
+                        name="teacherTopicsSearch"
                         type="text"
                         placeholder="Tìm kiếm bài học, folder..."
                         value={searchTerm}

@@ -132,6 +132,8 @@ export default function TeacherPromptsPage() {
                     <div style={{ position: 'relative', flex: 1, maxWidth: '360px' }}>
                         <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                         <input
+                            id="teacher-prompts-search"
+                            name="teacherPromptsSearch"
                             type="text"
                             placeholder="Tìm prompt..."
                             value={searchQuery}

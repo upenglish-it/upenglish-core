@@ -1,18 +1,25 @@
-import { db } from '../config/firebase';
-import { collection, doc, setDoc, updateDoc, getDoc, getDocs, query, where, serverTimestamp } from 'firebase/firestore';
+import { redFlagsService } from '../models';
 import { createNotification, queueEmail, buildEmailHtml } from './notificationService';
 
 /**
  * Violation types for red flags.
  */
 export const VIOLATION_TYPES = [
-    { value: 'late_homework', label: 'Không hoàn thành bài tập đúng hạn' },
-    { value: 'unexcused_absence', label: 'Vắng mặt không phép' },
-    { value: 'class_conduct', label: 'Không tuân thủ nội quy lớp' },
-    { value: 'cheating', label: 'Gian lận trong kiểm tra' },
-    { value: 'uncooperative', label: 'Thái độ thiếu hợp tác' },
-    { value: 'other', label: 'Khác' }
+    { value: 'late_homework', label: 'KhÃ´ng hoÃ n thÃ nh bÃ i táº­p Ä‘Ãºng háº¡n' },
+    { value: 'unexcused_absence', label: 'Váº¯ng máº·t khÃ´ng phÃ©p' },
+    { value: 'class_conduct', label: 'KhÃ´ng tuÃ¢n thá»§ ná»™i quy lá»›p' },
+    { value: 'cheating', label: 'Gian láº­n trong kiá»ƒm tra' },
+    { value: 'uncooperative', label: 'ThÃ¡i Ä‘á»™ thiáº¿u há»£p tÃ¡c' },
+    { value: 'other', label: 'KhÃ¡c' }
 ];
+
+function sortFlagsAscending(flags = []) {
+    return [...flags].sort((a, b) => {
+        const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return ta - tb;
+    });
+}
 
 /**
  * Get all red flags for a specific student.
@@ -21,32 +28,22 @@ export const VIOLATION_TYPES = [
  */
 export async function getRedFlagsForStudent(studentId) {
     if (!studentId) return [];
-    const q = query(
-        collection(db, 'red_flags'),
-        where('studentId', '==', studentId)
-    );
-    const snap = await getDocs(q);
-    const flags = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    // Sort client-side to avoid composite index
-    flags.sort((a, b) => {
-        const ta = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
-        const tb = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
-        return ta - tb;
-    });
-    return flags;
+    const result = await redFlagsService.findAll({ studentId });
+    const flags = Array.isArray(result) ? result : (result?.data || []);
+    return sortFlagsAscending(flags);
 }
 
 /**
  * Get all red flags for a specific student in a specific group.
- * Uses single-field query + client-side filter to avoid composite index.
  * @param {string} studentId
  * @param {string} groupId
  * @returns {Promise<Array>} sorted by createdAt ascending
  */
 export async function getRedFlagsForStudentInGroup(studentId, groupId) {
     if (!studentId || !groupId) return [];
-    const allFlags = await getRedFlagsForStudent(studentId);
-    return allFlags.filter(f => f.groupId === groupId);
+    const result = await redFlagsService.findAll({ studentId, groupId });
+    const flags = Array.isArray(result) ? result : (result?.data || []);
+    return sortFlagsAscending(flags);
 }
 
 /**
@@ -64,8 +61,8 @@ export async function getRedFlagsForStudentInGroupByDateRange(studentId, groupId
     const start = startDate ? new Date(startDate) : new Date(0);
     const end = endDate ? new Date(endDate + 'T23:59:59') : new Date();
     return flags.filter(f => {
-        const dt = f.createdAt?.toDate ? f.createdAt.toDate() : (f.createdAt ? new Date(f.createdAt) : null);
-        if (!dt) return false;
+        const dt = f.createdAt ? new Date(f.createdAt) : null;
+        if (!dt || Number.isNaN(dt.getTime())) return false;
         return dt >= start && dt <= end;
     });
 }
@@ -78,16 +75,12 @@ export async function getRedFlagsForStudentInGroupByDateRange(studentId, groupId
  */
 export async function getRedFlagCountsForGroup(groupId) {
     if (!groupId) return {};
-    const q = query(
-        collection(db, 'red_flags'),
-        where('groupId', '==', groupId)
-    );
-    const snap = await getDocs(q);
+    const result = await redFlagsService.findAll({ groupId });
+    const flags = Array.isArray(result) ? result : (result?.data || []);
     const counts = {};
-    snap.docs.forEach(d => {
-        const data = d.data();
-        if (data.removed) return; // skip removed flags
-        const sid = data.studentId;
+    flags.forEach(flag => {
+        if (flag.removed) return;
+        const sid = flag.studentId;
         counts[sid] = (counts[sid] || 0) + 1;
     });
     return counts;
@@ -105,15 +98,13 @@ export async function addRedFlag({
     violationType, violationLabel, note,
     flaggedBy, flaggedByName, flaggedByRole
 }) {
-    const roleLabels = { admin: 'Quản trị viên', teacher: 'Giáo viên', staff: 'Nhân viên' };
-    const roleLabel = roleLabels[flaggedByRole] || 'Giáo viên';
-    // Count existing ACTIVE flags for this student in this group
+    const roleLabels = { admin: 'Quáº£n trá»‹ viÃªn', teacher: 'GiÃ¡o viÃªn', staff: 'NhÃ¢n viÃªn' };
+    const roleLabel = roleLabels[flaggedByRole] || 'GiÃ¡o viÃªn';
     const existing = await getRedFlagsForStudentInGroup(studentId, groupId);
     const activeFlags = existing.filter(f => !f.removed);
     const flagNumber = activeFlags.length + 1;
 
-    const flagRef = doc(collection(db, 'red_flags'));
-    const flagData = {
+    const createdFlag = await redFlagsService.create({
         studentId,
         studentName: studentName || '',
         studentEmail: studentEmail || '',
@@ -124,63 +115,58 @@ export async function addRedFlag({
         note: note || '',
         flaggedBy,
         flaggedByName: flaggedByName || '',
+        flaggedByRole: flaggedByRole || '',
         flagNumber,
-        createdAt: serverTimestamp()
-    };
+    });
 
-    await setDoc(flagRef, flagData);
-
-    // Build email
     const isContractTerminated = flagNumber >= 3;
-    const flagEmoji = flagNumber === 1 ? '🟡' : flagNumber === 2 ? '🟠' : '🔴';
+    const flagEmoji = flagNumber === 1 ? 'ðŸŸ¡' : flagNumber === 2 ? 'ðŸŸ ' : 'ðŸ”´';
 
     const emailBody = `
-        <p>Bạn vừa nhận được <strong>cờ cảnh báo lần ${flagNumber}/3</strong> tại lớp <strong>${groupName}</strong>.</p>
-        <p><strong>Loại vi phạm:</strong> ${violationLabel}</p>
-        <p><strong>Ghi chú từ ${roleLabel} ${flaggedByName}:</strong></p>
+        <p>Báº¡n vá»«a nháº­n Ä‘Æ°á»£c <strong>cá» cáº£nh bÃ¡o láº§n ${flagNumber}/3</strong> táº¡i lá»›p <strong>${groupName}</strong>.</p>
+        <p><strong>Loáº¡i vi pháº¡m:</strong> ${violationLabel}</p>
+        <p><strong>Ghi chÃº tá»« ${roleLabel} ${flaggedByName}:</strong></p>
         <p style="font-style:italic;color:#64748b;padding-left:12px;border-left:3px solid #e2e8f0;">${note}</p>
         ${isContractTerminated ? `
         <div style="background:#fef2f2;padding:16px 20px;border-radius:12px;margin:16px 0;border-left:4px solid #dc2626;">
-            <p style="color:#dc2626;font-weight:700;margin:0;">⚠️ Hợp đồng đảm bảo chất lượng đầu ra đã bị chấm dứt.</p>
-            <p style="color:#64748b;margin:8px 0 0;font-size:0.9rem;">Bạn vẫn được tham gia lớp học cho đến khi hết khóa, nhưng không còn được đảm bảo chất lượng đầu ra.</p>
+            <p style="color:#dc2626;font-weight:700;margin:0;">âš ï¸ Há»£p Ä‘á»“ng Ä‘áº£m báº£o cháº¥t lÆ°á»£ng Ä‘áº§u ra Ä‘Ã£ bá»‹ cháº¥m dá»©t.</p>
+            <p style="color:#64748b;margin:8px 0 0;font-size:0.9rem;">Báº¡n váº«n Ä‘Æ°á»£c tham gia lá»›p há»c cho Ä‘áº¿n khi háº¿t khÃ³a, nhÆ°ng khÃ´ng cÃ²n Ä‘Æ°á»£c Ä‘áº£m báº£o cháº¥t lÆ°á»£ng Ä‘áº§u ra.</p>
         </div>` : `
-        <p style="color:#ca8a04;font-size:0.9rem;">Lưu ý: Khi nhận đủ 3 cờ cảnh báo, hợp đồng đảm bảo chất lượng đầu ra sẽ không còn hiệu lực. Hãy cố gắng cải thiện để đảm bảo quyền lợi học tập của bạn nhé!</p>
+        <p style="color:#ca8a04;font-size:0.9rem;">LÆ°u Ã½: Khi nháº­n Ä‘á»§ 3 cá» cáº£nh bÃ¡o, há»£p Ä‘á»“ng Ä‘áº£m báº£o cháº¥t lÆ°á»£ng Ä‘áº§u ra sáº½ khÃ´ng cÃ²n hiá»‡u lá»±c. HÃ£y cá»‘ gáº¯ng cáº£i thiá»‡n Ä‘á»ƒ Ä‘áº£m báº£o quyá»n lá»£i há»c táº­p cá»§a báº¡n nhÃ©!</p>
         `}
     `;
 
     const emailHtml = buildEmailHtml({
         emoji: flagEmoji,
-        heading: isContractTerminated ? 'Chấm dứt đảm bảo chất lượng đầu ra' : `Cờ cảnh báo lần ${flagNumber}/3`,
+        heading: isContractTerminated ? 'Cháº¥m dá»©t Ä‘áº£m báº£o cháº¥t lÆ°á»£ng Ä‘áº§u ra' : `Cá» cáº£nh bÃ¡o láº§n ${flagNumber}/3`,
         headingColor: isContractTerminated ? '#dc2626' : '#ca8a04',
         body: emailBody,
-        ctaText: 'Mở sUPerStudy', ctaLink: 'https://upenglishvietnam.com/preview/superstudy/dashboard?scrollTo=reports',
+        ctaText: 'Má»Ÿ sUPerStudy', ctaLink: 'https://upenglishvietnam.com/preview/superstudy/dashboard?scrollTo=reports',
         ctaColor: isContractTerminated ? '#dc2626' : '#ca8a04',
         ctaColor2: isContractTerminated ? '#ef4444' : '#f59e0b',
-        greeting: `Chào ${studentName} 👋`
+        greeting: `ChÃ o ${studentName} ðŸ‘‹`
     });
 
-    // Queue email
     if (studentEmail) {
         await queueEmail(studentEmail, {
             subject: isContractTerminated
-                ? `🔴 Chấm dứt đảm bảo CLĐR — ${groupName}`
-                : `${flagEmoji} Cờ cảnh báo lần ${flagNumber}/3 — ${groupName}`,
+                ? `ðŸ”´ Cháº¥m dá»©t Ä‘áº£m báº£o CLÄR â€” ${groupName}`
+                : `${flagEmoji} Cá» cáº£nh bÃ¡o láº§n ${flagNumber}/3 â€” ${groupName}`,
             html: emailHtml
         });
     }
 
-    // In-app notification
     await createNotification({
         userId: studentId,
         type: 'red_flag',
         title: isContractTerminated
-            ? `🔴 Chấm dứt đảm bảo CLĐR — ${groupName}`
-            : `${flagEmoji} Cờ cảnh báo lần ${flagNumber}/3`,
-        message: `Lý do: ${violationLabel}. ${note}`,
+            ? `ðŸ”´ Cháº¥m dá»©t Ä‘áº£m báº£o CLÄR â€” ${groupName}`
+            : `${flagEmoji} Cá» cáº£nh bÃ¡o láº§n ${flagNumber}/3`,
+        message: `LÃ½ do: ${violationLabel}. ${note}`,
         link: '/dashboard?scrollTo=reports'
     });
 
-    return { id: flagRef.id, ...flagData, flagNumber };
+    return { ...createdFlag, flagNumber };
 }
 
 /**
@@ -188,68 +174,60 @@ export async function addRedFlag({
  * Marks the flag as removed with reason and who removed it.
  */
 export async function removeRedFlag({ flagId, removedBy, removedByName, removedByRole, removeReason }) {
-    const roleLabels = { admin: 'Quản trị viên', teacher: 'Giáo viên', staff: 'Nhân viên' };
-    const roleLabel = roleLabels[removedByRole] || 'Giáo viên';
-    const flagRef = doc(db, 'red_flags', flagId);
+    const roleLabels = { admin: 'Quáº£n trá»‹ viÃªn', teacher: 'GiÃ¡o viÃªn', staff: 'NhÃ¢n viÃªn' };
+    const roleLabel = roleLabels[removedByRole] || 'GiÃ¡o viÃªn';
+    const flagData = await redFlagsService.findOne(flagId).catch(() => null);
 
-    // Read the flag data first for email
-    const flagSnap = await getDoc(flagRef);
-    let flagData = null;
-    if (flagSnap.exists()) flagData = flagSnap.data();
-
-    await updateDoc(flagRef, {
+    await redFlagsService.update(flagId, {
         removed: true,
-        removedAt: serverTimestamp(),
+        removedAt: new Date().toISOString(),
         removedBy: removedBy || '',
         removedByName: removedByName || '',
         removedByRole: removedByRole || '',
         removeReason: removeReason || ''
     });
 
-    // Renumber remaining active flags for this student+group
     if (flagData) {
         const allFlags = await getRedFlagsForStudentInGroup(flagData.studentId, flagData.groupId);
         const activeFlags = allFlags.filter(f => !f.removed && f.id !== flagId);
-        // activeFlags is already sorted by createdAt ascending from getRedFlagsForStudent
         for (let i = 0; i < activeFlags.length; i++) {
             const newNumber = i + 1;
             if (activeFlags[i].flagNumber !== newNumber) {
-                await updateDoc(doc(db, 'red_flags', activeFlags[i].id), { flagNumber: newNumber });
+                await redFlagsService.update(activeFlags[i].id, { flagNumber: newNumber });
             }
         }
     }
 
-    // Send email notification
     if (flagData && flagData.studentEmail) {
         const emailBody = `
-            <p>Một cờ cảnh báo của bạn tại lớp <strong>${flagData.groupName}</strong> đã được <strong>gỡ bỏ</strong>.</p>
-            <p><strong>Loại vi phạm đã gỡ:</strong> ${flagData.violationLabel}</p>
-            <p><strong>Gỡ bởi ${roleLabel} ${removedByName}</strong></p>
-            ${removeReason ? `<p><strong>Lý do:</strong> ${removeReason}</p>` : ''}
-            <p style="color:#10b981;font-size:0.9rem;">Hãy tiếp tục cố gắng để duy trì kết quả học tập tốt nhé! 💪</p>
+            <p>Má»™t cá» cáº£nh bÃ¡o cá»§a báº¡n táº¡i lá»›p <strong>${flagData.groupName}</strong> Ä‘Ã£ Ä‘Æ°á»£c <strong>gá»¡ bá»</strong>.</p>
+            <p><strong>Loáº¡i vi pháº¡m Ä‘Ã£ gá»¡:</strong> ${flagData.violationLabel}</p>
+            <p><strong>Gá»¡ bá»Ÿi ${roleLabel} ${removedByName}</strong></p>
+            ${removeReason ? `<p><strong>LÃ½ do:</strong> ${removeReason}</p>` : ''}
+            <p style="color:#10b981;font-size:0.9rem;">HÃ£y tiáº¿p tá»¥c cá»‘ gáº¯ng Ä‘á»ƒ duy trÃ¬ káº¿t quáº£ há»c táº­p tá»‘t nhÃ©! ðŸ’ª</p>
         `;
 
         const emailHtml = buildEmailHtml({
-            emoji: '✅',
-            heading: 'Cờ cảnh báo đã được gỡ',
+            emoji: 'âœ…',
+            heading: 'Cá» cáº£nh bÃ¡o Ä‘Ã£ Ä‘Æ°á»£c gá»¡',
             headingColor: '#10b981',
             body: emailBody,
-            ctaText: 'Mở sUPerStudy', ctaLink: 'https://upenglishvietnam.com/preview/superstudy/dashboard?scrollTo=reports',
+            ctaText: 'Má»Ÿ sUPerStudy', ctaLink: 'https://upenglishvietnam.com/preview/superstudy/dashboard?scrollTo=reports',
             ctaColor: '#10b981',
             ctaColor2: '#34d399',
-            greeting: `Chào ${flagData.studentName} 👋`
+            greeting: `ChÃ o ${flagData.studentName} ðŸ‘‹`
         });
 
         await queueEmail(flagData.studentEmail, {
-            subject: `✅ Cờ cảnh báo đã được gỡ — ${flagData.groupName}`,
+            subject: `âœ… Cá» cáº£nh bÃ¡o Ä‘Ã£ Ä‘Æ°á»£c gá»¡ â€” ${flagData.groupName}`,
             html: emailHtml
         });
 
         await createNotification({
             userId: flagData.studentId,
             type: 'red_flag_removed',
-            title: `✅ Cờ cảnh báo đã được gỡ — ${flagData.groupName}`,
-            message: `${roleLabel} ${removedByName} đã gỡ cờ: ${flagData.violationLabel}`,
+            title: `âœ… Cá» cáº£nh bÃ¡o Ä‘Ã£ Ä‘Æ°á»£c gá»¡ â€” ${flagData.groupName}`,
+            message: `${roleLabel} ${removedByName} Ä‘Ã£ gá»¡ cá»: ${flagData.violationLabel}`,
             link: '/dashboard?scrollTo=reports'
         });
     }

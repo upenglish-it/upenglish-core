@@ -5,12 +5,15 @@ import { saveGrammarExercise, deleteGrammarExercise, getGrammarExercises } from 
 import { getGrammarFolders, saveGrammarFolder, deleteGrammarFolder, getGroups, toggleResourcePublic, toggleTeacherVisible, getResourceSharedEntities, shareResourceToEmail, unshareResourceFromUser, shareResourceToGroup, unshareResourceFromGroup, updateGrammarFoldersOrder, transferOfficialToTeacher, shareResourceToTeacher, unshareResourceFromTeacher, getResourceSharedTeachers } from '../../services/adminService';
 import { createAssignment, getAssignmentsForTopic } from '../../services/teacherService';
 import { getPendingProposals, approveProposal, rejectProposal, findExistingOfficialCopy } from '../../services/contentProposalService';
+import { duplicateAdminGrammarExercise } from '../../services/duplicateService';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useAuth } from '../../contexts/AuthContext';
-import { BookOpen, Edit, Trash2, X, Plus, List, FolderOpen, GripVertical, Check, Share2, Globe, Users, Mail, UserPlus, Lock, Search, AlertTriangle, ChevronDown, ChevronRight, CheckCircle, XCircle, Landmark, Clock, Send, FileText, Filter, ArrowRightLeft, GraduationCap } from 'lucide-react';
+import { BookOpen, Edit, Trash2, X, Plus, List, FolderOpen, GripVertical, Check, Share2, Globe, Users, Mail, UserPlus, Lock, Search, AlertTriangle, ChevronDown, ChevronRight, CheckCircle, XCircle, Landmark, Clock, Send, FileText, Filter, ArrowRightLeft, GraduationCap, Copy } from 'lucide-react';
 import { convertGrammarToExam } from '../../services/conversionService';
 import CustomSelect from '../../components/common/CustomSelect';
 import EmailAutocomplete from '../../components/common/EmailAutocomplete';
+import { findFolderIdForItem, reorderIdsByVisibleSubset, toggleIdInList, syncItemFolderAssignment } from '../../utils/folderManagement';
+import { truncateText } from '../../utils/textDisplay';
 import '../../components/common/ShareModal.css';
 
 function CustomDropdown({ value, options, onChange, placeholder = "Chọn một mục" }) {
@@ -132,6 +135,8 @@ export default function AdminGrammarPage() {
     const [exerciseFormData, setExerciseFormData] = useState({ name: '', description: '', targetLevel: 'A1', targetAge: '10-15' });
     const [isEditingExercise, setIsEditingExercise] = useState(false);
     const [exerciseToDelete, setExerciseToDelete] = useState(null);
+    const [exerciseToDuplicate, setExerciseToDuplicate] = useState(null);
+    const [isDuplicating, setIsDuplicating] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
     // Conversion state
@@ -161,10 +166,14 @@ export default function AdminGrammarPage() {
     const [sharedTeachers, setSharedTeachers] = useState([]);
     const [isTeacherSharing, setIsTeacherSharing] = useState(false);
 
+    // Share modal tab (mobile)
+    const [adminShareTab, setAdminShareTab] = useState('internal');
+
     // Quick Assign States
     const [teacherManagedGroups, setTeacherManagedGroups] = useState([]);
     const [quickAssignGroupId, setQuickAssignGroupId] = useState('');
     const [quickAssignDueDate, setQuickAssignDueDate] = useState('');
+    const [quickAssignScheduledStart, setQuickAssignScheduledStart] = useState('');
     const [isQuickAssigning, setIsQuickAssigning] = useState(false);
     const [quickAssignSuccess, setQuickAssignSuccess] = useState('');
     const [existingAssignments, setExistingAssignments] = useState([]);
@@ -190,8 +199,8 @@ export default function AdminGrammarPage() {
         loadProposals();
     }, []);
 
-    async function loadData() {
-        setLoading(true);
+    async function loadData(silent = false) {
+        if (!silent) setLoading(true);
         try {
             const [exercisesData, foldersData] = await Promise.all([
                 getGrammarExercises(), // no teacherId = get all
@@ -242,15 +251,13 @@ export default function AdminGrammarPage() {
     }
 
     function openEditExerciseForm(exercise) {
-        // Find if this exercise is in any folder
-        const currentFolder = folders.find(f => (f.exerciseIds || []).includes(exercise.id));
         setExerciseFormData({
             ...exercise,
             targetLevel: exercise.targetLevel || 'A1',
             targetAge: exercise.targetAge || '10-15',
             icon: exercise.icon || '📝',
             color: exercise.color || '#3b82f6',
-            folderId: currentFolder ? currentFolder.id : ''
+            folderId: findFolderIdForItem(folders, exercise.id, 'exerciseIds')
         });
         setIsEditingExercise(true);
         setExerciseFormOpen(true);
@@ -267,34 +274,17 @@ export default function AdminGrammarPage() {
             // Admin-created exercises: no teacherId, they're "preset"
             const savedId = await saveGrammarExercise({ ...exerciseToSave });
             const finalExerciseId = exerciseToSave.id || savedId;
-
-            // Handle Folder Reassignment
-            const currentFolder = folders.find(f => (f.exerciseIds || []).includes(finalExerciseId));
-
-            if (currentFolder && currentFolder.id !== targetFolderId) {
-                // Remove from old folder
-                const updatedOldFolder = {
-                    ...currentFolder,
-                    exerciseIds: (currentFolder.exerciseIds || []).filter(eid => eid !== finalExerciseId)
-                };
-                await saveGrammarFolder(updatedOldFolder);
-            }
-
-            if (targetFolderId && (!currentFolder || currentFolder.id !== targetFolderId)) {
-                // Add to new folder
-                const targetFolder = folders.find(f => f.id === targetFolderId);
-                if (targetFolder) {
-                    const updatedNewFolder = {
-                        ...targetFolder,
-                        exerciseIds: Array.from(new Set([...(targetFolder.exerciseIds || []), finalExerciseId]))
-                    };
-                    await saveGrammarFolder(updatedNewFolder);
-                }
-            }
+            await syncItemFolderAssignment({
+                itemId: finalExerciseId,
+                targetFolderId,
+                folders,
+                itemIdsKey: 'exerciseIds',
+                saveFolder: saveGrammarFolder
+            });
 
             setExerciseFormOpen(false);
             setAlertMessage({ type: 'success', text: isEditingExercise ? "Cập nhật bài luyện thành công!" : "Tạo bài luyện mới thành công!" });
-            loadData();
+            loadData(true);
         } catch (error) {
             setAlertMessage({ type: 'error', text: "Lỗi lưu bài luyện: " + error.message });
         }
@@ -311,6 +301,21 @@ export default function AdminGrammarPage() {
             setAlertMessage({ type: 'error', text: "Lỗi xóa bài luyện: " + error.message });
         }
         setExerciseToDelete(null);
+    }
+
+    async function handleConfirmDuplicateExercise() {
+        if (!exerciseToDuplicate || isDuplicating) return;
+        setIsDuplicating(true);
+        try {
+            await duplicateAdminGrammarExercise(exerciseToDuplicate.id, user?.uid);
+            setAlertMessage({ type: 'success', text: `Đã nhân đôi bài học "${exerciseToDuplicate.name}" thành công!` });
+            await loadData(true);
+        } catch (error) {
+            setAlertMessage({ type: 'error', text: 'Lỗi nhân đôi bài học: ' + error.message });
+        } finally {
+            setIsDuplicating(false);
+            setExerciseToDuplicate(null);
+        }
     }
 
     async function handleConfirmConvert() {
@@ -358,7 +363,7 @@ export default function AdminGrammarPage() {
             await saveGrammarFolder({ ...folderFormData, id: finalFolderId });
             setFolderFormOpen(false);
             setAlertMessage({ type: 'success', text: isEditingFolder ? "Cập nhật folder thành công!" : "Thêm folder mới thành công!" });
-            loadData();
+            loadData(true);
         } catch (error) {
             setAlertMessage({ type: 'error', text: "Lỗi lưu folder: " + error.message });
         }
@@ -377,15 +382,7 @@ export default function AdminGrammarPage() {
     }
 
     function toggleExerciseInFolder(exerciseId) {
-        setFolderFormData(prev => {
-            const current = new Set(prev.exerciseIds || []);
-            if (current.has(exerciseId)) {
-                current.delete(exerciseId);
-            } else {
-                current.add(exerciseId);
-            }
-            return { ...prev, exerciseIds: Array.from(current) };
-        });
+        setFolderFormData(prev => ({ ...prev, exerciseIds: toggleIdInList(prev.exerciseIds, exerciseId) }));
     }
 
 
@@ -395,17 +392,23 @@ export default function AdminGrammarPage() {
         if (source.droppableId === destination.droppableId && source.index === destination.index) return;
 
         if (type === 'exercise') {
-            // Reorder exercises within a folder
             const folderId = source.droppableId.replace('folder-exercises-', '');
             const folder = folders.find(f => f.id === folderId);
             if (!folder) return;
-            const ids = Array.from(folder.exerciseIds || []);
-            const [movedId] = ids.splice(source.index, 1);
-            ids.splice(destination.index, 0, movedId);
+            const ids = reorderIdsByVisibleSubset({
+                allIds: folder.exerciseIds || [],
+                sourceIndex: source.index,
+                destinationIndex: destination.index,
+                searchTerm,
+                getItem: id => exercises.find(exercise => exercise.id === id),
+                matchesSearch: (exercise, term) =>
+                    (exercise.name || '').toLowerCase().includes(term) ||
+                    (exercise.description || '').toLowerCase().includes(term)
+            });
             setFolders(prev => prev.map(f => f.id === folderId ? { ...f, exerciseIds: ids } : f));
             try { await saveGrammarFolder({ ...folder, exerciseIds: ids }); } catch (error) {
                 setAlertMessage({ type: 'error', text: 'Lỗi sắp xếp bài luyện: ' + error.message });
-                loadData();
+                loadData(true);
             }
             return;
         }
@@ -419,7 +422,7 @@ export default function AdminGrammarPage() {
             await updateGrammarFoldersOrder(reordered);
         } catch (error) {
             setAlertMessage({ type: 'error', text: 'Lỗi sắp xếp folder: ' + error.message });
-            loadData();
+            loadData(true);
         }
     }
 
@@ -427,11 +430,13 @@ export default function AdminGrammarPage() {
     async function openShareModal(resource, type) {
         setResourceToShare({ ...resource, type });
         setShareModalOpen(true);
+        setAdminShareTab('internal');
         setLinkCopied(false);
         setIsSharing(true);
         setShareEmail('');
         setQuickAssignGroupId('');
         setQuickAssignDueDate('');
+        setQuickAssignScheduledStart('');
         setQuickAssignSuccess('');
         setTeacherShareEmail('');
         setSharedTeachers([]);
@@ -460,7 +465,7 @@ export default function AdminGrammarPage() {
         setQuickAssignSuccess('');
         try {
             const selectedGroup = teacherManagedGroups.find(g => g.id === quickAssignGroupId);
-            await createAssignment({
+            const assignPayload = {
                 topicId: resourceToShare.id,
                 topicName: resourceToShare.name,
                 groupId: quickAssignGroupId,
@@ -468,10 +473,15 @@ export default function AdminGrammarPage() {
                 dueDate: new Date(quickAssignDueDate).toISOString(),
                 teacherId: user.uid,
                 teacherName: user.displayName || user.email,
-            });
+            };
+            if (quickAssignScheduledStart && quickAssignScheduledStart !== 'pending') {
+                assignPayload.scheduledStart = new Date(quickAssignScheduledStart).toISOString();
+            }
+            await createAssignment(assignPayload);
             setQuickAssignSuccess(`Đã giao thành công cho lớp ${selectedGroup?.name}!`);
             setQuickAssignGroupId('');
             setQuickAssignDueDate('');
+            setQuickAssignScheduledStart('');
             const updated = await getAssignmentsForTopic(resourceToShare.id);
             setExistingAssignments(updated);
         } catch (err) {
@@ -487,7 +497,7 @@ export default function AdminGrammarPage() {
         try {
             await toggleResourcePublic(resourceToShare.type, resourceToShare.id, newPublicStatus);
             setResourceToShare({ ...resourceToShare, isPublic: newPublicStatus });
-            loadData();
+            loadData(true);
         } catch (err) {
             setAlertMessage({ type: 'error', text: 'Lỗi cập nhật public: ' + err.message });
         }
@@ -501,7 +511,7 @@ export default function AdminGrammarPage() {
             await toggleTeacherVisible(type, resource.id, newStatus);
             setResourceToShare(prev => prev ? { ...prev, teacherVisible: newStatus } : prev);
             setAlertMessage({ type: 'success', text: newStatus ? 'Đã bật cho GV sử dụng!' : 'Đã tắt quyền GV sử dụng.' });
-            loadData();
+            loadData(true);
         } catch (err) {
             setAlertMessage({ type: 'error', text: 'Lỗi cập nhật: ' + err.message });
         }
@@ -613,7 +623,7 @@ export default function AdminGrammarPage() {
                 await approveProposal(proposal.id, 'admin', 'create_new');
                 setAlertMessage({ type: 'success', text: 'Đã duyệt và tạo bài học chính thức thành công!' });
                 loadProposals();
-                loadData();
+                loadData(true);
                 setIsApproving(false);
             }
         } catch (err) {
@@ -632,7 +642,7 @@ export default function AdminGrammarPage() {
             setProposalToApprove(null);
             setExistingOfficialCopy(null);
             loadProposals();
-            loadData();
+            loadData(true);
         } catch (err) {
             setAlertMessage({ type: 'error', text: 'Lỗi duyệt: ' + err.message });
         }
@@ -659,7 +669,7 @@ export default function AdminGrammarPage() {
             setTransferModalOpen(false);
             setTransferTarget(null);
             setShareModalOpen(false);
-            loadData();
+            loadData(true);
         } catch (err) {
             setAlertMessage({ type: 'error', text: 'Lỗi chuyển quyền: ' + err.message });
         }
@@ -721,6 +731,8 @@ export default function AdminGrammarPage() {
                 <div className="admin-search-box" style={{ flex: 1, minWidth: '200px' }}>
                     <Search size={16} className="search-icon" />
                     <input
+                        id="admin-grammar-search"
+                        name="adminGrammarSearch"
                         type="text"
                         placeholder="Tìm tên bài luyện, tên folder..."
                         value={searchTerm}
@@ -746,13 +758,12 @@ export default function AdminGrammarPage() {
                 ) : (
                     <div className="admin-table-container">
                         <DragDropContext onDragEnd={handleFolderDragEnd}>
-                            <table className="admin-table">
+                            <table className="admin-table admin-content-table">
                                 <thead>
                                     <tr>
                                         <th style={{ width: '40px' }}></th>
                                         <th>Tên mục</th>
                                         <th>Thông tin</th>
-                                        <th style={{ textAlign: 'center' }}>Trạng thái</th>
                                         <th className="text-right">Hành động</th>
                                     </tr>
                                 </thead>
@@ -807,34 +818,33 @@ export default function AdminGrammarPage() {
                                                                         <div className="admin-topic-cell" style={{ width: '100%' }}>
                                                                             <div className="admin-topic-icon" style={{ background: '#fef9c3', width: '32px', height: '32px', fontSize: '0.9rem' }}>📁</div>
                                                                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '10px' }}>
-                                                                                    <div className="admin-topic-name" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem', fontWeight: 600 }}>
-                                                                                        {folder.name}
+                                                                                <div style={{ display: 'flex', alignItems: 'center', width: '100%', gap: '10px' }}>
+                                                                                    <div className="admin-topic-name" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem', fontWeight: 600, flexWrap: 'wrap' }}>
+                                                                                        {folder.isPublic && (
+                                                                                            <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                                                                                <Globe size={10} /> Public
+                                                                                            </span>
+                                                                                        )}
+                                                                                        {folder.teacherVisible && !folder.isPublic && (
+                                                                                            <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                                                                                <GraduationCap size={10} /> GV
+                                                                                            </span>
+                                                                                        )}
+                                                                                        <span>{folder.name}</span>
                                                                                         <div className="mobile-show" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: '#64748b' }}>
                                                                                             <BookOpen size={12} />
                                                                                             <span>{folderExercises.length}</span>
                                                                                         </div>
                                                                                     </div>
-                                                                                    {folder.isPublic && (
-                                                                                        <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                                                                            <Globe size={10} /> Public
-                                                                                        </span>
-                                                                                    )}
-                                                                                    {folder.teacherVisible && !folder.isPublic && (
-                                                                                        <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                                                                            <GraduationCap size={10} /> GV
-                                                                                        </span>
-                                                                                    )}
                                                                                 </div>
                                                                                 <div className="admin-text-muted" style={{ fontSize: '0.8rem', maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                                                    {folder.description || <span style={{ fontStyle: 'italic', color: '#cbd5e1' }}>Không có mô tả</span>}
+                                                                                    {folder.description ? truncateText(folder.description) : <span style={{ fontStyle: 'italic', color: '#cbd5e1' }}>Không có mô tả</span>}
                                                                                 </div>
                                                                             </div>
                                                                         </div>
                                                                     </td>
                                                                     <td className="mobile-hide"></td>
-                                                                    <td className="mobile-hide"></td>
-                                                                    <td className="text-right">
+                                                                    <td data-label="Hành động" className="text-right">
                                                                         <div className="admin-table-actions">
                                                                             <button
                                                                                 className="admin-action-btn mobile-show"
@@ -863,9 +873,9 @@ export default function AdminGrammarPage() {
                                                         </Draggable>
                                                         {isExpanded && (
                                                             folderExercises.length === 0 ? (
-                                                                <tr className="admin-empty-nested-row">
+                                                                <tr className="admin-empty-nested-row admin-content-empty-row">
                                                                     <td></td>
-                                                                    <td colSpan="4">
+                                                                    <td colSpan="3">
                                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', color: '#64748b' }}>
                                                                             <AlertTriangle size={14} style={{ opacity: 0.7 }} />
                                                                             <span style={{ fontSize: '0.85rem' }}>Folder này chưa có bài luyện nào. Bấm "Sửa Folder" để thêm.</span>
@@ -873,93 +883,90 @@ export default function AdminGrammarPage() {
                                                                     </td>
                                                                 </tr>
                                                             ) : (
-                                                                <Droppable droppableId={`folder-exercises-${folder.id}`} type="exercise">
-                                                                    {(exDropProvided) => (
-                                                                        <>
-                                                                        {folderExercises.map((exercise, exIdx) => (
-                                                                            <Draggable key={exercise.id} draggableId={`ex-${exercise.id}`} index={exIdx}>
-                                                                                {(exDragProv, exSnapshot) => (
-                                                                    <tr
-                                                                        ref={(node) => { exDragProv.innerRef(node); if (exIdx === 0) exDropProvided.innerRef(node); }}
-                                                                        {...exDragProv.draggableProps}
-                                                                        {...(exIdx === 0 ? exDropProvided.droppableProps : {})}
-                                                                        className="table-row-nested"
-                                                                        style={{
-                                                                            ...exDragProv.draggableProps.style,
-                                                                            backgroundColor: exSnapshot.isDragging ? '#f0f9ff' : undefined,
-                                                                            boxShadow: exSnapshot.isDragging ? '0 4px 12px rgba(0,0,0,0.08)' : undefined
-                                                                        }}
-                                                                    >
-                                                                        <td>
-                                                                            <div {...exDragProv.dragHandleProps} style={{ cursor: 'grab', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                                                <GripVertical size={14} />
-                                                                            </div>
-                                                                        </td>
-                                                                        <td data-label="Tên mục">
-                                                                            <div className="admin-topic-cell">
-                                                                                <div className="admin-topic-icon" style={{ background: `${exercise.color || '#3b82f6'}20`, width: '32px', height: '32px', fontSize: '0.9rem' }}>{exercise.icon || '📝'}</div>
-                                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
-                                                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '10px' }}>
-                                                                                        <div className="admin-topic-name" style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.9rem' }}>{exercise.name}</div>
-                                                                                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                                                                                            {exercise.isPublic && (
-                                                                                                <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0', whiteSpace: 'nowrap' }}>Public</span>
-                                                                                            )}
-                                                                                            {exercise.teacherVisible && !exercise.isPublic && (
-                                                                                                <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '2px' }}><GraduationCap size={9} /> GV</span>
-                                                                                            )}
-                                                                                        </div>
-                                                                                    </div>
-                                                                                    <div className="admin-text-muted" style={{ maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.75rem', marginBottom: '2px' }}>
-                                                                                        {exercise.description}
-                                                                                    </div>
-
-                                                                                    {/* Compact Info for Mobile */}
-                                                                                    <div className="mobile-show" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.7rem', color: '#64748b', flexWrap: 'wrap' }}>
-                                                                                        <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><List size={10} /> {exerciseQuestionCounts[exercise.id] || 0} câu</span>
-                                                                                        <span>&middot;</span>
-                                                                                        <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><Globe size={10} /> {exercise.targetLevel}</span>
-                                                                                        <span>&middot;</span>
-                                                                                        <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><Users size={10} /> {exercise.targetAge}t</span>
+                                                                <tr key={`${folder.id}-droppable`} className="admin-content-nested-wrapper">
+                                                                    <td colSpan="4" style={{ padding: 0 }}>
+                                                                        <table className="admin-content-nested-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                                                            <Droppable droppableId={`folder-exercises-${folder.id}`} type="exercise">
+                                                                                {(exDropProvided) => (
+                                                                                    <tbody ref={exDropProvided.innerRef} {...exDropProvided.droppableProps}>
+                                                                                        {folderExercises.map((exercise, exIdx) => (
+                                                                                            <Draggable key={exercise.id} draggableId={`ex-${exercise.id}`} index={exIdx}>
+                                                                                                {(exDragProv, exSnapshot) => (
+                                                                                                    <tr
+                                                                                                        ref={exDragProv.innerRef}
+                                                                                                        {...exDragProv.draggableProps}
+                                                                                                        className="table-row-nested"
+                                                                                                        style={{
+                                                                                                            ...exDragProv.draggableProps.style,
+                                                                                                            backgroundColor: exSnapshot.isDragging ? '#f0f9ff' : undefined,
+                                                                                                            boxShadow: exSnapshot.isDragging ? '0 4px 12px rgba(0,0,0,0.08)' : undefined
+                                                                                                        }}
+                                                                                                    >
+                                                                                                        <td>
+                                                                                                            <div {...exDragProv.dragHandleProps} style={{ cursor: 'grab', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                                                                <GripVertical size={14} />
+                                                                                                            </div>
+                                                                                                        </td>
+                                                                                                        <td data-label="Tên mục">
+                                                                                                            <div className="admin-topic-cell">
+                                                                                                                <div className="admin-topic-icon" style={{ background: `${exercise.color || '#3b82f6'}20`, width: '32px', height: '32px', fontSize: '0.9rem' }}>{exercise.icon || '📝'}</div>
+                                                                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
+                                                                                                                    <div style={{ display: 'flex', alignItems: 'center', width: '100%', gap: '10px' }}>
+                                                                                                                        <div className="admin-topic-name" style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                                                                                            {exercise.isPublic && (
+                                                                                                                                <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0', whiteSpace: 'nowrap' }}>Public</span>
+                                                                                                                            )}
+                                                                                                                            {exercise.teacherVisible && !exercise.isPublic && (
+                                                                                                                                <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '2px' }}><GraduationCap size={9} /> GV</span>
+                                                                                                                            )}
+                                                                                                                            <span>{exercise.name}</span>
+                                                                                                                        </div>
+                                                                                                                    </div>
+                                                                                                                    <div className="admin-text-muted" style={{ maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.75rem', marginBottom: '2px' }}>
+                                                                                                                        {truncateText(exercise.description)}
+                                                                                                                    </div>
+                                                                                                                </div>
+                                                                                                            </div>
+                                                                                                        <div className="mobile-show admin-mobile-card-meta" style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.7rem", color: "#64748b", flexWrap: "wrap" }}>
+                                                                                                            <span className="admin-mobile-meta-pill" style={{ display: "flex", alignItems: "center", gap: "3px" }}><List size={10} /> {exerciseQuestionCounts[exercise.id] || 0} câu</span>
+                                                                                                            <span className="admin-mobile-meta-pill" style={{ display: "flex", alignItems: "center", gap: "3px" }}><Globe size={10} /> {exercise.targetLevel}</span>
+                                                                                                            <span className="admin-mobile-meta-pill" style={{ display: "flex", alignItems: "center", gap: "3px" }}><Users size={10} /> {exercise.targetAge}t</span>
+                                                                                                        </div>
+                                                                                                        </td>
+                                                                            <td data-label="Thông tin" className="mobile-hide">
+                                                                                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                                                                    <span style={{ fontSize: "0.80rem", fontWeight: 600, color: "#475569" }}>
+                                                                                        {exerciseQuestionCounts[exercise.id] || 0} câu hỏi
+                                                                                    </span>
+                                                                                    <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                                                                        <span style={{ fontSize: "0.78rem", color: "#64748b", fontWeight: 500 }}>{exercise.targetLevel}</span>
+                                                                                        <span style={{ fontSize: "0.78rem", color: "#94a3b8", fontWeight: 500 }}>{exercise.targetAge} tuổi</span>
                                                                                     </div>
                                                                                 </div>
-                                                                            </div>
-                                                                        </td>
-                                                                        <td data-label="Thông tin" className="mobile-hide">
-                                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                                                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>
-                                                                                    {exerciseQuestionCounts[exercise.id] || 0} câu hỏi
-                                                                                </span>
-                                                                                <div style={{ display: 'flex', gap: '4px' }}>
-                                                                                    <span style={{ fontSize: '0.65rem', background: '#e0e7ff', color: '#4f46e5', padding: '1px 4px', borderRadius: '3px', fontWeight: 600 }}>{exercise.targetLevel}</span>
-                                                                                    <span style={{ fontSize: '0.65rem', background: '#fef3c7', color: '#d97706', padding: '1px 4px', borderRadius: '3px', fontWeight: 600 }}>{exercise.targetAge}t</span>
-                                                                                </div>
-                                                                            </div>
-                                                                        </td>
-                                                                        <td data-label="Trạng thái" className="mobile-hide" style={{ textAlign: 'center' }}>
-                                                                            <div style={{ display: 'flex', gap: '4px', flexDirection: 'column', alignItems: 'center' }}>
-                                                                                <span className="admin-status-badge active" style={{ fontSize: '0.6rem', padding: '1px 5px' }}>Đang hoạt động</span>
-                                                                            </div>
-                                                                        </td>
-                                                                        <td data-label="Thao tác" className="text-right">
-                                                                            <div className="admin-table-actions">
-                                                                                <Link to={`/admin/grammar/${exercise.id}`} className="admin-action-btn" title="Quản lý câu hỏi">
-                                                                                    <List size={14} />
-                                                                                </Link>
-                                                                                <button className="admin-action-btn" onClick={() => { setExerciseToConvert(exercise); setConvertExamType('homework'); setConvertTimingMode('exam'); }} title="Chuyển thành Bài tập/KT"><ArrowRightLeft size={14} /></button>
-                                                                                <button className="admin-action-btn" onClick={() => openShareModal(exercise, 'admin_grammar')}><Share2 size={14} /></button>
-                                                                                <button className="admin-action-btn" onClick={() => openEditExerciseForm(exercise)}><Edit size={14} /></button>
-                                                                                <button className="admin-action-btn danger" onClick={() => setExerciseToDelete(exercise)}><Trash2 size={14} /></button>
-                                                                            </div>
-                                                                        </td>
-                                                                    </tr>
+                                                                            </td>
+                                                                                                        <td data-label="Thao tác" className="text-right">
+                                                                                                            <div className="admin-table-actions">
+                                                                                                                <Link to={`/admin/grammar/${exercise.id}`} className="admin-action-btn" title="Quản lý câu hỏi">
+                                                                                                                    <List size={14} />
+                                                                                                                </Link>
+                                                                                                                <button className="admin-action-btn" onClick={() => setExerciseToDuplicate(exercise)} title="Nhân đôi bài học"><Copy size={14} /></button>
+                                                                                                                <button className="admin-action-btn" onClick={() => { setExerciseToConvert(exercise); setConvertExamType('homework'); setConvertTimingMode('exam'); }} title="Chuyển thành Bài tập/KT"><ArrowRightLeft size={14} /></button>
+                                                       <button className="admin-action-btn" onClick={() => openShareModal(exercise, 'admin_grammar')} title="Chia sẻ"><Share2 size={14} /></button>
+                                                       <button className="admin-action-btn" onClick={() => openEditExerciseForm(exercise)} title="Sửa"><Edit size={14} /></button>
+                                                       <button className="admin-action-btn danger" onClick={() => setExerciseToDelete(exercise)} title="Xóa"><Trash2 size={14} /></button>
+                                                                                                            </div>
+                                                                                                        </td>
+                                                                                                    </tr>
+                                                                                                )}
+                                                                                            </Draggable>
+                                                                                        ))}
+                                                                                        {exDropProvided.placeholder}
+                                                                                    </tbody>
                                                                                 )}
-                                                                            </Draggable>
-                                                                        ))}
-                                                                        {exDropProvided.placeholder}
-                                                                        </>
-                                                                    )}
-                                                                </Droppable>
+                                                                            </Droppable>
+                                                                        </table>
+                                                                    </td>
+                                                                </tr>
                                                             )
                                                         )}
                                                     </React.Fragment>
@@ -982,7 +989,7 @@ export default function AdminGrammarPage() {
                                             <>
                                                 <tr className="admin-unassigned-header">
                                                     <td></td>
-                                                    <td colSpan="4">
+                                                    <td colSpan="3">
                                                         <div className="admin-unassigned-label">
                                                             <AlertTriangle size={16} />
                                                             Bài luyện chưa phân loại ({unassignedExercises.length})
@@ -990,50 +997,48 @@ export default function AdminGrammarPage() {
                                                     </td>
                                                 </tr>
                                                 {unassignedExercises.map(exercise => (
-                                                    <tr key={exercise.id} className="table-row-nested" style={{ marginLeft: 0, width: '100%', borderLeft: '1px solid #e2e8f0' }}>
+                                                    <tr key={exercise.id} className="table-row-nested" style={{ marginLeft: 0, width: '100%' }}>
                                                         <td></td>
                                                         <td>
-                                                            <div className="admin-topic-cell">
+                                                            <div className="admin-topic-cell" style={{ paddingLeft: '25px' }}>
                                                                 <div className="admin-topic-icon" style={{ background: `${exercise.color || '#3b82f6'}20` }}>{exercise.icon || '📝'}</div>
                                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                                                    <div className="admin-topic-name" style={{ fontWeight: 600, color: '#1e293b' }}>{exercise.name}</div>
+                                                                    <div className="admin-topic-name" style={{ fontWeight: 600, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                                        {exercise.isPublic && (
+                                                                            <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0', whiteSpace: 'nowrap' }}>Public</span>
+                                                                        )}
+                                                                        {exercise.teacherVisible && !exercise.isPublic && (
+                                                                            <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '4px', background: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '2px' }}><GraduationCap size={9} /> GV</span>
+                                                                        )}
+                                                                        <span>{exercise.name}</span>
+                                                                    </div>
                                                                     <div className="admin-text-muted" style={{ maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.85rem' }}>
-                                                                        {exercise.description}
+                                                                        {truncateText(exercise.description)}
                                                                     </div>
                                                                 </div>
                                                             </div>
                                                         </td>
                                                         <td>
-                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>
+                                                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                                                <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#475569" }}>
                                                                     {exerciseQuestionCounts[exercise.id] || 0} câu hỏi
                                                                 </span>
-                                                                <div style={{ display: 'flex', gap: '4px' }}>
-                                                                    <span style={{ fontSize: '0.75rem', background: '#e0e7ff', color: '#4f46e5', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>{exercise.targetLevel}</span>
-                                                                    <span style={{ fontSize: '0.75rem', background: '#fef3c7', color: '#d97706', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>{exercise.targetAge} tuổi</span>
+                                                                <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                                                    <span style={{ fontSize: "0.78rem", color: "#64748b", fontWeight: 500 }}>{exercise.targetLevel}</span>
+                                                                    <span style={{ fontSize: "0.78rem", color: "#94a3b8", fontWeight: 500 }}>{exercise.targetAge} tuổi</span>
                                                                 </div>
                                                             </div>
                                                         </td>
-                                                        <td style={{ textAlign: 'center' }}>
-                                                            <div style={{ display: 'flex', gap: '6px', flexDirection: 'column', alignItems: 'center' }}>
-                                                                <span className="admin-status-badge active">Đang hoạt động</span>
-                                                                {exercise.isPublic && (
-                                                                    <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0' }}>Public</span>
-                                                                )}
-                                                                {exercise.teacherVisible && !exercise.isPublic && (
-                                                                    <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', display: 'inline-flex', alignItems: 'center', gap: '3px' }}><GraduationCap size={10} /> GV</span>
-                                                                )}
-                                                            </div>
-                                                        </td>
-                                                        <td className="text-right">
+                                                        <td data-label="Hành động" className="text-right">
                                                             <div className="admin-table-actions">
                                                                 <Link to={`/admin/grammar/${exercise.id}`} className="admin-action-btn" title="Quản lý câu hỏi">
                                                                     <List size={16} />
                                                                 </Link>
+                                                                <button className="admin-action-btn" onClick={() => setExerciseToDuplicate(exercise)} title="Nhân đôi bài học"><Copy size={16} /></button>
                                                                 <button className="admin-action-btn" onClick={() => { setExerciseToConvert(exercise); setConvertExamType('homework'); setConvertTimingMode('exam'); }} title="Chuyển thành Bài tập/KT"><ArrowRightLeft size={16} /></button>
-                                                                <button className="admin-action-btn" onClick={() => openShareModal(exercise, 'admin_grammar')}><Share2 size={16} /></button>
-                                                                <button className="admin-action-btn" onClick={() => openEditExerciseForm(exercise)}><Edit size={16} /></button>
-                                                                <button className="admin-action-btn danger" onClick={() => setExerciseToDelete(exercise)}><Trash2 size={16} /></button>
+                                                        <button className="admin-action-btn" onClick={() => openShareModal(exercise, 'admin_grammar')} title="Chia sẻ"><Share2 size={16} /></button>
+                                                        <button className="admin-action-btn" onClick={() => openEditExerciseForm(exercise)} title="Sửa"><Edit size={16} /></button>
+                                                        <button className="admin-action-btn danger" onClick={() => setExerciseToDelete(exercise)} title="Xóa"><Trash2 size={16} /></button>
                                                             </div>
                                                         </td>
                                                     </tr>
@@ -1266,6 +1271,25 @@ export default function AdminGrammarPage() {
                 </div>
             )}
 
+            {exerciseToDuplicate && (
+                <div className="admin-modal-overlay">
+                    <div className="admin-modal" style={{ maxWidth: '450px' }}>
+                        <h2 className="admin-modal-title" style={{ color: '#6366f1' }}><Copy size={24} /> Nhân đôi bài học</h2>
+                        <p className="admin-modal-desc">
+                            Bạn có muốn tạo một bản sao mới của bài học <strong>{exerciseToDuplicate.name}</strong>?
+                            <br /><br />
+                            Bản sao sẽ giữ nguyên câu hỏi và media nhưng không tự bật public hay chia sẻ cho giáo viên.
+                        </p>
+                        <div className="admin-modal-actions">
+                            <button className="admin-btn admin-btn-secondary" onClick={() => setExerciseToDuplicate(null)} disabled={isDuplicating}>Hủy</button>
+                            <button className="admin-btn admin-btn-primary" onClick={handleConfirmDuplicateExercise} disabled={isDuplicating}>
+                                {isDuplicating ? 'Đang nhân đôi...' : 'Xác nhận nhân đôi'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* --- FOLDER MODALS --- */}
             {folderFormOpen && (
                 <div className="teacher-modal-overlay">
@@ -1379,7 +1403,7 @@ export default function AdminGrammarPage() {
             {/* --- SHARE MODAL --- */}
             {shareModalOpen && resourceToShare && (
                 <div className="teacher-modal-overlay">
-                    <div className="teacher-modal wide" style={{ maxWidth: '600px', overflow: 'auto' }}>
+                    <div className="teacher-modal wide admin-share-modal">
                         <div style={{ position: 'sticky', top: '0px', zIndex: 100, display: 'flex', justifyContent: 'flex-end', height: 0, overflow: 'visible', pointerEvents: 'none' }}>
                             <button type="button" className="teacher-modal-close" onClick={() => setShareModalOpen(false)} style={{ pointerEvents: 'auto', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, background: 'rgba(241, 245, 249, 0.95)', backdropFilter: 'blur(4px)', border: 'none', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                                 <X size={20} />
@@ -1399,6 +1423,8 @@ export default function AdminGrammarPage() {
                             {/* Copy Link Section */}
                             <div style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                                 <input
+                                    id="admin-grammar-share-link"
+                                    name="adminGrammarShareLink"
                                     type="text"
                                     readOnly
                                     value={`${window.location.origin}/preview/superstudy?shareId=${resourceToShare.id}&shareType=${resourceToShare.type === 'grammar_folder' ? 'admin_grammar_folder' : 'admin_grammar'}`}
@@ -1470,7 +1496,7 @@ export default function AdminGrammarPage() {
                                             </div>
                                             <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><UserPlus size={14} /> Chia sẻ cho GV cụ thể</div>
                                             <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-                                                <EmailAutocomplete value={teacherShareEmail} onChange={setTeacherShareEmail} onSelect={(email) => handleAddTeacherShare(email)} placeholder="Email giáo viên..." roleFilter="teacher" />
+                                                <EmailAutocomplete inputId="admin-grammar-teacher-share-email" inputName="adminGrammarTeacherShareEmail" value={teacherShareEmail} onChange={setTeacherShareEmail} onSelect={(email) => handleAddTeacherShare(email)} placeholder="Email giáo viên..." roleFilter="teacher" />
                                                 <button onClick={() => handleAddTeacherShare(teacherShareEmail)} disabled={isTeacherSharing || !teacherShareEmail} style={{ flexShrink: 0, padding: '8px 12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', cursor: isTeacherSharing ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>Thêm</button>
                                             </div>
                                             {sharedTeachers.length > 0 && (
@@ -1496,7 +1522,7 @@ export default function AdminGrammarPage() {
                                                 </div>
                                                 <p style={{ fontSize: '0.75rem', color: '#7c3aed', margin: '0 0 8px 0' }}>Nội dung sẽ mất tag "Chính thức" và thuộc về giáo viên.</p>
                                                 <div style={{ display: 'flex', gap: '8px' }}>
-                                                    <EmailAutocomplete value={transferEmail} onChange={setTransferEmail} onSelect={(email) => { const collName = resourceToShare.type === 'grammar_folder' ? 'grammar_folders' : 'grammar_exercises'; handleConfirmTransfer(email, collName, resourceToShare.id, resourceToShare.name || resourceToShare.title); }} placeholder="Email giáo viên nhận..." roleFilter="teacher" />
+                                                    <EmailAutocomplete inputId="admin-grammar-transfer-email" inputName="adminGrammarTransferEmail" value={transferEmail} onChange={setTransferEmail} onSelect={(email) => { const collName = resourceToShare.type === 'grammar_folder' ? 'grammar_folders' : 'grammar_exercises'; handleConfirmTransfer(email, collName, resourceToShare.id, resourceToShare.name || resourceToShare.title); }} placeholder="Email giáo viên nhận..." roleFilter="teacher" />
                                                     <button onClick={() => { const collName = resourceToShare.type === 'grammar_folder' ? 'grammar_folders' : 'grammar_exercises'; handleConfirmTransfer(transferEmail, collName, resourceToShare.id, resourceToShare.name || resourceToShare.title); }} disabled={isTransferring || !transferEmail.trim()} style={{ flexShrink: 0, padding: '8px 14px', background: '#8b5cf6', color: '#fff', border: 'none', borderRadius: '6px', cursor: (isTransferring || !transferEmail.trim()) ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: '0.82rem', opacity: (isTransferring || !transferEmail.trim()) ? 0.5 : 1 }}>
                                                         {isTransferring ? 'Đang chuyển...' : 'Chuyển'}
                                                     </button>
@@ -1521,7 +1547,7 @@ export default function AdminGrammarPage() {
                                                         {allGroups.length === 0 ? <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: 0 }}>Chưa có nhóm nào.</p> : null}
                                                         {allGroups.map(g => (
                                                             <label key={g.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '0.85rem', color: '#475569', cursor: 'pointer', background: '#f8fafc', padding: '8px', borderRadius: '6px' }}>
-                                                                <input type="checkbox" checked={shareGroups.includes(g.id)} disabled={isSharing} onChange={() => handleToggleGroupShare(g.id)} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
+                                                            <input id={`admin-grammar-share-group-${g.id}`} name={`adminGrammarShareGroup-${g.id}`} type="checkbox" checked={shareGroups.includes(g.id)} disabled={isSharing} onChange={() => handleToggleGroupShare(g.id)} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
                                                                 <span style={{ flex: 1 }}>{g.name}</span>
                                                             </label>
                                                         ))}
@@ -1530,7 +1556,7 @@ export default function AdminGrammarPage() {
                                                 <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
                                                     <h4 style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', fontWeight: 600, color: '#334155', margin: '0 0 12px 0' }}><Mail size={16} /> Chia sẻ cá nhân</h4>
                                                     <form onSubmit={handleAddShareEmail} style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-                                                        <EmailAutocomplete value={shareEmail} onChange={setShareEmail} onSubmit={(email) => handleAddShareEmail(email)} disabled={isSharing} roleFilter="student" />
+                                                    <EmailAutocomplete inputId="admin-grammar-student-share-email" inputName="adminGrammarStudentShareEmail" value={shareEmail} onChange={setShareEmail} onSubmit={(email) => handleAddShareEmail(email)} disabled={isSharing} roleFilter="student" />
                                                         <button type="submit" disabled={isSharing} style={{ flexShrink: 0, padding: '8px 12px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: '6px', cursor: isSharing ? 'not-allowed' : 'pointer' }}><UserPlus size={16} /></button>
                                                     </form>
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '150px', overflowY: 'auto' }}>
@@ -1568,7 +1594,7 @@ export default function AdminGrammarPage() {
                                                             <CustomSelect value={quickAssignGroupId} onChange={v => setQuickAssignGroupId(v)} placeholder="-- Chọn lớp --" options={teacherManagedGroups.map(g => ({ value: g.id, label: g.name, icon: '🏫' }))} style={{ margin: 0 }} />
                                                         </div>
                                                         <div style={{ flex: '1 1 140px', minWidth: 0 }}>
-                                                            <input type="datetime-local" value={quickAssignDueDate} onChange={e => setQuickAssignDueDate(e.target.value)} style={{ width: '100%', padding: '6px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.88rem', color: '#1e293b', minHeight: '38px', boxSizing: 'border-box' }} />
+                                                            <input id="admin-grammar-quick-assign-due-date" name="adminGrammarQuickAssignDueDate" type="datetime-local" value={quickAssignDueDate} onChange={e => setQuickAssignDueDate(e.target.value)} style={{ width: '100%', padding: '6px 12px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.88rem', color: '#1e293b', minHeight: '38px', boxSizing: 'border-box' }} />
                                                         </div>
                                                     </div>
                                                     <div>
@@ -1579,7 +1605,7 @@ export default function AdminGrammarPage() {
                                                         </div>
                                                         {quickAssignScheduledStart && (
                                                             <div style={{ marginTop: '6px' }}>
-                                                                <input type="datetime-local" value={quickAssignScheduledStart === 'pending' ? '' : quickAssignScheduledStart} onChange={e => setQuickAssignScheduledStart(e.target.value)} style={{ width: '100%', padding: '6px 12px', borderRadius: '8px', border: '1.5px solid #f59e0b', fontSize: '0.85rem', color: '#1e293b', background: '#fffbeb', boxSizing: 'border-box' }} />
+                                                                <input id="admin-grammar-quick-assign-start" name="adminGrammarQuickAssignStart" type="datetime-local" value={quickAssignScheduledStart === 'pending' ? '' : quickAssignScheduledStart} onChange={e => setQuickAssignScheduledStart(e.target.value)} style={{ width: '100%', padding: '6px 12px', borderRadius: '8px', border: '1.5px solid #f59e0b', fontSize: '0.85rem', color: '#1e293b', background: '#fffbeb', boxSizing: 'border-box' }} />
                                                                 {quickAssignScheduledStart && quickAssignScheduledStart !== 'pending' && quickAssignDueDate && new Date(quickAssignScheduledStart) >= new Date(quickAssignDueDate) && (
                                                                     <p style={{ color: '#ef4444', fontSize: '0.75rem', margin: '4px 0 0', fontWeight: 600 }}>⚠ Ngày bắt đầu phải trước hạn nộp!</p>
                                                                 )}

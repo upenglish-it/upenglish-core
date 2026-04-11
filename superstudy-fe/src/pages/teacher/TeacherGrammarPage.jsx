@@ -752,6 +752,8 @@ export default function TeacherGrammarPage() {
                 <div className="admin-search-box">
                     <Search size={16} className="search-icon" />
                     <input
+                        id="teacher-grammar-search"
+                        name="teacherGrammarSearch"
                         type="text"
                         placeholder="Tìm kiếm bài học Kỹ năng, folder..."
                         value={searchTerm}

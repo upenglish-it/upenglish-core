@@ -1,13 +1,13 @@
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
 // NestJs Imports
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 // Schemas
 import { Accounts, Properties, PropertiesBranches } from '../../../isms';
 
 export const SSTAssignmentsCN = 'sst-assignments';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: SSTAssignmentsCN } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: SSTAssignmentsCN } })
 export class SSTAssignments {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public readonly _id: string;
@@ -40,7 +40,7 @@ export class SSTAssignments {
   public readonly studentDeadlines: Record<string, any>;
 
   /** Restrict to specific students (empty array = whole class) */
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly assignedStudentIds: string[];
 
   /** Scheduled release date (null = publish immediately) */

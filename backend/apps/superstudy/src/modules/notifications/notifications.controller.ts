@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Patch,
+  Controller, Get, Post, Patch, Delete,
   Param, Query, Body, HttpCode, HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -35,6 +35,13 @@ export class NotificationsController {
   @HttpCode(HttpStatus.OK)
   markAllRead(@Body() body: { userId: string }) {
     return this.notificationsService.markAllRead(body.userId);
+  }
+
+  @ApiOperation({ summary: 'Delete all notifications for a user' })
+  @Delete('clear-all')
+  @HttpCode(HttpStatus.OK)
+  clearAll(@Query('userId') userId: string) {
+    return this.notificationsService.clearAll(userId);
   }
 
   @ApiOperation({ summary: 'Get count of unread notifications for a user' })

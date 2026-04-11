@@ -11,6 +11,27 @@ import { ExamQuestionsService } from './exam-questions.service';
 export class ExamQuestionsController {
   constructor(private readonly examQuestionsService: ExamQuestionsService) {}
 
+  @ApiOperation({ summary: 'Get question counts per exam (comma-separated examIds)' })
+  @Get('counts')
+  getCounts(@Query('examIds') examIds: string) {
+    const ids = examIds?.split(',').filter(Boolean) || [];
+    return this.examQuestionsService.getCounts(ids);
+  }
+
+  @ApiOperation({ summary: 'Get time totals per exam (comma-separated examIds)' })
+  @Get('time-totals')
+  getTimeTotals(@Query('examIds') examIds: string) {
+    const ids = examIds?.split(',').filter(Boolean) || [];
+    return this.examQuestionsService.getTimeTotals(ids);
+  }
+
+  @ApiOperation({ summary: 'Bulk reorder questions (array of { id, order })' })
+  @Patch('order/batch')
+  @HttpCode(HttpStatus.OK)
+  reorder(@Body() body: Array<{ id: string; order: number }>) {
+    return this.examQuestionsService.reorder(body);
+  }
+
   @ApiOperation({ summary: 'List questions for an exam (sorted by order). Optional sectionId filter.' })
   @Get()
   findAll(
@@ -24,13 +45,6 @@ export class ExamQuestionsController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.examQuestionsService.findOne(id);
-  }
-
-  @ApiOperation({ summary: 'Get question counts per exam (comma-separated examIds)' })
-  @Get('counts')
-  getCounts(@Query('examIds') examIds: string) {
-    const ids = examIds?.split(',').filter(Boolean) || [];
-    return this.examQuestionsService.getCounts(ids);
   }
 
   @ApiOperation({ summary: 'Create a new exam question (auto-assigns order)' })
@@ -49,12 +63,5 @@ export class ExamQuestionsController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.examQuestionsService.remove(id);
-  }
-
-  @ApiOperation({ summary: 'Bulk reorder questions (array of { id, order })' })
-  @Patch('order/batch')
-  @HttpCode(HttpStatus.OK)
-  reorder(@Body() body: Array<{ id: string; order: number }>) {
-    return this.examQuestionsService.reorder(body);
   }
 }

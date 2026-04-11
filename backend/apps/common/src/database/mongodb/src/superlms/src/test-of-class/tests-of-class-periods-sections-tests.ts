@@ -1,10 +1,10 @@
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 import { Accounts, Properties, PropertiesBranches } from '../../../isms';
 import { SYSTEM_ID } from 'apps/common/src/utils';
 import { IELTSTasks } from '../tasks';
 
 export const IELTSTestsOfClassPeriodsSectionsTestsCN = 'ielts-tests-of-class-periods-sections-tests';
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: IELTSTestsOfClassPeriodsSectionsTestsCN } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: IELTSTestsOfClassPeriodsSectionsTestsCN } })
 export class IELTSTestsOfClassPeriodsSectionsTests {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public _id: string;

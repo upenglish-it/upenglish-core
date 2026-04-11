@@ -32,6 +32,14 @@ export const topicsService = {
   softDelete: (id) =>
     api.delete(`${BASE}/${id}`),
 
+  /** Restore a soft-deleted topic */
+  restore: (id) =>
+    api.patch(`${BASE}/${id}/restore`, {}),
+
+  /** List all soft-deleted topics */
+  findDeleted: () =>
+    api.get(`${BASE}/deleted`),
+
   /** Permanently delete a topic */
   permanentDelete: (id) =>
     api.delete(`${BASE}/${id}/permanent`),

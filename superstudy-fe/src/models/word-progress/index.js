@@ -39,4 +39,8 @@ export const wordProgressService = {
   /** Reset all progress for a topic (for a user) */
   reset: (userId, topicId) =>
     api.post(`${BASE}/reset`, { userId, topicId }),
+
+  /** Delete a single progress record by user/topic/word */
+  removeOne: (userId, topicId, wordId) =>
+    api.delete(`${BASE}/word?userId=${encodeURIComponent(userId)}&topicId=${encodeURIComponent(topicId)}&wordId=${encodeURIComponent(wordId)}`),
 };

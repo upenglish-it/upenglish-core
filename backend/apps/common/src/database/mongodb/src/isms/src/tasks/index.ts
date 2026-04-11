@@ -1,10 +1,10 @@
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 import { Accounts } from '../accounts';
 import { Properties } from '../properties';
 import { PropertiesBranches } from '../properties/branches';
 import { SYSTEM_ID } from 'apps/common/src/utils';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: 'tasks' } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: 'tasks' } })
 export class Tasks {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public _id: string;
