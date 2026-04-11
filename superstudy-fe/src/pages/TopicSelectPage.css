@@ -1,5 +1,6 @@
 .topic-page {
     min-height: 100vh;
+    min-height: 100dvh;
 }
 
 .topic-main {
@@ -582,6 +583,10 @@
 @media (max-width: 768px) {
     .topic-grid {
         gap: var(--space-sm);
+    }
+
+    .topic-main {
+        padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px));
     }
 
     .topic-title-section h1 {

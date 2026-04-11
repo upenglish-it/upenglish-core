@@ -642,6 +642,8 @@ export default function TeacherExamsPage() {
                 <div className="admin-search-box">
                     <Search size={16} className="search-icon" />
                     <input
+                        id="teacher-exams-search"
+                        name="teacherExamsSearch"
                         type="text"
                         placeholder="Tìm bài tập và kiểm tra, folder..."
                         value={searchTerm}
@@ -1460,7 +1462,6 @@ export default function TeacherExamsPage() {
                         setIsQuickAssigning(true);
                         setQuickAssignSuccess('');
                         try {
-                            const dueDateTimestamp = Timestamp.fromDate(new Date(quickAssignDueDate));
                             const assignPayload = {
                                 examId: resourceToShare.id,
                                 examName: resourceToShare.name,
@@ -1468,13 +1469,13 @@ export default function TeacherExamsPage() {
                                 examType: resourceToShare.examType || 'homework',
                                 targetType: 'group',
                                 targetId: quickAssignGroupId,
-                                dueDate: dueDateTimestamp,
+                                dueDate: new Date(quickAssignDueDate).toISOString(),
                                 createdBy: user?.uid,
                                 teacherTitle: user?.teacherTitle || '',
                                 studentTitle: user?.studentTitle || ''
                             };
                             if (quickAssignScheduledStart && quickAssignScheduledStart !== 'pending') {
-                                assignPayload.scheduledStart = Timestamp.fromDate(new Date(quickAssignScheduledStart));
+                                assignPayload.scheduledStart = new Date(quickAssignScheduledStart).toISOString();
                             }
                             if (quickAssignSelectedStudentIds.length > 0) {
                                 assignPayload.assignedStudentIds = quickAssignSelectedStudentIds;

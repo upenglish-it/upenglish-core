@@ -27,15 +27,28 @@ export class SSTTopicFolders {
   @Prop({ type: Number, required: true })
   public readonly order: number;
 
-  @Prop({ type: Array, required: true })
+  @Prop({ type: [String], required: true })
   public readonly topicIds: string[];
 
   @Prop({ type: Boolean, required: true })
   public readonly teacherVisible: boolean;
 
-  @Prop({ type: Array, required: true })
+  @Prop({ type: [String], required: true })
   public readonly sharedWithTeacherIds: string[];
 
+  @Prop({ type: String, default: null })
+  public readonly copiedFrom?: string;
+
+  @Prop({ type: String, default: null })
+  public readonly proposedBy?: string;
+
+  @Prop({ type: String, default: null })
+  public readonly proposedByName?: string;
+
+  @Prop({ type: Boolean, default: false })
+  public readonly isPublic: boolean;
+
+  // Legacy Firestore compatibility for older folder documents.
   @Prop({ type: Boolean, required: true })
   public readonly public: boolean;
 

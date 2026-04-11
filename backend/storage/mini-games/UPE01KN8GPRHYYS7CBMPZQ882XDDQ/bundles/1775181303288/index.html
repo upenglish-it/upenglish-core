@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SuperStudy Playable Test Game</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main class="game-shell">
+    <section class="hero">
+      <span class="badge">SuperStudy Mini Game</span>
+      <h1 id="gameTitle">Waiting for game data...</h1>
+      <p id="gameSubtitle">Open this through the launcher to start the quiz.</p>
+    </section>
+
+    <section class="status-grid">
+      <article class="status-card">
+        <span class="status-label">Mode</span>
+        <strong class="status-value" id="modeValue">Unknown</strong>
+      </article>
+      <article class="status-card">
+        <span class="status-label">Progress</span>
+        <strong class="status-value" id="progressValue">0 / 0</strong>
+      </article>
+      <article class="status-card">
+        <span class="status-label">Score</span>
+        <strong class="status-value" id="scoreValue">0</strong>
+      </article>
+    </section>
+
+    <section class="question-card" id="questionCard">
+      <div class="empty-state">
+        <h2>Launcher payload not loaded yet</h2>
+        <p>The game will render real questions once it receives <code>GAME_DATA</code>.</p>
+      </div>
+    </section>
+
+    <section class="action-row">
+      <button class="secondary" id="reloadBtn" type="button">Reload Data</button>
+      <button class="primary" id="nextBtn" type="button" disabled>Start</button>
+    </section>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

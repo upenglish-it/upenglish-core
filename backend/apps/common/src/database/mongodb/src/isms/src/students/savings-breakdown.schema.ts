@@ -1,4 +1,4 @@
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 import { Accounts } from '../accounts';
 import { Classes } from '../classes';
 import { Properties } from '../properties';
@@ -7,7 +7,7 @@ import { SYSTEM_ID } from 'apps/common/src/utils';
 import { IStudentsTuitionAttendanceRecord, StudentsTuitionAttendance } from './tuition-attendance.schema';
 import { Courses } from '../courses';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: 'students-savings-breakdown' } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: 'students-savings-breakdown' } })
 export class StudentsSavingsBreakdown {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public _id: string;

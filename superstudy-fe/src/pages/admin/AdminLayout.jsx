@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, BookOpen, Users, LogOut, Home, Menu, X, Layers, User as UserIcon, FileText, ClipboardCheck, Settings, Mail, MessageSquare, Gift, MessageSquareText, Gamepad2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { db } from '../../config/firebase';
 import { dashboardService, usersService } from '../../models';
 import { getUnreadFeedbackCount } from '../../services/feedbackService';
 import { getPendingGamesCount } from '../../services/miniGameService';

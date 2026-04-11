@@ -1,13 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
-import { getExam, getExamQuestions, getExamSubmission, overrideExamQuestionScore, releaseExamSubmissionResults, getExamAssignment, gradeExamSubmission, gradeSingleQuestion, regenerateExamSummaryForSubmission, toggleFollowUpRequest, gradeFollowUpAnswer, overrideFollowUpScore, releaseFollowUpResults } from '../../services/examService';
+import { getExam, getExamQuestions, getExamSubmission, overrideExamQuestionScore, releaseExamSubmissionResults, getExamAssignment, gradeExamSubmission, gradeSingleQuestion, regenerateExamSummaryForSubmission, toggleFollowUpRequest, gradeFollowUpAnswer, overrideFollowUpScore, releaseFollowUpResults, hydrateFollowUpAudioTranscript, saveExamSubmission } from '../../services/examService';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAppSettings } from '../../contexts/AppSettingsContext';
 import { ArrowLeft, Check, X, Edit, Save, Award, AlertCircle, Send, FileText, Flag, AlertTriangle, Sparkles, EyeOff, RefreshCw, MessageSquare } from 'lucide-react';
 import ConfirmModal from '../../components/common/ConfirmModal';
 import { getRedFlagsForStudent, addRedFlag, removeRedFlag, VIOLATION_TYPES } from '../../services/redFlagService';
-import { db } from '../../config/firebase';
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { usersService } from '../../models';
 import { OptionContent, isImageOption } from '../../components/common/MCQImageOption';
 import { normalizeForComparison } from '../../utils/textNormalization';
 
@@ -127,7 +126,7 @@ export default function ExamSubmissionsPage() {
                     getExam(sub.examId),
                     getExamQuestions(sub.examId),
                     getExamAssignment(assignmentId),
-                    getDoc(doc(db, 'users', studentId)),
+                    usersService.findOne(studentId).catch(() => null),
                     getRedFlagsForStudent(studentId)
                 ]);
                 // Filter out orphan questions not belonging to any active section
@@ -136,8 +135,9 @@ export default function ExamSubmissionsPage() {
                 setExam(examData);
                 setQuestions(validQs);
                 setAssignment(assignmentData);
-                if (userSnap.exists()) {
-                    setStudentInfo({ uid: studentId, ...userSnap.data() });
+                const student = userSnap?.data || userSnap;
+                if (student) {
+                    setStudentInfo({ uid: studentId, ...student });
                 }
                 setRedFlags(flags);
             }
@@ -703,9 +703,10 @@ export default function ExamSubmissionsPage() {
                                             txt.innerHTML = html;
                                             const markdown = txt.value.replace(/^\n+/, '').replace(/\n{3,}/g, '\n\n');
 
-                                            await updateDoc(doc(db, 'exam_submissions', submission.id), {
+                                            await saveExamSubmission({
+                                                id: submission.id,
                                                 examSummary: markdown,
-                                                updatedAt: serverTimestamp()
+                                                updatedAt: new Date().toISOString()
                                             });
                                             setSubmission(prev => ({ ...prev, examSummary: markdown }));
                                             setEditingSummary(false);

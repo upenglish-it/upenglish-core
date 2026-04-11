@@ -82,6 +82,7 @@ export default function TakeExamPage() {
     const [questions, setQuestions] = useState([]);
     const [submission, setSubmission] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [resolvedExamId, setResolvedExamId] = useState(examId || null);
     const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
     const [answers, setAnswers] = useState({});
     const answersRef = useRef(answers);
@@ -221,11 +222,32 @@ export default function TakeExamPage() {
     async function loadData() {
         setLoading(true);
         try {
-            const [examData, questionsData, assignmentData] = await Promise.all([
-                getExam(examId),
-                getExamQuestions(examId),
-                getExamAssignment(assignmentId)
+            if (!assignmentId && !examId) {
+                setResolvedExamId(null);
+                setExam(null);
+                setQuestions([]);
+                setAssignment(null);
+                setLoading(false);
+                return;
+            }
+
+            const assignmentData = assignmentId ? await getExamAssignment(assignmentId) : null;
+            const effectiveExamId = examId || assignmentData?.examId || null;
+
+            if (!effectiveExamId) {
+                setResolvedExamId(null);
+                setExam(null);
+                setQuestions([]);
+                setAssignment(assignmentData);
+                setLoading(false);
+                return;
+            }
+
+            const [examData, questionsData] = await Promise.all([
+                getExam(effectiveExamId),
+                getExamQuestions(effectiveExamId)
             ]);
+            setResolvedExamId(effectiveExamId);
             setExam(examData);
             setQuestions(questionsData);
             setAssignment(assignmentData);
@@ -717,7 +739,7 @@ export default function TakeExamPage() {
                 initialTimerData.lastActiveQuestionIdx = 0;
             }
             const newSubId = await saveExamSubmission({
-                examId, assignmentId, studentId: user?.uid,
+                examId: resolvedExamId, assignmentId, studentId: user?.uid,
                 status: 'in_progress',
                 startedAt: startedAtDate.toISOString(),
                 examEndTime,

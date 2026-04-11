@@ -9,6 +9,7 @@ import { convertGrammarToExam } from '../../services/conversionService';
 import CustomSelect from '../../components/common/CustomSelect';
 import EmailAutocomplete from '../../components/common/EmailAutocomplete';
 import { usersService } from '../../models';
+import { getResolvedUserEmail, getResolvedUserLabel } from '../../utils/userIdentity';
 
 export default function AdminTeacherGrammarPage() {
     const { user } = useAuth();
@@ -74,17 +75,27 @@ export default function AdminTeacherGrammarPage() {
         loadData();
     }, []);
 
-    const fetchTeacherInfo = async (teacherId, currentMap) => {
+    const fetchTeacherInfo = async (teacherId, currentMap, fallbackName) => {
         if (!teacherId || currentMap[teacherId]) return;
         try {
-            const userSnap = await usersService.findOne(teacherId);
-            if (userSnap) {
-                setTeacherMap(prev => ({ ...prev, [teacherId]: userSnap }));
-            } else {
-                setTeacherMap(prev => ({ ...prev, [teacherId]: { email: 'Unknown user', displayName: 'Unknown' } }));
-            }
-        } catch (err) {
-            console.error("Error fetching teacher:", err);
+            const result = await usersService.findOne(teacherId);
+            const userSnap = result?.data || result;
+            setTeacherMap(prev => ({
+                ...prev,
+                [teacherId]: {
+                    ...userSnap,
+                    displayName: getResolvedUserLabel(userSnap, fallbackName, teacherId),
+                    email: getResolvedUserEmail(userSnap, fallbackName),
+                },
+            }));
+        } catch {
+            setTeacherMap(prev => ({
+                ...prev,
+                [teacherId]: {
+                    displayName: getResolvedUserLabel({}, fallbackName, teacherId),
+                    email: getResolvedUserEmail({}, fallbackName),
+                },
+            }));
         }
     };
 
@@ -107,6 +118,12 @@ export default function AdminTeacherGrammarPage() {
             cleanupExpiredDeletedContent().catch(() => {});
 
             const tempTeacherMap = { ...teacherMap };
+            const fallbackNames = {};
+            [...teacherExercises, ...foldersData, ...delExercises, ...delFolders].forEach(item => {
+                if (item.teacherId && item.createdByName && !fallbackNames[item.teacherId]) {
+                    fallbackNames[item.teacherId] = item.createdByName;
+                }
+            });
             const allTeacherIds = new Set([
                 ...teacherExercises.map(ex => ex.teacherId),
                 ...foldersData.map(f => f.teacherId),
@@ -114,7 +131,7 @@ export default function AdminTeacherGrammarPage() {
                 ...delExercises.map(ex => ex.teacherId),
                 ...delFolders.map(f => f.teacherId)
             ]);
-            await Promise.all([...allTeacherIds].map(id => fetchTeacherInfo(id, tempTeacherMap)));
+            await Promise.all([...allTeacherIds].map(id => fetchTeacherInfo(id, tempTeacherMap, fallbackNames[id])));
         } catch (error) {
             console.error(error);
             setAlertMessage({ type: 'error', text: 'Lỗi tải dữ liệu: ' + error.message });
@@ -394,6 +411,8 @@ export default function AdminTeacherGrammarPage() {
                 <div className="admin-search-box">
                     <Search size={16} className="search-icon" />
                     <input
+                        id="admin-teacher-grammar-search"
+                        name="adminTeacherGrammarSearch"
                         type="text"
                         placeholder="Tìm tên bài luyện, folder, tên GV hoặc email..."
                         value={searchTerm}

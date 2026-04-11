@@ -55,4 +55,12 @@ export const usersService = {
   /** Get user learning stats */
   getLearningStats: (id, query) =>
     api.get(`${BASE}/${id}/stats`, query),
+
+  /** Permanently delete a user and all their data (cascading) */
+  permanentDelete: (id) =>
+    api.delete(`${BASE}/${id}/permanent`),
+
+  /** Change user email (updates ISMS account + sst-users doc) */
+  changeEmail: (id, newEmail) =>
+    api.patch(`${BASE}/${id}/email`, { newEmail }),
 };

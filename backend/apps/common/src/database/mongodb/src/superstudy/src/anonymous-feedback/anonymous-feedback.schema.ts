@@ -49,6 +49,15 @@ export class SSTAnonymousFeedback {
   @Prop({ type: String, default: '' })
   public readonly targetEmail: string;
 
+  @Prop({ type: String, default: '' })
+  public readonly targetRole: string;
+
+  @Prop({ type: String, default: '' })
+  public readonly imageUrl: string;
+
+  @Prop({ type: String, default: '' })
+  public readonly imageName: string;
+
   @Prop({ type: [String], default: [] })
   public readonly hiddenBy: string[];
 

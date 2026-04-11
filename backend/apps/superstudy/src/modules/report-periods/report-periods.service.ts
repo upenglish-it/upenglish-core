@@ -6,9 +6,9 @@ import {
   SSTReportPeriods,
   SSTSettings,
   SSTSkillReports,
-  SSTUsers,
   SSTUserGroups
 } from 'apps/common/src/database/mongodb/src/superstudy';
+import { Accounts } from 'apps/common/src/database/mongodb/src/isms';
 
 @Injectable()
 export class ReportPeriodsService {
@@ -16,13 +16,112 @@ export class ReportPeriodsService {
     @InjectModel(SSTReportPeriods) private readonly periodsModel: ReturnModelType<typeof SSTReportPeriods>,
     @InjectModel(SSTSettings) private readonly settingsModel: ReturnModelType<typeof SSTSettings>,
     @InjectModel(SSTSkillReports) private readonly reportsModel: ReturnModelType<typeof SSTSkillReports>,
-    @InjectModel(SSTUsers) private readonly usersModel: ReturnModelType<typeof SSTUsers>,
+    @InjectModel(Accounts) private readonly accountsModel: ReturnModelType<typeof Accounts>,
     @InjectModel(SSTUserGroups) private readonly groupsModel: ReturnModelType<typeof SSTUserGroups>,
   ) {}
 
   private mapDoc(doc: any) {
     if (!doc) return null;
     return { id: doc._id, ...doc };
+  }
+
+  private normalizeEmail(value?: string | null) {
+    return String(value ?? '').trim().toLowerCase();
+  }
+
+  private normalizeAccountUser(account: any) {
+    const uid = String(account?.accountId || account?._id || '').trim();
+    if (!uid) return null;
+
+    return {
+      _id: uid,
+      uid,
+      id: uid,
+      email: this.normalizeEmail(account?.email || account?.emailAddresses?.[0]),
+      displayName:
+        String(account?.displayName ?? '').trim()
+        || [account?.firstName, account?.lastName].filter(Boolean).join(' ').trim()
+        || this.normalizeEmail(account?.email || account?.emailAddresses?.[0])
+        || uid,
+      role: account?.role === 'student' ? 'user' : account?.role,
+      status: account?.status ?? (account?.active === false ? 'pending' : 'approved'),
+      groupIds: Array.isArray(account?.groupIds) ? account.groupIds : [],
+      deleted: Boolean(account?.deleted),
+    };
+  }
+
+  private normalizeLegacyUser(user: any) {
+    const uid = String(user?._id || user?.uid || '').trim();
+    if (!uid) return null;
+
+    return {
+      ...user,
+      _id: uid,
+      uid,
+      id: uid,
+      email: this.normalizeEmail(user?.email),
+      deleted: Boolean(user?.deleted),
+    };
+  }
+
+  private mergeUsers(accounts: any[], legacyUsers: any[]) {
+    const merged = new Map<string, any>();
+
+    for (const account of accounts || []) {
+      const normalized = this.normalizeAccountUser(account);
+      if (!normalized?.uid) continue;
+      merged.set(normalized.uid, normalized);
+    }
+
+    for (const legacyUser of legacyUsers || []) {
+      const normalized = this.normalizeLegacyUser(legacyUser);
+      if (!normalized?.uid) continue;
+      const existing = merged.get(normalized.uid);
+      merged.set(normalized.uid, {
+        ...(existing || {}),
+        ...normalized,
+        _id: existing?._id || normalized._id,
+        uid: existing?.uid || normalized.uid,
+        id: existing?.id || normalized.id,
+        email: normalized.email || existing?.email || '',
+        displayName: normalized.displayName || existing?.displayName || normalized.email || existing?.email || normalized.uid,
+        role: normalized.role || existing?.role,
+        status: normalized.status || existing?.status,
+        groupIds: Array.isArray(existing?.groupIds) && existing.groupIds.length > 0
+          ? existing.groupIds
+          : (normalized.groupIds || []),
+        deleted: existing?.deleted ?? normalized.deleted,
+      });
+    }
+
+    return Array.from(merged.values()).filter((user) => !user.deleted);
+  }
+
+  private shouldLoadLegacyUser(account: any) {
+    if (!account) return true;
+
+    const hasPrimaryEmail = Boolean(this.normalizeEmail(account?.email || account?.emailAddresses?.[0]));
+    const hasDisplayName = Boolean(String(account?.displayName ?? '').trim())
+      || Boolean([account?.firstName, account?.lastName].filter(Boolean).join(' ').trim());
+    const hasCompatibilityMetadata = Array.isArray(account?.groupIds) && account.groupIds.length > 0;
+
+    return !hasPrimaryEmail || !account?.role || !account?.status || !hasDisplayName || !hasCompatibilityMetadata;
+  }
+
+  private async getUsersByRole(role: 'teacher' | 'user') {
+    const accountRole = role === 'user' ? 'student' : role;
+    const accounts = await this.accountsModel
+      .find({ role: accountRole, status: 'approved', deleted: { $ne: true } })
+      .lean();
+    return this.mergeUsers(accounts, []);
+  }
+
+  private async getUserById(userId: string) {
+    const normalizedId = String(userId || '').trim();
+    const account = await this.accountsModel
+      .findOne({ $or: [{ accountId: normalizedId }, { _id: normalizedId }] })
+      .lean();
+    return this.mergeUsers(account ? [account] : [], [])[0] || null;
   }
 
   // ═══════════════════════════════════════════════
@@ -236,8 +335,8 @@ export class ReportPeriodsService {
     const periodEnd = new Date(endDate + 'T23:59:59');
 
     const [allTeachers, allStudents, allGroups, rawReports] = await Promise.all([
-      this.usersModel.find({ role: 'teacher', status: 'approved', deleted: { $ne: true } }).lean(),
-      this.usersModel.find({ role: 'user', status: 'approved', deleted: { $ne: true } }).lean(),
+      this.getUsersByRole('teacher'),
+      this.getUsersByRole('user'),
       this.groupsModel.find({ isHidden: { $ne: true }, deleted: { $ne: true } }).lean(),
       this.reportsModel.find({ status: 'sent' }).lean()
     ]);
@@ -292,7 +391,7 @@ export class ReportPeriodsService {
   }
 
   async getTeacherReportDetails(teacherId: string, startDate: string, endDate: string, periodId?: string) {
-    const teacherDoc = await this.usersModel.findById(teacherId).lean();
+    const teacherDoc = await this.getUserById(teacherId);
     if (!teacherDoc) return [];
 
     const teacherGroupIds = (teacherDoc as any).groupIds || [];
@@ -306,7 +405,7 @@ export class ReportPeriodsService {
     if (!validGroupIds.length) return [];
 
     const students = [];
-    const studentsRaw = await this.usersModel.find({ role: 'user', status: 'approved', deleted: { $ne: true } }).lean();
+    const studentsRaw = await this.getUsersByRole('user');
     for (const u of studentsRaw) {
       const mgps = ((u as any).groupIds || []).filter(gid => validGroupIds.includes(gid));
       if (mgps.length > 0) students.push({ ...u, id: u._id, matchedGroupId: mgps[0] });

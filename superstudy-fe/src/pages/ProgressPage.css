@@ -19,7 +19,7 @@
 /* Bottom Sheet */
 .progress-modal {
     width: 100%;
-    max-width: 500px;
+    max-width: 700px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
@@ -28,12 +28,10 @@
     box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.4);
     max-height: 88vh;
     overflow-y: auto;
-    animation: slideUpSheet 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-@keyframes slideUpSheet {
-    from { transform: translateY(100%); }
-    to { transform: translateY(0); }
+.progress-modal.animate-slide-up {
+    animation: modalSheetUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .progress-modal-close {

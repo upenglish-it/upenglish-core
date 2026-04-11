@@ -36,7 +36,7 @@ export class SSTGrammarExercises {
   @Prop({ type: String, default: null })
   public readonly proposedBy: string;
 
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly proposedByName: string[];
 
   @Prop({ type: String, default: null })
@@ -60,13 +60,13 @@ export class SSTGrammarExercises {
   @Prop({ type: String, default: null })
   public readonly duplicatedFrom: string;
 
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly collaborators: string[];
 
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly collaboratorNames: string[];
 
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly collaboratorIds: string[];
 
   @Prop({ type: Boolean, default: false })
@@ -101,7 +101,7 @@ export class SSTGrammarExercises {
   public readonly folderId: string;
 
   /** Teacher IDs individually shared this exercise */
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly sharedWithTeacherIds: string[];
 
   @Prop({ ref: () => Accounts, type: String, required: false })

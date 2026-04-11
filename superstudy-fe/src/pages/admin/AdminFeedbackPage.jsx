@@ -3,6 +3,7 @@ import { MessageSquareText, Send, Trash2, CheckCheck, X, Loader, ArrowRight, Use
 import { useAuth } from '../../contexts/AuthContext';
 import { getAdminFeedback, getDirectFeedback, getMyReceivedFeedback, submitFeedback, markFeedbackAsRead, deleteFeedback, hideFeedbackForUser } from '../../services/feedbackService';
 import { getAllUsers } from '../../services/adminService';
+import FeedbackImageCard from '../../components/common/FeedbackImageCard';
 
 const CATEGORIES = [
     { value: 'suggestion', label: 'Đề xuất', emoji: '💡', color: '#4f46e5', bg: '#eff6ff' },
@@ -33,18 +34,33 @@ function timeAgo(ts) {
     return '';
 }
 
+function feedbackTimestampValue(ts) {
+    if (!ts) return 0;
+    if (typeof ts.toMillis === 'function') return ts.toMillis();
+    if (typeof ts.toDate === 'function') return ts.toDate().getTime();
+    return new Date(ts).getTime() || 0;
+}
+
+function sortFeedbackList(list) {
+    return [...list].sort((a, b) => {
+        if (!!a.isRead !== !!b.isRead) {
+            return a.isRead ? 1 : -1;
+        }
+        return feedbackTimestampValue(b.createdAt) - feedbackTimestampValue(a.createdAt);
+    });
+}
+
 export default function AdminFeedbackPage() {
     const { user } = useAuth();
     const isAdmin = user?.role === 'admin';
     const isStaff = user?.role === 'staff';
 
-    const [activeTab, setActiveTab] = useState('admin'); // 'admin' | 'direct'
+    const [activeTab, setActiveTab] = useState('admin');
     const [adminList, setAdminList] = useState([]);
     const [directList, setDirectList] = useState([]);
     const [mineList, setMineList] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    // Send feedback (staff only)
     const [showSendModal, setShowSendModal] = useState(false);
     const [sendCategory, setSendCategory] = useState('suggestion');
     const [sendMessage, setSendMessage] = useState('');
@@ -59,7 +75,9 @@ export default function AdminFeedbackPage() {
     const [hideTarget, setHideTarget] = useState(null);
     const [targetSearch, setTargetSearch] = useState('');
 
-    useEffect(() => { loadFeedback(); }, []);
+    useEffect(() => {
+        loadFeedback();
+    }, []);
 
     async function loadFeedback() {
         setLoading(true);
@@ -70,7 +88,9 @@ export default function AdminFeedbackPage() {
             setAdminList(results[0]);
             setDirectList(results[1]);
             if (results[2]) setMineList(results[2]);
-        } catch (err) { console.error('Error loading feedback:', err); }
+        } catch (err) {
+            console.error('Error loading feedback:', err);
+        }
         setLoading(false);
     }
 
@@ -79,18 +99,25 @@ export default function AdminFeedbackPage() {
             await markFeedbackAsRead(fb.id);
             const updater = prev => prev.map(f => f.id === fb.id ? { ...f, isRead: true } : f);
             if (activeTab === 'admin') setAdminList(updater);
-            else if (activeTab === 'direct') { setDirectList(updater); setMineList(updater); }
-        } catch (err) { console.error('Error:', err); }
+            else if (activeTab === 'direct') {
+                setDirectList(updater);
+                setMineList(updater);
+            }
+        } catch (err) {
+            console.error('Error:', err);
+        }
     }
 
     async function handleDelete(fb) {
         try {
-            await deleteFeedback(fb.id);
+            await deleteFeedback(fb);
             setAdminList(prev => prev.filter(f => f.id !== fb.id));
             setDirectList(prev => prev.filter(f => f.id !== fb.id));
             setMineList(prev => prev.filter(f => f.id !== fb.id));
             setDeleteTarget(null);
-        } catch (err) { console.error('Error:', err); }
+        } catch (err) {
+            console.error('Error:', err);
+        }
     }
 
     async function loadStaffTeachers() {
@@ -106,7 +133,9 @@ export default function AdminFeedbackPage() {
             });
             list.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
             setStaffTeacherList(list);
-        } catch (err) { console.error('Error loading staff/teachers:', err); }
+        } catch (err) {
+            console.error('Error loading staff/teachers:', err);
+        }
         setLoadingUsers(false);
     }
 
@@ -116,28 +145,39 @@ export default function AdminFeedbackPage() {
         setSending(true);
         try {
             await submitFeedback({
-                message: sendMessage, category: sendCategory,
-                senderUid: user.uid, senderName: user.displayName || '', senderEmail: user.email || '', senderRole: user.role,
+                message: sendMessage,
+                category: sendCategory,
+                senderUid: user.uid,
+                senderName: user.displayName || '',
+                senderEmail: user.email || '',
+                senderRole: user.role,
                 targetType: sendTargetType,
                 targetUid: sendTargetType === 'direct' ? sendTargetUser.uid : undefined,
                 targetName: sendTargetType === 'direct' ? sendTargetUser.displayName : undefined,
                 targetEmail: sendTargetType === 'direct' ? sendTargetUser.email : undefined,
+                targetRole: sendTargetType === 'direct' ? sendTargetUser.role : undefined,
             });
-            setSendSuccess(true); setSendMessage(''); setSendTargetUser(null);
-            setTimeout(() => { setSendSuccess(false); setShowSendModal(false); }, 1500);
+            setSendSuccess(true);
+            setSendMessage('');
+            setSendTargetUser(null);
+            setTimeout(() => {
+                setSendSuccess(false);
+                setShowSendModal(false);
+            }, 1500);
             loadFeedback();
-        } catch (err) { console.error('Error:', err); }
+        } catch (err) {
+            console.error('Error:', err);
+        }
         setSending(false);
     }
 
-    // For staff, internal tab shows their personal received; for admin, all direct
     const currentList = activeTab === 'admin' ? adminList : (isStaff ? mineList : directList);
+    const sortedCurrentList = sortFeedbackList(currentList);
     const adminUnread = adminList.filter(f => !f.isRead).length;
     const internalUnread = (isStaff ? mineList : directList).filter(f => !f.isRead).length;
 
     return (
         <div className="admin-page">
-            {/* Header */}
             <div className="admin-page-header">
                 <h1 className="admin-page-title" style={{ margin: 0, fontSize: 'clamp(1.1rem, 4vw, 1.5rem)' }}>
                     <MessageSquareText size={24} color="#7c3aed" /> Góp ý ẩn danh
@@ -163,7 +203,6 @@ export default function AdminFeedbackPage() {
                 </button>
             </div>
 
-            {/* Content */}
             {loading ? (
                 <div className="admin-card" style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b' }}>
                     <Loader size={24} className="spin" style={{ margin: '0 auto 12px' }} />
@@ -183,13 +222,12 @@ export default function AdminFeedbackPage() {
                 </div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {[...currentList].sort((a, b) => (a.isRead === b.isRead ? 0 : a.isRead ? 1 : -1)).map(fb => {
+                    {sortedCurrentList.map(fb => {
                         const cat = CATEGORIES.find(c => c.value === fb.category) || CATEGORIES[0];
                         const roleInfo = ROLE_LABELS[fb.senderRole] || ROLE_LABELS.user;
                         const isHidden = (fb.hiddenBy || []).length > 0;
                         return (
                             <div key={fb.id} className="admin-card" style={{ padding: '16px', paddingRight: '44px', background: fb.isRead ? '#fff' : '#fefce8', transition: 'all 0.2s', position: 'relative', opacity: isAdmin && isHidden ? 0.45 : 1 }}>
-                                {/* Right action buttons */}
                                 <div style={{ position: 'absolute', top: '50%', right: '10px', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
                                     {!fb.isRead && (
                                         <button onClick={() => handleMarkRead(fb)} title="Đánh dấu đã đọc" style={{
@@ -217,7 +255,7 @@ export default function AdminFeedbackPage() {
                                     )}
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                    <div style={{
+                                    <div className="feedback-card-emoji" style={{
                                         width: '38px', height: '38px', borderRadius: '12px',
                                         background: cat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
                                         fontSize: '1.1rem', flexShrink: 0,
@@ -242,6 +280,7 @@ export default function AdminFeedbackPage() {
                                             📅 {formatDate(fb.createdAt)}{timeAgo(fb.createdAt) && ` · ${timeAgo(fb.createdAt)}`}
                                         </div>
                                         <p style={{ margin: 0, fontSize: '0.92rem', color: '#1e293b', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{fb.message}</p>
+                                        <FeedbackImageCard imageUrl={fb.imageUrl} imageName={fb.imageName} />
                                     </div>
                                 </div>
                             </div>
@@ -250,7 +289,6 @@ export default function AdminFeedbackPage() {
                 </div>
             )}
 
-            {/* Delete confirm */}
             {deleteTarget && (
                 <div className="teacher-modal-overlay" onClick={() => setDeleteTarget(null)}>
                     <div className="teacher-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px', width: '90%', textAlign: 'center', padding: '32px 24px' }}>
@@ -265,7 +303,6 @@ export default function AdminFeedbackPage() {
                 </div>
             )}
 
-            {/* Hide confirm (staff) */}
             {hideTarget && (
                 <div className="teacher-modal-overlay" onClick={() => setHideTarget(null)}>
                     <div className="teacher-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px', width: '90%', textAlign: 'center', padding: '32px 24px' }}>
@@ -280,7 +317,6 @@ export default function AdminFeedbackPage() {
                 </div>
             )}
 
-            {/* Send Feedback Modal (staff) */}
             {showSendModal && (
                 <div className="teacher-modal-overlay" onClick={() => !sending && setShowSendModal(false)}>
                     <div className="teacher-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '520px', width: '92%' }}>
@@ -304,7 +340,6 @@ export default function AdminFeedbackPage() {
                                     Góp ý của bạn sẽ được gửi ẩn danh.
                                 </p>
 
-                                {/* Target picker */}
                                 <div style={{ marginBottom: '16px' }}>
                                     <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '8px' }}>Gửi cho</label>
                                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: sendTargetType === 'direct' ? '12px' : '0' }}>
@@ -313,7 +348,7 @@ export default function AdminFeedbackPage() {
                                             background: sendTargetType === 'admin' ? '#eff6ff' : '#f1f5f9',
                                             color: sendTargetType === 'admin' ? '#4f46e5' : '#64748b',
                                             border: `2px solid ${sendTargetType === 'admin' ? '#4f46e5' : 'transparent'}`,
-                                        }}>👑 Ban quản lý</button>
+                                        }}>📑 Ban quản lý</button>
                                         <button onClick={() => { setSendTargetType('direct'); loadStaffTeachers(); }} style={{
                                             padding: '8px 16px', borderRadius: '12px', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', transition: 'all 0.2s',
                                             background: sendTargetType === 'direct' ? '#f0fdf4' : '#f1f5f9',
@@ -334,45 +369,44 @@ export default function AdminFeedbackPage() {
                                                 }}
                                             />
                                             <div style={{ maxHeight: '140px', overflowY: 'auto', padding: '4px' }}>
-                                            {loadingUsers ? (
-                                                <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: '0.82rem' }}>Đang tải...</div>
-                                            ) : (() => {
-                                                const filtered = staffTeacherList.filter(u => {
-                                                    if (!targetSearch.trim()) return true;
-                                                    const q = targetSearch.toLowerCase();
-                                                    return (u.displayName || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
-                                                });
-                                                return filtered.length === 0 ? (
-                                                    <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: '0.82rem' }}>
-                                                        {staffTeacherList.length === 0 ? 'Không có người nhận' : 'Không tìm thấy'}
-                                                    </div>
-                                                ) : filtered.map(u => {
-                                                const uRole = ROLE_LABELS[u.role] || { label: u.role, color: '#64748b', bg: '#f8fafc' };
-                                                return (
-                                                    <button key={u.uid} onClick={() => setSendTargetUser(u)} style={{
-                                                        display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 12px', borderRadius: '10px',
-                                                        border: 'none', cursor: 'pointer', transition: 'all 0.15s', textAlign: 'left',
-                                                        background: sendTargetUser?.uid === u.uid ? '#f0fdf4' : 'transparent',
-                                                        fontWeight: sendTargetUser?.uid === u.uid ? 600 : 400,
-                                                    }}>
-                                                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: uRole.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, color: uRole.color, flexShrink: 0 }}>
-                                                            {(u.displayName || '?')[0].toUpperCase()}
+                                                {loadingUsers ? (
+                                                    <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: '0.82rem' }}>Đang tải...</div>
+                                                ) : (() => {
+                                                    const filtered = staffTeacherList.filter(u => {
+                                                        if (!targetSearch.trim()) return true;
+                                                        const q = targetSearch.toLowerCase();
+                                                        return (u.displayName || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+                                                    });
+                                                    return filtered.length === 0 ? (
+                                                        <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: '0.82rem' }}>
+                                                            {staffTeacherList.length === 0 ? 'Không có người nhận' : 'Không tìm thấy'}
                                                         </div>
-                                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                                            <div style={{ fontSize: '0.85rem', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.displayName}</div>
-                                                            <div style={{ fontSize: '0.72rem', color: uRole.color }}>{uRole.label}</div>
-                                                        </div>
-                                                        {sendTargetUser?.uid === u.uid && <CheckCheck size={16} color="#16a34a" />}
-                                                    </button>
-                                                );
-                                            });
-                                            })()}
+                                                    ) : filtered.map(u => {
+                                                        const uRole = ROLE_LABELS[u.role] || { label: u.role, color: '#64748b', bg: '#f8fafc' };
+                                                        return (
+                                                            <button key={u.uid} onClick={() => setSendTargetUser(u)} style={{
+                                                                display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 12px', borderRadius: '10px',
+                                                                border: 'none', cursor: 'pointer', transition: 'all 0.15s', textAlign: 'left',
+                                                                background: sendTargetUser?.uid === u.uid ? '#f0fdf4' : 'transparent',
+                                                                fontWeight: sendTargetUser?.uid === u.uid ? 600 : 400,
+                                                            }}>
+                                                                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: uRole.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, color: uRole.color, flexShrink: 0 }}>
+                                                                    {(u.displayName || '?')[0].toUpperCase()}
+                                                                </div>
+                                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                                    <div style={{ fontSize: '0.85rem', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.displayName}</div>
+                                                                    <div style={{ fontSize: '0.72rem', color: uRole.color }}>{uRole.label}</div>
+                                                                </div>
+                                                                {sendTargetUser?.uid === u.uid && <CheckCheck size={16} color="#16a34a" />}
+                                                            </button>
+                                                        );
+                                                    });
+                                                })()}
                                             </div>
                                         </div>
                                     )}
                                 </div>
 
-                                {/* Category */}
                                 <div style={{ marginBottom: '16px' }}>
                                     <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '8px' }}>Phân loại</label>
                                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -388,7 +422,6 @@ export default function AdminFeedbackPage() {
                                     </div>
                                 </div>
 
-                                {/* Message */}
                                 <div style={{ marginBottom: '20px' }}>
                                     <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '8px' }}>Nội dung</label>
                                     <textarea value={sendMessage} onChange={e => setSendMessage(e.target.value)}
@@ -407,6 +440,17 @@ export default function AdminFeedbackPage() {
                     </div>
                 </div>
             )}
+
+            <style>{`
+                .spin { animation: spin 1s linear infinite; }
+                @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+
+                @media (max-width: 640px) {
+                    .feedback-card-emoji {
+                        display: none !important;
+                    }
+                }
+            `}</style>
         </div>
     );
 }

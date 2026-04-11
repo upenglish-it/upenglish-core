@@ -1,7 +1,7 @@
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
 // NestJs Imports
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 // Schemas
 import { Accounts, Properties, PropertiesBranches } from '../../../isms';
 
@@ -13,7 +13,7 @@ export const SSTWordProgressCN = 'sst-word-progress';
  *
  * Each document = one word for one user in one topic.
  */
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: SSTWordProgressCN } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: SSTWordProgressCN } })
 export class SSTWordProgress {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public readonly _id: string;

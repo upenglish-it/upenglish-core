@@ -25,7 +25,7 @@ export class SSTGrammarFolders {
   public readonly color: string;
 
   /** Grammar exercise IDs in this folder */
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly exerciseIds: string[];
 
   /** If this folder was duplicated from another, source folder ID */
@@ -45,8 +45,11 @@ export class SSTGrammarFolders {
   public readonly teacherVisible: boolean;
 
   /** Teacher UIDs that have been explicitly shared this folder */
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly sharedWithTeacherIds: string[];
+
+  @Prop({ type: Boolean, default: false })
+  public readonly isPublic: boolean;
 
   /** Sort order for drag-and-drop reordering */
   @Prop({ type: Number, default: 0 })

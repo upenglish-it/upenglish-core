@@ -27,7 +27,7 @@ export class SSTTeacherGrammarFolders {
   @Prop({ type: String, required: true })
   public readonly teacherId: string;
 
-  @Prop({ type: Array, required: true })
+  @Prop({ type: [String], required: true })
   public readonly exerciseIds: string[];
 
   @Prop({ type: Boolean, default: false })

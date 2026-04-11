@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚔️ Kéo Co Trí Tuệ</title>
+    <script>
+    /* SPerStudy Game SDK v1.0 — inline */
+    (function () {
+        'use strict';
+        window.SuperStudySDK = {
+            _data: null,
+            _onDataCallbacks: [],
+            onData: function (callback) {
+                if (typeof callback !== 'function') return;
+                if (this._data) { callback(this._data); }
+                else { this._onDataCallbacks.push(callback); }
+            },
+            notifyComplete: function (summary) {
+                try { window.parent.postMessage({ type: 'GAME_COMPLETE', summary: summary || {} }, '*'); } catch (e) {}
+            },
+            requestReload: function () {
+                try { window.parent.postMessage({ type: 'GAME_REQUEST_RELOAD' }, '*'); } catch (e) {}
+            }
+        };
+        window.addEventListener('message', function (event) {
+            if (event.data && event.data.type === 'GAME_DATA') {
+                window.SuperStudySDK._data = event.data;
+                window.SuperStudySDK._onDataCallbacks.forEach(function (cb) {
+                    try { cb(event.data); } catch (e) { console.error('SDK callback error:', e); }
+                });
+                window.SuperStudySDK._onDataCallbacks = [];
+            }
+        });
+    })();
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background: #0f172a;
+            color: #fff;
+            user-select: none;
+        }
+
+        /* ─── LOADING SCREEN ─── */
+        #loading {
+            position: absolute; inset: 0;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            z-index: 100;
+        }
+        #loading .emoji { font-size: 4rem; animation: bounce 1s infinite; }
+        #loading p { margin-top: 16px; font-size: 1.1rem; color: #94a3b8; }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-12px); }
+        }
+
+        /* ─── START SCREEN ─── */
+        #start-screen {
+            position: absolute; inset: 0;
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            z-index: 90;
+        }
+        #start-screen h1 {
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            font-weight: 900;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6, #ef4444);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            margin-bottom: 12px;
+        }
+        #start-screen .subtitle { font-size: 1rem; color: #94a3b8; margin-bottom: 32px; }
+        .keys-guide {
+            display: flex; gap: 40px; margin-bottom: 36px;
+            flex-wrap: wrap; justify-content: center;
+        }
+        .keys-guide .team {
+            text-align: center; padding: 20px 24px;
+            border-radius: 16px; min-width: 200px;
+        }
+        .keys-guide .team.blue { background: rgba(59, 130, 246, 0.15); border: 2px solid rgba(59, 130, 246, 0.3); }
+        .keys-guide .team.red { background: rgba(239, 68, 68, 0.15); border: 2px solid rgba(239, 68, 68, 0.3); }
+        .keys-guide .team h3 { font-size: 1.1rem; margin-bottom: 12px; }
+        .keys-guide .team.blue h3 { color: #60a5fa; }
+        .keys-guide .team.red h3 { color: #f87171; }
+        .key-row { display: flex; gap: 6px; justify-content: center; margin-bottom: 6px; }
+        .key-label { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; color: #cbd5e1; }
+        .key-badge {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 36px; height: 36px; border-radius: 8px;
+            font-weight: 800; font-size: 0.9rem;
+            background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.2);
+        }
+        .start-hint {
+            font-size: 1.1rem; color: #fbbf24; font-weight: 700;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* ─── GAME SCREEN ─── */
+        #game {
+            display: none; flex-direction: column;
+            width: 100%; height: 100%;
+        }
+
+        /* Top bar */
+        .game-topbar {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 8px 16px;
+            background: rgba(15, 23, 42, 0.9);
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            flex-shrink: 0; height: 48px;
+        }
+        .team-score {
+            display: flex; align-items: center; gap: 8px;
+            font-weight: 800; font-size: 1.2rem;
+        }
+        .team-score.blue { color: #60a5fa; }
+        .team-score.red { color: #f87171; }
+        .team-score .score-num {
+            background: rgba(255,255,255,0.1); padding: 2px 14px;
+            border-radius: 8px; font-size: 1.4rem;
+        }
+        .question-counter {
+            font-size: 0.85rem; color: #64748b; font-weight: 600;
+        }
+
+        /* Rope area */
+        .rope-area {
+            position: relative;
+            height: 80px; flex-shrink: 0;
+            background: linear-gradient(180deg, rgba(15,23,42,0.5), transparent);
+            display: flex; align-items: center;
+            overflow: hidden;
+        }
+        .rope-track {
+            position: relative; width: 90%; margin: 0 auto; height: 8px;
+            background: rgba(255,255,255,0.08); border-radius: 4px;
+        }
+        .rope-track::before, .rope-track::after {
+            content: ''; position: absolute; top: 50%; transform: translateY(-50%);
+            width: 16px; height: 16px; border-radius: 50%;
+        }
+        .rope-track::before { left: -8px; background: #3b82f6; }
+        .rope-track::after { right: -8px; background: #ef4444; }
+        .rope-fill-blue {
+            position: absolute; left: 0; top: 0; height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #60a5fa);
+            border-radius: 4px; transition: width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .rope-fill-red {
+            position: absolute; right: 0; top: 0; height: 100%;
+            background: linear-gradient(90deg, #f87171, #ef4444);
+            border-radius: 4px; transition: width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .rope-marker {
+            position: absolute; top: -18px;
+            transform: translateX(-50%);
+            font-size: 1.8rem;
+            transition: left 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+            filter: drop-shadow(0 2px 8px rgba(0,0,0,0.5));
+        }
+        .rope-center-line {
+            position: absolute; left: 50%; top: -10px; bottom: -10px;
+            width: 2px; background: rgba(255,255,255,0.2);
+            border-radius: 2px;
+        }
+        .win-zone {
+            position: absolute; top: 0; bottom: 0; width: 5%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.7rem; font-weight: 700; opacity: 0.5;
+        }
+        .win-zone.left { left: 0; background: rgba(59,130,246,0.15); color: #60a5fa; border-radius: 4px 0 0 4px; }
+        .win-zone.right { right: 0; background: rgba(239,68,68,0.15); color: #f87171; border-radius: 0 4px 4px 0; }
+
+        /* Split-screen game area */
+        .game-arena {
+            flex: 1; display: flex;
+            overflow: hidden;
+        }
+
+        /* Each team's half */
+        .team-half {
+            flex: 1; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            padding: 16px 20px;
+            position: relative;
+        }
+        .team-half.blue {
+            background: linear-gradient(135deg, #0c1929 0%, #111d35 100%);
+            border-right: 1px solid rgba(255,255,255,0.06);
+        }
+        .team-half.red {
+            background: linear-gradient(135deg, #1a1118 0%, #251519 100%);
+            border-left: 1px solid rgba(255,255,255,0.06);
+        }
+
+        /* Team label */
+        .team-label {
+            font-size: 0.78rem; font-weight: 700;
+            letter-spacing: 0.05em; text-transform: uppercase;
+            margin-bottom: 12px; opacity: 0.5;
+        }
+        .team-half.blue .team-label { color: #60a5fa; }
+        .team-half.red .team-label { color: #f87171; }
+
+        /* Question text in each half */
+        .question-text {
+            font-size: clamp(0.95rem, 2.5vw, 1.35rem);
+            font-weight: 700; color: #f1f5f9;
+            text-align: center; max-width: 400px;
+            margin-bottom: 20px; line-height: 1.5;
+        }
+
+        /* 2x2 Options Grid */
+        .options-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            width: 100%; max-width: 380px;
+        }
+        .option-btn {
+            display: flex; align-items: center; gap: 8px;
+            padding: 12px 14px; border-radius: 12px;
+            background: rgba(255,255,255,0.05); border: 1.5px solid rgba(255,255,255,0.1);
+            color: #cbd5e1; font-size: clamp(0.78rem, 1.5vw, 0.88rem); font-weight: 600;
+            transition: all 0.15s; cursor: default;
+            min-height: 52px;
+        }
+        .team-half.blue .option-btn { border-left: 3px solid rgba(59,130,246,0.3); }
+        .team-half.red .option-btn { border-right: 3px solid rgba(239,68,68,0.3); }
+        .option-key {
+            display: flex; align-items: center; justify-content: center;
+            min-width: 30px; height: 30px; border-radius: 8px;
+            font-weight: 800; font-size: 0.82rem;
+            flex-shrink: 0;
+        }
+        .team-half.blue .option-key {
+            background: rgba(59,130,246,0.2); border: 1.5px solid rgba(59,130,246,0.35);
+            color: #93c5fd;
+        }
+        .team-half.red .option-key {
+            background: rgba(239,68,68,0.2); border: 1.5px solid rgba(239,68,68,0.35);
+            color: #fca5a5;
+        }
+        .option-label { flex: 1; line-height: 1.3; }
+
+        /* Center divider */
+        .arena-divider {
+            position: absolute; left: 50%; top: 0; bottom: 0;
+            width: 3px; transform: translateX(-50%);
+            background: linear-gradient(180deg, rgba(139,92,246,0.4), rgba(139,92,246,0.1), rgba(139,92,246,0.4));
+            z-index: 2;
+        }
+        .arena-divider::after {
+            content: '⚔️'; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.5rem;
+            background: #1e293b; padding: 6px;
+            border-radius: 50%;
+        }
+
+        /* Feedback states */
+        .option-btn.correct {
+            background: rgba(34, 197, 94, 0.25) !important;
+            border-color: #22c55e !important;
+            color: #86efac !important;
+            animation: correctPop 0.3s ease;
+        }
+        .option-btn.wrong {
+            background: rgba(239, 68, 68, 0.2) !important;
+            border-color: #ef4444 !important;
+            color: #fca5a5 !important;
+            animation: shake 0.4s ease;
+        }
+        .option-btn.highlight-correct {
+            background: rgba(34, 197, 94, 0.12) !important;
+            border-color: rgba(34, 197, 94, 0.4) !important;
+            color: #86efac !important;
+        }
+        @keyframes correctPop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.04); }
+            100% { transform: scale(1); }
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        /* Round result flash */
+        .round-result {
+            position: fixed; top: 50%; z-index: 50;
+            transform: translateY(-50%);
+            font-size: clamp(1.2rem, 3vw, 2rem); font-weight: 900;
+            padding: 10px 24px; border-radius: 14px;
+            pointer-events: none;
+            animation: flashIn 0.4s ease forwards;
+        }
+        .round-result.blue { left: 25%; transform: translate(-50%, -50%); background: rgba(59,130,246,0.9); color: #fff; }
+        .round-result.red { right: 25%; left: auto; transform: translate(50%, -50%); background: rgba(239,68,68,0.9); color: #fff; }
+        .round-result.draw { left: 50%; transform: translate(-50%, -50%); background: rgba(100,116,139,0.9); color: #fff; }
+        @keyframes flashIn {
+            0% { opacity: 0; scale: 0.5; }
+            60% { opacity: 1; scale: 1.1; }
+            100% { opacity: 1; scale: 1; }
+        }
+
+        /* ─── END SCREEN ─── */
+        #end-screen {
+            position: absolute; inset: 0;
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 80;
+        }
+        #end-screen.blue-wins { background: linear-gradient(135deg, #1e3a5f, #0f172a); }
+        #end-screen.red-wins { background: linear-gradient(135deg, #5f1e1e, #0f172a); }
+        #end-screen.draw { background: linear-gradient(135deg, #334155, #0f172a); }
+        .end-emoji { font-size: 4rem; margin-bottom: 12px; }
+        .end-title {
+            font-size: clamp(1.8rem, 5vw, 3rem); font-weight: 900;
+            margin-bottom: 8px;
+        }
+        .end-title.blue { color: #60a5fa; }
+        .end-title.red { color: #f87171; }
+        .end-title.draw-text { color: #94a3b8; }
+        .end-scores {
+            display: flex; gap: 32px; margin: 16px 0 24px;
+            font-size: 1.2rem; font-weight: 700;
+        }
+        .end-score-item { text-align: center; }
+        .end-score-num { font-size: 2rem; font-weight: 900; }
+        .end-hint {
+            font-size: 0.95rem; color: #64748b;
+            animation: pulse 1.5s infinite;
+        }
+
+        /* ─── COUNTDOWN ─── */
+        .countdown-overlay {
+            position: fixed; inset: 0; z-index: 60;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(8px);
+        }
+        .countdown-num {
+            font-size: 8rem; font-weight: 900;
+            background: linear-gradient(135deg, #3b82f6, #ef4444);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            animation: countPop 0.8s ease;
+        }
+        .countdown-go {
+            font-size: 4rem; font-weight: 900; color: #fbbf24;
+            animation: countPop 0.5s ease;
+        }
+        @keyframes countPop {
+            0% { transform: scale(0.3); opacity: 0; }
+            60% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(1); }
+        }
+
+        /* Mobile */
+        @media (max-width: 700px) {
+            .game-arena { flex-direction: column; }
+            .team-half.blue { border-right: none; border-bottom: 1px solid rgba(255,255,255,0.06); }
+            .team-half.red { border-left: none; }
+            .arena-divider { display: none; }
+            .question-text { font-size: 0.9rem; margin-bottom: 12px; }
+            .options-grid { max-width: 320px; gap: 6px; }
+            .option-btn { padding: 8px 10px; min-height: 40px; font-size: 0.75rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Loading Screen -->
+    <div id="loading">
+        <div class="emoji">⚔️</div>
+        <p>Đang tải dữ liệu...</p>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="start-screen">
+        <h1>⚔️ Kéo Co Trí Tuệ</h1>
+        <p class="subtitle">2 người chơi — Ai trả lời đúng & nhanh hơn sẽ thắng!</p>
+        <div class="keys-guide">
+            <div class="team blue">
+                <h3>🔵 Đội Xanh (Trái)</h3>
+                <div class="key-row">
+                    <div class="key-label"><span class="key-badge">Q</span> = A</div>
+                    <div class="key-label"><span class="key-badge">W</span> = B</div>
+                </div>
+                <div class="key-row">
+                    <div class="key-label"><span class="key-badge">A</span> = C</div>
+                    <div class="key-label"><span class="key-badge">S</span> = D</div>
+                </div>
+            </div>
+            <div class="team red">
+                <h3>🔴 Đội Đỏ (Phải)</h3>
+                <div class="key-row">
+                    <div class="key-label"><span class="key-badge">O</span> = A</div>
+                    <div class="key-label"><span class="key-badge">P</span> = B</div>
+                </div>
+                <div class="key-row">
+                    <div class="key-label"><span class="key-badge">K</span> = C</div>
+                    <div class="key-label"><span class="key-badge">L</span> = D</div>
+                </div>
+            </div>
+        </div>
+        <p class="start-hint">⏎ Nhấn SPACE để bắt đầu</p>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="game">
+        <div class="game-topbar">
+            <div class="team-score blue">
+                🔵 Xanh <span class="score-num" id="score-blue">0</span>
+            </div>
+            <div class="question-counter" id="q-counter">Câu 1/10</div>
+            <div class="team-score red">
+                <span class="score-num" id="score-red">0</span> Đỏ 🔴
+            </div>
+        </div>
+
+        <div class="rope-area">
+            <div class="rope-track">
+                <div class="win-zone left">🏁</div>
+                <div class="win-zone right">🏁</div>
+                <div class="rope-center-line"></div>
+                <div class="rope-fill-blue" id="rope-blue"></div>
+                <div class="rope-fill-red" id="rope-red"></div>
+                <div class="rope-marker" id="rope-marker">🚩</div>
+            </div>
+        </div>
+
+        <div class="game-arena">
+            <!-- Blue team half -->
+            <div class="team-half blue">
+                <div class="team-label">🔵 Đội Xanh</div>
+                <div class="question-text" id="question-text-blue">Loading...</div>
+                <div class="options-grid" id="options-left"></div>
+            </div>
+            <!-- Center divider -->
+            <div class="arena-divider"></div>
+            <!-- Red team half -->
+            <div class="team-half red">
+                <div class="team-label">🔴 Đội Đỏ</div>
+                <div class="question-text" id="question-text-red">Loading...</div>
+                <div class="options-grid" id="options-right"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- End Screen -->
+    <div id="end-screen">
+        <div class="end-emoji" id="end-emoji">🏆</div>
+        <div class="end-title" id="end-title">Đội Xanh thắng!</div>
+        <div class="end-scores">
+            <div class="end-score-item">
+                <div class="end-score-num blue" id="end-score-blue">0</div>
+                <div style="color:#64748b;font-size:0.85rem;">Đội Xanh</div>
+            </div>
+            <div style="color:#334155;font-size:1.5rem;font-weight:900;align-self:center;">—</div>
+            <div class="end-score-item">
+                <div class="end-score-num red" id="end-score-red">0</div>
+                <div style="color:#64748b;font-size:0.85rem;">Đội Đỏ</div>
+            </div>
+        </div>
+        <p class="end-hint">Nhấn SPACE để chơi lại</p>
+    </div>
+
+    <script>
+    (function() {
+        'use strict';
+
+        // ─── KEY MAPPINGS ───
+        const BLUE_KEYS = { q: 0, w: 1, a: 2, s: 3 }; // A, B, C, D
+        const RED_KEYS  = { o: 0, p: 1, k: 2, l: 3 };
+
+        // ─── GAME STATE ───
+        let questions = [];
+        let currentQ = 0;
+        let scoreBlue = 0;
+        let scoreRed = 0;
+        let ropePos = 0; // -WIN_THRESHOLD to +WIN_THRESHOLD (negative = blue winning)
+        const WIN_THRESHOLD = 5;
+        let blueAnswered = false;
+        let redAnswered = false;
+        let roundActive = false;
+        let gamePhase = 'loading'; // loading, start, countdown, playing, ended
+        let soundEnabled = true;
+
+        // ─── DOM REFS ───
+        const $loading = document.getElementById('loading');
+        const $startScreen = document.getElementById('start-screen');
+        const $game = document.getElementById('game');
+        const $endScreen = document.getElementById('end-screen');
+        const $questionTextBlue = document.getElementById('question-text-blue');
+        const $questionTextRed = document.getElementById('question-text-red');
+        const $optionsLeft = document.getElementById('options-left');
+        const $optionsRight = document.getElementById('options-right');
+        const $scoreBlue = document.getElementById('score-blue');
+        const $scoreRed = document.getElementById('score-red');
+        const $qCounter = document.getElementById('q-counter');
+        const $ropeMarker = document.getElementById('rope-marker');
+        const $ropeBlue = document.getElementById('rope-blue');
+        const $ropeRed = document.getElementById('rope-red');
+
+        // ─── AUDIO (Web Audio API) ───
+        let audioCtx = null;
+        function playTone(freq, duration, type) {
+            if (!soundEnabled) return;
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type || 'sine';
+                osc.frequency.value = freq;
+                gain.gain.value = 0.15;
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e) {}
+        }
+        function playCorrect() { playTone(880, 0.15, 'sine'); setTimeout(() => playTone(1100, 0.2, 'sine'), 100); }
+        function playWrong() { playTone(200, 0.3, 'square'); }
+        function playWin() { [0,100,200,300].forEach((d,i) => setTimeout(() => playTone(440*(i+1)/2, 0.2, 'sine'), d)); }
+
+        // ─── DATA CONVERSION ───
+        function convertVocabToQuestions(words) {
+            const qs = [];
+            const allMeanings = words.map(w => w.meaning);
+            
+            words.forEach(w => {
+                // Pick 3 random wrong answers
+                const wrongs = allMeanings.filter(m => m !== w.meaning)
+                    .sort(() => Math.random() - 0.5)
+                    .slice(0, 3);
+                
+                if (wrongs.length < 3) {
+                    // Not enough unique words, pad with dummy
+                    while (wrongs.length < 3) wrongs.push('—');
+                }
+
+                const options = [w.meaning, ...wrongs].sort(() => Math.random() - 0.5);
+                const correctIndex = options.indexOf(w.meaning);
+
+                qs.push({
+                    question: `"${w.word}" nghĩa là gì?`,
+                    options,
+                    correctIndex
+                });
+            });
+
+            return qs.sort(() => Math.random() - 0.5);
+        }
+
+        function convertGrammarToQuestions(grammarQs) {
+            return grammarQs.map(q => {
+                const opts = q.options || [];
+                const answer = q.answer || q.correctAnswer || '';
+                let correctIndex = opts.indexOf(answer);
+                if (correctIndex === -1) correctIndex = 0;
+
+                // Ensure exactly 4 options
+                while (opts.length < 4) opts.push('—');
+                const finalOpts = opts.slice(0, 4);
+
+                return {
+                    question: q.question || q.content || '',
+                    options: finalOpts,
+                    correctIndex
+                };
+            }).sort(() => Math.random() - 0.5);
+        }
+
+        // ─── SDK DATA HANDLER ───
+        SuperStudySDK.onData(function(data) {
+            if (data.dataType === 'vocabulary' && data.words) {
+                questions = convertVocabToQuestions(data.words);
+            } else if (data.dataType === 'grammar' && data.questions) {
+                questions = convertGrammarToQuestions(data.questions);
+            } else {
+                // Try both
+                if (data.words) questions = convertVocabToQuestions(data.words);
+                else if (data.questions) questions = convertGrammarToQuestions(data.questions);
+            }
+
+            if (questions.length === 0) {
+                $loading.querySelector('p').textContent = '⚠️ Không có dữ liệu phù hợp.';
+                return;
+            }
+
+            showStartScreen();
+        });
+
+        // ─── SCREENS ───
+        function showStartScreen() {
+            gamePhase = 'start';
+            $loading.style.display = 'none';
+            $startScreen.style.display = 'flex';
+            $game.style.display = 'none';
+            $endScreen.style.display = 'none';
+        }
+
+        function startCountdown() {
+            gamePhase = 'countdown';
+            $startScreen.style.display = 'none';
+            $game.style.display = 'flex';
+
+            let count = 3;
+            const overlay = document.createElement('div');
+            overlay.className = 'countdown-overlay';
+            document.body.appendChild(overlay);
+
+            function tick() {
+                if (count > 0) {
+                    overlay.innerHTML = `<div class="countdown-num">${count}</div>`;
+                    playTone(440, 0.15, 'sine');
+                    count--;
+                    setTimeout(tick, 800);
+                } else {
+                    overlay.innerHTML = `<div class="countdown-go">GO! ⚔️</div>`;
+                    playTone(880, 0.3, 'sine');
+                    setTimeout(() => {
+                        overlay.remove();
+                        startGame();
+                    }, 600);
+                }
+            }
+            tick();
+        }
+
+        function startGame() {
+            gamePhase = 'playing';
+            currentQ = 0;
+            scoreBlue = 0;
+            scoreRed = 0;
+            ropePos = 0;
+            updateScores();
+            updateRope();
+            showQuestion();
+        }
+
+        function showQuestion() {
+            if (currentQ >= questions.length) {
+                endGame();
+                return;
+            }
+
+            const q = questions[currentQ];
+            $questionTextBlue.textContent = q.question;
+            $questionTextRed.textContent = q.question;
+            $qCounter.textContent = `Câu ${currentQ + 1}/${questions.length}`;
+
+            const BLUE_KEY_LABELS = ['Q', 'W', 'A', 'S'];
+            const RED_KEY_LABELS = ['O', 'P', 'K', 'L'];
+            const OPTION_LABELS = ['A', 'B', 'C', 'D'];
+
+            // Render 2x2 grid for Blue team (Q W / A S)
+            $optionsLeft.innerHTML = q.options.map((opt, i) => `
+                <div class="option-btn" id="opt-left-${i}">
+                    <span class="option-key">${BLUE_KEY_LABELS[i]}</span>
+                    <span class="option-label">${OPTION_LABELS[i]}. ${opt}</span>
+                </div>
+            `).join('');
+
+            // Render 2x2 grid for Red team (O P / K L)
+            $optionsRight.innerHTML = q.options.map((opt, i) => `
+                <div class="option-btn" id="opt-right-${i}">
+                    <span class="option-key">${RED_KEY_LABELS[i]}</span>
+                    <span class="option-label">${OPTION_LABELS[i]}. ${opt}</span>
+                </div>
+            `).join('');
+
+            blueAnswered = false;
+            redAnswered = false;
+            roundActive = true;
+        }
+
+        function handleAnswer(team, choiceIndex) {
+            if (!roundActive) return;
+            if (team === 'blue' && blueAnswered) return;
+            if (team === 'red' && redAnswered) return;
+
+            const q = questions[currentQ];
+            const isCorrect = choiceIndex === q.correctIndex;
+            const side = team === 'blue' ? 'left' : 'right';
+            const optEl = document.getElementById(`opt-${side}-${choiceIndex}`);
+
+            if (team === 'blue') blueAnswered = true;
+            if (team === 'red') redAnswered = true;
+
+            if (isCorrect) {
+                playCorrect();
+                if (optEl) optEl.classList.add('correct');
+                
+                // Move rope toward this team
+                if (team === 'blue') {
+                    scoreBlue++;
+                    ropePos--;
+                } else {
+                    scoreRed++;
+                    ropePos++;
+                }
+                updateScores();
+                updateRope();
+
+                // Show flash
+                showRoundResult(team === 'blue' ? '🔵 Xanh +1!' : '🔴 Đỏ +1!', team);
+
+                // Check win
+                if (Math.abs(ropePos) >= WIN_THRESHOLD) {
+                    roundActive = false;
+                    setTimeout(endGame, 1200);
+                    return;
+                }
+            } else {
+                playWrong();
+                if (optEl) optEl.classList.add('wrong');
+                // Show correct answer
+                const correctSide = side;
+                const correctEl = document.getElementById(`opt-${correctSide}-${q.correctIndex}`);
+                if (correctEl) correctEl.classList.add('highlight-correct');
+            }
+
+            // If both answered, move to next
+            if (blueAnswered && redAnswered) {
+                roundActive = false;
+                setTimeout(nextQuestion, 1500);
+            }
+            // If one team answers correctly first (pulling), auto-advance after delay
+            else if (isCorrect) {
+                // Give other team 3 seconds to answer
+                setTimeout(() => {
+                    if (roundActive) {
+                        roundActive = false;
+                        setTimeout(nextQuestion, 800);
+                    }
+                }, 3000);
+            }
+        }
+
+        function nextQuestion() {
+            currentQ++;
+            if (currentQ >= questions.length || Math.abs(ropePos) >= WIN_THRESHOLD) {
+                endGame();
+            } else {
+                showQuestion();
+            }
+        }
+
+        function showRoundResult(text, team) {
+            const el = document.createElement('div');
+            el.className = `round-result ${team}`;
+            el.textContent = text;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 1200);
+        }
+
+        function updateScores() {
+            $scoreBlue.textContent = scoreBlue;
+            $scoreRed.textContent = scoreRed;
+        }
+
+        function updateRope() {
+            const pct = 50 + (ropePos / WIN_THRESHOLD) * 50;
+            $ropeMarker.style.left = pct + '%';
+            
+            // Fill bars
+            const blueWidth = Math.max(0, (50 - pct));  // Blue winning = rope going left
+            const redWidth = Math.max(0, (pct - 50));
+            $ropeBlue.style.width = (50 - Math.min(pct, 50)) + '%';
+            $ropeRed.style.width = (Math.max(pct, 50) - 50) + '%';
+        }
+
+        function endGame() {
+            gamePhase = 'ended';
+            roundActive = false;
+            playWin();
+
+            const $emoji = document.getElementById('end-emoji');
+            const $title = document.getElementById('end-title');
+            const $endBlue = document.getElementById('end-score-blue');
+            const $endRed = document.getElementById('end-score-red');
+
+            $endBlue.textContent = scoreBlue;
+            $endRed.textContent = scoreRed;
+
+            if (scoreBlue > scoreRed) {
+                $endScreen.className = 'blue-wins';
+                $endScreen.style.display = 'flex';
+                $emoji.textContent = '🏆';
+                $title.textContent = '🔵 Đội Xanh thắng!';
+                $title.className = 'end-title blue';
+            } else if (scoreRed > scoreBlue) {
+                $endScreen.className = 'red-wins';
+                $endScreen.style.display = 'flex';
+                $emoji.textContent = '🏆';
+                $title.textContent = '🔴 Đội Đỏ thắng!';
+                $title.className = 'end-title red';
+            } else {
+                $endScreen.className = 'draw';
+                $endScreen.style.display = 'flex';
+                $emoji.textContent = '🤝';
+                $title.textContent = 'Hòa!';
+                $title.className = 'end-title draw-text';
+            }
+
+            $game.style.display = 'none';
+
+            SuperStudySDK.notifyComplete({
+                message: scoreBlue > scoreRed ? 'Đội Xanh thắng!' : scoreRed > scoreBlue ? 'Đội Đỏ thắng!' : 'Hòa!',
+                blueScore: scoreBlue,
+                redScore: scoreRed,
+                totalQuestions: questions.length,
+                questionsPlayed: currentQ
+            });
+        }
+
+        function restartGame() {
+            $endScreen.style.display = 'none';
+            // Reshuffle questions
+            questions.sort(() => Math.random() - 0.5);
+            showStartScreen();
+        }
+
+        // ─── KEYBOARD HANDLER ───
+        document.addEventListener('keydown', function(e) {
+            const key = e.key.toLowerCase();
+
+            // Space to start/restart
+            if (key === ' ' || key === 'space') {
+                e.preventDefault();
+                if (gamePhase === 'start') startCountdown();
+                else if (gamePhase === 'ended') restartGame();
+                return;
+            }
+
+            if (gamePhase !== 'playing' || !roundActive) return;
+
+            // Blue team keys
+            if (key in BLUE_KEYS) {
+                e.preventDefault();
+                handleAnswer('blue', BLUE_KEYS[key]);
+            }
+            // Red team keys
+            else if (key in RED_KEYS) {
+                e.preventDefault();
+                handleAnswer('red', RED_KEYS[key]);
+            }
+        });
+
+        // Initialize rope position
+        updateRope();
+    })();
+    </script>
+</body>
+</html>

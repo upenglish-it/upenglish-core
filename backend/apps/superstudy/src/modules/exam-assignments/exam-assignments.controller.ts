@@ -11,14 +11,26 @@ import { ExamAssignmentsService } from './exam-assignments.service';
 export class ExamAssignmentsController {
   constructor(private readonly examAssignmentsService: ExamAssignmentsService) {}
 
-  @ApiOperation({ summary: 'List exam assignments. Filter by examId, groupId, or studentId.' })
+  @ApiOperation({ summary: 'List exam assignments. Filter by examId, targetType+targetId, or targetType+targetId.' })
   @Get()
   findAll(
     @Query('examId') examId?: string,
+    @Query('targetType') targetType?: string,
+    @Query('targetId') targetId?: string,
     @Query('groupId') groupId?: string,
     @Query('studentId') studentId?: string,
   ) {
-    return this.examAssignmentsService.findAll({ examId, groupId, studentId });
+    return this.examAssignmentsService.findAll({ examId, targetType, targetId, groupId, studentId });
+  }
+
+  @ApiOperation({ summary: 'List assignments for a student (individual + group-based), comma-sep groupIds' })
+  @Get('student')
+  findForStudent(
+    @Query('studentId') studentId: string,
+    @Query('groupIds') groupIds?: string,
+  ) {
+    const ids = groupIds ? groupIds.split(',').filter(Boolean) : [];
+    return this.examAssignmentsService.findForStudent(studentId, ids);
   }
 
   @ApiOperation({ summary: 'List soft-deleted assignments for a group' })
@@ -37,6 +49,13 @@ export class ExamAssignmentsController {
   @Post()
   create(@Body() body: Record<string, any>) {
     return this.examAssignmentsService.create(body);
+  }
+
+  @ApiOperation({ summary: 'Generic update for an assignment (fields, studentDeadlines, etc.)' })
+  @Patch(':id')
+  @HttpCode(HttpStatus.OK)
+  update(@Param('id') id: string, @Body() body: Record<string, any>) {
+    return this.examAssignmentsService.update(id, body);
   }
 
   @ApiOperation({ summary: 'Update assignment due date (+ optionally notify)' })

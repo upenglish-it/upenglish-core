@@ -1,13 +1,13 @@
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
 // NestJs Imports
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 // Schemas
 import { Accounts, Properties, PropertiesBranches } from '../../../isms';
 
 export const SSTTeacherTopicsCN = 'sst-teacher-topics';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: SSTTeacherTopicsCN } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: SSTTeacherTopicsCN } })
 export class SSTTeacherTopics {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public readonly _id: string;
@@ -36,6 +36,9 @@ export class SSTTeacherTopics {
   @Prop({ type: Number, default: 0 })
   public readonly cachedWordCount: number;
 
+  @Prop({ type: Array, default: [] })
+  public readonly words: Record<string, any>[];
+
   @Prop({ type: Boolean, default: false })
   public readonly isDeleted: boolean;
 
@@ -45,20 +48,29 @@ export class SSTTeacherTopics {
   @Prop({ type: String, default: null })
   public readonly duplicatedFrom: string;
 
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly collaborators: string[];
 
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly collaboratorNames: string[];
 
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly collaboratorIds: string[];
 
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly collaboratorRoles: string[];
 
   @Prop({ type: Boolean, default: false })
   public readonly isPublic: boolean;
+
+  @Prop({ type: String, default: 'teacher' })
+  public readonly createdByRole?: string;
+
+  @Prop({ type: String, default: null })
+  public readonly transferredFromOfficial?: string;
+
+  @Prop({ type: Date, default: null })
+  public readonly transferredAt?: Date;
 
   /** Folder this teacher topic belongs to */
   @Prop({ type: String, default: null })

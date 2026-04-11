@@ -1,8 +1,9 @@
 import {
   Controller, Get, Post, Patch, Delete,
-  Param, Query, Body, HttpCode, HttpStatus,
+  Param, Query, Body, HttpCode, HttpStatus, UseInterceptors, UploadedFile,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { TopicsService } from './topics.service';
 
 @ApiTags('Topics (Admin)')
@@ -15,6 +16,41 @@ export class TopicsController {
   @Get()
   findAll(@Query('folderId') folderId?: string) {
     return this.topicsService.findAll(folderId);
+  }
+
+  @ApiOperation({ summary: 'List soft-deleted topics' })
+  @Get('deleted')
+  findDeleted() {
+    return this.topicsService.findDeleted();
+  }
+
+  @ApiOperation({ summary: 'Check whether a vocab image URL is still referenced by any official topic word' })
+  @Get('check-vocab-image-used')
+  checkVocabImageUsed(@Query('url') url: string) {
+    return this.topicsService.checkVocabImageUsed(url);
+  }
+
+  @ApiOperation({ summary: 'Upload a vocab image for topic words' })
+  @Post('vocab-images/upload')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+      required: ['file'],
+    },
+  })
+  uploadVocabImage(@UploadedFile() file: Express.Multer.File) {
+    return this.topicsService.uploadVocabImage(file);
+  }
+
+  @ApiOperation({ summary: 'Delete a vocab image previously uploaded for topic words' })
+  @Delete('vocab-images')
+  deleteVocabImage(@Body('url') url: string) {
+    return this.topicsService.deleteVocabImage(url);
   }
 
   @ApiOperation({ summary: 'Get a single topic by ID' })
@@ -56,6 +92,12 @@ export class TopicsController {
   @Delete(':id')
   softDelete(@Param('id') id: string) {
     return this.topicsService.softDelete(id);
+  }
+
+  @ApiOperation({ summary: 'Restore a soft-deleted topic' })
+  @Patch(':id/restore')
+  restore(@Param('id') id: string) {
+    return this.topicsService.restore(id);
   }
 
   @ApiOperation({ summary: 'Permanently delete a topic' })

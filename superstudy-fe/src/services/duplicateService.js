@@ -1,9 +1,7 @@
-import { db, storage } from '../config/firebase';
-import { collection, doc, getDocs, getDoc, setDoc, Timestamp, query, where, orderBy } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { recalcExamQuestionCache, getExam, getExamQuestions, saveExam, saveExamQuestion } from './examService';
 import { recalcGrammarQuestionCache, getGrammarExercise, getGrammarQuestions, saveGrammarExercise, saveGrammarQuestion } from './grammarService';
-import { teacherTopicsService } from '../models';
+import { teacherTopicsService, topicsService } from '../models';
+import { uploadPublicAsset } from './uploadService';
 
 // ==========================================
 // HELPER: Copy a Firebase Storage file to a new path
@@ -34,10 +32,11 @@ async function copyStorageFile(url, targetFolder) {
         else if (contentType.includes('png')) ext = 'png';
         else if (contentType.includes('jpeg') || contentType.includes('jpg')) ext = 'jpg';
 
-        const newPath = `${targetFolder}/${timestamp}_${rand}.${ext}`;
-        const storageRef = ref(storage, newPath);
-        await uploadBytes(storageRef, blob, { contentType: blob.type || 'application/octet-stream' });
-        return getDownloadURL(storageRef);
+        const upload = await uploadPublicAsset(blob, targetFolder, {
+            fileName: `${timestamp}_${rand}.${ext}`,
+            contentType: blob.type || 'application/octet-stream',
+        });
+        return upload?.url || url;
     } catch (e) {
         console.error('[duplicateService] Error copying storage file:', url, e);
         return url; // fallback: keep original URL (shared reference) rather than failing
@@ -168,6 +167,71 @@ export async function duplicateTeacherTopic(topicId, teacherId) {
 
     // 5. Save new topic via API
     await teacherTopicsService.create(newTopicData);
+
+    return newTopicId;
+}
+
+// ==========================================
+// DUPLICATE: Admin Topic (Official Vocab)
+// ==========================================
+
+/**
+ * Deep-clone an official admin topic with all words and images.
+ * Adapted for the NestJS/MongoDB backend (uses topicsService API).
+ * @param {string} topicId - The source topic ID
+ * @param {string} [adminId] - The current admin UID
+ * @returns {Promise<string>} The new topic ID
+ */
+export async function duplicateAdminTopic(topicId, adminId) {
+    if (!topicId) throw new Error('Missing topicId');
+
+    // 1. Read source topic via API
+    const topicData = await topicsService.findOne(topicId);
+    if (!topicData) throw new Error('Chủ đề không tồn tại.');
+
+    // 2. Generate new ID
+    const newTopicId = `${String(topicId).replace(/\//g, '-')}-copy-${Date.now()}`;
+    const duplicateName = `${topicData.name || 'Chủ đề'} (Bản sao)`;
+
+    // 3. Build and clean new topic data
+    const newTopicData = { ...topicData };
+    delete newTopicData._id;
+    delete newTopicData.id;
+    delete newTopicData.isDeleted;
+    delete newTopicData.deletedAt;
+    delete newTopicData.archived;
+    delete newTopicData.isPublic;
+    delete newTopicData.teacherVisible;
+    delete newTopicData.sharedWith;
+    delete newTopicData.collaboratorIds;
+    delete newTopicData.collaboratorNames;
+    delete newTopicData.collaboratorRoles;
+    delete newTopicData.teacherId;
+
+    newTopicData.name = duplicateName;
+    newTopicData.createdByRole = 'admin';
+    newTopicData.duplicatedFrom = topicId;
+    newTopicData.collaborators = [];
+    newTopicData.createdAt = new Date().toISOString();
+    newTopicData.updatedAt = new Date().toISOString();
+    if (adminId) newTopicData.createdBy = adminId;
+
+    // Copy vocab images if stored in Firebase Storage
+    if (Array.isArray(newTopicData.words)) {
+        const newWords = [];
+        for (const w of newTopicData.words) {
+            const wordData = { ...w };
+            if (wordData.imageUrl && wordData.imageUrl.includes('firebasestorage.googleapis.com')) {
+                wordData.imageUrl = await copyStorageFile(wordData.imageUrl, 'vocab_images');
+            }
+            newWords.push(wordData);
+        }
+        newTopicData.words = newWords;
+        newTopicData.cachedWordCount = newWords.length;
+    }
+
+    // 4. Save via API
+    await topicsService.create({ _id: newTopicId, ...newTopicData });
 
     return newTopicId;
 }
@@ -383,6 +447,221 @@ export async function duplicateGrammarExercise(exerciseId, teacherId) {
             });
         } catch (e) {
             console.error('[duplicateService] Error copying grammar question:', qBase.id || qBase._id, e);
+        }
+    }
+
+    // 4. Recalc cache
+    await recalcGrammarQuestionCache(newExId);
+
+    return newExId;
+}
+
+// ==========================================
+// DUPLICATE: Admin Exam (Official)
+// ==========================================
+
+/**
+ * Deep-clone an official admin exam with all sections, questions, and media.
+ * Adapted for the NestJS/MongoDB backend (uses examService API).
+ * @param {string} examId - The source exam ID
+ * @param {string} [adminId] - The current admin UID
+ * @returns {Promise<string>} The new exam ID
+ */
+export async function duplicateAdminExam(examId, adminId) {
+    if (!examId) throw new Error('Missing examId');
+
+    // 1. Read source exam via API
+    const examData = await getExam(examId);
+    if (!examData) throw new Error('Đề thi không tồn tại.');
+
+    // 2. Create section ID mapping (old → new)
+    const sectionIdMap = {};
+    const newSections = (examData.sections || []).map(section => {
+        const newSectionId = crypto.randomUUID();
+        sectionIdMap[section.id || section._id] = newSectionId;
+        return { ...section, id: newSectionId };
+    });
+
+    // 3. Copy section-level context audio & context images
+    for (let i = 0; i < newSections.length; i++) {
+        if (newSections[i].contextAudioUrl) {
+            newSections[i].contextAudioUrl = await copyStorageFile(
+                newSections[i].contextAudioUrl,
+                `context_audio/exam/${crypto.randomUUID()}`
+            );
+        }
+        if (newSections[i].context) {
+            newSections[i].context = await copyAllStorageUrlsInHtml(newSections[i].context);
+        }
+    }
+
+    // 4. Prepare new exam data
+    const newExamId = `e-admin-${Date.now()}`;
+    const newExamData = {
+        ...examData,
+        sections: newSections,
+        name: `${examData.name || examData.title || 'Đề thi'} (Bản sao)`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdByRole: 'admin',
+        duplicatedFrom: examId,
+        collaborators: [],
+    };
+    if (adminId) newExamData.createdBy = adminId;
+    delete newExamData._id;
+    delete newExamData.id;
+    delete newExamData.teacherId;
+    delete newExamData.isPublic;
+    delete newExamData.isDeleted;
+    delete newExamData.collaboratorIds;
+    delete newExamData.collaboratorNames;
+
+    // Save via API
+    await saveExam({ _id: newExamId, ...newExamData });
+
+    // 5. Read and copy all questions
+    const questions = await getExamQuestions(examId);
+
+    for (const qBase of questions) {
+        try {
+            const qData = { ...qBase };
+
+            // Map IDs
+            qData.examId = newExamId;
+            if (qData.sectionId && sectionIdMap[qData.sectionId]) {
+                qData.sectionId = sectionIdMap[qData.sectionId];
+            }
+
+            // Copy option images (multiple_choice)
+            if (qData.type === 'multiple_choice' && qData.variations) {
+                qData.variations = await copyQuestionOptionImages(qData.variations);
+            }
+
+            if (qData.contextAudioUrl) {
+                qData.contextAudioUrl = await copyStorageFile(
+                    qData.contextAudioUrl,
+                    `context_audio/exam/${newExamId}`
+                );
+            }
+
+            if (qData.context) {
+                qData.context = await copyAllStorageUrlsInHtml(qData.context);
+            }
+
+            if (qData.variations && Array.isArray(qData.variations)) {
+                for (let vi = 0; vi < qData.variations.length; vi++) {
+                    const v = qData.variations[vi];
+                    if (v && v.text && typeof v.text === 'string' && v.text.includes('firebasestorage.googleapis.com')) {
+                        qData.variations[vi] = { ...v, text: await copyAllStorageUrlsInHtml(v.text) };
+                    }
+                }
+            }
+
+            delete qData.id;
+            delete qData._id;
+
+            await saveExamQuestion({
+                ...qData,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            });
+        } catch (e) {
+            console.error('[duplicateService] Error copying admin exam question:', qBase.id || qBase._id, e);
+        }
+    }
+
+    // 6. Recalc cache
+    await recalcExamQuestionCache(newExamId);
+
+    return newExamId;
+}
+
+// ==========================================
+// DUPLICATE: Admin Grammar Exercise (Official)
+// ==========================================
+
+/**
+ * Deep-clone an official admin grammar exercise with all questions and media.
+ * Adapted for the NestJS/MongoDB backend (uses grammarService API).
+ * @param {string} exerciseId - The source exercise ID
+ * @param {string} [adminId] - The current admin UID
+ * @returns {Promise<string>} The new exercise ID
+ */
+export async function duplicateAdminGrammarExercise(exerciseId, adminId) {
+    if (!exerciseId) throw new Error('Missing exerciseId');
+
+    // 1. Read source exercise via API
+    const exData = await getGrammarExercise(exerciseId);
+    if (!exData) throw new Error('Bài học không tồn tại.');
+
+    // 2. Create new exercise
+    const newExId = `g-admin-${Date.now()}`;
+    const duplicateName = `${exData.name || exData.title || 'Bài học'} (Bản sao)`;
+    const newExData = {
+        ...exData,
+        name: duplicateName,
+        title: duplicateName,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdByRole: 'admin',
+        duplicatedFrom: exerciseId,
+        collaborators: [],
+    };
+    if (adminId) newExData.createdBy = adminId;
+    delete newExData._id;
+    delete newExData.id;
+    delete newExData.teacherId;
+    delete newExData.isPublic;
+    delete newExData.isDeleted;
+    delete newExData.collaboratorIds;
+    delete newExData.collaboratorNames;
+
+    // Save via API
+    await saveGrammarExercise({ _id: newExId, ...newExData });
+
+    // 3. Read and copy all questions
+    const questions = await getGrammarQuestions(exerciseId);
+
+    for (const qBase of questions) {
+        try {
+            const qData = { ...qBase };
+
+            qData.exerciseId = newExId;
+
+            if (qData.type === 'multiple_choice' && qData.variations) {
+                qData.variations = await copyQuestionOptionImages(qData.variations);
+            }
+
+            if (qData.contextAudioUrl) {
+                qData.contextAudioUrl = await copyStorageFile(
+                    qData.contextAudioUrl,
+                    `context_audio/grammar/${newExId}`
+                );
+            }
+
+            if (qData.context) {
+                qData.context = await copyAllStorageUrlsInHtml(qData.context);
+            }
+
+            if (qData.variations && Array.isArray(qData.variations)) {
+                for (let vi = 0; vi < qData.variations.length; vi++) {
+                    const v = qData.variations[vi];
+                    if (v && v.text && typeof v.text === 'string' && v.text.includes('firebasestorage.googleapis.com')) {
+                        qData.variations[vi] = { ...v, text: await copyAllStorageUrlsInHtml(v.text) };
+                    }
+                }
+            }
+
+            delete qData.id;
+            delete qData._id;
+
+            await saveGrammarQuestion({
+                ...qData,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            });
+        } catch (e) {
+            console.error('[duplicateService] Error copying admin grammar question:', qBase.id || qBase._id, e);
         }
     }
 

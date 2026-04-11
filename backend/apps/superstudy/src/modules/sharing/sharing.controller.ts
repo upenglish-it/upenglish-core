@@ -220,4 +220,13 @@ export class SharingController {
   }) {
     return this.sharingService.removeTeacherShare(body.resourceType, body.resourceId, body.teacherId);
   }
+
+  @ApiOperation({ summary: 'Get teachers explicitly shared on an admin resource' })
+  @Get('teacher-share')
+  getTeacherShares(
+    @Query('resourceType') resourceType: string,
+    @Query('resourceId') resourceId: string,
+  ) {
+    return this.sharingService.getTeacherShares(resourceType, resourceId);
+  }
 }

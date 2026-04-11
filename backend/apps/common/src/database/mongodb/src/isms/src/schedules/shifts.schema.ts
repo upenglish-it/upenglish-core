@@ -5,7 +5,7 @@ import { Properties } from '../properties';
 import { PropertiesBranches } from '../properties/branches';
 // import { ISchedulesTime, Schedules } from '.';
 // Typegoose
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 // Utils
 import { ISchedule, SYSTEM_ID } from 'apps/common/src/utils';
 // Types
@@ -13,7 +13,7 @@ import { ScheduleTypeT } from '../../../../../../types/src/schedule.type';
 // Constants
 import { ScheduleTypeC } from '../../../../../../constants/src/schedule.constant';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: 'schedules-shifts' } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: 'schedules-shifts' } })
 export class SchedulesShifts {
   @Prop({ type: String, required: true })
   public title: string;

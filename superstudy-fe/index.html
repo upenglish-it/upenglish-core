@@ -7,10 +7,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>sUPerStudy</title>
   <script>
+    // Capture SPA base URL immediately (before History API changes URL)
+    (function () {
+      var href = window.location.href.split(/[?#]/)[0];
+      if (!href.endsWith('/')) href = href.substring(0, href.lastIndexOf('/') + 1);
+      window.__APP_BASE__ = href;
+    })();
     // Apply saved theme instantly to prevent flash-of-wrong-theme
     (function () {
       var t = localStorage.getItem('appTheme');
       if (t) document.documentElement.setAttribute('data-theme', t);
+    })();
+    // SPA preview routing: store target path, React will navigate() after mount
+    // (do NOT replaceState here - it breaks relative asset loading before scripts load)
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var previewPath = params.get('_preview');
+      if (previewPath) {
+        window.__PENDING_PREVIEW__ = decodeURIComponent(previewPath);
+      }
     })();
   </script>
 </head>

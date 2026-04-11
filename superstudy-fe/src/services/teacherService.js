@@ -1,8 +1,28 @@
-import { db } from '../config/firebase';
-import { collection, query, where, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, deleteField, serverTimestamp, orderBy, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { getAllWordProgressMap } from './spacedRepetition';
 import wordData from '../data/wordData';
-import { userGroupsService, usersService, assignmentsService, teacherTopicsService, teacherFoldersService, sharingService } from '../models';
+import { userGroupsService, usersService, assignmentsService, teacherTopicsService, teacherFoldersService, sharingService, topicsService, grammarQuestionsService } from '../models';
+
+function unwrapPayload(result) {
+    return result?.data || result || null;
+}
+
+function normalizeSharingResourceType(collectionName) {
+    const normalized = String(collectionName || '').trim();
+    const map = {
+        folders: 'folder',
+        topics: 'topic',
+        teacher_topics: 'teacher_topic',
+        teacher_topic_folders: 'teacher_topic_folder',
+        grammar_exercises: 'grammar',
+        grammar_folders: 'grammar_folder',
+        teacher_grammar_folders: 'teacher_grammar_folder',
+        exams: 'exam',
+        exam_folders: 'exam_folder',
+        teacher_exam_folders: 'teacher_exam_folder'
+    };
+
+    return map[normalized] || normalized;
+}
 
 // Get groups managed by the teacher
 // The teacher's user document has an array `groupIds`. 
@@ -12,7 +32,18 @@ export async function getTeacherGroups(groupIds) {
     try {
         const result = await userGroupsService.findByIds(groupIds);
         let groups = Array.isArray(result) ? result : (result?.data || []);
-        groups = groups.filter(g => !g.isHidden);
+        const seen = new Set();
+        groups = groups
+            .map(group => ({
+                ...group,
+                id: group?.id || group?._id,
+            }))
+            .filter(g => {
+                if (!g?.id || g.isHidden) return false;
+                if (seen.has(g.id)) return false;
+                seen.add(g.id);
+                return true;
+            });
         groups.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         return groups;
     } catch (error) {
@@ -25,8 +56,13 @@ export async function getTeacherGroups(groupIds) {
 export async function getStudentsInGroup(groupId) {
     if (!groupId) return [];
     try {
-        const result = await usersService.findByGroup(groupId, 'user');
+        const result = await userGroupsService.getStudents(groupId);
         let students = Array.isArray(result) ? result : (result?.data || []);
+        students = students.map(student => ({
+            ...student,
+            uid: student.uid || student.id || student._id,
+            id: student.id || student._id || student.uid,
+        })).filter(student => !!student.uid);
         students.sort((a, b) => (a.email || '').localeCompare(b.email || ''));
         return students;
     } catch (error) {
@@ -38,8 +74,11 @@ export async function getStudentsInGroup(groupId) {
 export async function getGroupById(groupId) {
     if (!groupId) return null;
     try {
-        const result = await userGroupsService.findOne(groupId);
-        return result || null;
+        const group = unwrapPayload(await userGroupsService.findOne(groupId));
+        return group ? {
+            ...group,
+            id: group.id || group._id,
+        } : null;
     } catch (error) {
         console.error("Error fetching group by ID:", error);
         throw error;
@@ -50,8 +89,7 @@ export async function getGroupById(groupId) {
 
 export async function createAssignment(assignmentData) {
     try {
-        const result = await assignmentsService.create(assignmentData);
-        const newId = result?.id || result;
+        return await assignmentsService.create(assignmentData);
 
         // Notify students (in-app + email) — non-blocking
         const scheduledStartDate = assignmentData.scheduledStart
@@ -185,7 +223,7 @@ export async function getDeletedAssignmentsForGroup(groupId) {
 export async function updateAssignmentDueDate(assignmentId, newDueDate) {
     if (!assignmentId || !newDueDate) throw new Error("Missing assignment ID or new due date");
     try {
-        const assignment = await assignmentsService.findOne(assignmentId);
+        const assignment = unwrapPayload(await assignmentsService.findOne(assignmentId));
         await assignmentsService.update(assignmentId, { dueDate: newDueDate });
 
         // Email students about extended deadline
@@ -224,7 +262,7 @@ export async function updateAssignmentDueDate(assignmentId, newDueDate) {
 export async function updateAssignmentStudentDeadline(assignmentId, studentId, newDueDate) {
     if (!assignmentId || !studentId || !newDueDate) throw new Error("Missing parameters");
     try {
-        const assignment = await assignmentsService.findOne(assignmentId);
+        const assignment = unwrapPayload(await assignmentsService.findOne(assignmentId));
         await assignmentsService.update(assignmentId, {
             [`studentDeadlines.${studentId}`]: newDueDate,
         });
@@ -234,7 +272,7 @@ export async function updateAssignmentStudentDeadline(assignmentId, studentId, n
             const dueDateStr = new Date(newDueDate).toLocaleString('vi-VN');
             try {
                 const { createNotification, queueEmail, buildEmailHtml } = await import('./notificationService');
-                const student = await usersService.findOne(studentId);
+                const student = unwrapPayload(await usersService.findOne(studentId));
                 const appUrl = 'https://upenglishvietnam.com/preview/superstudy';
                 await createNotification({ userId: studentId, type: 'deadline_extended', title: '⏰ Gia hạn deadline', message: `Bài "${topicName}" được gia hạn cho bạn đến ${dueDateStr}.`, link: '/dashboard?tab=assignments' });
                 if (student?.email) {
@@ -316,22 +354,10 @@ export async function getStudentTopicProgressSummary(uid, topicIds, startDate = 
                 total: 0, learned: 0, learning: 0, notStarted: 0, totalCorrect: 0, totalWrong: 0
             };
 
-            if (wordData[topicId]) {
-                const wordsList = wordData[topicId];
-                wordsList.forEach(wordObj => {
-                    processWordProgress(wordObj.word, progressMap, statsCount);
-                });
-            } else {
-                let colPath = `topics/${topicId}/words`;
-                if (topicId.startsWith('t-')) {
-                    colPath = `teacher_topics/${topicId}/words`;
-                }
-                const wordsSnap = await getDocs(collection(db, colPath));
-                wordsSnap.forEach(docSnap => {
-                    const wordObj = docSnap.data();
-                    processWordProgress(wordObj.word, progressMap, statsCount);
-                });
-            }
+            const wordsList = await getTopicWordsForProgress(topicId);
+            wordsList.forEach(wordObj => {
+                processWordProgress(wordObj.word, progressMap, statsCount);
+            });
 
             result[topicId] = statsCount;
         }));
@@ -353,34 +379,15 @@ export async function getStudentTopicWordsProgress(uid, topicId) {
         const progressMap = await getAllWordProgressMap(uid);
         const words = [];
 
-        if (wordData[topicId]) {
-            const wordsList = wordData[topicId];
-            wordsList.forEach(wordObj => {
-                const word = wordObj.word;
-                const prog = progressMap[word];
-                words.push({
-                    ...wordObj,
-                    progress: prog || null
-                });
+        const wordsList = await getTopicWordsForProgress(topicId);
+        wordsList.forEach(wordObj => {
+            const word = wordObj.word;
+            const prog = progressMap[word];
+            words.push({
+                ...wordObj,
+                progress: prog || null
             });
-        } else {
-            let colPath = `topics/${topicId}/words`;
-            if (topicId.startsWith('t-')) {
-                colPath = `teacher_topics/${topicId}/words`;
-            }
-            const wordsSnap = await getDocs(collection(db, colPath));
-
-            wordsSnap.forEach(docSnap => {
-                const wordObj = docSnap.data();
-                const word = wordObj.word;
-                const prog = progressMap[word];
-
-                words.push({
-                    ...wordObj,
-                    progress: prog || null
-                });
-            });
-        }
+        });
 
         words.sort((a, b) => {
             const levelA = a.progress ? a.progress.level : -1;
@@ -395,11 +402,46 @@ export async function getStudentTopicWordsProgress(uid, topicId) {
     }
 }
 
+async function getTopicWordsForProgress(topicId) {
+    if (!topicId) return [];
+
+    if (wordData[topicId]) {
+        return wordData[topicId];
+    }
+
+    if (isLikelyTeacherTopicId(topicId)) {
+        try {
+            const topic = unwrapPayload(await teacherTopicsService.findOne(topicId));
+            if (!topic) return [];
+            return mergeTeacherTopicWords(topic.words || []);
+        } catch (error) {
+            console.error('Error fetching teacher topic words for progress:', error);
+            return [];
+        }
+    }
+
+    try {
+        const topic = unwrapPayload(await topicsService.findOne(topicId));
+        if (topic) {
+            return Array.isArray(topic.words) ? topic.words : [];
+        }
+    } catch (error) {
+        // Ignore and try the teacher-topic source next.
+    }
+
+    try {
+        const topic = unwrapPayload(await teacherTopicsService.findOne(topicId));
+        if (!topic) return [];
+        return mergeTeacherTopicWords(topic.words || []);
+    } catch (error) {
+        console.error('Error fetching topic words for progress:', error);
+        return [];
+    }
+}
+
 // ==========================================
 // TEACHER TOPICS (LEARNING SETS)
 // ==========================================
-
-import { documentId } from 'firebase/firestore';
 
 export async function getSharedAndPublicTeacherTopics(topicAccessIds = []) {
     try {
@@ -422,6 +464,55 @@ export async function getTeacherTopics(teacherId) {
         console.error("Error fetching teacher topics:", error);
         throw error;
     }
+}
+
+export async function getTeacherTopic(topicId) {
+    if (!topicId) return null;
+    try {
+        const topic = unwrapPayload(await teacherTopicsService.findOne(topicId));
+        return topic ? { ...topic, id: topic._id || topic.id } : null;
+    } catch (error) {
+        console.error("Error fetching teacher topic:", error);
+        throw error;
+    }
+}
+
+function normalizeTeacherTopicWord(word = {}) {
+    const fallbackId = word.word ? String(word.word).trim() : crypto.randomUUID();
+    return { ...word, id: word._id || word.id || fallbackId };
+}
+
+function teacherTopicWordKey(word = {}) {
+    return String(word.word || word.id || '').trim().toLowerCase();
+}
+
+function isLikelyTeacherTopicId(topicId) {
+    const normalized = String(topicId || '').trim();
+    return normalized.startsWith('t-');
+}
+
+function mergeTeacherTopicWords(words = []) {
+    const merged = new Map();
+
+    for (const rawWord of words) {
+        const normalized = normalizeTeacherTopicWord(rawWord);
+        const key = teacherTopicWordKey(normalized) || normalized.id;
+        const previous = merged.get(key);
+        merged.set(key, previous ? { ...previous, ...normalized, id: previous.id || normalized.id } : normalized);
+    }
+
+    return Array.from(merged.values());
+}
+
+function reindexTeacherTopicWords(words = []) {
+    const sortedWords = [...words].sort((a, b) => {
+        if (a.index !== undefined && b.index !== undefined) return a.index - b.index;
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeA - timeB;
+    });
+
+    return sortedWords.map((word, index) => ({ ...word, index }));
 }
 
 export async function saveTeacherTopic(teacherId, topicData) {
@@ -453,13 +544,9 @@ export async function saveTeacherTopic(teacherId, topicData) {
 export async function updateGrammarQuestionsOrder(exerciseId, orderedQuestions) {
     if (!exerciseId || !Array.isArray(orderedQuestions)) throw new Error("Invalid parameters");
     try {
-        const questionsRef = collection(db, `grammar_questions`);
-        const promises = orderedQuestions.map(async (qData) => {
-            if (!qData.id) return;
-            const docRef = doc(questionsRef, qData.id);
-            return setDoc(docRef, { order: qData.order, updatedAt: serverTimestamp() }, { merge: true });
-        });
-        await Promise.all(promises);
+        await grammarQuestionsService.reorder(
+            orderedQuestions.map((question) => ({ id: question.id, order: question.order }))
+        );
     } catch (error) {
         console.error("Error updating grammar questions order:", error);
         throw error;
@@ -510,10 +597,9 @@ export async function getDeletedTeacherTopics() {
 export async function getTeacherTopicWords(topicId) {
     if (!topicId) return [];
     try {
-        const topic = await teacherTopicsService.findOne(topicId);
+        const topic = unwrapPayload(await teacherTopicsService.findOne(topicId));
         if (!topic) return [];
-        let words = topic.words || [];
-        words = words.map(w => ({ ...w, id: w._id || w.id }));
+        let words = mergeTeacherTopicWords(topic.words || []);
         words.sort((a, b) => {
             if (a.index !== undefined && b.index !== undefined) return a.index - b.index;
             const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -529,26 +615,36 @@ export async function getTeacherTopicWords(topicId) {
 
 export async function saveTeacherTopicWord(topicId, wordData) {
     if (!topicId || !wordData || !wordData.word) throw new Error("Missing data to save word");
-    console.log("saveTeacherTopicWord called with id:", wordData.id, "word:", wordData.word);
     try {
-        const topic = await teacherTopicsService.findOne(topicId);
+        const topic = unwrapPayload(await teacherTopicsService.findOne(topicId));
         if (!topic) throw new Error("Topic not found");
-        let words = topic.words || [];
-        words = words.map(w => ({ ...w, id: w._id || w.id }));
+        let words = mergeTeacherTopicWords(topic.words || []);
         
         let savedWord;
-        if (wordData.id) {
-            words = words.map(w => w.id === wordData.id ? { ...w, ...wordData, updatedAt: new Date().toISOString() } : w);
-            savedWord = words.find(w => w.id === wordData.id);
+        const targetKey = teacherTopicWordKey(wordData);
+        const existingIndex = words.findIndex(w =>
+            w.id === wordData.id || teacherTopicWordKey(w) === targetKey
+        );
+
+        if (existingIndex !== -1) {
+            const existingWord = words[existingIndex];
+            savedWord = {
+                ...existingWord,
+                ...wordData,
+                id: existingWord.id || wordData.id || existingWord.word || wordData.word,
+                updatedAt: new Date().toISOString()
+            };
+            words[existingIndex] = savedWord;
         } else {
             savedWord = { 
                 ...wordData, 
-                id: crypto.randomUUID(), 
+                id: wordData.id || crypto.randomUUID(),
                 createdAt: new Date().toISOString(), 
                 updatedAt: new Date().toISOString() 
             };
             words.push(savedWord);
         }
+        words = reindexTeacherTopicWords(mergeTeacherTopicWords(words));
         await teacherTopicsService.update(topicId, { words, cachedWordCount: words.length });
         return savedWord;
     } catch (error) {
@@ -560,19 +656,18 @@ export async function saveTeacherTopicWord(topicId, wordData) {
 export async function saveMultipleTeacherTopicWords(topicId, wordsArray) {
     if (!topicId || !wordsArray || !Array.isArray(wordsArray)) throw new Error("Invalid parameters");
     try {
-        const topic = await teacherTopicsService.findOne(topicId);
+        const topic = unwrapPayload(await teacherTopicsService.findOne(topicId));
         if (!topic) throw new Error("Topic not found");
-        let currentWords = topic.words || [];
-        currentWords = currentWords.map(w => ({ ...w, id: w._id || w.id }));
+        let currentWords = mergeTeacherTopicWords(topic.words || []);
         
         const newWords = wordsArray.map(wordData => ({
             ...wordData,
-            id: wordData.id || crypto.randomUUID(),
+            id: wordData.id || wordData.word || crypto.randomUUID(),
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         }));
 
-        currentWords = [...currentWords, ...newWords];
+        currentWords = reindexTeacherTopicWords(mergeTeacherTopicWords([...currentWords, ...newWords]));
         await teacherTopicsService.update(topicId, { words: currentWords, cachedWordCount: currentWords.length });
     } catch (error) {
         console.error("Error saving multiple teacher topic words:", error);
@@ -583,11 +678,13 @@ export async function saveMultipleTeacherTopicWords(topicId, wordsArray) {
 export async function deleteTeacherTopicWord(topicId, wordId) {
     if (!topicId || !wordId) throw new Error("Missing topicId or wordId. Received wordId: " + wordId);
     try {
-        const topic = await teacherTopicsService.findOne(topicId);
+        const topic = unwrapPayload(await teacherTopicsService.findOne(topicId));
         if (!topic) return;
-        let words = topic.words || [];
-        words = words.map(w => ({ ...w, id: w._id || w.id }));
-        words = words.filter(w => w.id !== wordId);
+        let words = mergeTeacherTopicWords(topic.words || []);
+        const deleteKey = String(wordId).trim().toLowerCase();
+        words = reindexTeacherTopicWords(
+            words.filter(w => w.id !== wordId && teacherTopicWordKey(w) !== deleteKey)
+        );
         await teacherTopicsService.update(topicId, { words, cachedWordCount: words.length });
     } catch (error) {
         console.error("Error deleting teacher topic word:", error);
@@ -598,20 +695,20 @@ export async function deleteTeacherTopicWord(topicId, wordId) {
 export async function updateTeacherTopicWordOrder(topicId, orderedWords) {
     if (!topicId || !Array.isArray(orderedWords)) throw new Error("Invalid parameters");
     try {
-        const topic = await teacherTopicsService.findOne(topicId);
+        const topic = unwrapPayload(await teacherTopicsService.findOne(topicId));
         if (!topic) return;
-        let currentWords = topic.words || [];
-        currentWords = currentWords.map(w => ({ ...w, id: w._id || w.id }));
+        let currentWords = mergeTeacherTopicWords(topic.words || []);
         
         orderedWords.forEach(updatedWord => {
-            if (!updatedWord.id) return;
-            const index = currentWords.findIndex(w => w.id === updatedWord.id);
+            const targetKey = teacherTopicWordKey(updatedWord);
+            const index = currentWords.findIndex(w => w.id === updatedWord.id || teacherTopicWordKey(w) === targetKey);
             if (index !== -1) {
                 currentWords[index].index = updatedWord.index;
                 currentWords[index].updatedAt = new Date().toISOString();
             }
         });
         
+        currentWords = reindexTeacherTopicWords(currentWords);
         await teacherTopicsService.update(topicId, { words: currentWords });
     } catch (error) {
         console.error("Error updating word order:", error);
@@ -650,6 +747,22 @@ export async function getAllTeacherTopicFolders() {
         return folders.map(f => ({ ...f, id: f._id || f.id })).sort((a, b) => (a.order || 0) - (b.order || 0));
     } catch (error) {
         console.error("Error fetching all teacher topic folders:", error);
+        return [];
+    }
+}
+
+/**
+ * Get public and explicitly shared teacher topic folders by folderAccessIds.
+ * Used by game pages to determine which teacher folders a teacher can access.
+ */
+export async function getSharedAndPublicTeacherTopicFolders(folderAccessIds = []) {
+    try {
+        const result = await teacherFoldersService.getSharedAndPublicTopicFolders(folderAccessIds);
+        let folders = Array.isArray(result) ? result : (result?.data || []);
+        return folders.map(f => ({ ...f, id: f._id || f.id, isTeacherFolder: true }))
+            .sort((a, b) => (a.order || 0) - (b.order || 0));
+    } catch (error) {
+        console.error("Error fetching shared teacher topic folders:", error);
         return [];
     }
 }
@@ -714,6 +827,14 @@ export async function getDeletedTeacherTopicFolders(teacherId) {
  */
 export async function addCollaborator(collectionName, resourceId, collaboratorUid, collaboratorName, resourceName = '', role = 'editor') {
     if (!collectionName || !resourceId || !collaboratorUid) throw new Error('Missing parameters');
+    await sharingService.addCollaborator({
+        resourceType: normalizeSharingResourceType(collectionName),
+        resourceId,
+        collaboratorId: collaboratorUid,
+        role
+    });
+    return;
+    const { db, doc, updateDoc, serverTimestamp, arrayUnion, getDoc } = await getFirebaseServiceDeps();
     const ref = doc(db, collectionName, resourceId);
     await updateDoc(ref, {
         collaboratorIds: arrayUnion(collaboratorUid),
@@ -764,7 +885,7 @@ export async function addCollaborator(collectionName, resourceId, collaboratorUi
 export async function removeCollaborator(collectionName, resourceId, collaboratorUid, resourceName = '') {
     if (!collectionName || !resourceId || !collaboratorUid) throw new Error('Missing parameters');
     await sharingService.removeCollaborator({
-        resourceType: collectionName,
+        resourceType: normalizeSharingResourceType(collectionName),
         resourceId,
         collaboratorId: collaboratorUid
     });
@@ -777,7 +898,7 @@ export async function updateCollaboratorRole(collectionName, resourceId, collabo
     if (!collectionName || !resourceId || !collaboratorUid) throw new Error('Missing parameters');
     if (!['viewer', 'editor'].includes(newRole)) throw new Error('Invalid role');
     await sharingService.updateCollaboratorRole({
-        resourceType: collectionName,
+        resourceType: normalizeSharingResourceType(collectionName),
         resourceId,
         collaboratorId: collaboratorUid,
         role: newRole
@@ -798,7 +919,7 @@ export async function updateCollaboratorRole(collectionName, resourceId, collabo
 export async function transferOwnership(collectionName, resourceId, oldOwnerUid, oldOwnerName, newOwnerUid, newOwnerName, resourceName = '') {
     if (!collectionName || !resourceId || !oldOwnerUid || !newOwnerUid) throw new Error('Missing parameters');
     await sharingService.transferOwnership({
-        resourceType: collectionName,
+        resourceType: normalizeSharingResourceType(collectionName),
         resourceId,
         oldOwnerId: oldOwnerUid,
         oldOwnerName,
@@ -816,7 +937,7 @@ export async function transferOwnership(collectionName, resourceId, oldOwnerUid,
 export async function getCollaboratedResources(collectionName, teacherUid) {
     if (!collectionName || !teacherUid) return [];
     try {
-        const result = await sharingService.getCollaboratedResources(collectionName, teacherUid);
+        const result = await sharingService.getCollaboratedResources(normalizeSharingResourceType(collectionName), teacherUid);
         return Array.isArray(result) ? result : (result?.data || []);
     } catch (error) {
         console.error(`Error fetching collaborated ${collectionName}:`, error);

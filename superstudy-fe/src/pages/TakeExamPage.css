@@ -434,6 +434,111 @@
     animation: fadeIn 0.2s ease-out;
 }
 
+/* Question Reveal Delay Overlay */
+.exam-reveal-overlay {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+.exam-reveal-overlay-inner {
+    padding: 24px 20px;
+    border-radius: 16px;
+    background: rgba(248, 250, 252, 0.7);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+
+.exam-reveal-text {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #64748b;
+    line-height: 1.5;
+    margin: 0;
+    max-width: 500px;
+}
+
+.exam-reveal-text strong {
+    display: inline-block;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #6366f1;
+    font-variant-numeric: tabular-nums;
+    min-width: 32px;
+}
+
+.exam-reveal-progress {
+    width: 100%;
+    max-width: 240px;
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(99, 102, 241, 0.1);
+    overflow: hidden;
+}
+
+.exam-reveal-progress-bar {
+    height: 100%;
+    background: rgba(99, 102, 241, 0.4);
+    border-radius: 2px;
+    transition: width 1s linear;
+}
+
+/* Hidden by reveal delay */
+.exam-questions.hidden-by-reveal {
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    pointer-events: none;
+    margin: 0;
+    padding: 0;
+}
+
+/* Revealed animation */
+.exam-questions.just-revealed {
+    animation: questionsRevealFade 0.6s ease-out;
+}
+
+@keyframes questionsRevealFade {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Answer Reveal Delay */
+.exam-answer-reveal-countdown {
+    text-align: center;
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: #94a3b8;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 12px;
+    animation: countdownPop 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    line-height: 1;
+}
+
+@keyframes countdownPop {
+    0%, 100% { transform: scale(1); opacity: 0.7; }
+    50% { transform: scale(1.15); opacity: 1; }
+}
+
+.exam-answers-locked {
+    filter: blur(4px);
+    opacity: 0.45;
+    pointer-events: none;
+    user-select: none;
+    transition: filter 0.4s ease, opacity 0.4s ease;
+}
+
 /* Questions */
 .exam-questions {
     max-width: 1000px;
@@ -485,7 +590,26 @@
     background: #fef3c7;
     padding: 5px 12px;
     border-radius: 10px;
+}
+
+.exam-question-timer {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #6366f1;
+    background: rgba(99, 102, 241, 0.08);
+    padding: 5px 10px;
+    border-radius: 10px;
+    font-variant-numeric: tabular-nums;
     margin-left: auto;
+}
+
+.exam-question-timer.warning {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.08);
+    animation: timerPulse 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
 .exam-question-done {

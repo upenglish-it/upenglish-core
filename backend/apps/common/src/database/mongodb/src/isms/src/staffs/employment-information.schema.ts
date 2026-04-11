@@ -1,11 +1,11 @@
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 import { Accounts } from '../accounts';
 import { Properties } from '../properties';
 import { PropertiesBranches } from '../properties/branches';
 import { SYSTEM_ID } from 'apps/common/src/utils';
 import { StaffsSalaryPackage } from './salary-package.schema';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: 'staffs-employment-information' } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: 'staffs-employment-information' } })
 export class StaffsEmploymentInformation {
   @Prop({
     type: String,

@@ -1,5 +1,4 @@
-import { storage } from '../config/firebase';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { deletePublicAsset, uploadPublicAsset } from './uploadService';
 
 export async function uploadContextAudio(file, resourceType, resourceId) {
     // Validate file size based on resource type
@@ -29,11 +28,12 @@ export async function uploadContextAudio(file, resourceType, resourceId) {
     // Fallback if the original file name contains an extension
     else if (file.name && file.name.includes('.')) ext = file.name.split('.').pop();
 
-    const storagePath = `context_audio/${resourceType}/${resourceId}/${timestamp}_${rand}.${ext}`;
-
-    const storageRef = ref(storage, storagePath);
-    await uploadBytes(storageRef, file, { contentType: file.type || 'audio/mpeg' });
-    return getDownloadURL(storageRef);
+    const folder = `context_audio/${resourceType}/${resourceId}`;
+    const upload = await uploadPublicAsset(file, folder, {
+        fileName: `${timestamp}_${rand}.${ext}`,
+        contentType: file.type || 'audio/mpeg',
+    });
+    return upload?.url || '';
 }
 
 /**
@@ -42,23 +42,10 @@ export async function uploadContextAudio(file, resourceType, resourceId) {
  */
 export async function deleteContextAudio(url) {
     if (!url || typeof url !== 'string') return;
-    // Only delete if it's a Firebase Storage URL for context audio
     if (!url.includes('context_audio')) return;
     try {
-        let storagePath = url;
-        // If it's a full download URL, try to extract the relative path
-        if (url.includes('firebasestorage.googleapis.com')) {
-            const decodedUrl = decodeURIComponent(url);
-            const pathStart = decodedUrl.indexOf('context_audio/');
-            if (pathStart !== -1) {
-                const pathEnd = decodedUrl.indexOf('?', pathStart);
-                storagePath = decodedUrl.substring(pathStart, pathEnd !== -1 ? pathEnd : undefined);
-            }
-        }
-
-        const audioRef = ref(storage, storagePath);
-        await deleteObject(audioRef);
-        console.log('[contextAudio] Deleted:', storagePath);
+        await deletePublicAsset(url);
+        console.log('[contextAudio] Deleted:', url);
     } catch (e) {
         console.error('[contextAudio] Error deleting audio from Storage:', e);
     }

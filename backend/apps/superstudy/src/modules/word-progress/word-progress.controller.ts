@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Patch,
+  Controller, Get, Post, Patch, Delete,
   Param, Query, Body, HttpCode, HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -88,5 +88,16 @@ export class WordProgressController {
   @HttpCode(HttpStatus.OK)
   reset(@Body() body: { userId: string; topicId: string }) {
     return this.wordProgressService.resetTopicProgress(body.userId, body.topicId);
+  }
+
+  @ApiOperation({ summary: 'Delete a single progress record by user/topic/word' })
+  @Delete('word')
+  @HttpCode(HttpStatus.OK)
+  removeOne(
+    @Query('userId') userId: string,
+    @Query('topicId') topicId: string,
+    @Query('wordId') wordId: string,
+  ) {
+    return this.wordProgressService.removeOne(userId, topicId, wordId);
   }
 }

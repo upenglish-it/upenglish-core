@@ -4,6 +4,14 @@ import localWordData from '../data/wordData';
 import { deleteQuestionImages } from './examService';
 import { deleteContextAudio } from './contextAudioService';
 
+function unwrapPayload(result) {
+    return result?.data || result || null;
+}
+
+function getEntityId(entity) {
+    return entity?.id || entity?._id || null;
+}
+
 // ========== TOPIC MANAGEMENT ==========
 
 // Fetch all topics from backend
@@ -14,12 +22,19 @@ export async function getAdminTopics() {
     return topics.map(t => ({ ...t, id: t._id || t.id }));
 }
 
+export async function getAdminTopic(topicId) {
+    if (!topicId) return null;
+    const result = await topicsService.findOne(topicId);
+    const topic = unwrapPayload(result);
+    return topic ? { ...topic, id: topic._id || topic.id } : null;
+}
+
 // Fetch word counts for multiple topics
 export async function getAdminTopicWordCounts(topicIds) {
     const counts = {};
     await Promise.all(topicIds.map(async (topicId) => {
         try {
-            const topic = await topicsService.findOne(topicId);
+            const topic = unwrapPayload(await topicsService.findOne(topicId));
             counts[topicId] = topic?.cachedWordCount || 0;
         } catch (e) {
             console.error(`Error counting words for ${topicId}:`, e);
@@ -48,14 +63,18 @@ export async function recalcTopicWordCount(topicId, collectionName = 'topics') {
 
 // Check content completeness status for multiple topics
 export async function getAdminTopicContentStatus(topicIds) {
+    function hasFullContent(w) {
+        return !!(w?.phonetic && w?.distractors?.length && w?.collocations?.length && w?.exampleSentences?.length && w?.sentenceSequence);
+    }
     // This requires word-level data inspection — keep as a backend call or client-side logic
     // For now, fetch topic data and check cached fields
     const status = {};
     await Promise.all(topicIds.map(async (topicId) => {
         try {
-            const topic = await topicsService.findOne(topicId);
-            const total = topic?.cachedWordCount || 0;
-            const complete = topic?.cachedCompleteWordCount || 0;
+            const topic = unwrapPayload(await topicsService.findOne(topicId));
+            const words = Array.isArray(topic?.words) ? topic.words : [];
+            const total = words.length;
+            const complete = words.filter(hasFullContent).length;
             status[topicId] = { total, complete, isComplete: total > 0 && complete === total };
         } catch (e) {
             console.error(`Error checking content for ${topicId}:`, e);
@@ -66,24 +85,23 @@ export async function getAdminTopicContentStatus(topicIds) {
 }
 
 // Add or Edit a topic
-export async function saveAdminTopic(topicData) {
+export async function saveAdminTopic(topicData, options = {}) {
+    const { isEditing = false } = options;
     const { id, ...data } = topicData;
-    if (id) {
-        // Try update first, create if doesn't exist
-        try {
-            await topicsService.update(id, data);
-        } catch (e) {
-            await topicsService.create({ id, ...data });
-        }
-    } else {
-        await topicsService.create(data);
+
+    if (isEditing) {
+        if (!id) throw new Error('Missing topic id for update');
+        await topicsService.update(id, data);
+        return;
     }
+
+    await topicsService.create(id ? { id, ...data } : data);
 }
 
 // Fetch words for a specific topic
 export async function getAdminTopicWords(topicId) {
     // Words are fetched as part of topic detail from backend
-    const topic = await topicsService.findOne(topicId);
+    const topic = unwrapPayload(await topicsService.findOne(topicId));
     return topic?.words || [];
 }
 
@@ -98,9 +116,33 @@ export async function deleteAdminTopicWord(topicId, word) {
     await topicsService.update(topicId, { _deleteWord: word });
 }
 
-// Delete a topic and all its words
+// Delete a topic (soft-delete, reversible)
 export async function deleteAdminTopic(topicId) {
+    await topicsService.softDelete(topicId);
+}
+
+// Save a single word to a topic
+export async function saveAdminTopicWord(topicId, wordData) {
+    if (!topicId || !wordData || !wordData.word) throw new Error('Missing data to save word');
+    await topicsService.update(topicId, { _upsertWord: wordData });
+    return wordData;
+}
+
+// Restore a soft-deleted topic
+export async function restoreAdminTopic(topicId) {
+    await topicsService.restore(topicId);
+}
+
+// Permanently delete a topic (irreversible)
+export async function permanentlyDeleteAdminTopic(topicId) {
     await topicsService.permanentDelete(topicId);
+}
+
+// Get all soft-deleted topics
+export async function getDeletedAdminTopics() {
+    const result = await topicsService.findDeleted();
+    const topics = Array.isArray(result) ? result : (result?.data || []);
+    return topics.map(t => ({ ...t, id: t._id || t.id }));
 }
 
 // ========== TOPIC FOLDERS ==========
@@ -152,9 +194,14 @@ export async function syncLocalDataToFirestore() {
 // ========== USER MANAGEMENT ==========
 
 export async function getAllUsers() {
-    const result = await usersService.findAll();
+    const result = await usersService.findAll({ includeDeleted: true });
     const users = Array.isArray(result) ? result : (result?.data || []);
-    return users.map(u => ({ ...u, uid: u.id || u._id, id: u._id || u.id }));
+    return users.map(u => ({
+        ...u,
+        uid: u.id || u._id,
+        id: u._id || u.id,
+        isDeleted: Boolean(u.isDeleted ?? u.deleted),
+    }));
 }
 
 export async function searchIsmsAccounts(q = '', limit = 50) {
@@ -186,7 +233,7 @@ export async function updateUserFolderAccess(uid, folderIds) {
 }
 
 export async function getUserFolderAccess(uid) {
-    const user = await usersService.findOne(uid);
+    const user = unwrapPayload(await usersService.findOne(uid));
     return user?.folderAccess || [];
 }
 
@@ -205,19 +252,24 @@ export async function getGroups(includeHidden = false) {
     });
 }
 
-export async function saveGroup(groupData) {
+export async function saveGroup(groupData, options = {}) {
+    const { createOnly = false } = options;
     const { id, ...data } = groupData;
-    if (id) {
+    if (id && !createOnly) {
         try {
             // Try update first
             await userGroupsService.update(id, data);
         } catch (e) {
+            if (e?.status !== 404 && e?.response?.status !== 404) {
+                throw e;
+            }
             // If it doesn't exist, create
             await userGroupsService.create({ id, ...data });
         }
-    } else {
-        await userGroupsService.create(data);
+        return;
     }
+
+    await userGroupsService.create(id ? { id, ...data } : data);
 }
 
 export async function deleteGroup(groupId) {
@@ -281,25 +333,28 @@ export async function addEmailToWhitelist(email, role = 'user', durationDays = n
 export async function updateWhitelistDisplayName(email, displayName) {
     const emailKey = email.toLowerCase().trim();
     // Find the entry first, then update
-    const entry = await emailWhitelistService.checkEmail(emailKey);
-    if (entry?.id) {
-        await emailWhitelistService.update(entry.id, { displayName: displayName.trim() });
+    const entry = unwrapPayload(await emailWhitelistService.checkEmail(emailKey));
+    const entryId = getEntityId(entry);
+    if (entryId) {
+        await emailWhitelistService.update(entryId, { displayName: displayName.trim() });
     }
 }
 
 export async function updateWhitelistEntry(email, data) {
     const emailKey = email.toLowerCase().trim();
-    const entry = await emailWhitelistService.checkEmail(emailKey);
-    if (entry?.id) {
-        await emailWhitelistService.update(entry.id, data);
+    const entry = unwrapPayload(await emailWhitelistService.checkEmail(emailKey));
+    const entryId = getEntityId(entry);
+    if (entryId) {
+        await emailWhitelistService.update(entryId, data);
     }
 }
 
 export async function removeEmailFromWhitelist(email) {
     const emailKey = email.toLowerCase().trim();
-    const entry = await emailWhitelistService.checkEmail(emailKey);
-    if (entry?.id) {
-        await emailWhitelistService.remove(entry.id);
+    const entry = unwrapPayload(await emailWhitelistService.checkEmail(emailKey));
+    const entryId = getEntityId(entry);
+    if (entryId) {
+        await emailWhitelistService.remove(entryId);
     }
 }
 
@@ -311,11 +366,15 @@ export async function getWhitelistEmails() {
 // ========== RESOURCE SHARING ==========
 
 function mapResourceType(resourceType) {
-    if (resourceType === 'admin_topic' || resourceType === 'teacher_topic') return 'topic';
+    if (resourceType === 'admin_topic') return 'topic';
+    if (resourceType === 'teacher_topic') return 'teacher_topic';
     if (resourceType === 'admin_grammar' || resourceType === 'teacher_grammar') return 'grammar';
-    if (resourceType === 'teacher_topic_folder' || resourceType === 'admin_folder' || resourceType === 'teacher_grammar_folder') {
-        throw new Error('Chức năng chia sẻ toàn bộ thư mục đang được cập nhật. Vui lòng chia sẻ từng bài học bên trong.');
-    }
+    if (resourceType === 'folder' || resourceType === 'admin_folder') return 'folder';
+    if (resourceType === 'grammar_folder' || resourceType === 'admin_grammar_folder') return 'grammar_folder';
+    if (resourceType === 'exam_folder' || resourceType === 'admin_exam_folder') return 'exam_folder';
+    if (resourceType === 'teacher_topic_folder') return 'teacher_topic_folder';
+    if (resourceType === 'teacher_grammar_folder') return 'teacher_grammar_folder';
+    if (resourceType === 'teacher_exam_folder') return 'teacher_exam_folder';
     return resourceType;
 }
 
@@ -341,11 +400,10 @@ export async function unshareResourceFromTeacher(resourceType, resourceId, teach
 }
 
 export async function getResourceSharedTeachers(resourceType, resourceId) {
-    // This data is typically included in the resource document — handled by the backend
-    // Fetch via the sharing service if available
     try {
-        const result = await sharingService.findUser('', 'teacher');
-        return Array.isArray(result) ? result : [];
+        const mappedType = mapResourceType(resourceType);
+        const result = await sharingService.getTeacherShares(mappedType, resourceId);
+        return Array.isArray(result) ? result : (result?.data || []);
     } catch (e) {
         return [];
     }
@@ -353,7 +411,6 @@ export async function getResourceSharedTeachers(resourceType, resourceId) {
 
 export async function getResourceSharedEntities(resourceType, resourceId) {
     try {
-        if (resourceType === 'teacher_topic_folder' || resourceType === 'admin_folder') return { users: [], groups: [] };
         const mappedType = mapResourceType(resourceType);
         const result = await sharingService.getResourceAccess(mappedType, resourceId);
         
@@ -367,7 +424,7 @@ export async function getResourceSharedEntities(resourceType, resourceId) {
 
 export async function shareResourceToEmail(resourceType, resourceId, email) {
     const mappedType = mapResourceType(resourceType);
-    const result = await sharingService.addUserAccess({ email, resourceType: mappedType, resourceId });
+    const result = await sharingService.addUserAccess({ userEmail: email, resourceType: mappedType, resourceId });
     return result;
 }
 
@@ -442,29 +499,27 @@ export async function deleteAdminGrammarExercise(exerciseId) {
     // Backend handles cascade deletion of questions, images, and audio
 }
 
-// ========== CLOUD FUNCTIONS ==========
-// These still use Firebase Functions (no backend equivalent yet)
-import { httpsCallable } from 'firebase/functions';
-import { functions } from '../config/firebase';
+// ========== USER MANAGEMENT ==========
+// Formerly Firebase Cloud Functions — now served by NestJS backend
 
 export async function permanentDeleteUser(uid) {
-    const deleteUserFn = httpsCallable(functions, 'deleteUser');
-    const result = await deleteUserFn({ uid });
-    return result.data;
+    const { usersService } = await import('../models');
+    const result = await usersService.permanentDelete(uid);
+    return result?.data || result;
 }
 
 export async function softDeleteUser(uid) {
-    await usersService.update(uid, { isDeleted: true });
+    await usersService.update(uid, { deleted: true, deletedAt: new Date().toISOString() });
 }
 
 export async function restoreUser(uid) {
-    await usersService.update(uid, { isDeleted: false });
+    await usersService.update(uid, { deleted: false, deletedAt: null, disabled: false });
 }
 
 export async function changeUserEmail(uid, newEmail) {
-    const changeEmailFn = httpsCallable(functions, 'changeUserEmail');
-    const result = await changeEmailFn({ uid, newEmail });
-    return result.data;
+    const { usersService } = await import('../models');
+    const result = await usersService.changeEmail(uid, newEmail);
+    return result?.data || result;
 }
 
 // ========== AUTO-PURGE SOFT-DELETED CONTENT ==========
@@ -537,9 +592,20 @@ export async function transferOfficialToTeacher(collectionName, docId, teacherEm
 
     if (!teacherUid) throw new Error('Không tìm thấy giáo viên với email này.');
 
+    const resourceTypeMap = {
+        topics: 'topic',
+        topic_folders: 'folder',
+        teacher_topics: 'teacher_topic',
+        teacher_topic_folders: 'teacher_topic_folder',
+        grammar_exercises: 'grammar',
+        grammar_folders: 'grammar_folder',
+        exams: 'exam',
+        exam_folders: 'exam_folder'
+    };
+
     // Use sharing service's transfer ownership
     await sharingService.transferOwnership({
-        resourceType: collectionName,
+        resourceType: resourceTypeMap[collectionName] || collectionName,
         resourceId: docId,
         oldOwnerId: '', // admin
         newOwnerEmail: teacherEmail,

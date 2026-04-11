@@ -17,6 +17,8 @@ import { ExamAssignmentsModule } from './modules/exam-assignments/exam-assignmen
 import { ExamSubmissionsModule } from './modules/exam-submissions/exam-submissions.module';
 import { GrammarExercisesModule } from './modules/grammar-exercises/grammar-exercises.module';
 import { GrammarQuestionsModule } from './modules/grammar-questions/grammar-questions.module';
+import { GrammarProgressModule } from './modules/grammar-progress/grammar-progress.module';
+import { GrammarSubmissionsModule } from './modules/grammar-submissions/grammar-submissions.module';
 import { TopicsModule } from './modules/topics/topics.module';
 import { TeacherTopicsModule } from './modules/teacher-topics/teacher-topics.module';
 import { AssignmentsModule } from './modules/assignments/assignments.module';
@@ -35,6 +37,23 @@ import { ReportPeriodsModule } from './modules/report-periods/report-periods.mod
 import { AuthModule } from './modules/auth/auth.module';
 import { ContentProposalsModule } from './modules/content-proposals/content-proposals.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { ScheduledJobsModule } from './modules/scheduled-jobs/scheduled-jobs.module';
+import { SkillReportsModule } from './modules/skill-reports/skill-reports.module';
+import { RedFlagsModule } from './modules/red-flags/red-flags.module';
+import { RewardPointsModule } from './modules/reward-points/reward-points.module';
+import { SettingsModule } from './modules/settings/settings.module';
+import { ToolsModule } from './modules/tools/tools.module';
+import { ToolAssignmentsModule } from './modules/tool-assignments/tool-assignments.module';
+import { ToolSubmissionsModule } from './modules/tool-submissions/tool-submissions.module';
+import { TopicFoldersModule } from './modules/topic-folders/topic-folders.module';
+import { ExamFoldersModule } from './modules/exam-folders/exam-folders.module';
+import { GrammarFoldersModule } from './modules/grammar-folders/grammar-folders.module';
+import { TeacherExamFoldersModule } from './modules/teacher-exam-folders/teacher-exam-folders.module';
+import { TeacherTopicFoldersModule } from './modules/teacher-topic-folders/teacher-topic-folders.module';
+import { TeacherGrammarFoldersModule } from './modules/teacher-grammar-folders/teacher-grammar-folders.module';
+import { TeacherRatingSummariesModule } from './modules/teacher-rating-summaries/teacher-rating-summaries.module';
+import { MailQueueModule } from './modules/mail-queue/mail-queue.module';
+import { UploadsModule } from './modules/uploads/uploads.module';
 
 const DatabaseProvider = {
   provide: 'DATABASE_CONNECTION',
@@ -47,8 +66,10 @@ const DatabaseProvider = {
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ envFilePath: `apps/env/.superstudy.env` }),
-    TypegooseModule.forRoot(process.env.MONGODB_URL),
+    ConfigModule.forRoot({ envFilePath: `env/.superstudy.env` }),
+    TypegooseModule.forRootAsync({
+      useFactory: () => ({ uri: process.env.MONGODB_URL }),
+    }),
     AgendaModule.forRootAsync({
       useFactory: (mongo: any) => ({
         mongo,
@@ -56,6 +77,7 @@ const DatabaseProvider = {
       inject: ['DATABASE_CONNECTION'],
       extraProviders: [DatabaseProvider],
     }),
+    AgendaModule.registerQueue(''),
     // Feature Modules
     UsersModule,
     UserGroupsModule,
@@ -65,6 +87,8 @@ const DatabaseProvider = {
     ExamSubmissionsModule,
     GrammarExercisesModule,
     GrammarQuestionsModule,
+    GrammarProgressModule,
+    GrammarSubmissionsModule,
     TopicsModule,
     TeacherTopicsModule,
     AssignmentsModule,
@@ -84,6 +108,23 @@ const DatabaseProvider = {
     AuthModule,
     ContentProposalsModule,
     DashboardModule,
+    // ScheduledJobsModule,
+    SkillReportsModule,
+    RedFlagsModule,
+    RewardPointsModule,
+    SettingsModule,
+    ToolsModule,
+    ToolAssignmentsModule,
+    ToolSubmissionsModule,
+    TopicFoldersModule,
+    ExamFoldersModule,
+    GrammarFoldersModule,
+    TeacherExamFoldersModule,
+    TeacherTopicFoldersModule,
+    TeacherGrammarFoldersModule,
+    TeacherRatingSummariesModule,
+    MailQueueModule,
+    UploadsModule,
   ],
 
   providers: [

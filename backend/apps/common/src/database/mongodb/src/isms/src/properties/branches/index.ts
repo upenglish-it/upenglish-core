@@ -1,8 +1,8 @@
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 import { Properties } from '..';
 import { SYSTEM_ID } from 'apps/common/src/utils';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: 'properties-branches' } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: 'properties-branches' } })
 export class PropertiesBranches {
   @Prop({
     type: String,

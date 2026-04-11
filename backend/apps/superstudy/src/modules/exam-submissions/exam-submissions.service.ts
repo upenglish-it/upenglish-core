@@ -22,6 +22,36 @@ export class ExamSubmissionsService {
     });
   }
 
+  /**
+   * Lookup a single submission by assignmentId + studentId.
+   * Mirrors examService.getExamSubmission — picks the most-complete submission
+   * if multiple exist (shouldn't normally happen, but guards against duplicates).
+   */
+  async lookup(assignmentId: string, studentId: string) {
+    const subs = await this.submissionsModel
+      .find({ assignmentId, studentId })
+      .lean();
+    if (!subs || subs.length === 0) return null;
+    // Prefer submitted/graded over in-progress (schema statuses: in_progress | submitted | graded)
+    const finished = subs.find(
+      (s) => s.status === 'submitted' || s.status === 'graded',
+    );
+    if (finished) return finished;
+    const hasScore = subs.find(
+      (s) => s['totalScore'] !== undefined && s['totalScore'] !== null,
+    );
+    return hasScore ?? subs[0];
+  }
+
+  /**
+   * Find submissions for multiple assignments (bulk).
+   * Mirrors examService.getExamSubmissionsForAssignments
+   */
+  async findByAssignments(assignmentIds: string[]) {
+    if (!assignmentIds.length) return [];
+    return this.submissionsModel.find({ assignmentId: { $in: assignmentIds } }).lean();
+  }
+
   async findOne(id: string) {
     const sub = await this.submissionsModel.findById(id).lean();
     if (!sub) throw new NotFoundException(`Submission ${id} not found`);
@@ -72,8 +102,24 @@ export class ExamSubmissionsService {
     if (data.status === 'submitted' && !data.submittedAt) {
       data.submittedAt = new Date();
     }
+
+    // Separate null values into $unset (mimics Firestore deleteField())
+    const setFields: Record<string, any> = {};
+    const unsetFields: Record<string, any> = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (value === null) {
+        unsetFields[key] = '';
+      } else {
+        setFields[key] = value;
+      }
+    }
+
+    const updateOp: Record<string, any> = {};
+    if (Object.keys(setFields).length > 0) updateOp.$set = setFields;
+    if (Object.keys(unsetFields).length > 0) updateOp.$unset = unsetFields;
+
     const updated = await this.submissionsModel
-      .findByIdAndUpdate(id, { $set: data }, { new: true })
+      .findByIdAndUpdate(id, updateOp, { new: true })
       .lean();
     if (!updated) throw new NotFoundException(`Submission ${id} not found`);
     return updated;
@@ -134,5 +180,15 @@ export class ExamSubmissionsService {
     return this.submissionsModel
       .findByIdAndUpdate(id, { $set: { followUpResultsViewedByStudent: true } }, { new: true })
       .lean();
+  }
+
+  /**
+   * Hard-delete a submission — mirrors examService.deleteExamSubmission
+   * Note: The frontend also cleans up Firebase Storage audio files separately.
+   */
+  async remove(id: string) {
+    const result = await this.submissionsModel.findByIdAndDelete(id).lean();
+    if (!result) throw new NotFoundException(`Submission ${id} not found`);
+    return { deleted: true };
   }
 }

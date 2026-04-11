@@ -10,6 +10,16 @@ import {
 
 type AdminFolderType = 'topics' | 'grammar' | 'exams';
 
+function normalizeFolder(doc: Record<string, any>) {
+  if (!doc) return doc;
+  const isPublic = doc.isPublic ?? doc.public ?? false;
+  return {
+    ...doc,
+    isPublic,
+    public: isPublic,
+  };
+}
+
 @Injectable()
 export class AdminFoldersService {
   constructor(
@@ -35,6 +45,45 @@ export class AdminFoldersService {
     }
   }
 
+  private listField(type: AdminFolderType) {
+    switch (type) {
+      case 'topics':
+        return 'topicIds';
+      case 'grammar':
+        return 'exerciseIds';
+      case 'exams':
+        return 'examIds';
+      default:
+        return null;
+    }
+  }
+
+  private normalizeIds(ids: unknown) {
+    const seen = new Set<string>();
+    return (Array.isArray(ids) ? ids : [])
+      .map((id) => (typeof id === 'string' ? id.trim() : String(id || '').trim()))
+      .filter((id) => {
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+  }
+
+  private async enforceExclusiveItems(type: AdminFolderType, targetFolderId: string, itemIds: string[]) {
+    const field = this.listField(type);
+    if (!field || itemIds.length === 0) return;
+
+    const docs = await (this.model(type) as any).find({ _id: { $ne: targetFolderId } }).lean();
+    await Promise.all(
+      docs.map(async (doc: Record<string, any>) => {
+        const currentIds = this.normalizeIds(doc[field]);
+        const filteredIds = currentIds.filter((id) => !itemIds.includes(id));
+        if (filteredIds.length === currentIds.length) return;
+        await (this.model(type) as any).findByIdAndUpdate(doc._id, { $set: { [field]: filteredIds } });
+      }),
+    );
+  }
+
   // ═════════════════════════════════════════════════════════════════════════
   // getFolders — mirrors getFolders() / getGrammarFolders() from adminService.js
   // Returns all folders sorted by `order` ascending.
@@ -44,6 +93,7 @@ export class AdminFoldersService {
     const docs = await (this.model(type) as any).find().lean();
     return docs
       .filter((d: any) => !d.isDeleted)
+      .map((d: any) => normalizeFolder(d))
       .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
   }
 
@@ -55,16 +105,32 @@ export class AdminFoldersService {
   async saveFolder(type: AdminFolderType, data: Record<string, any>) {
     const { _id, id, ...rest } = data;
     const folderId: string = _id || id || SYSTEM_ID();
+    const isPublic = rest.isPublic ?? rest.public ?? false;
+    const field = this.listField(type);
+    const normalizedIds = field && Object.prototype.hasOwnProperty.call(rest, field)
+      ? this.normalizeIds(rest[field])
+      : null;
+    const payload = {
+      ...rest,
+      ...(field && normalizedIds ? { [field]: normalizedIds } : {}),
+      isPublic,
+      public: isPublic,
+      _id: folderId,
+    };
 
     const updated = await (this.model(type) as any)
       .findByIdAndUpdate(
         folderId,
-        { $set: { ...rest, _id: folderId } },
+        { $set: payload },
         { new: true, upsert: true },
       )
       .lean();
 
-    return updated;
+    if (field && normalizedIds) {
+      await this.enforceExclusiveItems(type, folderId, normalizedIds);
+    }
+
+    return normalizeFolder(updated);
   }
 
   // ═════════════════════════════════════════════════════════════════════════

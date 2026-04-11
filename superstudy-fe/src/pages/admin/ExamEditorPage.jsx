@@ -7,7 +7,7 @@ import { getTeacherTopics, getTeacherTopicWords } from '../../services/teacherSe
 import { getAdminTopics, getAdminTopicWords } from '../../services/adminService';
 import { extractQuestionsFromText, extractQuestionsFromPDF } from '../../services/aiDocumentImportService';
 import { useAuth } from '../../contexts/AuthContext';
-import { ArrowLeft, Plus, Edit, Trash2, X, Wand2, RefreshCw, Save, GripVertical, ChevronDown, Check, AlertCircle, Info, CheckCircle, Clock, List, Trophy, Layers, BookOpen, Award, Copy, FileText, Upload, ArrowRightLeft } from 'lucide-react';
+import { ArrowLeft, Plus, Edit, Trash2, X, Wand2, RefreshCw, Save, GripVertical, ChevronDown, Check, AlertCircle, Info, CheckCircle, Clock, List, Trophy, Layers, BookOpen, Award, Copy, FileText, Upload, ArrowRightLeft, EyeOff, ArrowRight, Eye } from 'lucide-react';
 import '../teacher/TeacherGrammarEditorPage.css';
 
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
@@ -18,6 +18,17 @@ import AudioContextUploader from '../../components/common/AudioContextUploader';
 import { deleteContextAudio } from '../../services/contextAudioService';
 import { uploadContextImage, deleteContextImages } from '../../services/examService';
 import SavedPromptPicker from '../../components/SavedPromptPicker';
+import { renderFormattedText, applyFormatToSelection } from '../../utils/textFormatting';
+import { normalizeRichTextValue } from '../../utils/richTextFormatUtils';
+import FormattedOptionInput from '../../components/common/FormattedOptionInput';
+import { cloneQuestionStorageAssets } from '../../services/storageCloneService';
+
+function decodeHtmlEntities(str) {
+    if (!str) return str;
+    const ta = document.createElement('textarea');
+    ta.innerHTML = str;
+    return ta.value.replace(/\u00a0/g, ' ');
+}
 
 // Fix video disappearing on load/edit
 const Quill = ReactQuill.Quill;
@@ -172,14 +183,14 @@ function ContextQuillEditor({ value, onChange, readOnly, style }) {
     );
 }
 
-import { renderFormattedText, applyFormatToSelection } from '../../utils/textFormatting';
-
 /**
  * Minimal WYSIWYG rich-text input using ReactQuill.
  * Only provides Bold, Italic, Underline buttons.
  */
 function RichTextInput({ value, onChange, disabled, placeholder, minHeight = '100px', wrapperClassName = '' }) {
     const quillRef = React.useRef(null);
+    const containerRef = React.useRef(null);
+    const tooltipBaseId = React.useId();
 
     const modules = {
         toolbar: [
@@ -188,8 +199,20 @@ function RichTextInput({ value, onChange, disabled, placeholder, minHeight = '10
     };
     const formats = ['bold', 'italic', 'underline'];
 
+    useEffect(() => {
+        const root = containerRef.current;
+        if (!root) return;
+        root.querySelectorAll('.ql-tooltip input').forEach((input, idx) => {
+            input.id = `${tooltipBaseId}-tooltip-${idx}`;
+            input.name = `${tooltipBaseId}-tooltip-${idx}`;
+            if (!input.getAttribute('aria-label')) {
+                input.setAttribute('aria-label', 'Quill tooltip input');
+            }
+        });
+    }, [tooltipBaseId, value, disabled]);
+
     return (
-        <div style={{ position: 'relative' }}>
+        <div ref={containerRef} style={{ position: 'relative' }}>
             <div
                 style={{ background: disabled ? '#f8fafc' : '#fff', borderRadius: '8px', opacity: disabled ? 0.7 : 1 }}
                 className={`grammar-rich-text-input ${wrapperClassName}`}
@@ -216,6 +239,14 @@ function RichTextInput({ value, onChange, disabled, placeholder, minHeight = '10
  */
 function renderFillInBlankText(text) {
     if (!text) return '(Chưa có nội dung)';
+    if (/<[a-zA-Z][^>]*>/.test(text)) {
+        const processed = text.replace(/\{\{(.+?)\}\}/g, (_, word) => {
+            const cleanWord = decodeHtmlEntities(word);
+            return `<span style="display:inline-flex;align-items:center;gap:3px;background:#eef2ff;border:1.5px dashed #818cf8;border-radius:5px;padding:0px 7px;color:#4f46e5;font-weight:700;font-size:0.85em;white-space:nowrap;line-height:1.6;margin:0 2px;vertical-align:middle;">✎ ${cleanWord}</span>`;
+        });
+        return <span dangerouslySetInnerHTML={{ __html: processed.replace(/&nbsp;/g, ' ') }} />;
+    }
+
     return renderFormattedText(text, (word, key) => (
         <span key={key} style={{
             display: 'inline-flex',
@@ -237,6 +268,52 @@ function renderFillInBlankText(text) {
             ✎ {word}
         </span>
     ));
+}
+
+function normalizeFillInBlankTextForEditor(text) {
+    if (typeof text !== 'string') return text;
+
+    return decodeHtmlEntities(
+        text
+            .replace(/<\s*strong\b[^>]*>/gi, '**')
+            .replace(/<\s*\/\s*strong\s*>/gi, '**')
+            .replace(/<\s*b\b[^>]*>/gi, '**')
+            .replace(/<\s*\/\s*b\s*>/gi, '**')
+            .replace(/<\s*em\b[^>]*>/gi, '*')
+            .replace(/<\s*\/\s*em\s*>/gi, '*')
+            .replace(/<\s*i\b[^>]*>/gi, '*')
+            .replace(/<\s*\/\s*i\s*>/gi, '*')
+            .replace(/<\s*u\b[^>]*>/gi, '__')
+            .replace(/<\s*\/\s*u\s*>/gi, '__')
+            .replace(/<p><br><\/p>/gi, '\n')
+            .replace(/<\/p>/gi, '\n')
+            .replace(/<\/div>/gi, '\n')
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<p[^>]*>/gi, '')
+            .replace(/<div[^>]*>/gi, '')
+            .replace(/<[^>]*>/g, '')
+    ).replace(/\n{3,}/g, '\n\n');
+}
+
+function normalizeQuestionForEditor(question) {
+    if (!question || typeof question !== 'object') return question;
+
+    const isFillBlankType = ['fill_in_blank', 'fill_in_blanks', 'fill_in_blank_typing'].includes(question.type);
+
+    return {
+        ...question,
+        variations: Array.isArray(question.variations)
+            ? question.variations.map(variation => ({
+                ...variation,
+                text: typeof variation?.text === 'string'
+                    ? (isFillBlankType ? normalizeFillInBlankTextForEditor(variation.text) : normalizeRichTextValue(variation.text))
+                    : variation?.text,
+                explanation: typeof variation?.explanation === 'string'
+                    ? normalizeRichTextValue(variation.explanation)
+                    : variation?.explanation,
+            }))
+            : question.variations
+    };
 }
 
 const parseContextHtml = (html) => {
@@ -492,6 +569,7 @@ function FillInBlankEditor({ variation, vIdx, isReadOnly, updateVariation, hideD
     const text = variation?.text || '';
     const blanks = parseFillBlanks(text);
     const distractors = variation?.distractors || [];
+    const baseId = `exam-fill-blank-${vIdx}`;
 
     // Local state to handle comma typing without immediate parent sync interference
     const [distractStr, setDistractStr] = useState(distractors.join(', '));
@@ -538,10 +616,12 @@ function FillInBlankEditor({ variation, vIdx, isReadOnly, updateVariation, hideD
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {/* Textarea + button */}
             <div className="admin-form-group" style={{ marginBottom: 0 }}>
-                <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, marginBottom: '4px' }}>
+                <label htmlFor={`${baseId}-text`} style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, marginBottom: '4px' }}>
                     Nội dung câu (bôi đen từ rồi bấm "Tạo chỗ trống")
                 </label>
                 <textarea
+                    id={`${baseId}-text`}
+                    name={`${baseId}-text`}
                     ref={textareaRef}
                     className={`admin-form-input ${vIdx === 0 ? `required-field${text.trim() ? ' filled' : ''}` : ''}`}
                     rows={3}
@@ -643,10 +723,10 @@ function FillInBlankEditor({ variation, vIdx, isReadOnly, updateVariation, hideD
             {/* Distractors input */}
             {!hideDistractors && (
                 <div className="admin-form-group" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, marginBottom: '4px' }}>
+                    <label htmlFor={`${baseId}-distractors`} style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, marginBottom: '4px' }}>
                         Từ gây nhiễu (phân cách bằng dấu phẩy, tùy chọn)
                     </label>
-                    <input type="text" className="admin-form-input"
+                    <input id={`${baseId}-distractors`} name={`${baseId}-distractors`} type="text" className="admin-form-input"
                         disabled={isReadOnly}
                         placeholder="Ví dụ: has, were, being"
                         value={distractStr}
@@ -870,7 +950,7 @@ export default function ExamEditorPage() {
     function openEditForm(q) {
         pendingImageDeletionsRef.current = [];
         newlyUploadedImagesRef.current = [];
-        const deepCopy = JSON.parse(JSON.stringify(q));
+        const deepCopy = normalizeQuestionForEditor(JSON.parse(JSON.stringify(q)));
         // Ensure there are always 5 variations (old questions may have fewer)
         const variations = deepCopy.variations || [];
         while (variations.length < 5) {
@@ -944,14 +1024,17 @@ export default function ExamEditorPage() {
 
     async function handleDuplicate(q) {
         try {
-            const { id: _id, createdAt, updatedAt, order, ...rest } = JSON.parse(JSON.stringify(q));
+            const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, order: _order, ...rest } = JSON.parse(JSON.stringify(q));
+            const duplicatedQuestion = await cloneQuestionStorageAssets(rest, {
+                contextAudioFolder: `context_audio/exam/${examId}`
+            });
             await saveExamQuestion({
-                ...rest,
+                ...duplicatedQuestion,
                 examId: examId,
                 sectionId: q.sectionId
             });
             setToast({ message: 'Nhân bản câu hỏi thành công!', type: 'success' });
-            loadData();
+            loadData(true);
         } catch (error) {
             setToast({ message: 'Lỗi nhân bản câu hỏi: ' + error.message, type: 'error' });
         }
@@ -1882,7 +1965,7 @@ export default function ExamEditorPage() {
                                                                             {(q.type === 'fill_in_blank' || q.type === 'fill_in_blanks' || q.type === 'fill_in_blank_typing')
                                                                                 ? renderFillInBlankText(q.variations?.[0]?.text)
                                                                                 : (q.variations?.[0]?.text
-                                                                                    ? <span dangerouslySetInnerHTML={{ __html: q.variations[0].text.replace(/&nbsp;/g, ' ') }} />
+                                                                                    ? <span dangerouslySetInnerHTML={{ __html: normalizeRichTextValue(q.variations[0].text).replace(/&nbsp;/g, ' ') }} />
                                                                                     : (q.purpose || '(Chưa có nội dung)'))}
                                                                         </div>
                                                                         {q.purpose && (
@@ -1959,7 +2042,7 @@ export default function ExamEditorPage() {
                                                     {(q.type === 'fill_in_blank' || q.type === 'fill_in_blanks' || q.type === 'fill_in_blank_typing')
                                                         ? renderFillInBlankText(q.variations?.[0]?.text)
                                                         : (q.variations?.[0]?.text
-                                                            ? <span dangerouslySetInnerHTML={{ __html: q.variations[0].text }} />
+                                                            ? <span dangerouslySetInnerHTML={{ __html: normalizeRichTextValue(q.variations[0].text).replace(/&nbsp;/g, ' ') }} />
                                                             : '(Chưa có nội dung)')}
                                                 </div>
                                                 {q.purpose && (
@@ -2055,8 +2138,8 @@ export default function ExamEditorPage() {
                                             />
                                         </div>
                                         <div className="admin-form-group" style={{ flex: 1.2 }}>
-                                            <label>{getScoreLabel(formData.type)} <span style={{ color: '#ef4444', fontWeight: 700 }}>*</span></label>
-                                            <input type="number" className={`admin-form-input required-field${formData.points ? ' filled' : ''}`} min={0.25} max={100} step={0.25} value={formData.points} disabled={isReadOnly} onChange={e => setFormData({ ...formData, points: parseFloat(e.target.value) || '' })} placeholder="Nhập điểm" />
+                                            <label htmlFor="exam-question-points">{getScoreLabel(formData.type)} <span style={{ color: '#ef4444', fontWeight: 700 }}>*</span></label>
+                                            <input id="exam-question-points" name="points" type="number" className={`admin-form-input required-field${formData.points ? ' filled' : ''}`} min={0.25} max={100} step={0.25} value={formData.points} disabled={isReadOnly} onChange={e => setFormData({ ...formData, points: parseFloat(e.target.value) || '' })} placeholder="Nhập điểm" />
                                             {(() => {
                                                 const unitName = getItemUnitName(formData.type);
                                                 if (!unitName) return null;
@@ -2078,8 +2161,8 @@ export default function ExamEditorPage() {
                                         </div>
                                         {(exam.timingMode === 'question') && (
                                             <div className="admin-form-group" style={{ flex: 1 }}>
-                                                <label>⏱ Thời gian (giây) <span style={{ color: '#ef4444', fontWeight: 700 }}>*</span></label>
-                                                <input type="number" className={`admin-form-input required-field${formData.timeLimitSeconds ? ' filled' : ''}`} required min={5} max={3600} value={formData.timeLimitSeconds || ''} disabled={isReadOnly} onChange={e => setFormData({ ...formData, timeLimitSeconds: parseInt(e.target.value) || '' })} placeholder="Nhập" />
+                                                <label htmlFor="exam-question-time-limit">⏱ Thời gian (giây) <span style={{ color: '#ef4444', fontWeight: 700 }}>*</span></label>
+                                                <input id="exam-question-time-limit" name="timeLimitSeconds" type="number" className={`admin-form-input required-field${formData.timeLimitSeconds ? ' filled' : ''}`} required min={5} max={3600} value={formData.timeLimitSeconds || ''} disabled={isReadOnly} onChange={e => setFormData({ ...formData, timeLimitSeconds: parseInt(e.target.value) || '' })} placeholder="Nhập" />
                                             </div>
                                         )}
                                     </div>
@@ -2091,8 +2174,10 @@ export default function ExamEditorPage() {
                                             borderRadius: '10px', fontSize: '0.82rem', color: '#92400e',
                                             lineHeight: 1.5
                                         }}>
-                                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', flexShrink: 0, fontWeight: 600, marginTop: '1px' }}>
+                                            <label htmlFor="exam-question-use-ai-grading" style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', flexShrink: 0, fontWeight: 600, marginTop: '1px' }}>
                                                 <input
+                                                    id="exam-question-use-ai-grading"
+                                                    name="useAIGrading"
                                                     type="checkbox"
                                                     checked={!!formData.useAIGrading}
                                                     onChange={e => setFormData(prev => ({ ...prev, useAIGrading: e.target.checked }))}
@@ -2105,8 +2190,8 @@ export default function ExamEditorPage() {
                                         </div>
                                     )}
                                     <div className="admin-form-group">
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>Mục tiêu kiểm tra chính của câu hỏi <span style={{ color: '#ef4444', fontWeight: 700 }}>*</span> <span title="AI sử dụng mục tiêu này để tạo variations chính xác và phù hợp" style={{ cursor: 'help', color: '#94a3b8', fontSize: '0.8rem', fontWeight: 700, width: '16px', height: '16px', borderRadius: '50%', border: '1.5px solid #cbd5e1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>i</span></label>
-                                        <textarea className={`admin-form-input required-field${formData.purpose ? ' filled' : ''}`} required value={formData.purpose} disabled={isReadOnly} onChange={e => setFormData({ ...formData, purpose: e.target.value })} placeholder="Ví dụ: Kiểm tra khả năng sử dụng thì hiện tại hoàn thành"
+                                        <label htmlFor="exam-question-purpose" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>Mục tiêu kiểm tra chính của câu hỏi <span style={{ color: '#ef4444', fontWeight: 700 }}>*</span> <span title="AI sử dụng mục tiêu này để tạo variations chính xác và phù hợp" style={{ cursor: 'help', color: '#94a3b8', fontSize: '0.8rem', fontWeight: 700, width: '16px', height: '16px', borderRadius: '50%', border: '1.5px solid #cbd5e1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>i</span></label>
+                                        <textarea id="exam-question-purpose" name="purpose" className={`admin-form-input required-field${formData.purpose ? ' filled' : ''}`} required value={formData.purpose} disabled={isReadOnly} onChange={e => setFormData({ ...formData, purpose: e.target.value })} placeholder="Ví dụ: Kiểm tra khả năng sử dụng thì hiện tại hoàn thành"
                                             rows={1}
                                             style={{ resize: 'none', overflow: 'hidden', minHeight: '40px', lineHeight: '1.5' }}
                                             onInput={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
@@ -2116,9 +2201,11 @@ export default function ExamEditorPage() {
                                     <hr className="form-section-divider" />
                                     {/* Vocabulary topic selector */}
                                     <div className="admin-form-group optional-field">
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>📚 Chủ đề từ vựng (tùy chọn) <span title="AI sẽ ưu tiên sử dụng từ vựng trong chủ đề này để tạo câu hỏi" style={{ cursor: 'help', color: '#94a3b8', fontSize: '0.8rem', fontWeight: 700, width: '16px', height: '16px', borderRadius: '50%', border: '1.5px solid #cbd5e1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>i</span></label>
+                                        <label htmlFor="exam-question-vocab-topic-search" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>📚 Chủ đề từ vựng (tùy chọn) <span title="AI sẽ ưu tiên sử dụng từ vựng trong chủ đề này để tạo câu hỏi" style={{ cursor: 'help', color: '#94a3b8', fontSize: '0.8rem', fontWeight: 700, width: '16px', height: '16px', borderRadius: '50%', border: '1.5px solid #cbd5e1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>i</span></label>
                                         <div style={{ position: 'relative' }}>
                                             <input
+                                                id="exam-question-vocab-topic-search"
+                                                name="vocabTopicSearch"
                                                 type="text"
                                                 className="admin-form-input"
                                                 placeholder="🔍 Nhấp để tìm chủ đề từ vựng..."
@@ -2219,6 +2306,8 @@ export default function ExamEditorPage() {
                                         <div className="admin-form-group optional-field" style={{ marginBottom: '0' }}>
                                             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: isReadOnly ? 'default' : 'pointer', userSelect: 'none' }}>
                                                 <input
+                                                    id="exam-question-default-grading-criteria"
+                                                    name="useDefaultGradingCriteria"
                                                     type="checkbox"
                                                     checked={formData.useDefaultGradingCriteria !== false}
                                                     disabled={isReadOnly}
@@ -2321,6 +2410,8 @@ export default function ExamEditorPage() {
                                         {!isReadOnly && (
                                         <div className="admin-form-group optional-field" style={{ marginBottom: 0, marginTop: '8px' }}>
                                             <textarea
+                                                id="exam-question-special-requirement"
+                                                name="specialRequirement"
                                                 className="admin-form-input"
                                                 placeholder="Nhập yêu cầu bổ sung cho AI khi chấm (nếu có)..."
                                                 rows={3}
@@ -2354,6 +2445,8 @@ export default function ExamEditorPage() {
                                                 <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', margin: '16px 0', flexWrap: 'wrap', gap: '16px' }}>
                                                     <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, color: '#475569', cursor: 'pointer' }}>
                                                         <input
+                                                            id="exam-question-vietnamese-toggle"
+                                                            name="isVietnameseQuestion"
                                                             type="checkbox"
                                                             checked={isVietnameseQuestion}
                                                             onChange={e => setIsVietnameseQuestion(e.target.checked)}
@@ -2443,7 +2536,7 @@ export default function ExamEditorPage() {
                                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                                                     {(variation?.options || ['', '', '', '']).map((opt, oIdx) => (
                                                                         <div key={oIdx} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                                                            <input type="radio" name={`correct-${vIdx}`} checked={variation?.correctAnswer === oIdx}
+                                                                            <input id={`exam-question-correct-${vIdx}-${oIdx}`} aria-label={`Chọn đáp án đúng ${oIdx + 1} cho variation ${vIdx + 1}`} type="radio" name={`correct-${vIdx}`} checked={variation?.correctAnswer === oIdx}
                                                                                 disabled={isReadOnly}
                                                                                 onChange={() => updateVariation(vIdx, 'correctAnswer', oIdx)} />
                                                                             {isImageOption(opt) ? (
@@ -2458,9 +2551,13 @@ export default function ExamEditorPage() {
                                                                                 />
                                                                             ) : (
                                                                                 <>
-                                                                                    <input type="text" className="admin-form-input" style={{ margin: 0, flex: 1 }} placeholder={`Đáp án ${oIdx + 1}`}
+                                                                                    <FormattedOptionInput
+                                                                                        style={{ margin: 0, flex: 1 }}
+                                                                                        placeholder={`Đáp án ${oIdx + 1}`}
+                                                                                        value={opt}
+                                                                                        onChange={val => updateOption(vIdx, oIdx, val)}
                                                                                         disabled={isReadOnly}
-                                                                                        value={opt} onChange={e => updateOption(vIdx, oIdx, e.target.value)} />
+                                                                                    />
                                                                                     <ImageOptionUploader
                                                                                         value={opt}
                                                                                         onChange={url => updateOption(vIdx, oIdx, url)}
@@ -2501,11 +2598,11 @@ export default function ExamEditorPage() {
                                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                                             {(variation?.pairs || []).map((pair, pIdx) => (
                                                                 <div key={pIdx} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                                                    <input type="text" className="admin-form-input" style={{ margin: 0, flex: 1 }} placeholder="Bên trái"
+                                                                    <input id={`exam-question-pair-left-${vIdx}-${pIdx}`} name={`variation-${vIdx}-pair-left-${pIdx}`} aria-label={`Vế trái cặp ${pIdx + 1} của variation ${vIdx + 1}`} type="text" className="admin-form-input" style={{ margin: 0, flex: 1 }} placeholder="Bên trái"
                                                                         disabled={isReadOnly}
                                                                         value={pair.left} onChange={e => updatePair(vIdx, pIdx, 'left', e.target.value)} />
                                                                     <span style={{ color: '#94a3b8' }}>→</span>
-                                                                    <input type="text" className="admin-form-input" style={{ margin: 0, flex: 1 }} placeholder="Bên phải"
+                                                                    <input id={`exam-question-pair-right-${vIdx}-${pIdx}`} name={`variation-${vIdx}-pair-right-${pIdx}`} aria-label={`Vế phải cặp ${pIdx + 1} của variation ${vIdx + 1}`} type="text" className="admin-form-input" style={{ margin: 0, flex: 1 }} placeholder="Bên phải"
                                                                         disabled={isReadOnly}
                                                                         value={pair.right} onChange={e => updatePair(vIdx, pIdx, 'right', e.target.value)} />
                                                                     {!isReadOnly && (
@@ -2558,7 +2655,7 @@ export default function ExamEditorPage() {
                                                                                     width: '8px', height: '8px', borderRadius: '50%',
                                                                                     background: color.tag, flexShrink: 0
                                                                                 }} />
-                                                                                <input type="text" className="admin-form-input"
+                                                                                <input id={`exam-question-group-${vIdx}-${gIdx}`} name={`variation-${vIdx}-group-${gIdx}`} aria-label={`Tên nhóm ${gIdx + 1} của variation ${vIdx + 1}`} type="text" className="admin-form-input"
                                                                                     style={{
                                                                                         margin: 0, padding: '4px 8px', fontSize: '0.85rem',
                                                                                         fontWeight: 700, color: color.header,
@@ -2594,7 +2691,7 @@ export default function ExamEditorPage() {
                                                                                         padding: '6px 10px', border: '1px solid #e2e8f0',
                                                                                         boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
                                                                                     }}>
-                                                                                        <input type="text" className="admin-form-input"
+                                                                                        <input id={`exam-question-group-item-${vIdx}-${item._origIdx}`} name={`variation-${vIdx}-group-item-${item._origIdx}`} aria-label={`Nội dung mục ${item._origIdx + 1} của variation ${vIdx + 1}`} type="text" className="admin-form-input"
                                                                                             style={{ margin: 0, flex: 1, border: 'none', padding: '2px 4px', fontSize: '0.85rem', background: 'transparent' }}
                                                                                             placeholder="Nhập nội dung..."
                                                                                             disabled={isReadOnly}
@@ -2703,7 +2800,7 @@ export default function ExamEditorPage() {
                                                                         }}>
                                                                             {iIdx + 1}
                                                                         </div>
-                                                                        <input type="text" className="admin-form-input"
+                                                                        <input id={`exam-question-order-item-${vIdx}-${iIdx}`} name={`variation-${vIdx}-order-item-${iIdx}`} aria-label={`Mục thứ ${iIdx + 1} của variation ${vIdx + 1}`} type="text" className="admin-form-input"
                                                                             style={{ margin: 0, flex: 1, border: 'none', padding: '6px 8px', fontSize: '0.9rem', background: 'transparent' }}
                                                                             placeholder={`Mục thứ ${iIdx + 1}...`}
                                                                             disabled={isReadOnly}
@@ -3088,6 +3185,9 @@ export default function ExamEditorPage() {
                                                                 {/* Editable Points Input */}
                                                                 <div onClick={e => e.stopPropagation()} style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', fontSize: '0.72rem', fontWeight: 600, color: '#d97706', background: '#fffbeb', padding: '2px 8px', borderRadius: '6px', border: '1px solid #fde68a' }}>
                                                                     <input
+                                                                        id={`import-question-points-${idx}`}
+                                                                        name={`importQuestionPoints${idx}`}
+                                                                        aria-label={`Điểm của câu ${idx + 1}`}
                                                                         type="number"
                                                                         min={1}
                                                                         max={100}
@@ -3108,6 +3208,9 @@ export default function ExamEditorPage() {
                                                                     <div onClick={e => e.stopPropagation()} style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', fontSize: '0.72rem', fontWeight: 600, color: '#0284c7', background: '#f0f9ff', padding: '2px 8px', borderRadius: '6px', border: '1px solid #bae6fd' }}>
                                                                         ⏱
                                                                         <input
+                                                                            id={`import-question-time-${idx}`}
+                                                                            name={`importQuestionTime${idx}`}
+                                                                            aria-label={`Thời gian câu ${idx + 1}`}
                                                                             type="number"
                                                                             min={5}
                                                                             max={600}
@@ -3160,6 +3263,9 @@ export default function ExamEditorPage() {
                                                             <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={e => e.stopPropagation()}>
                                                                 <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic', flexShrink: 0 }}>Mục tiêu:</span>
                                                                 <input
+                                                                    id={`import-question-purpose-${idx}`}
+                                                                    name={`importQuestionPurpose${idx}`}
+                                                                    aria-label={`Mục tiêu của câu ${idx + 1}`}
                                                                     type="text"
                                                                     value={q.purpose || ''}
                                                                     onChange={e => {

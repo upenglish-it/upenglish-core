@@ -1,8 +1,8 @@
 import { api } from "../httpClient";
 
 export const contentProposalsService = {
-  findAll: async (params) => {
-    const res = await api.get('/content-proposals', { params });
+  findAll: async (query) => {
+    const res = await api.get('/content-proposals', query || {});
     return res.data || res;
   },
   findOne: async (id) => {
@@ -22,3 +22,4 @@ export const contentProposalsService = {
     return res.data || res;
   }
 };
+

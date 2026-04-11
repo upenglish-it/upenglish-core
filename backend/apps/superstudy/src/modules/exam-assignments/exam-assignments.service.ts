@@ -16,17 +16,29 @@ export class ExamAssignmentsService {
   ) {}
 
   /**
-   * List non-deleted assignments filtered by examId, groupId, or studentId
-   * For studentId, returns group assignments where student is in group + individual assignments
+   * List non-deleted assignments filtered by examId, groupId, targetType+targetId, or studentId
    * Mirrors examService.getExamAssignmentsForGroup / getExamAssignmentsForStudent
    */
-  async findAll(filters: { examId?: string; groupId?: string; studentId?: string }) {
+  async findAll(filters: {
+    examId?: string;
+    groupId?: string;
+    targetType?: string;
+    targetId?: string;
+    studentId?: string;
+  }) {
     const query: Record<string, any> = { isDeleted: { $ne: true } };
 
     if (filters.examId) query.examId = filters.examId;
-    if (filters.groupId) query.groupId = filters.groupId;
+    // Support both legacy ?groupId=X (mapped to targetId + group) and new ?targetType+targetId
+    if (filters.targetType && filters.targetId) {
+      query.targetType = filters.targetType;
+      query.targetId = filters.targetId;
+    } else if (filters.groupId) {
+      query.targetType = 'group';
+      query.targetId = filters.groupId;
+    }
     if (filters.studentId) {
-      // Assignments for an individual student: either targetId = studentId OR they appear in assignedStudentIds
+      // Individual assignments for this student
       query.$or = [
         { targetId: filters.studentId, targetType: 'individual' },
         { assignedStudentIds: filters.studentId },
@@ -39,6 +51,38 @@ export class ExamAssignmentsService {
       const tB = b['createdAt'] ? new Date(b['createdAt']).getTime() : 0;
       return tB - tA;
     });
+  }
+
+  /**
+   * Fetch assignments for a student across all their groups + individual assignments.
+   * Mirrors examService.getExamAssignmentsForStudent
+   */
+  async findForStudent(studentId: string, groupIds: string[]) {
+    const orClauses: Record<string, any>[] = [
+      { targetType: 'individual', targetId: studentId },
+    ];
+    if (groupIds.length > 0) {
+      orClauses.push({ targetType: 'group', targetId: { $in: groupIds } });
+    }
+
+    const assignments = await this.assignmentsModel
+      .find({ isDeleted: { $ne: true }, $or: orClauses })
+      .lean();
+
+    // Filter by assignedStudentIds if the list is non-empty
+    return assignments
+      .filter((a) => {
+        const ids: string[] = (a as any).assignedStudentIds;
+        if (ids && Array.isArray(ids) && ids.length > 0) {
+          return ids.includes(studentId);
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const tA = a['createdAt'] ? new Date(a['createdAt']).getTime() : 0;
+        const tB = b['createdAt'] ? new Date(b['createdAt']).getTime() : 0;
+        return tB - tA;
+      });
   }
 
   /**
@@ -94,6 +138,34 @@ export class ExamAssignmentsService {
       .lean();
     if (!updated) throw new NotFoundException(`Assignment ${id} not found`);
     // Notification for deadline extension is handled by caller
+    return updated;
+  }
+
+  /**
+   * Generic update — allows patching any fields including studentDeadlines.
+   * Mirrors examService.updateExamAssignmentStudentDeadline / removeExamAssignmentStudentDeadline
+   * If a field value is explicitly null, it is treated as an $unset operation.
+   */
+  async update(id: string, data: Record<string, any>) {
+    const setFields: Record<string, any> = {};
+    const unsetFields: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(data)) {
+      if (value === null) {
+        unsetFields[key] = '';
+      } else {
+        setFields[key] = value;
+      }
+    }
+
+    const updateOp: Record<string, any> = {};
+    if (Object.keys(setFields).length > 0) updateOp.$set = setFields;
+    if (Object.keys(unsetFields).length > 0) updateOp.$unset = unsetFields;
+
+    const updated = await this.assignmentsModel
+      .findByIdAndUpdate(id, updateOp, { new: true })
+      .lean();
+    if (!updated) throw new NotFoundException(`Assignment ${id} not found`);
     return updated;
   }
 

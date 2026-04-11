@@ -1,7 +1,7 @@
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
 // NestJs Imports
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 // Schemas
 import { Accounts, Properties, PropertiesBranches } from '../../../isms';
 
@@ -10,7 +10,7 @@ export const SSTTeacherExamFoldersCN = 'sst-teacher-exam-folders';
 export const CollaboratorRolesC = ['editor', 'viewer'] as const;
 export type CollaboratorRolesT = (typeof CollaboratorRolesC)[number];
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: SSTTeacherExamFoldersCN } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: SSTTeacherExamFoldersCN } })
 export class SSTTeacherExamFolders {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public readonly _id: string;
@@ -32,7 +32,7 @@ export class SSTTeacherExamFolders {
   public readonly teacherId: string;
 
   /** Exam IDs in this folder */
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly examIds: string[];
 
   /** Sort order */
@@ -61,7 +61,7 @@ export class SSTTeacherExamFolders {
   public readonly deletedAt: Date;
 
   /** Collaborator UIDs who have access to this folder */
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly collaboratorIds: string[];
 
   /**

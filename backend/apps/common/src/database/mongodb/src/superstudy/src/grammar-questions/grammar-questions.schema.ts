@@ -26,20 +26,18 @@ export const GrammarQuestionTypesC = [
   'match_words',
 ] as const;
 
-export const GrammarQuestionPurposeC = ['main', 'follow_up'] as const;
-
 export const GrammarQuestionSpecialRequirementC = ['', 'audio_required'] as const;
 
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
 // NestJs Imports
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 // Schemas
 import { Accounts, Properties, PropertiesBranches } from '../../../isms';
 
 export const SSTGrammarQuestionsCN = 'sst-grammar-questions';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: SSTGrammarQuestionsCN } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: SSTGrammarQuestionsCN } })
 export class SSTGrammarQuestions {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public readonly _id: string;
@@ -68,8 +66,10 @@ export class SSTGrammarQuestions {
   @Prop({ type: String, default: null })
   public readonly contextAudioUrl: string;
 
-  @Prop({ type: String, enum: GrammarQuestionPurposeC, default: 'main' })
-  public readonly purpose: GrammarQuestionPurposeT;
+  // In the original app this is a freeform teacher/admin objective text,
+  // not an enum such as "main" or "follow_up".
+  @Prop({ type: String, default: '' })
+  public readonly purpose: string;
 
   @Prop({ type: String, enum: GrammarQuestionTypesC, required: true })
   public readonly type: GrammarQuestionTypesT;
@@ -111,5 +111,4 @@ export class SSTGrammarQuestions {
 export type GrammarQuestionErrorCategoriesT = (typeof GrammarQuestionErrorCategoriesC)[number];
 export type GrammarQuestionTargetSkillsT = (typeof GrammarQuestionTargetSkillsC)[number];
 export type GrammarQuestionTypesT = (typeof GrammarQuestionTypesC)[number];
-export type GrammarQuestionPurposeT = (typeof GrammarQuestionPurposeC)[number];
 export type GrammarQuestionSpecialRequirementT = (typeof GrammarQuestionSpecialRequirementC)[number];

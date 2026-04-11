@@ -1,139 +1,189 @@
-import { db } from '../config/firebase';
-import {
-    collection,
-    doc,
-    setDoc,
-    getDoc,
-    getDocs,
-    deleteDoc,
-    updateDoc,
-    query,
-    orderBy,
-    serverTimestamp,
-} from 'firebase/firestore';
 import { resetTopicProgress } from './spacedRepetition';
+import { readUserStorageDoc, writeUserStorageDoc } from './userStorageService';
+
+const SAVED_WORDS_DOC_TYPE = 'saved_words';
+const CUSTOM_LISTS_DOC_TYPE = 'custom_lists';
+
+function normalizeSavedWord(word = {}) {
+    const vietnameseMeaning = word?.vietnameseMeaning || word?.meaning || '';
+
+    return {
+        ...word,
+        meaning: word?.meaning || vietnameseMeaning,
+        vietnameseMeaning,
+        savedAt: word?.savedAt || new Date().toISOString(),
+    };
+}
+
+function normalizeCustomList(list = {}) {
+    const words = Array.isArray(list?.words) ? list.words : [];
+
+    return {
+        ...list,
+        id: list?.id,
+        name: list?.name || `Danh sách ngày ${new Date().toLocaleDateString('vi-VN')}`,
+        words,
+        wordCount: list?.wordCount ?? words.length,
+        isGeneratedByAI: !!list?.isGeneratedByAI,
+        createdAt: list?.createdAt || new Date().toISOString(),
+    };
+}
+
+async function readSavedWordsDoc(userId) {
+    return readUserStorageDoc(userId, SAVED_WORDS_DOC_TYPE);
+}
+
+async function writeSavedWordsDoc(userId, words) {
+    return writeUserStorageDoc(userId, SAVED_WORDS_DOC_TYPE, { words });
+}
+
+async function readCustomListsDoc(userId) {
+    return readUserStorageDoc(userId, CUSTOM_LISTS_DOC_TYPE);
+}
+
+async function writeCustomListsDoc(userId, lists) {
+    return writeUserStorageDoc(userId, CUSTOM_LISTS_DOC_TYPE, { lists });
+}
 
 /**
  * Toggle saving/unsaving a specific word for a user.
- * @param {string} userId - The user's ID
- * @param {object} wordData - The full word data object to save
- * @returns {Promise<boolean>} - True if saved, false if unsaved
+ * @param {string} userId
+ * @param {object} wordData
+ * @returns {Promise<boolean>}
  */
 export async function toggleSavedWord(userId, wordData) {
     if (!userId || !wordData || !wordData.word) throw new Error('Invalid data');
 
+    const doc = await readSavedWordsDoc(userId);
+    const words = Array.isArray(doc?.words) ? [...doc.words] : [];
     const wordKey = wordData.word.toLowerCase();
-    const docRef = doc(db, `users/${userId}/saved_words`, wordKey);
-    const docSnap = await getDoc(docRef);
+    const existingIndex = words.findIndex(item => item?.word?.toLowerCase() === wordKey);
 
-    if (docSnap.exists()) {
-        // Unsave
-        await deleteDoc(docRef);
+    if (existingIndex !== -1) {
+        words.splice(existingIndex, 1);
+        await writeSavedWordsDoc(userId, words);
         return false;
-    } else {
-        // Save
-        await setDoc(docRef, {
-            ...wordData,
-            savedAt: serverTimestamp(),
-        });
-        return true;
     }
+
+    words.unshift(normalizeSavedWord(wordData));
+    await writeSavedWordsDoc(userId, words);
+    return true;
 }
 
 /**
  * Check if a word is saved by the user.
- * @param {string} userId - The user's ID
- * @param {string} word - The word text
+ * @param {string} userId
+ * @param {string} word
  * @returns {Promise<boolean>}
  */
 export async function checkWordSaved(userId, word) {
     if (!userId || !word) return false;
+
+    const words = await getSavedWords(userId);
     const wordKey = word.toLowerCase();
-    const docRef = doc(db, `users/${userId}/saved_words`, wordKey);
-    const docSnap = await getDoc(docRef);
-    return docSnap.exists();
+    return words.some(item => item?.word?.toLowerCase() === wordKey);
 }
 
 /**
  * Get all saved words for a user, ordered by most recently saved.
- * @param {string} userId - The user's ID
+ * @param {string} userId
  * @returns {Promise<Array>}
  */
 export async function getSavedWords(userId) {
     if (!userId) return [];
-    const q = query(
-        collection(db, `users/${userId}/saved_words`),
-        orderBy('savedAt', 'desc')
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => doc.data());
+
+    const doc = await readSavedWordsDoc(userId);
+    const words = Array.isArray(doc?.words) ? doc.words : [];
+    return words
+        .map(normalizeSavedWord)
+        .sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime());
 }
 
 /**
  * Save a custom AI-generated list.
- * @param {string} userId - The user's ID
- * @param {string} listName - The name of the list
- * @param {Array} wordsData - The array of word data objects
- * @returns {Promise<string>} - The ID of the newly created list
+ * @param {string} userId
+ * @param {string} listName
+ * @param {Array} wordsData
+ * @returns {Promise<string>}
  */
 export async function saveCustomList(userId, listName, wordsData, isAI = false) {
     if (!userId || !wordsData || !wordsData.length) throw new Error('Invalid data');
 
-    // Generate a unique ID for the list (e.g., timestamp based)
     const listId = `list_${Date.now()}`;
-    const docRef = doc(db, `users/${userId}/custom_lists`, listId);
+    const doc = await readCustomListsDoc(userId);
+    const lists = Array.isArray(doc?.lists) ? [...doc.lists] : [];
 
-    await setDoc(docRef, {
+    lists.unshift(normalizeCustomList({
         id: listId,
-        name: listName || `Danh sách ngày ${new Date().toLocaleDateString('vi-VN')}`,
+        name: listName,
         words: wordsData,
-        createdAt: serverTimestamp(),
         wordCount: wordsData.length,
-        isGeneratedByAI: isAI
-    });
+        isGeneratedByAI: isAI,
+        createdAt: new Date().toISOString(),
+    }));
 
+    await writeCustomListsDoc(userId, lists);
     return listId;
 }
 
 /**
  * Get all custom lists for a user, ordered by creation date.
- * @param {string} userId - The user's ID
+ * @param {string} userId
  * @returns {Promise<Array>}
  */
 export async function getCustomLists(userId) {
     if (!userId) return [];
-    const q = query(
-        collection(db, `users/${userId}/custom_lists`),
-        orderBy('createdAt', 'desc')
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => doc.data());
+
+    const doc = await readCustomListsDoc(userId);
+    const lists = Array.isArray(doc?.lists) ? doc.lists : [];
+    return lists
+        .map(normalizeCustomList)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export async function getCustomListById(userId, listId) {
+    if (!userId || !listId) return null;
+
+    const lists = await getCustomLists(userId);
+    return lists.find(list => list.id === listId) || null;
 }
 
 /**
  * Update the words array of an existing custom list.
- * @param {string} userId - The user's ID
- * @param {string} listId - The ID of the list to update
- * @param {Array} newWords - The updated array of word data objects
+ * @param {string} userId
+ * @param {string} listId
+ * @param {Array} newWords
  */
 export async function updateCustomListWords(userId, listId, newWords) {
     if (!userId || !listId || !newWords) throw new Error('Invalid data');
-    const docRef = doc(db, `users/${userId}/custom_lists`, listId);
-    await updateDoc(docRef, {
+
+    const doc = await readCustomListsDoc(userId);
+    const lists = Array.isArray(doc?.lists) ? [...doc.lists] : [];
+    const index = lists.findIndex(list => list?.id === listId);
+
+    if (index === -1) throw new Error('List not found');
+
+    lists[index] = normalizeCustomList({
+        ...lists[index],
         words: newWords,
         wordCount: newWords.length,
     });
+
+    await writeCustomListsDoc(userId, lists);
 }
 
 /**
  * Delete a custom list.
- * @param {string} userId - The user's ID
- * @param {string} listId - The ID of the list to delete
+ * @param {string} userId
+ * @param {string} listId
  */
 export async function deleteCustomList(userId, listId) {
     if (!userId || !listId) throw new Error('Invalid data');
-    const docRef = doc(db, `users/${userId}/custom_lists`, listId);
-    await deleteDoc(docRef);
-    // Cleanup any progress associated with this list so it doesn't appear in review
+
+    const doc = await readCustomListsDoc(userId);
+    const lists = Array.isArray(doc?.lists) ? doc.lists : [];
+    const filteredLists = lists.filter(list => list?.id !== listId);
+
+    await writeCustomListsDoc(userId, filteredLists);
     await resetTopicProgress(userId, listId);
 }

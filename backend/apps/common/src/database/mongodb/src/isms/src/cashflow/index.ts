@@ -1,4 +1,4 @@
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const orderId = require('order-id')(process.env.ORDER_NUMBER_KEY);
 import { Properties } from '../properties';
@@ -6,7 +6,7 @@ import { PropertiesBranches } from '../properties/branches';
 import { Accounts } from '../accounts';
 import { SYSTEM_ID } from 'apps/common/src/utils';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: 'cashflow' } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: 'cashflow' } })
 export class Cashflow {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public _id: string;

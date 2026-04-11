@@ -1,4 +1,4 @@
-const MailQueueStatusC = [''] as const;
+const MailQueueStatusC = ['pending', 'processing', 'sent', 'failed'] as const;
 
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
@@ -23,19 +23,19 @@ export class SSTMailQueue {
   @Prop({ type: String, required: true })
   public readonly html: string;
 
-  @Prop({ type: Date, required: true })
+  @Prop({ type: Date, required: false, default: null })
   public readonly processedAt: Date;
 
-  @Prop({ type: String, enum: MailQueueStatusC, required: true })
+  @Prop({ type: String, enum: MailQueueStatusC, required: false, default: 'pending' })
   public readonly status: MailQueueStatusT;
 
-  @Prop({ ref: () => Accounts, type: String, required: true })
+  @Prop({ ref: () => Accounts, type: String, required: false, default: null })
   public readonly createdBy: Accounts;
 
-  @Prop({ ref: () => Properties, type: String, required: true })
+  @Prop({ ref: () => Properties, type: String, required: false, default: null })
   public readonly properties: Properties;
 
-  @Prop({ ref: () => PropertiesBranches, type: String, required: true })
+  @Prop({ ref: () => PropertiesBranches, type: String, required: false, default: null })
   public readonly propertiesBranches: PropertiesBranches;
 }
 

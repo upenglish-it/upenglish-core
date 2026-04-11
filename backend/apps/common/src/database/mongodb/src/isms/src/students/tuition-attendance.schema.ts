@@ -1,11 +1,11 @@
-// import { Prop, modelOptions, Ref } from '@typegoose/typegoose';
+// import { Prop, modelOptions, Ref, Severity } from '@typegoose/typegoose';
 // import { Accounts } from '../accounts';
 // import { Cashflow } from '../cashflow';
 // import { Classes } from '../classes';
 // import { Properties } from '../properties';
 // import { PropertiesBranches } from '../properties/branches';
 
-// @modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: 'students-tuition-attendance' } })
+// @modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: 'students-tuition-attendance' } })
 // export class StudentsTuitionAttendance {
 //   @Prop({
 //     type: String,
@@ -123,7 +123,7 @@
 
 // type TStudentsTuitionAttendanceStatus = 'ongoing' | 'stop-learning' | 'completed';
 
-import { Prop, modelOptions, Ref } from '@typegoose/typegoose';
+import { Prop, modelOptions, Ref, Severity } from '@typegoose/typegoose';
 import { Accounts } from '../accounts';
 import { Cashflow } from '../cashflow';
 import { Classes } from '../classes';
@@ -134,7 +134,7 @@ import { DateTime } from 'luxon';
 import { SchedulesShifts } from '../schedules/shifts.schema';
 
 export const StudentsTuitionAttendanceCN = 'students-tuition-attendance';
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: StudentsTuitionAttendanceCN } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: StudentsTuitionAttendanceCN } })
 export class StudentsTuitionAttendance {
   @Prop({
     type: String,

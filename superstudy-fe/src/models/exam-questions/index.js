@@ -16,9 +16,13 @@ export const examQuestionsService = {
   findOne: (id) =>
     api.get(`${BASE}/${id}`),
 
-  /** Get question counts per exam (comma-separated examIds) */
+  /** Get question counts per exam (comma-separated examIds → { examId: count }) */
   getCounts: (examIds) =>
-    api.get(`${BASE}/counts`, { examIds }),
+    api.get(`${BASE}/counts`, { examIds: Array.isArray(examIds) ? examIds.join(',') : examIds }),
+
+  /** Get time totals per exam (comma-separated examIds → { examId: { totalSeconds, missingCount, questionCount } }) */
+  getTimeTotals: (examIds) =>
+    api.get(`${BASE}/time-totals`, { examIds: Array.isArray(examIds) ? examIds.join(',') : examIds }),
 
   /** Create a new exam question (auto-assigns order) */
   create: (body) =>

@@ -6,13 +6,13 @@ export const ToolSubmissionStatusC = ['pending', 'submitted', 'graded', 'failed'
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
 // NestJs Imports
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 // Schemas
 import { Accounts, Properties, PropertiesBranches } from '../../../isms';
 
 export const SSTToolSubmissionsCN = 'sst-tool-submissions';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: SSTToolSubmissionsCN } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: SSTToolSubmissionsCN } })
 export class SSTToolSubmissions {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public readonly _id: string;

@@ -92,6 +92,8 @@
     position: relative;
     overflow: hidden;
     width: 100%;
+    max-width: 700px;
+    margin-inline: auto;
     flex-shrink: 0;
 }
 
@@ -135,6 +137,16 @@
     align-items: center;
     gap: 10px;
     padding: 4px 0;
+}
+
+.dashboard-progress-stats.has-three-plus .dashboard-progress-item {
+    flex: 1 1 0;
+    min-width: 0;
+    justify-content: center;
+}
+
+.dashboard-progress-stats.has-three-plus .dashboard-stat-info {
+    min-width: 0;
 }
 
 
@@ -470,6 +482,11 @@
         flex-shrink: 0;
     }
 
+    .dashboard-progress-stats.has-three-plus.has-flags .dashboard-streak-item {
+        flex: 0 0 100%;
+        width: 100%;
+    }
+
     .has-flags .dashboard-streak-item .dashboard-stat-icon-wrapper {
         width: 48px;
         height: 48px;
@@ -682,7 +699,7 @@
 /* Bottom Sheet */
 .settings-modal {
     width: 100%;
-    max-width: 480px;
+    max-width: 700px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
@@ -691,6 +708,10 @@
     box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.4);
     max-height: 90vh;
     overflow-y: auto;
+}
+
+.settings-modal.animate-slide-up {
+    animation: modalSheetUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .settings-modal-header {
@@ -821,6 +842,12 @@
     gap: var(--space-md);
 }
 
+@media (min-width: 769px) {
+    .dashboard-fab-wrapper {
+        bottom: max(48px, calc(24px + env(safe-area-inset-bottom, 0px)));
+    }
+}
+
 .dashboard-fab {
     width: 56px;
     height: 56px;
@@ -940,8 +967,15 @@
 }
 
 @keyframes reviewPulse {
-    0%, 100% { box-shadow: 0 0 15px rgba(108, 92, 231, 0.15), 0 0 30px rgba(108, 92, 231, 0.06), 0 4px 16px rgba(0,0,0,0.06); }
-    50% { box-shadow: 0 0 25px rgba(108, 92, 231, 0.28), 0 0 50px rgba(108, 92, 231, 0.10), 0 8px 32px rgba(0,0,0,0.08); }
+
+    0%,
+    100% {
+        box-shadow: 0 0 15px rgba(108, 92, 231, 0.15), 0 0 30px rgba(108, 92, 231, 0.06), 0 4px 16px rgba(0, 0, 0, 0.06);
+    }
+
+    50% {
+        box-shadow: 0 0 25px rgba(108, 92, 231, 0.28), 0 0 50px rgba(108, 92, 231, 0.10), 0 8px 32px rgba(0, 0, 0, 0.08);
+    }
 }
 
 /* ===================================
@@ -1072,7 +1106,6 @@
 .dashboard-multi-rank {
     display: flex;
     flex-direction: column;
-    gap: 2px;
 }
 
 .dashboard-rank-row {
@@ -1103,6 +1136,7 @@
 .dashboard-group-filter {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     margin-bottom: 16px;
     flex-wrap: wrap;
@@ -1285,13 +1319,27 @@
 }
 
 @keyframes milestoneSlideIn {
-    from { opacity: 0; transform: translateY(6px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 @keyframes milestonePulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.15); }
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.15);
+    }
 }
 
 /* ---------- Streak Milestone Celebration Popup ---------- */
@@ -1408,25 +1456,59 @@
 }
 
 @keyframes celebrationBounceIn {
-    0% { opacity: 0; transform: scale(0.3) translateY(40px); }
-    60% { opacity: 1; transform: scale(1.05) translateY(-5px); }
-    100% { transform: scale(1) translateY(0); }
+    0% {
+        opacity: 0;
+        transform: scale(0.3) translateY(40px);
+    }
+
+    60% {
+        opacity: 1;
+        transform: scale(1.05) translateY(-5px);
+    }
+
+    100% {
+        transform: scale(1) translateY(0);
+    }
 }
 
 @keyframes celebrationEmoji {
-    0% { opacity: 0; transform: scale(0) rotate(-20deg); }
-    60% { transform: scale(1.3) rotate(10deg); }
-    100% { opacity: 1; transform: scale(1) rotate(0deg); }
+    0% {
+        opacity: 0;
+        transform: scale(0) rotate(-20deg);
+    }
+
+    60% {
+        transform: scale(1.3) rotate(10deg);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1) rotate(0deg);
+    }
 }
 
 @keyframes celebrationFadeUp {
-    from { opacity: 0; transform: translateY(12px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 @keyframes confettiFall {
-    0% { opacity: 1; transform: translateY(0) rotate(0deg); }
-    100% { opacity: 0; transform: translateY(350px) rotate(var(--rotation)); }
+    0% {
+        opacity: 1;
+        transform: translateY(0) rotate(0deg);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translateY(350px) rotate(var(--rotation));
+    }
 }
 
 @media (max-width: 768px) {

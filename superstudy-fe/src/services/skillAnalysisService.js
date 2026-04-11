@@ -4,8 +4,7 @@
  * to produce a skill profile for each student.
  */
 
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { examQuestionsService, examSubmissionsService, grammarProgressService, grammarQuestionsService, wordProgressService } from '../models';
 
 const STEP_NAMES = ['listening', 'pronunciation', 'meaning', 'spelling', 'collocation', 'sequence'];
 const STEP_TO_SKILL = {
@@ -211,29 +210,24 @@ async function analyzeVocabulary(uid, topicIds, startDate, endDate) {
     const result = { stepScores: {}, retentionRate: null, overallAccuracy: null, totalLearned: 0, totalStudied: 0 };
 
     try {
-        let progressDocs = [];
-        const progressRef = collection(db, 'users', uid, 'word_progress');
+        const rawResult = topicIds.length > 0
+            ? await Promise.all(topicIds.map(topicId => wordProgressService.findAll(uid, topicId)))
+            : [await wordProgressService.findAll(uid)];
 
-        if (topicIds.length > 0) {
-            // Batch query by topicId (Firestore 'in' limit = 30)
-            for (let i = 0; i < topicIds.length; i += 30) {
-                const batch = topicIds.slice(i, i + 30);
-                const q = query(progressRef, where('topicId', 'in', batch));
-                const snap = await getDocs(q);
-                snap.docs.forEach(d => progressDocs.push({ id: d.id, ...d.data() }));
-            }
-        } else {
-            // If no topicIds specified, get all progress
-            const snap = await getDocs(progressRef);
-            snap.docs.forEach(d => progressDocs.push({ id: d.id, ...d.data() }));
-        }
+        let progressDocs = rawResult
+            .flatMap(resultSet => (Array.isArray(resultSet) ? resultSet : (resultSet?.data || [])))
+            .map(doc => ({
+                ...doc,
+                id: doc.id || doc.wordId || doc._id,
+                lastStudied: doc.lastStudied || doc.lastPracticedAt || null,
+            }));
 
         // Filter by date range if specified
         if (startDate || endDate) {
             const start = startDate ? new Date(startDate).getTime() : 0;
             const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Infinity;
             progressDocs = progressDocs.filter(p => {
-                const lastStudied = p.lastStudied?.toMillis ? p.lastStudied.toMillis() : (p.lastStudied?.seconds ? p.lastStudied.seconds * 1000 : 0);
+                const lastStudied = p.lastStudied ? new Date(p.lastStudied).getTime() : 0;
                 return lastStudied >= start && lastStudied <= end;
             });
         }
@@ -306,44 +300,38 @@ async function analyzeGrammar(uid, grammarExerciseIds, startDate, endDate) {
     const result = { bySkill: {}, overallAccuracy: null, totalQuestions: 0, weakPoints: [], errorCategoryStats: {} };
 
     try {
-        let progressDocs = [];
-        const progressRef = collection(db, 'users', uid, 'grammar_progress');
-
-        if (grammarExerciseIds.length > 0) {
-            for (let i = 0; i < grammarExerciseIds.length; i += 30) {
-                const batch = grammarExerciseIds.slice(i, i + 30);
-                const q = query(progressRef, where('exerciseId', 'in', batch));
-                const snap = await getDocs(q);
-                snap.docs.forEach(d => progressDocs.push({ id: d.id, ...d.data() }));
-            }
-        } else {
-            const snap = await getDocs(progressRef);
-            snap.docs.forEach(d => progressDocs.push({ id: d.id, ...d.data() }));
-        }
+        const progressResponse = grammarExerciseIds.length > 0
+            ? await grammarProgressService.findAll(uid, undefined, grammarExerciseIds.join(','))
+            : await grammarProgressService.findAll(uid);
+        let progressDocs = (Array.isArray(progressResponse) ? progressResponse : (progressResponse?.data || []))
+            .map(doc => ({
+                ...doc,
+                id: doc.id || doc._id || doc.questionId,
+                questionId: doc.questionId || doc.id || doc._id,
+            }));
 
         // Filter by date
         if (startDate || endDate) {
             const start = startDate ? new Date(startDate).getTime() : 0;
             const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Infinity;
             progressDocs = progressDocs.filter(p => {
-                const lastStudied = p.lastStudied?.toMillis ? p.lastStudied.toMillis() : (p.lastStudied?.seconds ? p.lastStudied.seconds * 1000 : 0);
+                const lastStudied = p.lastStudied ? new Date(p.lastStudied).getTime() : 0;
                 return lastStudied >= start && lastStudied <= end;
             });
         }
 
         if (progressDocs.length === 0) return result;
 
-        // Fetch the grammar questions to get their targetSkill
-        const questionIds = progressDocs.map(p => p.id);
         const questionsMap = {};
-
-        for (let i = 0; i < questionIds.length; i += 30) {
-            const batch = questionIds.slice(i, i + 30);
-            const { documentId } = await import('firebase/firestore');
-            const q = query(collection(db, 'grammar_questions'), where(documentId(), 'in', batch));
-            const snap = await getDocs(q);
-            snap.docs.forEach(d => { questionsMap[d.id] = d.data(); });
-        }
+        const exerciseIds = [...new Set(progressDocs.map(p => p.exerciseId).filter(Boolean))];
+        await Promise.all(exerciseIds.map(async (exerciseId) => {
+            const response = await grammarQuestionsService.findAll(exerciseId);
+            const questions = Array.isArray(response) ? response : (response?.data || []);
+            questions.forEach(question => {
+                const normalized = { ...question, id: question.id || question._id };
+                questionsMap[normalized.id] = normalized;
+            });
+        }));
 
         // Aggregate by targetSkill
         let totalPasses = 0;
@@ -357,7 +345,7 @@ async function analyzeGrammar(uid, grammarExerciseIds, startDate, endDate) {
             totalPasses += passes;
             totalAttempts += attempts;
 
-            const question = questionsMap[prog.id];
+            const question = questionsMap[prog.questionId];
             const skill = question?.targetSkill;
 
             if (skill && attempts > 0) {
@@ -418,19 +406,17 @@ async function analyzeExams(uid, examAssignmentIds, startDate, endDate) {
         if (examAssignmentIds.length > 0) {
             for (let i = 0; i < examAssignmentIds.length; i += 30) {
                 const batch = examAssignmentIds.slice(i, i + 30);
-                const q = query(
-                    collection(db, 'exam_submissions'),
-                    where('assignmentId', 'in', batch),
-                    where('studentId', '==', uid)
-                );
-                const snap = await getDocs(q);
-                snap.docs.forEach(d => submissions.push({ id: d.id, ...d.data() }));
+                const response = await examSubmissionsService.findByAssignments(batch);
+                const docs = Array.isArray(response) ? response : (response?.data || []);
+                docs
+                    .filter(sub => sub.studentId === uid && batch.includes(sub.assignmentId))
+                    .forEach(sub => submissions.push({ id: sub._id || sub.id, ...sub }));
             }
         } else {
             // Get all submissions for student
-            const q = query(collection(db, 'exam_submissions'), where('studentId', '==', uid));
-            const snap = await getDocs(q);
-            snap.docs.forEach(d => submissions.push({ id: d.id, ...d.data() }));
+            const response = await examSubmissionsService.findByStudent(uid);
+            const docs = Array.isArray(response) ? response : (response?.data || []);
+            docs.forEach(sub => submissions.push({ id: sub._id || sub.id, ...sub }));
         }
 
         // Filter by date
@@ -438,13 +424,13 @@ async function analyzeExams(uid, examAssignmentIds, startDate, endDate) {
             const start = startDate ? new Date(startDate).getTime() : 0;
             const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Infinity;
             submissions = submissions.filter(s => {
-                const createdAt = s.createdAt?.toMillis ? s.createdAt.toMillis() : (s.createdAt?.seconds ? s.createdAt.seconds * 1000 : 0);
+                const createdAt = s.createdAt ? new Date(s.createdAt).getTime() : 0;
                 return createdAt >= start && createdAt <= end;
             });
         }
 
         // Only consider graded/released submissions
-        submissions = submissions.filter(s => s.status === 'graded' || s.status === 'released');
+        submissions = submissions.filter(s => s.status === 'graded' || s.status === 'released' || s.resultsReleased);
 
         if (submissions.length === 0) return result;
 
@@ -454,11 +440,13 @@ async function analyzeExams(uid, examAssignmentIds, startDate, endDate) {
         const examIds = [...new Set(submissions.map(s => s.examId).filter(Boolean))];
         const examQuestionsMap = {}; // questionId -> { targetSkill, purpose }
 
-        for (let i = 0; i < examIds.length; i += 30) {
-            const batch = examIds.slice(i, i + 30);
-            const q = query(collection(db, 'exam_questions'), where('examId', 'in', batch));
-            const snap = await getDocs(q);
-            snap.docs.forEach(d => { examQuestionsMap[d.id] = d.data(); });
+        for (const examId of examIds) {
+            const response = await examQuestionsService.findAll(examId);
+            const questions = Array.isArray(response) ? response : (response?.data || []);
+            questions.forEach(question => {
+                const questionId = question._id || question.id;
+                if (questionId) examQuestionsMap[questionId] = question;
+            });
         }
 
         // Aggregate scores by targetSkill

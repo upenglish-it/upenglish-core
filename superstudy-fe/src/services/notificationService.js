@@ -1,8 +1,24 @@
 import { notificationsService, usersService } from '../models';
-// Keep Firestore for: real-time subscriptions (onSnapshot), email queueing (mail_queue), 
-// and batch operations that don't have backend equivalents yet
-import { db } from '../config/firebase';
-import { collection, doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, query, where, getDocs, onSnapshot, limit, Timestamp, getDoc } from 'firebase/firestore';
+import { api } from '../models/httpClient';
+
+function normalizeUser(user) {
+    return {
+        ...user,
+        id: user?.id || user?._id,
+    };
+}
+
+async function getGroupUsers(groupId) {
+    if (!groupId) return [];
+    try {
+        const result = await usersService.getGroupMembers(groupId);
+        const users = Array.isArray(result) ? result : (result?.data || []);
+        return users.map(normalizeUser);
+    } catch (error) {
+        console.error('Error loading group users:', error);
+        return [];
+    }
+}
 
 /**
  * Check if a user wants to receive email for a specific notification type.
@@ -40,26 +56,34 @@ export async function createNotification(data) {
  * Consider migrating to WebSocket/SSE when the backend supports it.
  */
 export function subscribeToUserNotifications(userId, callback) {
-    if (!userId) return () => { };
+    if (!userId) {
+        callback?.([]);
+        return () => { };
+    }
 
-    const q = query(
-        collection(db, 'notifications'),
-        where('userId', '==', userId),
-        limit(50)
-    );
+    let active = true;
 
-    return onSnapshot(q, (snapshot) => {
-        const notifications = [];
-        snapshot.forEach((docSnap) => {
-            notifications.push({ id: docSnap.id, ...docSnap.data() });
-        });
-        notifications.sort((a, b) => {
-            const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-            const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
-            return timeB - timeA;
-        });
-        callback(notifications);
-    });
+    const load = async () => {
+        try {
+            const result = await notificationsService.findAll(userId);
+            const notifications = (result?.data || result || []).map(item => ({
+                ...item,
+                id: item.id || item._id,
+            }));
+            if (active) callback(notifications);
+        } catch (error) {
+            console.warn('Error loading notifications:', error);
+            if (active) callback([]);
+        }
+    };
+
+    load();
+    const intervalId = window.setInterval(load, 30000);
+
+    return () => {
+        active = false;
+        window.clearInterval(intervalId);
+    };
 }
 
 /**
@@ -84,31 +108,7 @@ export async function markAllNotificationsAsRead(userId) {
  */
 export async function cleanupOldReadNotifications(userId) {
     if (!userId) return 0;
-
-    const sevenDaysAgo = Timestamp.fromDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
-
-    const q = query(
-        collection(db, 'notifications'),
-        where('userId', '==', userId),
-        where('isRead', '==', true)
-    );
-
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) return 0;
-
-    const batch = writeBatch(db);
-    let count = 0;
-    snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        const createdAt = data.createdAt;
-        if (createdAt && createdAt.toMillis && createdAt.toMillis() < sevenDaysAgo.toMillis()) {
-            batch.delete(docSnap.ref);
-            count++;
-        }
-    });
-
-    if (count > 0) await batch.commit();
-    return count;
+    return 0;
 }
 
 /**
@@ -116,22 +116,8 @@ export async function cleanupOldReadNotifications(userId) {
  */
 export async function clearAllNotifications(userId) {
     if (!userId) return 0;
-
-    const q = query(
-        collection(db, 'notifications'),
-        where('userId', '==', userId)
-    );
-
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) return 0;
-
-    const batch = writeBatch(db);
-    snapshot.forEach((docSnap) => {
-        batch.delete(docSnap.ref);
-    });
-
-    await batch.commit();
-    return snapshot.size;
+    const result = await notificationsService.clearAll(userId);
+    return result?.data?.deletedCount ?? result?.deletedCount ?? 0;
 }
 
 /**
@@ -141,24 +127,11 @@ export async function clearAllNotifications(userId) {
  */
 export async function createNotificationForAdmins(data) {
     try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('role', '==', 'admin'));
-        const snapshot = await getDocs(q);
-
-        if (snapshot.empty) return;
-
-        const batch = writeBatch(db);
-        snapshot.forEach((docSnap) => {
-            const notifRef = doc(collection(db, 'notifications'));
-            batch.set(notifRef, {
-                ...data,
-                userId: docSnap.id,
-                isRead: false,
-                createdAt: serverTimestamp()
-            });
-        });
-
-        await batch.commit();
+        const result = await usersService.findAll({ role: 'admin' });
+        const admins = (Array.isArray(result) ? result : (result?.data || []))
+            .map(normalizeUser)
+            .filter(user => user.id);
+        await Promise.all(admins.map(admin => createNotification({ ...data, userId: admin.id })));
     } catch (error) {
         console.error("Error creating notifications for admins:", error);
     }
@@ -171,32 +144,14 @@ export async function createNotificationForGroupTeachers(groupId, data) {
     if (!groupId) return;
 
     try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('groupIds', 'array-contains', groupId));
-        const snapshot = await getDocs(q);
-
-        const teacherIds = [];
-        snapshot.forEach((docSnap) => {
-            const userData = docSnap.data();
-            if (userData.role === 'teacher' || userData.role === 'admin') {
-                teacherIds.push(docSnap.id);
-            }
-        });
+        const teacherIds = (await getGroupUsers(groupId))
+            .filter(user => user.role === 'teacher' || user.role === 'admin')
+            .map(user => user.id)
+            .filter(Boolean);
 
         if (teacherIds.length === 0) return;
 
-        const batch = writeBatch(db);
-        teacherIds.forEach(teacherId => {
-            const notifRef = doc(collection(db, 'notifications'));
-            batch.set(notifRef, {
-                ...data,
-                userId: teacherId,
-                isRead: false,
-                createdAt: serverTimestamp()
-            });
-        });
-
-        await batch.commit();
+        await Promise.all(teacherIds.map(userId => createNotification({ ...data, userId })));
     } catch (error) {
         console.error("Error creating notifications for group teachers:", error);
     }
@@ -209,32 +164,14 @@ export async function createNotificationForGroupStudents(groupId, data, excludeU
     if (!groupId) return;
 
     try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('groupIds', 'array-contains', groupId));
-        const snapshot = await getDocs(q);
-
-        const studentIds = [];
-        snapshot.forEach((docSnap) => {
-            const userData = docSnap.data();
-            if (userData.role === 'user' && docSnap.id !== excludeUserId) {
-                studentIds.push(docSnap.id);
-            }
-        });
+        const studentIds = (await getGroupUsers(groupId))
+            .filter(user => user.role === 'user' && user.id !== excludeUserId)
+            .map(user => user.id)
+            .filter(Boolean);
 
         if (studentIds.length === 0) return;
 
-        const batch = writeBatch(db);
-        studentIds.forEach(studentId => {
-            const notifRef = doc(collection(db, 'notifications'));
-            batch.set(notifRef, {
-                ...data,
-                userId: studentId,
-                isRead: false,
-                createdAt: serverTimestamp()
-            });
-        });
-
-        await batch.commit();
+        await Promise.all(studentIds.map(userId => createNotification({ ...data, userId })));
     } catch (error) {
         console.error("Error creating notifications for group students:", error);
     }
@@ -248,34 +185,13 @@ export async function queueEmailForGroupStudents(groupId, emailData, excludeUser
     if (!groupId) return;
 
     try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('groupIds', 'array-contains', groupId));
-        const snapshot = await getDocs(q);
-
-        const students = [];
-        snapshot.forEach((docSnap) => {
-            const userData = docSnap.data();
-            if (userData.role === 'user' && docSnap.id !== excludeUserId && userData.email) {
-                students.push({ uid: docSnap.id, email: userData.email, displayName: userData.displayName });
-            }
-        });
+        const students = (await getGroupUsers(groupId)).filter(user =>
+            user.role === 'user' && user.id !== excludeUserId && user.email
+        );
 
         if (students.length === 0) return;
 
-        const batch = writeBatch(db);
-        students.forEach(student => {
-            const mailRef = doc(collection(db, 'mail_queue'));
-            batch.set(mailRef, {
-                to: student.email,
-                subject: emailData.subject,
-                html: emailData.html,
-                status: 'pending',
-                createdAt: serverTimestamp()
-            });
-        });
-
-        await batch.commit();
-        console.log(`Queued ${students.length} emails for group ${groupId}`);
+        await Promise.all(students.map(student => queueEmail(student.email, emailData)));
     } catch (error) {
         console.error("Error queuing emails for group students:", error);
     }
@@ -341,13 +257,10 @@ export function buildEmailHtml({
 export async function queueEmail(email, emailData) {
     if (!email || !emailData?.subject) return;
     try {
-        const mailRef = doc(collection(db, 'mail_queue'));
-        await setDoc(mailRef, {
+        await api.post('/mail-queue', {
             to: email,
             subject: emailData.subject,
             html: emailData.html || '',
-            status: 'pending',
-            createdAt: serverTimestamp()
         });
     } catch (error) {
         console.error("Error queuing email:", error);
@@ -360,37 +273,11 @@ export async function queueEmail(email, emailData) {
 export async function queueEmailForAdmins(emailData, notificationType = null) {
     if (!emailData?.subject) return;
     try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('role', '==', 'admin'));
-        const snapshot = await getDocs(q);
-
-        const admins = [];
-        snapshot.forEach((docSnap) => {
-            const userData = docSnap.data();
-            if (userData.email) {
-                if (notificationType) {
-                    const prefs = userData.emailPreferences;
-                    if (prefs && prefs[notificationType] === false) return;
-                }
-                admins.push(userData.email);
-            }
+        await api.post('/mail-queue/admins', {
+            subject: emailData.subject,
+            html: emailData.html || '',
+            notificationType
         });
-
-        if (admins.length === 0) return;
-
-        const batch = writeBatch(db);
-        admins.forEach(email => {
-            const mailRef = doc(collection(db, 'mail_queue'));
-            batch.set(mailRef, {
-                to: email,
-                subject: emailData.subject,
-                html: emailData.html || '',
-                status: 'pending',
-                createdAt: serverTimestamp()
-            });
-        });
-
-        await batch.commit();
     } catch (error) {
         console.error("Error queuing emails for admins:", error);
     }
@@ -402,37 +289,18 @@ export async function queueEmailForAdmins(emailData, notificationType = null) {
 export async function queueEmailForGroupTeachers(groupId, emailData, notificationType = null) {
     if (!groupId || !emailData?.subject) return;
     try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('groupIds', 'array-contains', groupId));
-        const snapshot = await getDocs(q);
-
-        const teachers = [];
-        snapshot.forEach((docSnap) => {
-            const userData = docSnap.data();
-            if ((userData.role === 'teacher' || userData.role === 'admin') && userData.email) {
-                if (notificationType) {
-                    const prefs = userData.emailPreferences;
-                    if (prefs && prefs[notificationType] === false) return;
-                }
-                teachers.push(userData.email);
+        const teachers = (await getGroupUsers(groupId)).filter(user => {
+            if ((user.role !== 'teacher' && user.role !== 'admin') || !user.email) {
+                return false;
             }
+            if (!notificationType) return true;
+            const prefs = user.emailPreferences;
+            return !prefs || prefs[notificationType] !== false;
         });
 
         if (teachers.length === 0) return;
 
-        const batch = writeBatch(db);
-        teachers.forEach(email => {
-            const mailRef = doc(collection(db, 'mail_queue'));
-            batch.set(mailRef, {
-                to: email,
-                subject: emailData.subject,
-                html: emailData.html || '',
-                status: 'pending',
-                createdAt: serverTimestamp()
-            });
-        });
-
-        await batch.commit();
+        await Promise.all(teachers.map(teacher => queueEmail(teacher.email, emailData)));
     } catch (error) {
         console.error("Error queuing emails for group teachers:", error);
     }

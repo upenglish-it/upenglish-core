@@ -5,13 +5,13 @@ export const ExamAssignmentTeacherGendersC = ['male', 'female'] as const;
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
 // NestJs Imports
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 // Schemas
 import { Accounts, Properties, PropertiesBranches } from '../../../isms';
 
 export const SSTExamAssignmentsCN = 'sst-exam-assignments';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: SSTExamAssignmentsCN } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: SSTExamAssignmentsCN } })
 export class SSTExamAssignments {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public readonly _id: string;
@@ -74,7 +74,7 @@ export class SSTExamAssignments {
   public readonly assignedByName: string;
 
   /** Restrict assignment to specific students (empty = whole class) */
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly assignedStudentIds: string[];
 
   @Prop({ type: String, default: null })

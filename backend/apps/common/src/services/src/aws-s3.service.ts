@@ -90,6 +90,25 @@ import { IAWSS3ResponseData, IAWSS3UploadedResponse } from '../../interfaces';
 export class AWSS3Service {
   private s3: AWS.S3;
 
+  private getBucketConfig() {
+    const rawBucket = String(process.env.AWS_S3_BUCKET || '').trim();
+    const [bucketName, ...prefixParts] = rawBucket.split('/').filter(Boolean);
+    return {
+      bucketName,
+      prefix: prefixParts.join('/'),
+    };
+  }
+
+  private buildKey(pathName: string, fileName: string) {
+    const { prefix } = this.getBucketConfig();
+    return [prefix, pathName, fileName].filter(Boolean).join('/');
+  }
+
+  private buildPublicUrl(key: string) {
+    const baseUrl = String(process.env.AWS_CDN_PATH || '').replace(/\/+$/, '');
+    return `${baseUrl}/${key}`;
+  }
+
   constructor() {
     AWS.config.update({
       accessKeyId: process.env.AWS_S3_ACCESS_KEY_ID,
@@ -120,6 +139,53 @@ export class AWSS3Service {
           },
         });
       });
+    });
+  }
+
+  public uploadPublicFile(buffer: any, contentType: string, pathName: string, fileName: string): Promise<IAWSS3UploadedResponse> {
+    return new Promise((resolve, reject) => {
+      const { bucketName } = this.getBucketConfig();
+      const key = this.buildKey(pathName, fileName);
+      const params: AWS.S3.Types.PutObjectRequest = {
+        Bucket: bucketName,
+        Key: key,
+        ACL: 'public-read',
+        Body: buffer,
+        ...(contentType ? { ContentType: contentType } : null),
+      };
+      this.s3.upload(params, (err: any) => {
+        if (err) {
+          return reject({ success: false, error: err });
+        }
+        return resolve({
+          success: true,
+          fileName,
+          data: {
+            cdn: this.buildPublicUrl(key),
+          },
+        });
+      });
+    });
+  }
+
+  public deletePublicFileByUrl(url: string): Promise<IAWSS3UploadedResponse> {
+    return new Promise((resolve, reject) => {
+      const { bucketName } = this.getBucketConfig();
+      const parsedUrl = new URL(url);
+      const key = decodeURIComponent(parsedUrl.pathname.replace(/^\/+/, ''));
+
+      this.s3.deleteObject(
+        {
+          Bucket: bucketName,
+          Key: key,
+        },
+        (err: any, data: AWS.S3.DeleteObjectOutput) => {
+          if (err) {
+            return reject({ success: false, error: err });
+          }
+          return resolve({ success: true, data });
+        },
+      );
     });
   }
 
