@@ -89,7 +89,6 @@ export default function AdminLayout() {
     const ADMIN_EMAIL_TYPES = [
         { key: 'accounts_expiring', label: 'Tài khoản sắp hết hạn', emoji: '⚠️' },
         { key: 'new_user_pending', label: 'User mới cần duyệt', emoji: '👤' },
-        { key: 'half_submitted', label: '50% học viên đã nộp bài', emoji: '📊' },
         { key: 'content_proposal', label: 'Đề xuất nội dung từ GV', emoji: '📩' },
     ];
 

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { Link } from 'react-router-dom';
 import { getAdminTopics, saveAdminTopic, deleteAdminTopic, getFolders, saveFolder, deleteFolder, getGroups, toggleResourcePublic, toggleTeacherVisible, getResourceSharedEntities, shareResourceToEmail, unshareResourceFromUser, shareResourceToGroup, unshareResourceFromGroup, getAdminTopicContentStatus, updateTopicFoldersOrder, getAdminTopicWordCounts, recalcTopicWordCount, transferOfficialToTeacher, shareResourceToTeacher, unshareResourceFromTeacher, getResourceSharedTeachers } from '../../services/adminService';
@@ -773,7 +773,6 @@ export default function AdminTopicsPage() {
                                         <th style={{ width: '40px' }}></th>
                                         <th>Tên mục</th>
                                         <th>Thông tin</th>
-                                        <th style={{ textAlign: 'center' }}>Trạng thái</th>
                                         <th className="text-right">Hành động</th>
                                     </tr>
                                 </thead>
@@ -854,7 +853,6 @@ export default function AdminTopicsPage() {
                                                                         </div>
                                                                     </td>
                                                                     <td className="mobile-hide"></td>
-                                                                    <td className="mobile-hide"></td>
                                                                     <td className="text-right">
                                                                         <div className="admin-table-actions">
                                                                             <button
@@ -886,7 +884,7 @@ export default function AdminTopicsPage() {
                                                             folderTopics.length === 0 ? (
                                                                 <tr>
                                                                     <td></td>
-                                                                    <td colSpan="4" style={{ paddingLeft: '40px', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>
+                                                                    <td colSpan="3" style={{ paddingLeft: '40px', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>
                                                                         Folder này chưa có chủ đề nào.
                                                                     </td>
                                                                 </tr>
@@ -952,13 +950,6 @@ export default function AdminTopicsPage() {
                                                                                 {topicWordCounts[topic.id] || 0} từ
                                                                             </span>
                                                                         </td>
-                                                                        <td data-label="Trạng thái" className="mobile-hide">
-                                                                            <div style={{ display: 'flex', gap: '6px', flexDirection: 'column', alignItems: 'center' }}>
-                                                                                <span className={`admin-status-badge ${topic.status === 'coming_soon' ? 'coming-soon' : 'active'}`} style={{ fontSize: '0.65rem', padding: '1px 5px' }}>
-                                                                                    {topic.status === 'coming_soon' ? 'Sắp ra mắt' : 'Đang hoạt động'}
-                                                                                </span>
-                                                                            </div>
-                                                                        </td>
                                                                         <td data-label="Thao tác" className="text-right">
                                                                             <div className="admin-table-actions">
                                                                                 <Link to={`/admin/topics/${topic.id}`} className="admin-action-btn" title="Quản lý từ vựng">
@@ -1000,7 +991,7 @@ export default function AdminTopicsPage() {
                                             <>
                                                 <tr className="admin-unassigned-header">
                                                     <td></td>
-                                                    <td colSpan="4">
+                                                    <td colSpan="3">
                                                         <div className="admin-unassigned-label">
                                                             <AlertTriangle size={16} />
                                                             Chủ đề chưa phân loại ({unassignedTopics.length})
@@ -1031,19 +1022,6 @@ export default function AdminTopicsPage() {
                                                             <span style={{ fontWeight: 600, color: '#475569' }}>
                                                                 {topicWordCounts[topic.id] || 0} từ
                                                             </span>
-                                                        </td>
-                                                        <td>
-                                                            <div style={{ display: 'flex', gap: '6px', flexDirection: 'column', alignItems: 'center' }}>
-                                                                <span className={`admin-status-badge ${topic.status === 'coming_soon' ? 'coming-soon' : 'active'}`}>
-                                                                    {topic.status === 'coming_soon' ? 'Sắp ra mắt' : 'Đang hoạt động'}
-                                                                </span>
-                                                                {topic.isPublic && (
-                                                                    <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#ecfdf5', color: '#10b981', border: '1px solid #a7f3d0' }}>Public</span>
-                                                                )}
-                                                                {topic.teacherVisible && !topic.isPublic && (
-                                                                    <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', display: 'inline-flex', alignItems: 'center', gap: '3px' }}><GraduationCap size={10} /> GV</span>
-                                                                )}
-                                                            </div>
                                                         </td>
                                                         <td className="text-right">
                                                             <div className="admin-table-actions">

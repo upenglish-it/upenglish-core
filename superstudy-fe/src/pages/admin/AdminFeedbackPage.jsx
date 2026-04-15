@@ -348,7 +348,7 @@ export default function AdminFeedbackPage() {
                                             background: sendTargetType === 'admin' ? '#eff6ff' : '#f1f5f9',
                                             color: sendTargetType === 'admin' ? '#4f46e5' : '#64748b',
                                             border: `2px solid ${sendTargetType === 'admin' ? '#4f46e5' : 'transparent'}`,
-                                        }}>📑 Ban quản lý</button>
+                                        }}>👑 Ban quản lý</button>
                                         <button onClick={() => { setSendTargetType('direct'); loadStaffTeachers(); }} style={{
                                             padding: '8px 16px', borderRadius: '12px', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', transition: 'all 0.2s',
                                             background: sendTargetType === 'direct' ? '#f0fdf4' : '#f1f5f9',

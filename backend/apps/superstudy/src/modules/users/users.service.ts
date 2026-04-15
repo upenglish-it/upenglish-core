@@ -20,7 +20,7 @@ import { Accounts, Properties, PropertiesBranches } from 'apps/common/src/databa
 @Injectable()
 export class UsersService {
   private readonly superStudyAccountProjection =
-    'accountId email emailAddresses displayName firstName lastName photoURL profilePhoto role status groupIds folderAccess topicAccess grammarAccess examAccess emailPreferences teacherTitle studentTitle adminLanguage approvedAt expiresAt expiryNotifiedAt active disabled deleted deletedAt createdBy updatedAt';
+    'accountId email emailAddresses displayName firstName lastName photoURL profilePhoto role status groupIds folderAccess topicAccess grammarAccess examAccess emailPreferences teacherTitle studentTitle adminLanguage approvedAt expiresAt expiryNotifiedAt active disabled deleted deletedAt createdBy createdAt updatedAt';
 
   constructor(
     @InjectModel(Accounts)
@@ -52,11 +52,13 @@ export class UsersService {
     @InjectModel(SSTEmailWhitelist)
     private readonly emailWhitelistModel: ReturnModelType<typeof SSTEmailWhitelist>,
     @InjectModel(SSTRewardPoints)
-    private readonly rewardPointsModel: ReturnModelType<typeof SSTRewardPoints>,
+    private readonly rewardPointsModel: ReturnModelType<typeof SSTRewardPoints>
   ) {}
 
   private normalizeEmail(email?: string | null): string {
-    return String(email ?? '').trim().toLowerCase();
+    return String(email ?? '')
+      .trim()
+      .toLowerCase();
   }
 
   private toAccountRole(role?: string | null): string {
@@ -148,6 +150,7 @@ export class UsersService {
       deleted: Boolean(account.deleted),
       deletedAt: account.deletedAt ?? null,
       createdBy: account.createdBy ?? null,
+      createdAt: account.createdAt ?? account.updatedAt ?? null,
     };
   }
 
@@ -234,10 +237,7 @@ export class UsersService {
       return { account: null, mergedUser: null };
     }
 
-    const account = await this.accountsModel
-      .findOne({ accountId: normalizedUid })
-      .select(this.superStudyAccountProjection)
-      .lean();
+    const account = await this.accountsModel.findOne({ accountId: normalizedUid }).select(this.superStudyAccountProjection).lean();
 
     return {
       account,
@@ -262,15 +262,8 @@ export class UsersService {
       accountQuery.groupIds = String(filters.groupId).trim();
     }
 
-    const accounts = this.dedupeAccountsByAccountId(
-      await this.accountsModel
-        .find(accountQuery)
-        .select(this.superStudyAccountProjection)
-        .lean(),
-    );
-    return accounts
-      .map((account: any) => this.accountToSuperStudyUser(account))
-      .filter(Boolean);
+    const accounts = this.dedupeAccountsByAccountId(await this.accountsModel.find(accountQuery).select(this.superStudyAccountProjection).lean());
+    return accounts.map((account: any) => this.accountToSuperStudyUser(account)).filter(Boolean);
   }
 
   async getAllIsmsAccounts(search: string = '', limit: number = 50) {
@@ -288,11 +281,7 @@ export class UsersService {
               input: {
                 $trim: {
                   input: {
-                    $concat: [
-                      { $ifNull: ['$firstName', ''] },
-                      ' ',
-                      { $ifNull: ['$lastName', ''] },
-                    ],
+                    $concat: [{ $ifNull: ['$firstName', ''] }, ' ', { $ifNull: ['$lastName', ''] }],
                   },
                 },
               },
@@ -314,13 +303,9 @@ export class UsersService {
           displayName: {
             $trim: {
               input: {
-                $concat: [
-                  { $ifNull: ['$firstName', ''] },
-                  ' ',
-                  { $ifNull: ['$lastName', ''] }
-                ]
-              }
-            }
+                $concat: [{ $ifNull: ['$firstName', ''] }, ' ', { $ifNull: ['$lastName', ''] }],
+              },
+            },
           },
           role: '$role',
           photoURL: '$profilePhoto',
@@ -338,16 +323,10 @@ export class UsersService {
       normalizedEmail && normalizedEmail.includes('@')
         ? { emailAddresses: normalizedEmail }
         : {
-          $or: [
-            { accountId: normalizedId },
-            { _id: normalizedId },
-          ],
-        };
+            $or: [{ accountId: normalizedId }, { _id: normalizedId }],
+          };
 
-    const account = await this.accountsModel
-      .findOne(lookupQuery)
-      .select(this.superStudyAccountProjection)
-      .lean();
+    const account = await this.accountsModel.findOne(lookupQuery).select(this.superStudyAccountProjection).lean();
     if (account) return this.accountToSuperStudyUser(account);
 
     throw new NotFoundException(`User ${id} not found`);
@@ -355,10 +334,7 @@ export class UsersService {
 
   async findByEmail(email: string) {
     const normalizedEmail = this.normalizeEmail(email);
-    const account = await this.accountsModel
-      .findOne({ emailAddresses: normalizedEmail })
-      .select(this.superStudyAccountProjection)
-      .lean();
+    const account = await this.accountsModel.findOne({ emailAddresses: normalizedEmail }).select(this.superStudyAccountProjection).lean();
     return this.accountToSuperStudyUser(account);
   }
 
@@ -429,12 +405,7 @@ export class UsersService {
   /**
    * Approve a pending user — mirrors adminService.approveUser
    */
-  async approveUser(
-    uid: string,
-    role: string,
-    durationDays?: number,
-    customExpiresAt?: string,
-  ) {
+  async approveUser(uid: string, role: string, durationDays?: number, customExpiresAt?: string) {
     let expiresAt: Date | null = null;
     if (customExpiresAt) {
       expiresAt = new Date(`${customExpiresAt}T23:59:59`);
@@ -532,15 +503,8 @@ export class UsersService {
       accountQuery.role = this.toAccountRole(role);
     }
 
-    const accounts = this.dedupeAccountsByAccountId(
-      await this.accountsModel
-        .find(accountQuery)
-        .select(this.superStudyAccountProjection)
-        .lean(),
-    );
-    return accounts
-      .map((account: any) => this.accountToSuperStudyUser(account))
-      .filter(Boolean);
+    const accounts = this.dedupeAccountsByAccountId(await this.accountsModel.find(accountQuery).select(this.superStudyAccountProjection).lean());
+    return accounts.map((account: any) => this.accountToSuperStudyUser(account)).filter(Boolean);
   }
 
   /**
@@ -600,14 +564,11 @@ export class UsersService {
     const { account, mergedUser } = await this.getResolvedSuperStudyUser(uid);
     const targetData: Record<string, any> = mergedUser || this.accountToSuperStudyUser(account) || {};
     const targetEmail = this.normalizeEmail(targetData.email || this.getPrimaryAccountEmail(account));
-    const groupIds: string[] = [...(Array.isArray(targetData.groupIds) ? targetData.groupIds : [])]
-      .filter((v, i, a) => v && a.indexOf(v) === i);
+    const groupIds: string[] = [...(Array.isArray(targetData.groupIds) ? targetData.groupIds : [])].filter((v, i, a) => v && a.indexOf(v) === i);
 
     // 1. Clean regular assignments — pull studentId from assignedStudentIds
     if (groupIds.length > 0) {
-      const assignments = await this.assignmentsModel
-        .find({ groupId: { $in: groupIds } })
-        .lean();
+      const assignments = await this.assignmentsModel.find({ groupId: { $in: groupIds } }).lean();
       for (const a of assignments) {
         const doc = a as any;
         const ids: string[] = Array.isArray(doc.assignedStudentIds) ? doc.assignedStudentIds : [];
@@ -638,9 +599,7 @@ export class UsersService {
       targetId: uid,
     });
     if (groupIds.length > 0) {
-      const groupExamAssignments = await this.examAssignmentsModel
-        .find({ targetType: 'group', targetId: { $in: groupIds } })
-        .lean();
+      const groupExamAssignments = await this.examAssignmentsModel.find({ targetType: 'group', targetId: { $in: groupIds } }).lean();
       for (const a of groupExamAssignments) {
         const doc = a as any;
         const ids: string[] = Array.isArray(doc.assignedStudentIds) ? doc.assignedStudentIds : [];
@@ -662,9 +621,7 @@ export class UsersService {
     await this.examSubmissionsModel.deleteMany({ studentId: uid });
 
     // 4. Delete teacher_ratings and recalculate affected summaries
-    const deletedRatings = await this.teacherRatingsModel
-      .find({ studentId: uid })
-      .lean();
+    const deletedRatings = await this.teacherRatingsModel.find({ studentId: uid }).lean();
     const summaryIdsToDelete = new Set<string>();
     for (const r of deletedRatings) {
       const doc = r as any;
@@ -730,10 +687,7 @@ export class UsersService {
 
     // Update ISMS account email addresses
     try {
-      await this.accountsModel.updateMany(
-        { accountId: uid },
-        { $set: { emailAddresses: [normalizedEmail], email: normalizedEmail } },
-      );
+      await this.accountsModel.updateMany({ accountId: uid }, { $set: { emailAddresses: [normalizedEmail], email: normalizedEmail } });
     } catch {
       // Log but don't fail — user doc is already updated
     }

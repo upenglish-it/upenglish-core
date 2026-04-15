@@ -408,6 +408,9 @@ export default function AdminDashboardPage() {
                             {/* Input */}
                             <div style={{ display: 'flex', gap: '8px' }}>
                                 <input
+                                    id="admin-dashboard-ai-question"
+                                    name="adminDashboardAiQuestion"
+                                    aria-label="Câu hỏi phân tích dữ liệu"
                                     type="text"
                                     value={chatInput}
                                     onChange={e => setChatInput(e.target.value)}

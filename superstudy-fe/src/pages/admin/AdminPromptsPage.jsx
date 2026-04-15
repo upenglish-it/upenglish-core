@@ -312,14 +312,20 @@ export default function AdminPromptsPage() {
                                 Prompt: <strong>{deleteConfirm.title}</strong>
                             </p>
                             <p style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '20px' }}>
-                                Hành động này không thể hoàn tác.
+                                Thuộc về: {teachers[deleteConfirm.createdBy]?.displayName || deleteConfirm.createdBy}
                             </p>
-                            <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
-                                <button className="admin-btn" onClick={() => setDeleteConfirm(null)}>
+                            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                                <button onClick={() => setDeleteConfirm(null)} style={{
+                                    padding: '10px 24px', borderRadius: '12px', border: '1.5px solid #e2e8f0',
+                                    background: '#f8fafc', color: '#475569', fontWeight: 600, cursor: 'pointer', fontSize: '0.88rem',
+                                }}>
                                     Hủy
                                 </button>
-                                <button className="admin-btn admin-btn-danger" onClick={() => handleDelete(deleteConfirm.id)}>
-                                    <Trash2 size={15} /> Xóa
+                                <button onClick={() => handleDelete(deleteConfirm.id)} style={{
+                                    padding: '10px 24px', borderRadius: '12px', border: 'none',
+                                    background: '#ef4444', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: '0.88rem',
+                                }}>
+                                    Xóa
                                 </button>
                             </div>
                         </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getGroups, saveGroup, deleteGroup, getFolders, getGrammarFolders, addUserToGroup, removeUserFromGroup, searchIsmsAccounts, getGroupMembers } from '../../services/adminService';
+import { getGroups, saveGroup, deleteGroup, getFolders, getGrammarFolders, addUserToGroup, removeUserFromGroup, searchIsmsAccounts, getGroupMembers, getWhitelistEmails, updateWhitelistEntry } from '../../services/adminService';
 import { Link } from 'react-router-dom';
 import { Layers, Plus, Edit, Trash2, Tag, Save, X, FolderOpen, Users, Check, Search, UserPlus, UserMinus, User, Shield, Award, BarChart3, Mail, Briefcase, Eye, EyeOff, Gift } from 'lucide-react';
 import Avatar from '../../components/common/Avatar';
@@ -30,6 +30,7 @@ export default function AdminGroupsPage() {
     const [isUsersLoading, setIsUsersLoading] = useState(false);
     const [isUpdatingMember, setIsUpdatingMember] = useState(false);
     const [groupSearchTerm, setGroupSearchTerm] = useState('');
+    const [whitelistEmails, setWhitelistEmails] = useState([]);
 
     useEffect(() => {
         loadData();
@@ -98,8 +99,12 @@ export default function AdminGroupsPage() {
         setMembersModalOpen(true);
         setIsUsersLoading(true);
         try {
-            const membersList = await getGroupMembers(group.id);
+            const [membersList, wlList] = await Promise.all([
+                getGroupMembers(group.id),
+                getWhitelistEmails()
+            ]);
             setCurrentMembers(membersList);
+            setWhitelistEmails(wlList);
             setSearchResults([]);
         } catch (error) {
             console.error("Lỗi tải người dùng:", error);
@@ -135,7 +140,41 @@ export default function AdminGroupsPage() {
         setIsUpdatingMember(false);
     }
 
+    async function handleAddWhitelistMember(wlEntry) {
+        if (!selectedGroupForMembers || isUpdatingMember) return;
+        setIsUpdatingMember(true);
+        try {
+            const currentGroupIds = Array.isArray(wlEntry.groupIds) ? wlEntry.groupIds : [];
+            await updateWhitelistEntry(wlEntry.email, {
+                groupIds: [...new Set([...currentGroupIds, selectedGroupForMembers.id])]
+            });
+            setWhitelistEmails(prev => prev.map(w =>
+                w.email === wlEntry.email
+                    ? { ...w, groupIds: [...new Set([...(w.groupIds || []), selectedGroupForMembers.id])] }
+                    : w
+            ));
+        } catch (error) {
+            setAlertMessage({ type: 'error', text: 'Lỗi thêm email pre-approved: ' + error.message });
+        }
+        setIsUpdatingMember(false);
+    }
 
+    async function handleRemoveWhitelistMember(wlEntry) {
+        if (!selectedGroupForMembers || isUpdatingMember) return;
+        setIsUpdatingMember(true);
+        try {
+            const updatedGroupIds = (wlEntry.groupIds || []).filter(id => id !== selectedGroupForMembers.id);
+            await updateWhitelistEntry(wlEntry.email, { groupIds: updatedGroupIds });
+            setWhitelistEmails(prev => prev.map(w =>
+                w.email === wlEntry.email
+                    ? { ...w, groupIds: updatedGroupIds }
+                    : w
+            ));
+        } catch (error) {
+            setAlertMessage({ type: 'error', text: 'Lỗi xóa email pre-approved: ' + error.message });
+        }
+        setIsUpdatingMember(false);
+    }
 
     async function handleSubmit(e) {
         e.preventDefault();
@@ -603,8 +642,8 @@ export default function AdminGroupsPage() {
                                 </div>
                             </div>
                         </form>
-                    </div>
-                </div >
+                    </div >
+                </div>
             )}
 
             {/* DELETE MODAL */}
@@ -692,31 +731,71 @@ export default function AdminGroupsPage() {
                                                             return timeA - timeB;
                                                         });
 
-                                                        if (sortedUsers.length === 0) return <div style={{ padding: '12px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>Không tìm thấy người dùng phù hợp.</div>;
+                                                        if (sortedUsers.length === 0 && whitelistEmails.filter(w =>
+                                                            !(w.groupIds || []).includes(selectedGroupForMembers.id) &&
+                                                            w.email.toLowerCase().includes(memberSearchQuery.toLowerCase())
+                                                        ).length === 0) return <div style={{ padding: '12px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>Không tìm thấy người dùng phù hợp.</div>;
 
-                                                        return sortedUsers.map(user => (
-                                                            <div key={user.uid} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #f1f5f9' }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1, paddingRight: '12px' }}>
-                                                                    <Avatar src={user.photoURL} alt={user.displayName} size={36} />
-                                                                    <div style={{ minWidth: 0, flex: 1 }}>
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '2px' }}>
-                                                                            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#0f172a', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{user.displayName || 'Chưa cập nhật'}</div>
-                                                                            <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '8px', background: '#eff6ff', color: '#3b82f6', fontWeight: 700 }}>
-                                                                                {user.role === 'admin' ? 'Admin' : user.role === 'teacher' ? 'Giáo viên' : user.role === 'staff' ? 'Nhân viên VP' : 'Học viên'}
-                                                                            </span>
+                                                        return <>
+                                                            {sortedUsers.map(user => (
+                                                                <div key={user.uid} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #f1f5f9' }}>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1, paddingRight: '12px' }}>
+                                                                        <Avatar src={user.photoURL} alt={user.displayName} size={36} />
+                                                                        <div style={{ minWidth: 0, flex: 1 }}>
+                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '2px' }}>
+                                                                                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#0f172a', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{user.displayName || 'Chưa cập nhật'}</div>
+                                                                                <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '8px', background: '#eff6ff', color: '#3b82f6', fontWeight: 700 }}>
+                                                                                    {user.role === 'admin' ? 'Admin' : user.role === 'teacher' ? 'Giáo viên' : user.role === 'staff' ? 'Nhân viên VP' : 'Học viên'}
+                                                                                </span>
+                                                                            </div>
+                                                                            <div style={{ fontSize: '0.8rem', color: '#64748b', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{user.email}</div>
                                                                         </div>
-                                                                        <div style={{ fontSize: '0.8rem', color: '#64748b', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{user.email}</div>
                                                                     </div>
+                                                                    <button
+                                                                        onClick={() => handleAddMember(user)}
+                                                                        disabled={isUpdatingMember}
+                                                                        style={{ flexShrink: 0, padding: '8px 16px', borderRadius: '12px', background: '#eff6ff', color: '#3b82f6', border: 'none', fontSize: '0.85rem', fontWeight: 700, cursor: isUpdatingMember ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s ease' }}
+                                                                    >
+                                                                        <Plus size={16} /> Thêm
+                                                                    </button>
                                                                 </div>
-                                                                <button
-                                                                    onClick={() => handleAddMember(user)}
-                                                                    disabled={isUpdatingMember}
-                                                                    style={{ flexShrink: 0, padding: '8px 16px', borderRadius: '12px', background: '#eff6ff', color: '#3b82f6', border: 'none', fontSize: '0.85rem', fontWeight: 700, cursor: isUpdatingMember ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s ease' }}
-                                                                >
-                                                                    <Plus size={16} /> Thêm
-                                                                </button>
-                                                            </div>
-                                                        ));
+                                                            ))}
+                                                            {/* Whitelist emails matching search */}
+                                                            {(() => {
+                                                                const memberEmails = currentMembers.map(m => (m.email || '').toLowerCase());
+                                                                const unassignedWl = whitelistEmails.filter(w =>
+                                                                    !(w.groupIds || []).includes(selectedGroupForMembers.id) &&
+                                                                    !memberEmails.includes(w.email.toLowerCase())
+                                                                );
+                                                                const searchLower = memberSearchQuery.toLowerCase();
+                                                                const filteredWl = unassignedWl.filter(w =>
+                                                                    w.email.toLowerCase().includes(searchLower)
+                                                                );
+                                                                return filteredWl.map(wl => (
+                                                                    <div key={`wl-${wl.email}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #f1f5f9' }}>
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1, paddingRight: '12px' }}>
+                                                                            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                                                <Mail size={18} color="#22c55e" />
+                                                                            </div>
+                                                                            <div style={{ minWidth: 0, flex: 1 }}>
+                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '2px' }}>
+                                                                                    <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#0f172a', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{wl.email}</div>
+                                                                                    <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '8px', background: '#fef3c7', color: '#92400e', fontWeight: 700 }}>Chưa đăng nhập</span>
+                                                                                </div>
+                                                                                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Pre-approved • {wl.role === 'teacher' ? 'Giáo viên' : wl.role === 'admin' ? 'Admin' : wl.role === 'staff' ? 'Nhân viên VP' : 'Học viên'}</div>
+                                                                            </div>
+                                                                        </div>
+                                                                        <button
+                                                                            onClick={() => handleAddWhitelistMember(wl)}
+                                                                            disabled={isUpdatingMember}
+                                                                            style={{ flexShrink: 0, padding: '8px 16px', borderRadius: '12px', background: '#f0fdf4', color: '#16a34a', border: 'none', fontSize: '0.85rem', fontWeight: 700, cursor: isUpdatingMember ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s ease' }}
+                                                                        >
+                                                                            <Plus size={16} /> Thêm
+                                                                        </button>
+                                                                    </div>
+                                                                ));
+                                                            })()}
+                                                        </>;
                                                     })()}
                                                 </div>
                                             )}

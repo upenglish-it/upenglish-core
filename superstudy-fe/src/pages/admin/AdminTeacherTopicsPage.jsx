@@ -539,8 +539,6 @@ export default function AdminTeacherTopicsPage() {
                                                 </td>
                                                 <td>
                                                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                                        <span style={{ fontSize: '0.8rem', background: '#e0e7ff', color: '#4f46e5', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, border: '1px solid #c7d2fe' }}>Folders: {tFolders.length}</span>
-                                                        <span style={{ fontSize: '0.8rem', background: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, border: '1px solid #fde68a' }}>Bài rời: {tTopics.length}</span>
                                                         <span style={{ fontSize: '0.8rem', background: '#f0fdf4', color: '#16a34a', padding: '2px 8px', borderRadius: '4px', fontWeight: 700, border: '1px solid #bbf7d0' }}>Tổng bài: {topics.filter(t => t.teacherId === teacherId).length}</span>
                                                     </div>
                                                 </td>
@@ -763,98 +761,180 @@ export default function AdminTeacherTopicsPage() {
 
             {/* TRASH SECTION */}
             {(deletedTopics.length > 0 || deletedFolders.length > 0) && (
-                <div className="admin-card" style={{ marginTop: '24px', border: '1px solid #fecaca' }}>
+                <div className="admin-card trash-card-container" style={{
+                    marginTop: '32px',
+                    background: 'linear-gradient(135deg, #fff1f2 0%, #ffffff 100%)',
+                    border: '1.5px solid #fda4af',
+                    boxShadow: '0 8px 16px -4px rgba(225, 29, 72, 0.12), 0 4px 8px -2px rgba(225, 29, 72, 0.08)',
+                    padding: 0,
+                    overflow: 'hidden'
+                }}>
                     <div
-                        style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '16px 20px', userSelect: 'none' }}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '14px', cursor: 'pointer',
+                            padding: '18px 20px', userSelect: 'none',
+                            background: trashExpanded ? 'rgba(255, 255, 255, 0.5)' : 'transparent',
+                            transition: 'background 0.3s ease'
+                        }}
                         onClick={() => setTrashExpanded(!trashExpanded)}
                     >
-                        {trashExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                        <Trash2 size={18} style={{ color: '#ef4444' }} />
-                        <span style={{ fontWeight: 600, fontSize: '1rem', color: '#dc2626' }}>Thùng rác</span>
-                        <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 'normal' }}>({deletedTopics.length + deletedFolders.length} mục · Tự xóa sau 30 ngày)</span>
+                        <div style={{
+                            width: '42px', height: '42px', borderRadius: '14px',
+                            background: '#fff', border: '1px solid #fda4af',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            boxShadow: '0 2px 4px rgba(225, 29, 72, 0.06)'
+                        }}>
+                            <Trash2 size={22} style={{ color: '#e11d48' }} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontWeight: 800, fontSize: '1.1rem', color: '#9f1239', letterSpacing: '-0.01em' }}>Thùng rác</span>
+                                <span style={{
+                                    background: '#e11d48', color: '#fff', fontSize: '0.75rem',
+                                    fontWeight: 700, padding: '2px 8px', borderRadius: '100px',
+                                    boxShadow: '0 2px 4px rgba(225, 29, 72, 0.2)'
+                                }}>
+                                    {deletedTopics.length + deletedFolders.length}
+                                </span>
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: '#e11d48', opacity: 0.7, fontWeight: 500, marginTop: '2px' }}>
+                                Tự xóa vĩnh viễn sau 30 ngày
+                            </div>
+                        </div>
+                        <div style={{
+                            width: '32px', height: '32px', borderRadius: '50%',
+                            background: '#fff', display: 'flex', alignItems: 'center',
+                            justifyContent: 'center', border: '1px solid #fecaca'
+                        }}>
+                            {trashExpanded ? <ChevronDown size={18} color="#9f1239" /> : <ChevronRight size={18} color="#9f1239" />}
+                        </div>
                     </div>
                     {trashExpanded && (
                         <div style={{ padding: '0 20px 20px' }}>
                             <div className="admin-table-container">
-                                <table className="admin-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Loại</th>
-                                            <th>Tên</th>
-                                            <th>Giáo viên</th>
-                                            <th>Còn lại</th>
-                                            <th className="text-right">Thao tác</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {deletedFolders.map(folder => {
-                                            const folderId = folder.id || folder._id;
-                                            folder.id = folderId;
-                                            const daysLeft = folder.deletedAt ? Math.max(0, 30 - Math.floor((Date.now() - (folder.deletedAt.toMillis ? folder.deletedAt.toMillis() : new Date(folder.deletedAt).getTime())) / 86400000)) : '?';
-                                            const teacher = teacherMap[folder.teacherId] || {};
-                                            return (
-                                                <tr key={`df-${folderId}`}>
-                                                    <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', color: '#6366f1' }}><FolderOpen size={14} /> Folder</span></td>
-                                                    <td style={{ fontWeight: 500 }}>{folder.name}</td>
-                                                    <td style={{ fontSize: '0.85rem', color: '#64748b' }}>{teacher.displayName || teacher.email || folder.teacherId}</td>
-                                                    <td><span style={{ fontSize: '0.8rem', color: daysLeft <= 7 ? '#ef4444' : '#f59e0b', fontWeight: 600 }}>{daysLeft} ngày</span></td>
-                                                    <td className="text-right">
-                                                        <div className="admin-table-actions">
-                                                            <button className="admin-action-btn" disabled={trashActionLoading === folder.id} title="Khôi phục cho GV" onClick={async () => {
-                                                                setTrashActionLoading(folder.id);
-                                                                try { await restoreTeacherTopicFolder(folder.id); loadData(); setAlertMessage({ type: 'success', text: 'Đã khôi phục folder cho giáo viên!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
-                                                                setTrashActionLoading(null);
-                                                            }}><RotateCcw size={14} /></button>
-                                                            <button className="admin-action-btn danger" disabled={trashActionLoading === folder.id} title="Xóa vĩnh viễn" onClick={async () => {
-                                                                if (!window.confirm('Xóa vĩnh viễn folder này?')) return;
-                                                                setTrashActionLoading(folder.id);
-                                                                try { await permanentlyDeleteTeacherTopicFolder(folder.id); loadData(); setAlertMessage({ type: 'success', text: 'Đã xóa vĩnh viễn!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
-                                                                setTrashActionLoading(null);
-                                                            }}><Trash2 size={14} /></button>
+                                <div className="trash-items-list" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    {deletedFolders.map(folder => {
+                                        const folderId = folder.id || folder._id;
+                                        folder.id = folderId;
+                                        const daysLeft = folder.deletedAt ? Math.max(0, 30 - Math.floor((Date.now() - (folder.deletedAt.toMillis ? folder.deletedAt.toMillis() : new Date(folder.deletedAt).getTime())) / 86400000)) : '?';
+                                        const teacher = teacherMap[folder.teacherId] || {};
+                                        return (
+                                            <div key={`df-${folderId}`} className="trash-item-card" style={{
+                                                background: '#fff', borderRadius: '16px', padding: '16px',
+                                                border: '1px solid #fecaca', boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+                                                display: 'flex', flexDirection: 'column', gap: '12px'
+                                            }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+                                                        <div style={{
+                                                            width: '40px', height: '40px', borderRadius: '12px',
+                                                            background: '#eef2ff', color: '#6366f1',
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            flexShrink: 0
+                                                        }}>
+                                                            <FolderOpen size={20} />
                                                         </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                        {deletedTopics.map(topic => {
-                                            const daysLeft = topic.deletedAt ? Math.max(0, 30 - Math.floor((Date.now() - (topic.deletedAt.toMillis ? topic.deletedAt.toMillis() : new Date(topic.deletedAt).getTime())) / 86400000)) : '?';
-                                            const teacher = teacherMap[topic.teacherId] || {};
-                                            return (
-                                                <tr key={`dt-${topic.id}`}>
-                                                    <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', color: '#10b981' }}><BookOpen size={14} /> Bài học</span></td>
-                                                    <td>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                            <span style={{ fontSize: '1rem' }}>{topic.icon || '📚'}</span>
-                                                            <span style={{ fontWeight: 500 }}>{topic.name}</span>
+                                                        <div style={{ minWidth: 0, flex: 1 }}>
+                                                            <div style={{ fontWeight: 800, fontSize: '1rem', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{folder.name}</div>
+                                                            <div style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                                <User size={13} /> {teacher.displayName || teacher.email || 'Giáo viên'}
+                                                            </div>
                                                         </div>
-                                                    </td>
-                                                    <td style={{ fontSize: '0.85rem', color: '#64748b' }}>{teacher.displayName || teacher.email || topic.teacherId}</td>
-                                                    <td><span style={{ fontSize: '0.8rem', color: daysLeft <= 7 ? '#ef4444' : '#f59e0b', fontWeight: 600 }}>{daysLeft} ngày</span></td>
-                                                    <td className="text-right">
-                                                        <div className="admin-table-actions">
-                                                            <button className="admin-action-btn" disabled={trashActionLoading === topic.id} title="Khôi phục cho Giáo viên" onClick={async () => {
-                                                                setTrashActionLoading(topic.id);
-                                                                try { await restoreTeacherTopic(topic.id); loadData(); setAlertMessage({ type: 'success', text: 'Đã khôi phục cho giáo viên!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
-                                                                setTrashActionLoading(null);
-                                                            }}><RotateCcw size={14} /><User size={12} style={{ marginLeft: '-4px' }} /></button>
-                                                            <button className="admin-action-btn" disabled={trashActionLoading === topic.id} title="Khôi phục cho Admin" style={{ color: '#7c3aed' }} onClick={async () => {
-                                                                setTrashActionLoading(topic.id);
-                                                            try { await handleRestoreTeacherTopicToAdmin(topic.id); loadData(true); setAlertMessage({ type: 'success', text: 'Đã khôi phục cho Admin!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
-                                                                setTrashActionLoading(null);
-                                                            }}><RotateCcw size={14} /><UsersRound size={12} style={{ marginLeft: '-4px' }} /></button>
-                                                            <button className="admin-action-btn danger" disabled={trashActionLoading === topic.id} title="Xóa vĩnh viễn" onClick={async () => {
-                                                                if (!window.confirm('Xóa vĩnh viễn bài học này? Tất cả từ vựng bên trong sẽ bị xóa.')) return;
-                                                                setTrashActionLoading(topic.id);
-                                                                try { await permanentlyDeleteTeacherTopic(topic.id); loadData(); setAlertMessage({ type: 'success', text: 'Đã xóa vĩnh viễn!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
-                                                                setTrashActionLoading(null);
-                                                            }}><Trash2 size={14} /></button>
+                                                    </div>
+                                                    <span style={{
+                                                        fontSize: '0.75rem', fontWeight: 700, padding: '4px 10px', borderRadius: '100px',
+                                                        background: daysLeft <= 7 ? '#fff1f2' : '#fffbeb',
+                                                        color: daysLeft <= 7 ? '#e11d48' : '#d97706',
+                                                        border: `1px solid ${daysLeft <= 7 ? '#fda4af' : '#fde68a'}`,
+                                                        whiteSpace: 'nowrap'
+                                                    }}>
+                                                        {daysLeft} ngày còn lại
+                                                    </span>
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid #f1f5f9', paddingTop: '12px' }}>
+                                                    <button className="admin-btn admin-btn-secondary" style={{ padding: '0 16px', fontSize: '0.8rem', height: '36px', borderRadius: '10px' }} disabled={trashActionLoading === folderId} onClick={async () => {
+                                                        setTrashActionLoading(folderId);
+                                                        try { await restoreTeacherTopicFolder(folderId); loadData(true); setAlertMessage({ type: 'success', text: 'Đã khôi phục folder!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
+                                                        setTrashActionLoading(null);
+                                                    }}>
+                                                        <RotateCcw size={16} /> <span style={{ marginLeft: '6px' }}>Khôi phục</span>
+                                                    </button>
+                                                    <button className="admin-btn" style={{ padding: '0 16px', fontSize: '0.8rem', height: '36px', borderRadius: '10px', background: '#fff1f2', color: '#e11d48', border: '1px solid #fda4af' }} disabled={trashActionLoading === folderId} onClick={async () => {
+                                                        if (!window.confirm('Xóa vĩnh viễn folder này?')) return;
+                                                        setTrashActionLoading(folderId);
+                                                        try { await permanentlyDeleteTeacherTopicFolder(folderId); loadData(true); setAlertMessage({ type: 'success', text: 'Xóa vĩnh viễn thành công!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
+                                                        setTrashActionLoading(null);
+                                                    }}>
+                                                        <Trash2 size={16} /> <span style={{ marginLeft: '6px' }}>Xóa bỏ</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    {deletedTopics.map(topic => {
+                                        const daysLeft = topic.deletedAt ? Math.max(0, 30 - Math.floor((Date.now() - (topic.deletedAt.toMillis ? topic.deletedAt.toMillis() : new Date(topic.deletedAt).getTime())) / 86400000)) : '?';
+                                        const teacher = teacherMap[topic.teacherId] || {};
+                                        return (
+                                            <div key={`dt-${topic.id}`} className="trash-item-card" style={{
+                                                background: '#fff', borderRadius: '16px', padding: '16px',
+                                                border: '1px solid #fecaca', boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+                                                display: 'flex', flexDirection: 'column', gap: '12px'
+                                            }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+                                                        <div style={{
+                                                            width: '40px', height: '40px', borderRadius: '12px',
+                                                            background: `${topic.color || '#3b82f6'}15`, color: topic.color || '#3b82f6',
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            fontSize: '1.2rem', flexShrink: 0
+                                                        }}>
+                                                            {topic.icon || '📚'}
                                                         </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
+                                                        <div style={{ minWidth: 0, flex: 1 }}>
+                                                            <div style={{ fontWeight: 800, fontSize: '1rem', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{topic.name}</div>
+                                                            <div style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                                <User size={13} /> {teacher.displayName || teacher.email || 'Giáo viên'}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <span style={{
+                                                        fontSize: '0.75rem', fontWeight: 700, padding: '4px 10px', borderRadius: '100px',
+                                                        background: daysLeft <= 7 ? '#fff1f2' : '#fffbeb',
+                                                        color: daysLeft <= 7 ? '#e11d48' : '#d97706',
+                                                        border: `1px solid ${daysLeft <= 7 ? '#fda4af' : '#fde68a'}`,
+                                                        whiteSpace: 'nowrap'
+                                                    }}>
+                                                        {daysLeft} ngày còn lại
+                                                    </span>
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid #f1f5f9', paddingTop: '12px' }}>
+                                                    <button className="admin-btn admin-btn-secondary" style={{ padding: '0 16px', fontSize: '0.8rem', height: '36px', borderRadius: '10px' }} disabled={trashActionLoading === topic.id} onClick={async () => {
+                                                        setTrashActionLoading(topic.id);
+                                                        try { await restoreTeacherTopic(topic.id); loadData(true); setAlertMessage({ type: 'success', text: 'Đã khôi phục cho giáo viên!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
+                                                        setTrashActionLoading(null);
+                                                    }}>
+                                                        <RotateCcw size={16} /> <span style={{ marginLeft: '6px' }}>Khôi phục</span>
+                                                    </button>
+                                                    <button className="admin-btn admin-btn-secondary" style={{ padding: '0 16px', fontSize: '0.8rem', height: '36px', borderRadius: '10px', color: '#7c3aed', borderColor: '#ddd6fe' }} disabled={trashActionLoading === topic.id} onClick={async () => {
+                                                        setTrashActionLoading(topic.id);
+                                                        try { await handleRestoreTeacherTopicToAdmin(topic.id); loadData(true); setAlertMessage({ type: 'success', text: 'Đã khôi phục cho Admin!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
+                                                        setTrashActionLoading(null);
+                                                    }}>
+                                                        <RotateCcw size={16} /> <span style={{ marginLeft: '6px' }}>Về Admin</span>
+                                                    </button>
+                                                    <button className="admin-btn" style={{ padding: '0 16px', fontSize: '0.8rem', height: '36px', borderRadius: '10px', background: '#fff1f2', color: '#e11d48', border: '1px solid #fda4af' }} disabled={trashActionLoading === topic.id} onClick={async () => {
+                                                        if (!window.confirm('Xóa vĩnh viễn bài học này? Tất cả từ vựng bên trong sẽ bị xóa.')) return;
+                                                        setTrashActionLoading(topic.id);
+                                                        try { await permanentlyDeleteTeacherTopic(topic.id); loadData(true); setAlertMessage({ type: 'success', text: 'Xóa vĩnh viễn thành công!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
+                                                        setTrashActionLoading(null);
+                                                    }}>
+                                                        <Trash2 size={16} /> <span style={{ marginLeft: '6px' }}>Xóa bỏ</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         </div>
                     )}
