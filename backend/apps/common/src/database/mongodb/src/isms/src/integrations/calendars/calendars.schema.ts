@@ -1,4 +1,4 @@
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 import { Properties } from '../../properties';
 import { PropertiesBranches } from '../../properties/branches';
 import { SYSTEM_ID } from 'apps/common/src/utils';
@@ -6,7 +6,7 @@ import { Integrations } from '..';
 import { Accounts } from '../../accounts';
 import { IMicrosoftCalendar } from 'apps/common/src/interfaces';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: 'calendars' } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: 'calendars' } })
 export class Calendars {
   @Prop({
     type: String,

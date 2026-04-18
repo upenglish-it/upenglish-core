@@ -2,10 +2,13 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from 'nestjs-typegoose';
 import { ReturnModelType } from '@typegoose/typegoose';
 import { SSTTeacherTopics } from 'apps/common/src/database/mongodb/src/superstudy';
-import { clearGlobalAppDefaultCred } from 'firebase-admin/lib/app/credential-factory';
 
 @Injectable()
 export class TeacherTopicsService {
+  private countWords(words: unknown) {
+    return Array.isArray(words) ? words.length : 0;
+  }
+
   constructor(
     @InjectModel(SSTTeacherTopics)
     private readonly teacherTopicsModel: ReturnModelType<typeof SSTTeacherTopics>,
@@ -52,7 +55,11 @@ export class TeacherTopicsService {
 
   async create(data: Record<string, any>) {
     console.log(data);
-    const payload: Record<string, any> = { ...data, isDeleted: false, cachedWordCount: 0 };
+    const payload: Record<string, any> = {
+      ...data,
+      isDeleted: false,
+      cachedWordCount: this.countWords(data.words),
+    };
     if (data.id) payload._id = data.id;
     else if (data._id) payload._id = data._id;
 
@@ -62,10 +69,47 @@ export class TeacherTopicsService {
   }
 
   async update(id: string, data: Record<string, any>) {
+    const current = (await this.teacherTopicsModel.findById(id).lean()) as Record<string, any> | null;
+    if (!current) throw new NotFoundException(`Teacher topic ${id} not found`);
+
+    const payload: Record<string, any> = { ...data };
+    let nextWords = Array.isArray(current.words) ? [...current.words] : [];
+
+    if (Array.isArray(payload.words)) {
+      nextWords = payload.words;
+      payload.cachedWordCount = this.countWords(nextWords);
+    }
+
+    if (payload._upsertWord) {
+      const nextWord = payload._upsertWord;
+      const nextWordKey = String(nextWord.word || '').trim().toLowerCase();
+      nextWords = nextWords.filter(
+        (word) => String(word?.word || '').trim().toLowerCase() !== nextWordKey,
+      );
+      nextWords.push(nextWord);
+      payload.words = nextWords;
+      payload.cachedWordCount = this.countWords(nextWords);
+      delete payload._upsertWord;
+    }
+
+    if (payload._deleteWord) {
+      const wordToDelete = String(payload._deleteWord || '').trim().toLowerCase();
+      nextWords = nextWords.filter(
+        (word) => String(word?.word || '').trim().toLowerCase() !== wordToDelete,
+      );
+      payload.words = nextWords;
+      payload.cachedWordCount = this.countWords(nextWords);
+      delete payload._deleteWord;
+    }
+
+    if (payload._recalcWordCount) {
+      payload.cachedWordCount = this.countWords(payload.words ?? nextWords);
+      delete payload._recalcWordCount;
+    }
+
     const updated = await this.teacherTopicsModel
-      .findByIdAndUpdate(id, { $set: data }, { new: true })
+      .findByIdAndUpdate(id, { $set: payload }, { new: true })
       .lean();
-    if (!updated) throw new NotFoundException(`Teacher topic ${id} not found`);
     return updated;
   }
 

@@ -1,13 +1,13 @@
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
 // NestJs Imports
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 // Schemas
 import { Accounts, Properties, PropertiesBranches } from '../../../isms';
 
 export const SSTTeacherRatingSummariesCN = 'sst-teacher-rating-summaries';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: SSTTeacherRatingSummariesCN } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: SSTTeacherRatingSummariesCN } })
 export class SSTTeacherRatingSummaries {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public readonly _id: string;
@@ -32,6 +32,9 @@ export class SSTTeacherRatingSummaries {
 
   @Prop({ type: String, required: true })
   public readonly aiSummary: string;
+
+  @Prop({ type: Object, default: {} })
+  public readonly groupScores?: Record<string, any>;
 
   @Prop({ type: String, required: true })
   public readonly generatedAt: string;

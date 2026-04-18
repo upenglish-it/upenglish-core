@@ -24,6 +24,13 @@ export class AuthController {
     return this.authService.signIn(body, request);
   }
 
+  @Get('social-authorization')
+  @ApiOperation({ summary: 'Complete Google/Microsoft OAuth sign in' })
+  @ApiResponse({ description: 'Returns authorizationToken and user info for the authenticated social account' })
+  public async socialAuthorization(@Query() query: any, @Req() request: Request): Promise<IResponseHandlerParams> {
+    return this.authService.socialAuthorization(query, request);
+  }
+
   /**
    * SSO sign in — PRODUCTION flow.
    * Called after Google/Microsoft OAuth resolves the user's email.
@@ -41,10 +48,7 @@ export class AuthController {
   @Get('generate-token')
   @ApiOperation({ summary: 'Generate token by email (dev testing only)' })
   @ApiResponse({ description: 'Returns authorizationToken and user info for the given emailAddress' })
-  public async generateTokenByEmail(
-    @Query('emailAddress') email: string,
-    @Req() request: Request,
-  ): Promise<IResponseHandlerParams> {
+  public async generateTokenByEmail(@Query('emailAddress') email: string, @Req() request: Request): Promise<IResponseHandlerParams> {
     return this.authService.generateTokenByEmail(email, request);
   }
 }

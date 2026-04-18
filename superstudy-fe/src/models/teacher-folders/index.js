@@ -102,4 +102,17 @@ export const teacherFoldersService = {
   /** Permanently delete a teacher exam folder */
   permanentDeleteExamFolder: (id) =>
     api.delete(`${BASE}/exams/${id}/permanent`),
+
+  // ─── Shared / Public access ─────────────────────────────────────────────
+  /** Get public and explicitly shared teacher topic folders */
+  getSharedAndPublicTopicFolders: (folderAccessIds = []) =>
+    api.post(`${BASE}/topics/shared`, { folderAccessIds }),
+
+  /** Get public and explicitly shared teacher grammar folders */
+  getSharedAndPublicGrammarFolders: (folderAccessIds = []) =>
+    api.post(`${BASE}/grammar/shared`, { folderAccessIds }),
+
+  /** Get public and explicitly shared teacher exam folders */
+  getSharedAndPublicExamFolders: (folderAccessIds = []) =>
+    api.post(`${BASE}/exams/shared`, { folderAccessIds }),
 };

@@ -5,13 +5,13 @@ export const practiceModesC = [''] as const;
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
 // NestJs Imports
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 // Schemas
 import { Accounts, Properties, PropertiesBranches } from '../../../isms';
 
 export const SSTToolAssignmentsCN = 'sst-tool-assignments';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: SSTToolAssignmentsCN } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: SSTToolAssignmentsCN } })
 export class SSTToolAssignments {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public readonly _id: string;
@@ -46,7 +46,7 @@ export class SSTToolAssignments {
   @Prop({ type: Number, required: true })
   public readonly requiredAttempts: number;
 
-  @Prop({ type: Array, required: true })
+  @Prop({ type: [String], required: true })
   public readonly assignedStudentIds: string[];
 
   @Prop({ type: String, required: true })

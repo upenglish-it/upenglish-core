@@ -71,13 +71,13 @@ export class SSTEmailWhitelist {
   @Prop({ type: String, default: null })
   public readonly notes: string;
 
-  @Prop({ ref: () => Accounts, type: String, required: true })
+  @Prop({ ref: () => Accounts, type: String, required: false, default: null })
   public readonly createdBy: Accounts;
 
-  @Prop({ ref: () => Properties, type: String, required: true })
+  @Prop({ ref: () => Properties, type: String, required: false, default: null })
   public readonly properties: Properties;
 
-  @Prop({ ref: () => PropertiesBranches, type: String, required: true })
+  @Prop({ ref: () => PropertiesBranches, type: String, required: false, default: null })
   public readonly propertiesBranches: PropertiesBranches;
 }
 

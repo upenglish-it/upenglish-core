@@ -6,9 +6,15 @@ export const NotificationTypesC = [
   'account_approved',
   'student_joined',
   'resource_shared',
+  'content_proposal',
+  'proposal_approved',
+  'proposal_rejected',
   'result_released',
   'follow_up_released',
   'exam_graded',
+  'new_user_pending',
+  'feedback_admin',
+  'feedback_direct',
 ] as const;
 
 // Utils
@@ -46,13 +52,13 @@ export class SSTNotifications {
   @Prop({ type: Date, default: null })
   public readonly readAt: Date;
 
-  @Prop({ ref: () => Accounts, type: String, required: true })
+  @Prop({ ref: () => Accounts, type: String, required: false, default: null })
   public readonly createdBy: Accounts;
 
-  @Prop({ ref: () => Properties, type: String, required: true })
+  @Prop({ ref: () => Properties, type: String, required: false, default: null })
   public readonly properties: Properties;
 
-  @Prop({ ref: () => PropertiesBranches, type: String, required: true })
+  @Prop({ ref: () => PropertiesBranches, type: String, required: false, default: null })
   public readonly propertiesBranches: PropertiesBranches;
 }
 

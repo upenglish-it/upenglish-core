@@ -1,32 +1,64 @@
-import { db } from '../config/firebase';
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { api } from '../models/httpClient';
 
-const APP_SETTINGS_PATH = 'settings/app';
+const DEFAULT_APP_SETTINGS = {
+    devBypassEnabled: false,
+    allowRetryAiGrading: false,
+};
 
-// Fetch the current app settings
+function normalizeAppSettings(data = {}) {
+    return {
+        ...DEFAULT_APP_SETTINGS,
+        ...(data || {}),
+    };
+}
+
+async function readSettingsDoc() {
+    const result = await api.get('/settings');
+    const docs = Array.isArray(result) ? result : (result?.data || []);
+    return docs[0] || null;
+}
+
 export async function getAppSettings() {
-    const docRef = doc(db, APP_SETTINGS_PATH);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-        return snap.data();
+    try {
+        const doc = await readSettingsDoc();
+        return normalizeAppSettings(doc);
+    } catch (error) {
+        console.error('Failed to load app settings', error);
+        return { ...DEFAULT_APP_SETTINGS };
     }
-    return { devBypassEnabled: false };
 }
 
-// Update app settings
 export async function updateAppSettings(newSettings) {
-    const docRef = doc(db, APP_SETTINGS_PATH);
-    await setDoc(docRef, newSettings, { merge: true });
+    const existing = await readSettingsDoc();
+    const payload = normalizeAppSettings({
+        ...(existing || {}),
+        ...(newSettings || {}),
+    });
+
+    const result = existing?.id
+        ? await api.patch(`/settings/${existing.id}`, payload)
+        : await api.post('/settings', payload);
+
+    return normalizeAppSettings(result?.data || result);
 }
 
-// Subscribe to app settings (real-time listener)
 export function subscribeToAppSettings(callback) {
-    const docRef = doc(db, APP_SETTINGS_PATH);
-    return onSnapshot(docRef, (snap) => {
-        if (snap.exists()) {
-            callback(snap.data());
-        } else {
-            callback({ devBypassEnabled: false });
+    let active = true;
+
+    const load = async () => {
+        try {
+            const data = await getAppSettings();
+            if (active) callback(data);
+        } catch (error) {
+            console.error('Failed to subscribe to app settings', error);
         }
-    });
+    };
+
+    load();
+    const intervalId = window.setInterval(load, 30000);
+
+    return () => {
+        active = false;
+        window.clearInterval(intervalId);
+    };
 }

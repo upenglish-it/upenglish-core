@@ -10,8 +10,7 @@ import {
     getAllSummariesForPeriod,
 } from '../../services/teacherRatingService';
 import { createNotification, queueEmail, buildEmailHtml } from '../../services/notificationService';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../../config/firebase';
+import { usersService } from '../../models';
 import SpiderChart from '../../components/common/SpiderChart';
 import Avatar from '../../components/common/Avatar';
 
@@ -163,10 +162,9 @@ export default function AdminTeacherRatingsPage() {
 
                 // Get teacher email
                 try {
-                    const { getDoc, doc } = await import('firebase/firestore');
-                    const tSnap = await getDoc(doc(db, 'users', summary.teacherId));
-                    if (tSnap.exists() && tSnap.data().email) {
-                        await queueEmail(tSnap.data().email, {
+                    const teacher = await usersService.findOne(summary.teacherId);
+                    if (teacher?.email) {
+                        await queueEmail(teacher.email, {
                             subject: `📊 Kết quả đánh giá — Điểm: ${summary.overallScore}/100`,
                             html: emailHtml,
                         });
@@ -175,11 +173,15 @@ export default function AdminTeacherRatingsPage() {
             }
 
             // Also send to staff/admins
-            const usersSnap = await getDocs(query(collection(db, 'users'), where('role', 'in', ['admin', 'staff'])));
-            for (const uDoc of usersSnap.docs) {
-                if (uDoc.id === user?.uid) continue; // skip current admin
+                        const [admins, staff] = await Promise.all([
+                usersService.findAll({ role: 'admin' }),
+                usersService.findAll({ role: 'staff' }),
+            ]);
+            for (const recipient of [...(admins || []), ...(staff || [])]) {
+                const recipientId = recipient?.id || recipient?._id || recipient?.uid;
+                if (!recipientId || recipientId === user?.uid) continue;
                 await createNotification({
-                    userId: uDoc.id,
+                    userId: recipientId,
                     type: 'teacher_rating_result',
                     title: '📊 Kết quả đánh giá GV',
                     message: `Đã tạo kết quả đánh giá cho ${summaries.length} giáo viên.`,
@@ -403,3 +405,6 @@ export default function AdminTeacherRatingsPage() {
         </div>
     );
 }
+
+
+

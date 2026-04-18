@@ -25,7 +25,7 @@ export class SSTExamFolders {
   public readonly color: string;
 
   /** Exam IDs inside this folder */
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly examIds: string[];
 
   /** If this folder was duplicated, source folder ID */
@@ -45,8 +45,11 @@ export class SSTExamFolders {
   public readonly teacherVisible: boolean;
 
   /** Teacher UIDs that have been explicitly shared this folder */
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly sharedWithTeacherIds: string[];
+
+  @Prop({ type: Boolean, default: false })
+  public readonly isPublic: boolean;
 
   /** Sort order */
   @Prop({ type: Number, default: 0 })

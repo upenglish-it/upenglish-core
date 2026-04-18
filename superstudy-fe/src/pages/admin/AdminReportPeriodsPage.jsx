@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ClipboardList, Plus, Calendar, Clock, Users, CheckCircle, AlertTriangle, Trash2, Edit3, ChevronDown, ChevronUp, Save, X, Settings, ToggleLeft, ToggleRight, Star, Sparkles, Send, RefreshCw, Eye, RotateCcw, Ban, Archive, Undo2 } from 'lucide-react';
 import { getAllReportPeriods, createReportPeriod, updateReportPeriod, deleteReportPeriod, restoreReportPeriod, permanentlyDeleteReportPeriod, getDeletedReportPeriods, purgeExpiredDeletedPeriods, computePeriodStatus, getStatusLabel, getDaysRemaining, getReportStatsForPeriod, getReportPeriodDefaults, saveReportPeriodDefaults, ensureCurrentPeriodExists, getTeacherReportDetails } from '../../services/reportPeriodService';
-import { RATING_CRITERIA, getAllRatingsForPeriod, getRatingsForTeacher, generateRatingSummaries, generateRatingSummaryForTeacher, getAllSummariesForPeriod, deleteRating, toggleEliminateRating } from '../../services/teacherRatingService';
+import { RATING_CRITERIA, getAllRatingsForPeriod, getRatingsForTeacher, generateRatingSummaries, generateRatingSummaryForTeacher, getAllSummariesForPeriod, deleteRating, toggleEliminateRating, updateRatingSummary } from '../../services/teacherRatingService';
 import { createNotification, queueEmail, buildEmailHtml } from '../../services/notificationService';
-import { collection, getDocs, query, where, getDoc, doc } from 'firebase/firestore';
-import { db } from '../../config/firebase';
+import { usersService } from '../../models';
 import SpiderChart from '../../components/common/SpiderChart';
 import Avatar from '../../components/common/Avatar';
 import { useAuth } from '../../contexts/AuthContext';
@@ -220,14 +219,18 @@ export default function AdminReportPeriodsPage() {
                 }).join('');
                 const emailHtml = buildEmailHtml({ emoji: '📊', heading: 'Kết quả đánh giá giáo viên', headingColor: '#4f46e5', body: `<p>Kỳ đánh giá đã kết thúc với <strong>${summary.totalResponses}</strong> phản hồi từ học viên.</p><div style="margin:12px 0">${criteriaHtml}</div>`, highlight: summary.aiSummary ? `<strong>💡 Nhận xét tổng hợp:</strong><br/>${summary.aiSummary}` : null, highlightBg: '#f0f9ff', highlightBorder: '#4f46e5', ctaText: 'Xem chi tiết' });
                 try {
-                    const tSnap = await getDoc(doc(db, 'users', summary.teacherId));
-                    if (tSnap.exists() && tSnap.data().email) await queueEmail(tSnap.data().email, { subject: `📊 Kết quả đánh giá — Điểm: ${summary.overallScore}/100`, html: emailHtml });
+                    const teacher = await usersService.findOne(summary.teacherId);
+                    if (teacher?.email) await queueEmail(teacher.email, { subject: `📊 Kết quả đánh giá — Điểm: ${summary.overallScore}/100`, html: emailHtml });
                 } catch { /* ignore */ }
             }
-            const usersSnap = await getDocs(query(collection(db, 'users'), where('role', 'in', ['admin', 'staff'])));
-            for (const uDoc of usersSnap.docs) {
-                if (uDoc.id === user?.uid) continue;
-                await createNotification({ userId: uDoc.id, type: 'teacher_rating_result', title: '📊 Kết quả đánh giá GV', message: `Đã tạo kết quả đánh giá cho ${sums.length} giáo viên.`, link: '/admin/report-periods' });
+            const [admins, staff] = await Promise.all([
+                usersService.findAll({ role: 'admin' }),
+                usersService.findAll({ role: 'staff' }),
+            ]);
+            for (const recipient of [...(admins || []), ...(staff || [])]) {
+                const recipientId = recipient?.id || recipient?._id || recipient?.uid;
+                if (!recipientId || recipientId === user?.uid) continue;
+                await createNotification({ userId: recipientId, type: 'teacher_rating_result', title: '📊 Kết quả đánh giá GV', message: `Đã tạo kết quả đánh giá cho ${sums.length} giáo viên.`, link: '/admin/report-periods' });
             }
             setSentSuccessPeriodId(periodId);
             setTimeout(() => setSentSuccessPeriodId(null), 3000);
@@ -407,6 +410,9 @@ export default function AdminReportPeriodsPage() {
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                             <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Ngày</span>
                                             <input
+                                                id="report-default-start-day"
+                                                name="reportDefaultStartDay"
+                                                aria-label="Ngày bắt đầu mặc định"
                                                 type="number" min="1" max="28"
                                                 value={defaults.startDay}
                                                 onChange={e => setDefaults(d => ({ ...d, startDay: parseInt(e.target.value) || 1 }))}
@@ -420,6 +426,9 @@ export default function AdminReportPeriodsPage() {
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                             <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Ngày</span>
                                             <input
+                                                id="report-default-end-day"
+                                                name="reportDefaultEndDay"
+                                                aria-label="Ngày kết thúc mặc định"
                                                 type="number" min="1" max="28"
                                                 value={defaults.endDay}
                                                 onChange={e => setDefaults(d => ({ ...d, endDay: parseInt(e.target.value) || 28 }))}
@@ -432,6 +441,9 @@ export default function AdminReportPeriodsPage() {
                                         <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>Số ngày trễ</label>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                             <input
+                                                id="report-default-grace-days"
+                                                name="reportDefaultGraceDays"
+                                                aria-label="Số ngày trễ mặc định"
                                                 type="number" min="0" max="14"
                                                 value={defaults.graceDays}
                                                 onChange={e => setDefaults(d => ({ ...d, graceDays: parseInt(e.target.value) || 0 }))}
@@ -455,6 +467,9 @@ export default function AdminReportPeriodsPage() {
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                 <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Ngày</span>
                                                 <input
+                                                    id="report-default-data-start-day"
+                                                    name="reportDefaultDataStartDay"
+                                                    aria-label="Ngày bắt đầu dữ liệu mặc định"
                                                     type="number" min="1" max="28"
                                                     value={defaults.dataStartDay || defaults.startDay}
                                                     onChange={e => setDefaults(d => ({ ...d, dataStartDay: parseInt(e.target.value) || 1 }))}
@@ -467,6 +482,9 @@ export default function AdminReportPeriodsPage() {
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                 <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Ngày</span>
                                                 <input
+                                                    id="report-default-data-end-day"
+                                                    name="reportDefaultDataEndDay"
+                                                    aria-label="Ngày kết thúc dữ liệu mặc định"
                                                     type="number" min="1" max="28"
                                                     value={defaults.dataEndDay || defaults.endDay}
                                                     onChange={e => setDefaults(d => ({ ...d, dataEndDay: parseInt(e.target.value) || 28 }))}
@@ -488,6 +506,9 @@ export default function AdminReportPeriodsPage() {
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                             <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Ngày</span>
                                             <input
+                                                id="report-default-rating-start-day"
+                                                name="reportDefaultRatingStartDay"
+                                                aria-label="Ngày bắt đầu đánh giá mặc định"
                                                 type="number" min="0" max="28"
                                                 value={defaults.ratingStartDay || 0}
                                                 onChange={e => setDefaults(d => ({ ...d, ratingStartDay: parseInt(e.target.value) || 0 }))}
@@ -500,6 +521,9 @@ export default function AdminReportPeriodsPage() {
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                             <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Ngày</span>
                                             <input
+                                                id="report-default-rating-end-day"
+                                                name="reportDefaultRatingEndDay"
+                                                aria-label="Ngày kết thúc đánh giá mặc định"
                                                 type="number" min="0" max="28"
                                                 value={defaults.ratingEndDay || 0}
                                                 onChange={e => setDefaults(d => ({ ...d, ratingEndDay: parseInt(e.target.value) || 0 }))}
@@ -563,6 +587,9 @@ export default function AdminReportPeriodsPage() {
                             <div>
                                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>Nhãn (tên kỳ)</label>
                                 <input
+                                    id="report-period-label"
+                                    name="reportPeriodLabel"
+                                    aria-label="Nhãn kỳ báo cáo"
                                     type="text"
                                     placeholder="VD: Kỳ báo cáo tháng 3/2026"
                                     value={form.label}
@@ -573,6 +600,9 @@ export default function AdminReportPeriodsPage() {
                             <div>
                                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>Từ ngày</label>
                                 <input
+                                    id="report-period-start-date"
+                                    name="reportPeriodStartDate"
+                                    aria-label="Từ ngày"
                                     type="date"
                                     required
                                     value={form.startDate}
@@ -583,6 +613,9 @@ export default function AdminReportPeriodsPage() {
                             <div>
                                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>Đến ngày</label>
                                 <input
+                                    id="report-period-end-date"
+                                    name="reportPeriodEndDate"
+                                    aria-label="Đến ngày"
                                     type="date"
                                     required
                                     value={form.endDate}
@@ -593,6 +626,9 @@ export default function AdminReportPeriodsPage() {
                             <div>
                                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>Số ngày trễ cho phép</label>
                                 <input
+                                    id="report-period-grace-days"
+                                    name="reportPeriodGraceDays"
+                                    aria-label="Số ngày trễ cho phép"
                                     type="number"
                                     min="0"
                                     max="30"
@@ -612,6 +648,9 @@ export default function AdminReportPeriodsPage() {
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>Dữ liệu từ ngày</label>
                                     <input
+                                        id="report-period-data-start-date"
+                                        name="reportPeriodDataStartDate"
+                                        aria-label="Dữ liệu từ ngày"
                                         type="date"
                                         value={form.dataStartDate}
                                         onChange={e => setForm(f => ({ ...f, dataStartDate: e.target.value }))}
@@ -621,6 +660,9 @@ export default function AdminReportPeriodsPage() {
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>Dữ liệu đến ngày</label>
                                     <input
+                                        id="report-period-data-end-date"
+                                        name="reportPeriodDataEndDate"
+                                        aria-label="Dữ liệu đến ngày"
                                         type="date"
                                         value={form.dataEndDate}
                                         onChange={e => setForm(f => ({ ...f, dataEndDate: e.target.value }))}
@@ -640,6 +682,9 @@ export default function AdminReportPeriodsPage() {
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>HV đánh giá từ ngày</label>
                                     <input
+                                        id="report-period-rating-start-date"
+                                        name="reportPeriodRatingStartDate"
+                                        aria-label="Học viên đánh giá từ ngày"
                                         type="date"
                                         value={form.ratingStartDate}
                                         onChange={e => setForm(f => ({ ...f, ratingStartDate: e.target.value }))}
@@ -649,6 +694,9 @@ export default function AdminReportPeriodsPage() {
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>HV đánh giá đến ngày</label>
                                     <input
+                                        id="report-period-rating-end-date"
+                                        name="reportPeriodRatingEndDate"
+                                        aria-label="Học viên đánh giá đến ngày"
                                         type="date"
                                         value={form.ratingEndDate}
                                         onChange={e => setForm(f => ({ ...f, ratingEndDate: e.target.value }))}
@@ -1161,7 +1209,6 @@ export default function AdminReportPeriodsPage() {
                                                                                 </div>
 
                                                                                 {summary?.aiSummary != null && (() => {
-                                                                                    const summaryDocId = `${period.id}_${t.teacherId}`;
                                                                                     return (
                                                                                         <div style={{ padding: '12px 16px', background: '#eff6ff', borderRadius: '12px', border: '1px solid #bfdbfe', marginBottom: '14px' }}>
                                                                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
@@ -1171,12 +1218,10 @@ export default function AdminReportPeriodsPage() {
                                                                                                     onClick={async (e) => {
                                                                                                         e.stopPropagation();
                                                                                                         const textarea = e.target.closest('div').parentElement.querySelector('textarea');
-                                                                                                        if (!textarea) return;
+                                                                                                        if (!textarea || !summary?.id) return;
                                                                                                         const newText = textarea.value.trim();
                                                                                                         try {
-                                                                                                            const { setDoc, doc } = await import('firebase/firestore');
-                                                                                                            const { db } = await import('../../config/firebase');
-                                                                                                            await setDoc(doc(db, 'teacher_rating_summaries', summaryDocId), { aiSummary: newText }, { merge: true });
+                                                                                                            await updateRatingSummary(summary.id, { aiSummary: newText });
                                                                                                             setRatingSummaries(prev => {
                                                                                                                 const arr = (prev[period.id] || []).map(s => s.teacherId === t.teacherId ? { ...s, aiSummary: newText } : s);
                                                                                                                 return { ...prev, [period.id]: arr };
@@ -1254,8 +1299,8 @@ export default function AdminReportPeriodsPage() {
                                                                                                 }).join('');
                                                                                                 const emailHtml = buildEmailHtml({ emoji: '📊', heading: 'Kết quả đánh giá giáo viên', headingColor: '#4f46e5', body: `<p>Kỳ đánh giá đã kết thúc với <strong>${summary.totalResponses}</strong> phản hồi từ học viên.</p><div style="margin:12px 0">${criteriaHtml}</div>`, highlight: summary.aiSummary ? `<strong>💡 Nhận xét tổng hợp:</strong><br/>${summary.aiSummary}` : null, highlightBg: '#f0f9ff', highlightBorder: '#4f46e5', ctaText: 'Xem chi tiết' });
                                                                                                 try {
-                                                                                                    const tSnap = await getDoc(doc(db, 'users', summary.teacherId));
-                                                                                                    if (tSnap.exists() && tSnap.data().email) await queueEmail(tSnap.data().email, { subject: `📊 Kết quả đánh giá — Điểm: ${summary.overallScore}/100`, html: emailHtml });
+                                                                                                    const teacher = await usersService.findOne(summary.teacherId);
+                                                                                                    if (teacher?.email) await queueEmail(teacher.email, { subject: `📊 Kết quả đánh giá — Điểm: ${summary.overallScore}/100`, html: emailHtml });
                                                                                                 } catch { /* ignore */ }
                                                                                                 setToast({ type: 'success', text: `Đã gửi kết quả cho ${t.teacherName}` });
                                                                                             } catch (err) { setToast({ type: 'error', text: err.message }); }
@@ -1430,7 +1475,11 @@ export default function AdminReportPeriodsPage() {
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             {deletedPeriods.map(period => {
-                                const deletedAt = period.deletedAt?.toDate?.() || null;
+                                const deletedAt = period.deletedAt
+                                    ? (typeof period.deletedAt?.toDate === 'function'
+                                        ? period.deletedAt.toDate()
+                                        : new Date(period.deletedAt))
+                                    : null;
                                 const daysLeft = deletedAt ? Math.max(0, 30 - Math.floor((Date.now() - deletedAt) / (1000 * 60 * 60 * 24))) : 30;
 
                                 return (
@@ -1512,3 +1561,8 @@ export default function AdminReportPeriodsPage() {
         </div>
     );
 }
+
+
+
+
+

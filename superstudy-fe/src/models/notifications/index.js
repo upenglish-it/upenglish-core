@@ -20,6 +20,10 @@ export const notificationsService = {
   markAllRead: (userId) =>
     api.post(`${BASE}/batch-read`, { userId }),
 
+  /** Delete all notifications for a user */
+  clearAll: (userId) =>
+    api.delete(`${BASE}/clear-all?userId=${encodeURIComponent(userId)}`),
+
   /** Get count of unread notifications for a user */
   unreadCount: (userId) =>
     api.get(`${BASE}/unread-count`, { userId }),

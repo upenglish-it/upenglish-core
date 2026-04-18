@@ -1,18 +1,17 @@
-import { useState, useEffect, useRef } from 'react';
-import { useParams, Link, useLocation } from 'react-router-dom';
+﻿import { useState, useEffect, useRef } from 'react';
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { generateWordsDetails, generateFullWordData } from '../../services/aiService';
 import { getAdminTopics, getAdminTopicWords, recalcTopicWordCount } from '../../services/adminService';
-import { getTeacherTopicWords, saveTeacherTopicWord, deleteTeacherTopicWord, updateTeacherTopicWordOrder, saveMultipleTeacherTopicWords } from '../../services/teacherService';
-import { prepareVocabImage, generateVocabImageLocal, uploadVocabImageBlob, deleteVocabImage } from '../../services/vocabImageService';
-import { ArrowLeft, Plus, Edit, Trash2, X, FileJson, Sparkles, Image as ImageIcon, CheckCircle, AlertTriangle, GripVertical, Zap, Upload, Wand2 } from 'lucide-react';
+import { getTeacherTopic, getTeacherTopicWords, saveTeacherTopicWord, deleteTeacherTopicWord, updateTeacherTopicWordOrder, saveMultipleTeacherTopicWords } from '../../services/teacherService';
+import { prepareVocabImage, generateVocabImageLocal, uploadVocabImageBlob, deleteVocabImageIfUnused } from '../../services/vocabImageService';
+import { ArrowLeft, Plus, Edit, Trash2, X, FileJson, Sparkles, Image as ImageIcon, CheckCircle, AlertTriangle, GripVertical, Zap, Upload, Wand2, Eye, Lock } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { db } from '../../config/firebase';
-import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function TeacherTopicWordsPage() {
     const { topicId } = useParams();
     const location = useLocation();
+    const navigate = useNavigate();
     const isAdminView = location.pathname.startsWith('/admin/');
     const isSystemTopic = location.pathname.includes('/system-topics/');
     const { user } = useAuth();
@@ -57,8 +56,8 @@ export default function TeacherTopicWordsPage() {
         loadData();
     }, [topicId, user?.uid, isSystemTopic]);
 
-    async function loadData() {
-        setLoading(true);
+    async function loadData(silent = false) {
+        if (!silent) setLoading(true);
         try {
             if (isSystemTopic) {
                 // Fetch Admin (System) Topic Info
@@ -68,7 +67,7 @@ export default function TeacherTopicWordsPage() {
                     setTopic({ ...foundTopic, isAdmin: true });
                 } else {
                     setAlertMessage({ type: 'error', text: 'Chủ đề hệ thống không tồn tại.' });
-                    setLoading(false);
+                    if (!silent) setLoading(false);
                     return;
                 }
 
@@ -81,27 +80,22 @@ export default function TeacherTopicWordsPage() {
                 setWords(wordsData);
             } else {
                 // Check topic existence/ownership for Teacher Topic
-                if (user?.uid) {
-                    const tRef = doc(db, 'teacher_topics', topicId);
-                    const tSnap = await getDoc(tRef);
-                    if (tSnap.exists()) {
-                        const topicData = tSnap.data();
-                        setTopic({ id: tSnap.id, ...topicData });
+                const topicData = await getTeacherTopic(topicId);
+                if (topicData) {
+                    setTopic({ id: topicData.id || topicData._id, ...topicData });
 
-                        // Determine if the user is the owner, a collaborator, or an admin
-                        const isOwner = topicData.teacherId === user.uid;
-                        const isCollaborator = topicData.collaboratorIds?.includes(user.uid) || false;
-                        const collabRole = (topicData.collaboratorRoles || {})[user.uid] || 'editor';
-                        if (!isOwner && !(isCollaborator && collabRole === 'editor') && !isAdminView) {
-                            setIsReadOnly(true);
-                        } else {
-                            setIsReadOnly(false);
-                        }
+                    // Determine if the user is the owner, a collaborator, or an admin
+                    const isOwner = topicData.teacherId === user?.uid;
+                    const isCollaborator = topicData.collaboratorIds?.includes(user?.uid) || false;
+                    const collabRole = (topicData.collaboratorRoles || {})[user?.uid] || 'editor';
+                    if (!isOwner && !(isCollaborator && collabRole === 'editor') && !isAdminView) {
+                        setIsReadOnly(true);
                     } else {
-                        setAlertMessage({ type: 'error', text: 'Chủ đề không tồn tại hoặc bạn không có quyền truy cập.' });
-                        setLoading(false);
-                        return;
+                        setIsReadOnly(false);
                     }
+                } else {
+                    setAlertMessage({ type: 'error', text: 'Chủ đề không tồn tại hoặc bạn không có quyền truy cập.' });
+                    return;
                 }
 
                 const wordsData = await getTeacherTopicWords(topicId);
@@ -158,14 +152,14 @@ export default function TeacherTopicWordsPage() {
 
             // Delete pending old images from Firebase Storage
             for (const imgUrl of pendingDeleteImages) {
-                await deleteVocabImage(imgUrl);
+                await deleteVocabImageIfUnused(imgUrl);
             }
             setPendingDeleteImages([]);
             setPendingImageBlob(null);
 
             setWordFormOpen(false);
             setAlertMessage({ type: 'success', text: isEditingWord ? "Cập nhật từ vựng thành công!" : "Thêm từ vựng mới thành công!" });
-            loadData();
+            loadData(true);
         } catch (error) {
             setAlertMessage({ type: 'error', text: "Lỗi lưu từ vựng: " + error.message });
         }
@@ -250,7 +244,7 @@ export default function TeacherTopicWordsPage() {
             await updateTeacherTopicWordOrder(topicId, updatedItems);
         } catch (error) {
             setAlertMessage({ type: 'error', text: 'Lỗi lưu thứ tự mới: ' + error.message });
-            loadData(); // revert
+            loadData(true); // revert
         }
     }
 
@@ -263,8 +257,8 @@ export default function TeacherTopicWordsPage() {
 
         setIsGeneratingBulk(true);
         try {
-            // Processing in one batch up to 15 items
-            const wordsToGen = lines.slice(0, 15);
+            // Processing in one batch up to 50 items
+            const wordsToGen = lines.slice(0, 50);
             // Dynamic import specifically for new basic generator
             const { generateBasicWordsDetails } = await import('../../services/aiService');
             parsedWords = await generateBasicWordsDetails(wordsToGen, bulkAiLevel, topic?.name || 'General');
@@ -291,7 +285,7 @@ export default function TeacherTopicWordsPage() {
             setBulkImportOpen(false);
             setBulkText('');
             setAlertMessage({ type: 'success', text: `Đã nhập thành công ${parsedWords.length} từ vựng mới.` });
-            loadData();
+            loadData(true);
         } catch (error) {
             setAlertMessage({ type: 'error', text: "Lỗi khi import: " + error.message });
         }
@@ -440,7 +434,19 @@ export default function TeacherTopicWordsPage() {
                     </div>
                 </div>
                 {!isReadOnly && (
-                    <div className="admin-header-actions" style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                    <div className="admin-header-actions" style={{ display: 'flex', gap: '8px', marginTop: '16px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                        <button 
+                            className="admin-btn admin-btn-outline" 
+                            onClick={() => {
+                                if (words.length === 0) {
+                                    setAlertMessage({ type: 'warning', text: 'Chủ đề này chưa có từ vựng nào để học.' });
+                                    return;
+                                }
+                                window.open(`${window.__APP_BASE__ || './'}?_preview=${encodeURIComponent(`/learn?topicId=${topicId}&preview=true&isTeacherTopic=true`)}`, '_blank');
+                            }} 
+                            style={{ display: 'flex', gap: '6px', color: '#6366f1', borderColor: '#c7d2fe', background: '#e0e7ff' }}>
+                            <Eye size={16} /> Xem trước
+                        </button>
                         <button className="admin-btn admin-btn-secondary" onClick={() => setBulkImportOpen(true)} style={{ display: 'flex', gap: '6px' }}>
                             <FileJson size={16} /> Import hàng loạt
                         </button>
@@ -641,7 +647,7 @@ export default function TeacherTopicWordsPage() {
                             {/* Image Section */}
                             <hr style={{ border: 'none', borderTop: '1px solid #e2e8f0', margin: '16px 0' }} />
                             <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '12px', fontWeight: 600 }}>
-                                Ảnh minh hoạ
+                                Ảnh minh họa
                             </p>
                             <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', marginBottom: '16px' }}>
                                 {/* Left: Image Preview */}
@@ -759,7 +765,7 @@ export default function TeacherTopicWordsPage() {
 
                             <div className="admin-form-group">
                                 <label>Phiên âm (IPA)</label>
-                                <input type="text" className="admin-form-input" value={wordFormData.phonetic || wordFormData.ipa || ''} onChange={e => setWordFormData({ ...wordFormData, phonetic: e.target.value, ipa: e.target.value })} placeholder="/nɪˈɡoʊ.ʃi.eɪt/" />
+                                <input type="text" className="admin-form-input" value={wordFormData.phonetic || wordFormData.ipa || ''} onChange={e => setWordFormData({ ...wordFormData, phonetic: e.target.value, ipa: e.target.value })} placeholder="/nÉªËˆÉ¡oÊŠ.Êƒi.eÉªt/" />
                             </div>
 
                             <div className="admin-form-group">
@@ -921,7 +927,7 @@ export default function TeacherTopicWordsPage() {
                         <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '16px', fontSize: '0.9rem', color: '#475569' }}>
                             <p style={{ margin: '0 0 8px 0', fontWeight: 600 }}>Hướng dẫn nhập tự động bằng AI:</p>
                             <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                                <li>Chỉ cần dán các <strong>từ tiếng Anh</strong> (mỗi từ 1 dòng, tối đa 15 từ/lần)</li>
+                                <li>Chỉ cần dán các <strong>từ tiếng Anh</strong> (mỗi từ 1 dòng, tối đa 50 từ/lần)</li>
                                 <li>Hoặc có thể kèm theo nghĩa để AI dịch chính xác hơn (VD: <code style={{ color: '#ec4899' }}>apple, quả táo</code>)</li>
                                 <li>AI sẽ tự động điền Từ loại, Nghĩa tiếng Việt và Phiên âm cho từng từ.</li>
                             </ul>

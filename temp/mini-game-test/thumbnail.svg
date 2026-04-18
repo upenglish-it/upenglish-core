@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="240" viewBox="0 0 400 240">
+  <rect width="400" height="240" rx="24" fill="#0f172a" />
+  <rect x="24" y="24" width="352" height="192" rx="18" fill="#f59e0b" />
+  <text x="200" y="110" text-anchor="middle" font-family="Arial, sans-serif" font-size="32" fill="#0f172a">Mini Game</text>
+  <text x="200" y="150" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" fill="#1f2937">Nest Upload Test</text>
+</svg>

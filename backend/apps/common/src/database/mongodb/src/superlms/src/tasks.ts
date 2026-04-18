@@ -1,8 +1,8 @@
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 import { Accounts, Properties, PropertiesBranches } from '../../isms';
 import { SYSTEM_ID } from 'apps/common/src/utils';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: 'ielts-tasks' } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: 'ielts-tasks' } })
 export class IELTSTasks {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public _id: string;

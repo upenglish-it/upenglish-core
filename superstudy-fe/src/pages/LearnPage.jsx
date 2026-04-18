@@ -1,6 +1,8 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { getTeacherTopicWords } from '../services/teacherService';
+import { getAdminTopicWords } from '../services/adminService';
 import { updateWordProgress, updateIntermediateWordProgress } from '../services/spacedRepetition';
 import { checkWordSaved, toggleSavedWord } from '../services/savedService';
 import { logRecentList } from '../services/recentService';
@@ -81,17 +83,54 @@ function buildInitialQueue(batchWords) {
     return queue;
 }
 
+function getInitialBatchState(wordsList) {
+    for (let start = 0; start < wordsList.length; start += BATCH_SIZE) {
+        const batchIndex = Math.floor(start / BATCH_SIZE);
+        const batchWords = wordsList.slice(start, start + BATCH_SIZE);
+        const queue = buildInitialQueue(batchWords);
+        if (queue.length > 0) {
+            return { batchIndex, queue };
+        }
+    }
+
+    return { batchIndex: 0, queue: [] };
+}
+
 export default function LearnPage() {
     const location = useLocation();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const { user } = useAuth();
     useAntiCopy();
 
-    const { words = [], topicId = '', topicName = '', listType = 'topic', icon = '📚', color = 'var(--color-primary)', isTeacherTopic = false } = location.state || {};
+    const stateData = location.state || {};
+    const [previewLoading, setPreviewLoading] = useState(!stateData.words && !!searchParams.get('preview'));
+    const [previewData, setPreviewData] = useState(stateData);
+
+    const { words = [], topicId = '', topicName = '', listType = 'topic', icon = '📚', color = 'var(--color-primary)', isTeacherTopic = false, isPreview = false } = previewData;
     const totalWords = words.length;
 
     useEffect(() => {
-        if (user?.uid && topicId && topicName) {
+        if (!stateData.words && searchParams.get('preview') === 'true' && searchParams.get('topicId')) {
+            const tid = searchParams.get('topicId');
+            const isTeacher = searchParams.get('isTeacherTopic') === 'true';
+            setPreviewLoading(true);
+            (isTeacher ? getTeacherTopicWords(tid) : getAdminTopicWords(tid))
+                .then(data => {
+                    setPreviewData({
+                        words: data,
+                        topicId: tid,
+                        topicName: 'Xem trước chủ đề',
+                        isPreview: true,
+                        isTeacherTopic: isTeacher
+                    });
+                })
+                .finally(() => setPreviewLoading(false));
+        }
+    }, [stateData.words, searchParams]);
+
+    useEffect(() => {
+        if (user?.uid && topicId && topicName && !isPreview) {
             const cleanName = topicName.replace(/^Cụm từ chủ đề:\s*/, '');
             logRecentList(user.uid, {
                 id: topicId,
@@ -103,10 +142,16 @@ export default function LearnPage() {
                 isTeacherTopic: isTeacherTopic
             });
         }
-    }, [user?.uid, topicId, topicName, listType, icon, color, totalWords]);
+    }, [user?.uid, topicId, topicName, listType, icon, color, totalWords, isPreview]);
 
     // activeWords can be reset to stepsCompleted=0 when user clicks "Học lại từ đầu"
     const [activeWords, setActiveWords] = useState(words);
+
+    useEffect(() => {
+        if (words && words.length > 0) {
+            setActiveWords(words);
+        }
+    }, [words]);
 
     const batches = useMemo(() => {
         const b = [];
@@ -114,24 +159,27 @@ export default function LearnPage() {
         return b;
     }, [activeWords]);
 
-    const [batchIndex, setBatchIndex] = useState(() => {
-        // Find the first batch that has at least one word with remaining steps
-        for (let b = 0; b < Math.ceil(words.length / BATCH_SIZE); b++) {
-            const batch = words.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
-            if (buildInitialQueue(batch).length > 0) return b;
+    const initialBatchState = useMemo(() => getInitialBatchState(activeWords), [activeWords]);
+
+    const [batchIndex, setBatchIndex] = useState(initialBatchState.batchIndex);
+
+    useEffect(() => {
+        if (activeWords.length > 0) {
+            // Find the first batch that has at least one word with remaining steps
+            for (let b = 0; b < Math.ceil(activeWords.length / BATCH_SIZE); b++) {
+                const batch = activeWords.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
+                if (buildInitialQueue(batch).length > 0) {
+                    setBatchIndex(b);
+                    return;
+                }
+            }
+            setBatchIndex(0);
         }
-        return 0;
-    });
+    }, [activeWords]);
     const [completed, setCompleted] = useState(false);
 
     // Dynamic queue - start from the first non-empty batch
-    const [queue, setQueue] = useState(() => {
-        for (let b = 0; b < batches.length; b++) {
-            const q = buildInitialQueue(batches[b]);
-            if (q.length > 0) return q;
-        }
-        return []; // all batches are done
-    });
+    const [queue, setQueue] = useState(initialBatchState.queue);
     const [cursor, setCursor] = useState(0);
     const [showWelcome, setShowWelcome] = useState(!location.state?.skipWelcome);
 
@@ -164,6 +212,23 @@ export default function LearnPage() {
     // Accumulated results across all batches (for the final summary)
     const [allResults, setAllResults] = useState([]);
 
+    useEffect(() => {
+        // Preview loads words asynchronously, so the initial queue is created
+        // before the fetched word list arrives. Rebuild it once data is ready.
+        if (!activeWords.length) {
+            setQueue([]);
+            setCursor(0);
+            return;
+        }
+
+        if (isPreview && queue.length === 0 && !completed && allResults.length === 0 && historyTimeline.length === 0) {
+            setBatchIndex(initialBatchState.batchIndex);
+            setQueue(initialBatchState.queue);
+            setCursor(0);
+            setStepKey(0);
+        }
+    }, [activeWords.length, isPreview, queue.length, completed, allResults.length, historyTimeline.length, initialBatchState]);
+
     // Force re-render key for step component when same item re-appears
     const [stepKey, setStepKey] = useState(0);
 
@@ -189,7 +254,7 @@ export default function LearnPage() {
     // Check if the current word is saved when it changes
     useEffect(() => {
         let isMounted = true;
-        if (user?.uid && currentWord?.word) {
+        if (user?.uid && currentWord?.word && !isPreview) {
             checkWordSaved(user.uid, currentWord.word)
                 .then(saved => {
                     if (isMounted) setIsSaved(saved);
@@ -197,10 +262,10 @@ export default function LearnPage() {
                 .catch(err => console.error('Failed to check saved status', err));
         }
         return () => { isMounted = false; };
-    }, [user?.uid, currentWord?.word]);
+    }, [user?.uid, currentWord?.word, isPreview]);
 
     const handleToggleSave = async () => {
-        if (!user?.uid || !currentWord || isSaving) return;
+        if (!user?.uid || !currentWord || isSaving || isPreview) return;
         setIsSaving(true);
         try {
             const newStatus = await toggleSavedWord(user.uid, currentWord);
@@ -230,7 +295,15 @@ export default function LearnPage() {
         }
     }, [cursor, batchIndex, currentWord?.word, reviewCursor, showWelcome]);
 
-    if (!totalWords) {
+    if (previewLoading || (isPreview && words.length === 0)) {
+        return (
+            <div className="loading-screen">
+                <div className="admin-empty-state">Đang tải dữ liệu xem trước...</div>
+            </div>
+        );
+    }
+
+    if (!totalWords && !previewLoading) {
         return (
             <div className="loading-screen">
                 <h2 className="mb-4">Không có từ vựng nào để học!</h2>
@@ -302,7 +375,7 @@ export default function LearnPage() {
 
         // Save to Firestore
         for (const w of currentBatch) {
-            if (user?.uid) {
+            if (user?.uid && !isPreview) {
                 try {
                     // Count how many steps are mastered for this word
                     const wordMap = mMap[w.word] || {};
@@ -386,7 +459,7 @@ export default function LearnPage() {
         const isMastered = updatedMap[wordKey][stepIdx].correct >= requiredForThis;
 
         // Always save stepMastery on every answer (so red dots persist)
-        if (user?.uid) {
+        if (user?.uid && !isPreview) {
             const baseSteps = Math.min(currentWord.stepsCompleted || 0, STEPS.length);
             let stepsCompleted = baseSteps;
             for (let s = baseSteps; s < STEPS.length; s++) {
@@ -434,10 +507,48 @@ export default function LearnPage() {
         }
     }
 
+    const jumpToWord = (wordGlobalIndex, targetStepIdx = null) => {
+        const targetBatchIdx = Math.floor(wordGlobalIndex / BATCH_SIZE);
+        const targetBatch = batches[targetBatchIdx];
+        if (!targetBatch) return;
+
+        const internalWordIdx = wordGlobalIndex % BATCH_SIZE;
+
+        // Build a full queue for this batch from scratch so every step is reachable
+        const fullQueue = [];
+        for (let s = 0; s < STEPS.length; s++) {
+            fullQueue.push({ wordIdx: internalWordIdx, stepIdx: s });
+        }
+
+        // Find the right cursor position
+        let cursorPos = 0;
+        if (targetStepIdx !== null) {
+            const idx = fullQueue.findIndex(q => q.wordIdx === internalWordIdx && q.stepIdx === targetStepIdx);
+            cursorPos = idx !== -1 ? idx : 0;
+        }
+
+        setBatchIndex(targetBatchIdx);
+        setQueue(fullQueue);
+        setCursor(cursorPos);
+        setStepKey(k => k + 1);
+        setReviewCursor(-1);
+    };
+
+    const handleSkip = () => {
+        setCursor(prev => prev + 1);
+        setStepKey(k => k + 1);
+        setReviewCursor(-1);
+    };
+
     // === COMPLETED SCREEN ===
     if (completed) {
         return (
             <div className="learn-page">
+                {isPreview && (
+                    <div style={{ position: 'sticky', top: 0, background: '#fef2f2', color: '#991b1b', padding: '8px 16px', textAlign: 'center', fontSize: '0.85rem', fontWeight: 600, borderBottom: '1px solid #fecaca', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', zIndex: 1002 }}>
+                        <span>👁️</span> Chế độ Xem trước - Không lưu
+                    </div>
+                )}
                 <LearningComplete
                     results={allResults}
                     topicName={topicName}
@@ -469,7 +580,7 @@ export default function LearnPage() {
         // Auto-fix: patch any words that have stepsCompleted=6 but level=0 (stuck data)
         // Uses updateIntermediateWordProgress which safely only bumps level 0→1
         // and won't affect words already at level >= 1
-        if (user?.uid && topicId) {
+        if (user?.uid && topicId && !isPreview) {
             const fixStuckWords = async () => {
                 for (const w of words) {
                     if ((w.stepsCompleted ?? 0) >= 6) {
@@ -551,9 +662,31 @@ export default function LearnPage() {
     }
 
     return (
-        <div className="learn-page">
+        <div className="learn-page" style={isPreview ? { paddingTop: '125px' } : {}}>
+            {isPreview && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    background: '#fef2f2',
+                    color: '#991b1b',
+                    padding: '6px 16px',
+                    textAlign: 'center',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    borderBottom: '1px solid #fecaca',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    gap: '6px',
+                    zIndex: 200
+                }}>
+                    <span>👁️</span> Chế độ Xem trước - Không lưu
+                </div>
+            )}
             {/* Top progress */}
-            <div className="learn-topbar">
+            <div className="learn-topbar" style={{ top: isPreview ? '43px' : '8px' }}>
                 <button className="btn btn-ghost learn-topbar-back" onClick={() => navigate(-1)} title="Thoát">
                     ✕
                 </button>
@@ -589,6 +722,21 @@ export default function LearnPage() {
                     >
                         <Heart size={20} fill={isSaved ? "currentColor" : "none"} className={isSaved ? "text-error" : ""} />
                     </button>
+
+                    {/* Teacher Skip */}
+                    {isPreview && (
+                        <button
+                            className="btn btn-ghost"
+                            onClick={handleSkip}
+                            style={{ padding: '8px', color: '#6366f1' }}
+                            title="Qua nhanh bước này (Chế độ xem trước)"
+                        >
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polygon points="5 4 15 12 5 20 5 4"></polygon>
+                                <line x1="19" y1="5" x2="19" y2="19"></line>
+                            </svg>
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -606,8 +754,12 @@ export default function LearnPage() {
                             ref={isActive ? activeWordRef : null}
                         >
                             <div
-                                className={`learn-batch-word ${isActive ? 'learn-batch-word--active' : ''} ${done >= STEPS.length ? 'learn-batch-word--done' : ''} ${historyTimeline.some(item => item.word.word === w.word) ? 'learn-batch-word--clickable' : ''}`}
+                                className={`learn-batch-word ${isActive ? 'learn-batch-word--active' : ''} ${done >= STEPS.length ? 'learn-batch-word--done' : ''} ${(isPreview || historyTimeline.some(item => item.word.word === w.word)) ? 'learn-batch-word--clickable' : ''}`}
                                 onClick={() => {
+                                    if (isPreview) {
+                                        jumpToWord(i);
+                                        return;
+                                    }
                                     const hasHistory = historyTimeline.some(item => item.word.word === w.word);
                                     if (hasHistory) {
                                         // Find the last history entry for this word
@@ -639,6 +791,12 @@ export default function LearnPage() {
                                     else if (hasError) dotClass += ' learn-mastery-dot--error';
 
                                     const handleDotClick = () => {
+                                        if (isPreview) {
+                                            // In preview: jump directly to this word+step
+                                            jumpToWord(i, stepIdx);
+                                            return;
+                                        }
+                                        // Normal: review from history
                                         for (let j = historyTimeline.length - 1; j >= 0; j--) {
                                             if (historyTimeline[j].word.word === w.word && historyTimeline[j].stepIdx === stepIdx) {
                                                 setReviewCursor(j);
@@ -648,13 +806,14 @@ export default function LearnPage() {
                                     };
 
                                     const hasHistory = historyTimeline.some(item => item.word.word === w.word && item.stepIdx === stepIdx);
+                                    const isDotClickable = isPreview || hasHistory;
 
                                     return (
                                         <div
                                             key={stepIdx}
                                             className={dotClass}
                                             onClick={handleDotClick}
-                                            style={{ cursor: hasHistory ? 'pointer' : 'default' }}
+                                            style={{ cursor: isDotClickable ? 'pointer' : 'default' }}
                                         />
                                     );
                                 })}

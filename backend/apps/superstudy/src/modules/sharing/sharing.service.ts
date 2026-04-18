@@ -1,36 +1,55 @@
-import {
+﻿import {
   Injectable, Logger, NotFoundException, BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from 'nestjs-typegoose';
 import { ReturnModelType } from '@typegoose/typegoose';
 import {
-  SSTUsers,
   SSTUserGroups,
+  SSTNotifications,
   SSTTopics,
+  SSTTopicFolders,
   SSTTeacherTopics,
+  SSTTeacherTopicFolders,
   SSTExams,
+  SSTExamFolders,
   SSTGrammarExercises,
+  SSTGrammarFolders,
+  SSTTeacherExamFolders,
+  SSTTeacherGrammarFolders,
 } from 'apps/common/src/database/mongodb/src/superstudy';
 import { Accounts } from 'apps/common/src/database/mongodb/src/isms';
 
-// ─── Constants matching the original Firestore collection names ───────────────
+// â”€â”€â”€ Constants matching the original Firestore collection names â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const RESOURCE_TYPE_MAP: Record<string, string> = {
+  folder: 'topic_folders',
   topic: 'topics',
   teacher_topic: 'teacher_topics',
+  teacher_topic_folder: 'teacher_topic_folders',
   grammar: 'grammar_exercises',
+  grammar_folder: 'grammar_folders',
   exam: 'exams',
+  exam_folder: 'exam_folders',
+  teacher_grammar_folder: 'teacher_grammar_folders',
+  teacher_exam_folder: 'teacher_exam_folders',
 };
 
 const ACCESS_FIELD_MAP: Record<string, string> = {
+  folder: 'folderAccess',
   topic: 'topicAccess',
+  teacher_topic: 'topicAccess',
   grammar: 'grammarAccess',
   exam: 'examAccess',
+  grammar_folder: 'folderAccess',
+  exam_folder: 'folderAccess',
+  teacher_topic_folder: 'folderAccess',
+  teacher_grammar_folder: 'folderAccess',
+  teacher_exam_folder: 'folderAccess',
 };
 
 const TYPE_LABELS: Record<string, string> = {
-  teacher_topic: 'bài từ vựng',
-  grammar: 'bài Kỹ năng',
-  exam: 'bài tập và kiểm tra',
+  teacher_topic: 'bÃ i tá»« vá»±ng',
+  grammar: 'bÃ i Ká»¹ nÄƒng',
+  exam: 'bÃ i táº­p vÃ  kiá»ƒm tra',
 };
 
 @Injectable()
@@ -41,82 +60,200 @@ export class SharingService {
     @InjectModel(Accounts)
     private readonly accountsModel: ReturnModelType<typeof Accounts>,
 
-    @InjectModel(SSTUsers)
-    private readonly sstUsersModel: ReturnModelType<typeof SSTUsers>,
-
     @InjectModel(SSTUserGroups)
     private readonly groupsModel: ReturnModelType<typeof SSTUserGroups>,
+
+    @InjectModel(SSTNotifications)
+    private readonly notificationsModel: ReturnModelType<typeof SSTNotifications>,
 
     @InjectModel(SSTTopics)
     private readonly topicsModel: ReturnModelType<typeof SSTTopics>,
 
+    @InjectModel(SSTTopicFolders)
+    private readonly topicFoldersModel: ReturnModelType<typeof SSTTopicFolders>,
+
     @InjectModel(SSTTeacherTopics)
     private readonly teacherTopicsModel: ReturnModelType<typeof SSTTeacherTopics>,
+
+    @InjectModel(SSTTeacherTopicFolders)
+    private readonly teacherTopicFoldersModel: ReturnModelType<typeof SSTTeacherTopicFolders>,
 
     @InjectModel(SSTExams)
     private readonly examsModel: ReturnModelType<typeof SSTExams>,
 
+    @InjectModel(SSTExamFolders)
+    private readonly examFoldersModel: ReturnModelType<typeof SSTExamFolders>,
+
     @InjectModel(SSTGrammarExercises)
     private readonly grammarModel: ReturnModelType<typeof SSTGrammarExercises>,
+
+    @InjectModel(SSTGrammarFolders)
+    private readonly grammarFoldersModel: ReturnModelType<typeof SSTGrammarFolders>,
+
+    @InjectModel(SSTTeacherGrammarFolders)
+    private readonly teacherGrammarFoldersModel: ReturnModelType<typeof SSTTeacherGrammarFolders>,
+
+    @InjectModel(SSTTeacherExamFolders)
+    private readonly teacherExamFoldersModel: ReturnModelType<typeof SSTTeacherExamFolders>,
   ) {}
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Helper — resolve the Typegoose model for a given resource type
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Helper â€” resolve the Typegoose model for a given resource type
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private resourceModel(resourceType: string) {
     switch (resourceType) {
+      case 'folder':         return this.topicFoldersModel;
       case 'topic':         return this.topicsModel;
       case 'teacher_topic': return this.teacherTopicsModel;
+      case 'teacher_topic_folder': return this.teacherTopicFoldersModel;
       case 'grammar':       return this.grammarModel;
+      case 'grammar_folder': return this.grammarFoldersModel;
       case 'exam':          return this.examsModel;
+      case 'exam_folder':   return this.examFoldersModel;
+      case 'teacher_grammar_folder': return this.teacherGrammarFoldersModel;
+      case 'teacher_exam_folder': return this.teacherExamFoldersModel;
       default:
         throw new BadRequestException(
-          `Unknown resourceType "${resourceType}". Valid: topic | teacher_topic | grammar | exam`,
+          `Unknown resourceType "${resourceType}". Valid: folder | topic | teacher_topic | teacher_topic_folder | grammar | grammar_folder | exam | exam_folder | teacher_grammar_folder | teacher_exam_folder`,
         );
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  private isFolderResource(resourceType: string) {
+    return ACCESS_FIELD_MAP[resourceType] === 'folderAccess';
+  }
+
+  private normalizeEmail(value?: string | null) {
+    return String(value ?? '').trim().toLowerCase();
+  }
+
+  private toSuperStudyRole(role?: string | null) {
+    if (!role) return null;
+    return role === 'student' ? 'user' : role;
+  }
+
+  private getAccountPrimaryEmail(account: any) {
+    const emailAddresses = Array.isArray(account?.emailAddresses) ? account.emailAddresses : [];
+    return this.normalizeEmail(account?.email || emailAddresses[0] || '');
+  }
+
+  private getAccountDisplayName(account: any) {
+    return String(account?.displayName ?? '').trim()
+      || [account?.firstName, account?.lastName].filter(Boolean).join(' ').trim()
+      || this.getAccountPrimaryEmail(account)
+      || String(account?.accountId || account?._id || '');
+  }
+
+  private normalizeAccountSummary(account: any) {
+    if (!account) return null;
+
+    const uid = String(account.accountId || account._id || '').trim();
+    if (!uid) return null;
+
+    return {
+      uid,
+      id: uid,
+      email: this.getAccountPrimaryEmail(account),
+      displayName: this.getAccountDisplayName(account),
+      role: this.toSuperStudyRole(account.role),
+      groupIds: Array.isArray(account.groupIds) ? account.groupIds : [],
+      folderAccess: Array.isArray(account.folderAccess) ? account.folderAccess : [],
+      topicAccess: Array.isArray(account.topicAccess) ? account.topicAccess : [],
+      grammarAccess: Array.isArray(account.grammarAccess) ? account.grammarAccess : [],
+      examAccess: Array.isArray(account.examAccess) ? account.examAccess : [],
+      emailPreferences: account.emailPreferences || {},
+      teacherTitle: account.teacherTitle ?? null,
+      studentTitle: account.studentTitle ?? null,
+      photoURL: account.photoURL ?? account.profilePhoto ?? null,
+      disabled: Boolean(account.disabled ?? account.deleted),
+      status: account.status ?? (account.active === false ? 'pending' : 'approved'),
+    };
+  }
+
+  private async findAccountByUserId(userId: string) {
+    const normalizedId = String(userId || '').trim();
+    if (!normalizedId) return null;
+
+    return this.accountsModel
+      .findOne({
+        $or: [{ accountId: normalizedId }, { _id: normalizedId }],
+      })
+      .lean();
+  }
+
+  private async getResolvedUser(userId: string) {
+    const normalizedId = String(userId || '').trim();
+    const account = await this.findAccountByUserId(normalizedId);
+    const summary = this.normalizeAccountSummary(account);
+
+    return {
+      normalizedUserId: String(account?.accountId || normalizedId),
+      account,
+      legacyUser: null,
+      summary,
+    };
+  }
+
+  private async updateUserAccessField(userId: string, field: string, action: 'add' | 'remove', resourceId: string) {
+    const resolved = await this.getResolvedUser(userId);
+    const normalizedUserId = resolved.normalizedUserId;
+    if (!resolved.account) {
+      throw new NotFoundException(`User "${normalizedUserId}" not found`);
+    }
+
+    const update =
+      action === 'add'
+        ? { $addToSet: { [field]: resourceId } }
+        : { $pull: { [field]: resourceId } };
+
+    const operations: Promise<any>[] = [];
+
+    if (resolved.account) {
+      operations.push(
+        this.accountsModel.updateMany(
+          { $or: [{ accountId: normalizedUserId }, { _id: normalizedUserId }] },
+          update,
+        ),
+      );
+    }
+
+    await Promise.all(operations);
+
+    return this.getResolvedUser(normalizedUserId);
+  }
+
+  private async getUserSummaryById(userId: string) {
+    const resolved = await this.getResolvedUser(userId);
+    return resolved.summary;
+  }
+
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // User lookup
   // Mirrors findTeacherByEmail + a student version from teacherService.js
-  // Uses Accounts (not SSTUsers) for lookup — covers all roles
-  // ─────────────────────────────────────────────────────────────────────────
+  // Uses account-backed records for lookup across all roles
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
    * Find a user by email address.
-   * First checks the SST user collection (for role/access data),
-   * then falls back to Accounts (for cross-app lookup).
-   * roleFilter: 'teacher' | 'student' | 'user' | 'admin' — optional
+   * Resolves against the shared account record used by SuperStudy.
+   * roleFilter: 'teacher' | 'student' | 'user' | 'admin' â€” optional
    */
   async findUserByEmail(email: string, roleFilter?: string) {
     if (!email) throw new BadRequestException('email is required');
-    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedEmail = this.normalizeEmail(email);
 
-    // Try SSTUsers first (has role context)
-    const sstUser = await this.sstUsersModel.findOne({ email: normalizedEmail }).lean();
-    if (sstUser) {
-      if (roleFilter && sstUser.role !== roleFilter) return null;
-      return {
-        id: (sstUser as any)._id,
-        email: sstUser.email,
-        displayName: sstUser.displayName || sstUser.email,
-        role: sstUser.role,
-        source: 'sst',
-      };
-    }
+    const account = await this.accountsModel.findOne({ emailAddresses: normalizedEmail }).lean();
+    const summary = this.normalizeAccountSummary(account);
 
-    // Fall back to Accounts
-    const account = await this.accountsModel
-      .findOne({ emailAddresses: normalizedEmail })
-      .lean();
-    if (account) {
-      if (roleFilter && (account as any).role !== roleFilter) return null;
+    if (summary) {
+      if (roleFilter && summary.role !== roleFilter) return null;
       return {
-        id: (account as any)._id,
-        email: normalizedEmail,
-        displayName: `${account.firstName} ${account.lastName}`.trim() || normalizedEmail,
-        role: (account as any).role,
+        id: summary.id,
+        uid: summary.uid,
+        email: summary.email,
+        displayName: summary.displayName,
+        role: summary.role,
         source: 'accounts',
       };
     }
@@ -124,25 +261,28 @@ export class SharingService {
     return null;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Mode 1: Public toggle
   // resource.isPublic = true | false
   // Mirrors teacherService.saveTeacherTopic / examService / grammarService
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async togglePublic(resourceType: string, resourceId: string, isPublic: boolean) {
     const model = this.resourceModel(resourceType);
+    const updateSet = this.isFolderResource(resourceType)
+      ? { isPublic, public: isPublic }
+      : { isPublic };
     const updated = await (model as any)
-      .findByIdAndUpdate(resourceId, { $set: { isPublic } }, { new: true })
+      .findByIdAndUpdate(resourceId, { $set: updateSet }, { new: true })
       .lean();
     if (!updated) throw new NotFoundException(`${resourceType} "${resourceId}" not found`);
     return { updated: true, isPublic };
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Mode 2: Teacher-visible toggle (admin resources only)
   // resource.teacherVisible = true | false
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async toggleTeacherVisible(resourceType: string, resourceId: string, teacherVisible: boolean) {
     const model = this.resourceModel(resourceType);
@@ -153,11 +293,11 @@ export class SharingService {
     return { updated: true, teacherVisible };
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Mode 3: Group access
   // Adds/removes resourceId from group.topicAccess / grammarAccess / examAccess
   // createAssignment() calls addGroupAccess internally (auto-share)
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async addGroupAccess(groupId: string, resourceType: string, resourceId: string) {
     const field = ACCESS_FIELD_MAP[resourceType];
@@ -179,7 +319,7 @@ export class SharingService {
   }
 
   /**
-   * Sync group access — given a resource and a desired final list of group IDs,
+   * Sync group access â€” given a resource and a desired final list of group IDs,
    * adds the resource to groups that don't already have it, and removes from groups
    * that lost access. Mirrors the ShareModal group toggle behavior.
    */
@@ -206,11 +346,11 @@ export class SharingService {
     return { added: toAdd.length, removed: toRemove.length, addedGroupIds: toAdd, removedGroupIds: toRemove };
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Mode 4: Individual user access
-  // Adds/removes resourceId from SSTUsers.topicAccess / grammarAccess / examAccess
+  // Adds/removes resourceId from Accounts.topicAccess / grammarAccess / examAccess
   // Looks up user via email if needed
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async addUserAccess(params: {
     userEmail?: string;
@@ -223,24 +363,34 @@ export class SharingService {
     if (!field) throw new BadRequestException(`No access array for resourceType "${resourceType}"`);
 
     const userId = await this.resolveUserId(params.userId, params.userEmail);
-
-    await this.sstUsersModel.findByIdAndUpdate(userId, { $addToSet: { [field]: resourceId } });
-    return { updated: true, userId, field, resourceId };
+    const resolved = await this.updateUserAccessField(userId, field, 'add', resourceId);
+    const user = resolved.summary;
+    return {
+      updated: true,
+      userId: resolved.normalizedUserId,
+      field,
+      resourceId,
+      uid: user?.uid || resolved.normalizedUserId,
+      id: user?.id || resolved.normalizedUserId,
+      email: user?.email,
+      displayName: user?.displayName,
+      role: user?.role,
+    };
   }
 
   async removeUserAccess(userId: string, resourceType: string, resourceId: string) {
     const field = ACCESS_FIELD_MAP[resourceType];
     if (!field) throw new BadRequestException(`No access array for resourceType "${resourceType}"`);
 
-    await this.sstUsersModel.findByIdAndUpdate(userId, { $pull: { [field]: resourceId } });
-    return { updated: true, userId, field, resourceId };
+    const resolved = await this.updateUserAccessField(userId, field, 'remove', resourceId);
+    return { updated: true, userId: resolved.normalizedUserId, field, resourceId };
   }
 
   async getUserAccess(userId: string) {
-    const user = await this.sstUsersModel.findById(userId).lean();
-    if (!user) throw new NotFoundException(`User "${userId}" not found in SST users`);
+    const user = await this.getUserSummaryById(userId);
+    if (!user) throw new NotFoundException(`User "${userId}" not found`);
     return {
-      userId,
+      userId: user.uid || userId,
       topicAccess: user.topicAccess || [],
       grammarAccess: user.grammarAccess || [],
       examAccess: user.examAccess || [],
@@ -253,13 +403,20 @@ export class SharingService {
     const field = ACCESS_FIELD_MAP[resourceType];
     if (!field) throw new BadRequestException(`No access array for resourceType "${resourceType}"`);
 
-    const usersWithAccess = await this.sstUsersModel.find({ [field]: resourceId }).lean();
-    const users = usersWithAccess.map((u: any) => ({
-      uid: String(u._id),
-      email: u.email,
-      displayName: u.displayName || u.email,
-      role: u.role
-    }));
+    const accountUsersWithAccess = await this.accountsModel.find({ [field]: resourceId }).lean();
+
+    const userMap = new Map<string, any>();
+    for (const accountUser of accountUsersWithAccess) {
+      const summary = this.normalizeAccountSummary(accountUser);
+      if (!summary?.uid) continue;
+      userMap.set(summary.uid, {
+        uid: summary.uid,
+        email: summary.email,
+        displayName: summary.displayName,
+        role: summary.role,
+      });
+    }
+    const users = Array.from(userMap.values());
 
     const groupsWithAccess = await this.groupsModel.find({ [field]: resourceId }).lean();
     const groups = groupsWithAccess.map((g: any) => ({
@@ -271,11 +428,11 @@ export class SharingService {
   }
 
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Mode 5: Teacher collaboration
   // Mirrors addCollaborator / removeCollaborator / updateCollaboratorRole /
   //         transferOwnership / getCollaboratedResources from teacherService.js
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
    * Add a collaborator to a teacher resource.
@@ -296,8 +453,8 @@ export class SharingService {
     if (!['editor', 'viewer'].includes(role)) throw new BadRequestException('role must be editor | viewer');
 
     const collabId = await this.resolveUserId(params.collaboratorId, params.collaboratorEmail);
-    const collabUser = await this.sstUsersModel.findById(collabId).lean();
-    const collabName = collabUser?.displayName || collabUser?.email || 'Giáo viên';
+    const collabUser = await this.getUserSummaryById(collabId);
+    const collabName = collabUser?.displayName || collabUser?.email || 'Teacher';
 
     const model = this.resourceModel(resourceType);
     const resource = await (model as any).findById(resourceId).lean();
@@ -314,8 +471,8 @@ export class SharingService {
     // In-app notification (non-blocking, best effort)
     this.sendCollabNotification(collabId, {
       type: 'collab_invite',
-      title: '🤝 Bạn được mời hợp tác',
-      message: `Bạn được mời ${role === 'viewer' ? 'xem & sử dụng' : 'cộng tác chỉnh sửa'} ${TYPE_LABELS[resourceType] || 'bài học'} "${resource['name'] || resource['title'] || ''}"`,
+      title: 'ðŸ¤ Báº¡n Ä‘Æ°á»£c má»i há»£p tÃ¡c',
+      message: `Báº¡n Ä‘Æ°á»£c má»i ${role === 'viewer' ? 'xem & sá»­ dá»¥ng' : 'cá»™ng tÃ¡c chá»‰nh sá»­a'} ${TYPE_LABELS[resourceType] || 'bÃ i há»c'} "${resource['name'] || resource['title'] || ''}"`,
     });
 
     return { updated: true, resourceId, collaboratorId: collabId, role };
@@ -348,8 +505,8 @@ export class SharingService {
 
     this.sendCollabNotification(collaboratorId, {
       type: 'collab_removed',
-      title: 'Đã bị gỡ khỏi danh sách cộng tác',
-      message: `Bạn đã bị gỡ khỏi danh sách cộng tác viên của ${TYPE_LABELS[resourceType] || 'bài học'} "${resource['name'] || resource['title'] || ''}"`,
+      title: 'ÄÃ£ bá»‹ gá»¡ khá»i danh sÃ¡ch cá»™ng tÃ¡c',
+      message: `Báº¡n Ä‘Ã£ bá»‹ gá»¡ khá»i danh sÃ¡ch cá»™ng tÃ¡c viÃªn cá»§a ${TYPE_LABELS[resourceType] || 'bÃ i há»c'} "${resource['name'] || resource['title'] || ''}"`,
     });
 
     return { updated: true, resourceId, collaboratorId };
@@ -372,6 +529,92 @@ export class SharingService {
     return { updated: true, resourceId, collaboratorId, role };
   }
 
+  private async transferOfficialTopicToTeacher(topicId: string, newOwnerId: string, newOwnerName: string) {
+    const topic = await this.topicsModel.findById(topicId).lean();
+    if (!topic) throw new NotFoundException(`topic "${topicId}" not found`);
+
+    const payload: Record<string, any> = {
+      ...topic,
+      teacherId: newOwnerId,
+      createdBy: newOwnerId,
+      createdByName: newOwnerName,
+      createdByRole: 'teacher',
+      transferredAt: new Date(),
+      transferredFromOfficial: topicId,
+      isDeleted: false,
+      deletedAt: null,
+      isPublic: false,
+      collaboratorIds: [],
+      collaboratorNames: [],
+      collaboratorRoles: [],
+      sharedWithTeacherIds: [],
+      properties: (topic as any).properties || 'SYSTEM',
+      propertiesBranches: (topic as any).propertiesBranches || 'SYSTEM',
+    };
+
+    delete payload._id;
+    const created = await this.teacherTopicsModel.create(payload);
+    await this.topicsModel.findByIdAndDelete(topicId);
+    return String(created._id);
+  }
+
+  private async transferOfficialFolderToTeacher(folderId: string, newOwnerId: string, newOwnerName: string) {
+    const folder = await this.topicFoldersModel.findById(folderId).lean();
+    if (!folder) throw new NotFoundException(`folder "${folderId}" not found`);
+
+    const sourceTopicIds = Array.isArray(folder.topicIds) ? folder.topicIds : [];
+    const transferredTopicIds: string[] = [];
+
+    for (const topicId of sourceTopicIds) {
+      try {
+        const existingTransferredTopic = await this.teacherTopicsModel
+          .findOne({
+            transferredFromOfficial: String(topicId),
+            teacherId: newOwnerId,
+          })
+          .lean();
+
+        if (existingTransferredTopic?._id) {
+          transferredTopicIds.push(String(existingTransferredTopic._id));
+          continue;
+        }
+
+        const transferredId = await this.transferOfficialTopicToTeacher(String(topicId), newOwnerId, newOwnerName);
+        transferredTopicIds.push(transferredId);
+      } catch (error) {
+        this.logger.error(`Failed to transfer official topic "${topicId}"`, error as any);
+      }
+    }
+
+    const payload: Record<string, any> = {
+      ...folder,
+      teacherId: newOwnerId,
+      createdBy: newOwnerId,
+      createdByName: newOwnerName,
+      createdByRole: 'teacher',
+      transferredAt: new Date(),
+      transferredFromOfficial: folderId,
+      topicIds: transferredTopicIds,
+      icon: folder.icon || '📁',
+      color: folder.color || '#3b82f6',
+      appSystemFolder: false,
+      ownFolder: true,
+      isDeleted: false,
+      deletedAt: null,
+      isPublic: false,
+      public: false,
+      teacherVisible: false,
+      sharedWithTeacherIds: [],
+      properties: (folder as any).properties || 'SYSTEM',
+      propertiesBranches: (folder as any).propertiesBranches || 'SYSTEM',
+    };
+
+    delete payload._id;
+    const created = await this.teacherTopicFoldersModel.create(payload);
+    await this.topicFoldersModel.findByIdAndDelete(folderId);
+    return String(created._id);
+  }
+
   /**
    * Transfer ownership of a resource to a new owner.
    * The old owner becomes an 'editor' collaborator.
@@ -390,34 +633,41 @@ export class SharingService {
     resourceName?: string;
   }) {
     const { resourceType, resourceId, oldOwnerId, resourceName = '' } = params;
-    if (!['teacher_topic', 'grammar', 'exam'].includes(resourceType)) {
-      throw new BadRequestException('transferOwnership only supports: teacher_topic | grammar | exam');
+    const newOwnerId = await this.resolveUserId(params.newOwnerId, params.newOwnerEmail);
+    const newOwnerUser = await this.getUserSummaryById(newOwnerId);
+    const newOwnerName = params.newOwnerName || newOwnerUser?.displayName || 'Teacher';
+    const oldOwnerName = params.oldOwnerName || 'Teacher';
+
+    if (resourceType === 'topic') {
+      const targetDocId = await this.transferOfficialTopicToTeacher(resourceId, newOwnerId, newOwnerName);
+      return { updated: true, resourceId, newOwnerId, targetDocId, ownerField: 'teacherId' };
     }
 
-    const newOwnerId = await this.resolveUserId(params.newOwnerId, params.newOwnerEmail);
-    const newOwnerUser = await this.sstUsersModel.findById(newOwnerId).lean();
-    const newOwnerName = params.newOwnerName || newOwnerUser?.displayName || 'Giáo viên';
-    const oldOwnerName = params.oldOwnerName || 'Giáo viên';
+    if (resourceType === 'folder') {
+      const targetDocId = await this.transferOfficialFolderToTeacher(resourceId, newOwnerId, newOwnerName);
+      return { updated: true, resourceId, newOwnerId, targetDocId, ownerField: 'teacherId' };
+    }
+
+    if (!['teacher_topic', 'grammar', 'exam'].includes(resourceType)) {
+      throw new BadRequestException('transferOwnership only supports: topic | folder | teacher_topic | grammar | exam');
+    }
 
     const model = this.resourceModel(resourceType);
     const resource = await (model as any).findById(resourceId).lean();
     if (!resource) throw new NotFoundException(`${resourceType} "${resourceId}" not found`);
 
-    // Determine owner field (mirrors original JS: exams use 'createdBy', others use 'teacherId')
     const ownerField = resourceType === 'exam' ? 'createdBy' : 'teacherId';
-
-    // Build updated collaborator maps: remove new owner, add old owner as editor
     const currentCollabIds: string[] = resource['collaboratorIds'] || [];
     const updatedCollabIds = currentCollabIds.filter(id => id !== newOwnerId);
-    if (!updatedCollabIds.includes(oldOwnerId)) updatedCollabIds.push(oldOwnerId);
+    if (oldOwnerId && !updatedCollabIds.includes(oldOwnerId)) updatedCollabIds.push(oldOwnerId);
 
     const updatedNames = { ...(resource['collaboratorNames'] || {}) };
     delete updatedNames[newOwnerId];
-    updatedNames[oldOwnerId] = oldOwnerName;
+    if (oldOwnerId) updatedNames[oldOwnerId] = oldOwnerName;
 
     const updatedRoles = { ...(resource['collaboratorRoles'] || {}) };
     delete updatedRoles[newOwnerId];
-    updatedRoles[oldOwnerId] = 'editor';
+    if (oldOwnerId) updatedRoles[oldOwnerId] = 'editor';
 
     await (model as any).findByIdAndUpdate(resourceId, {
       $set: {
@@ -428,18 +678,19 @@ export class SharingService {
       },
     });
 
-    // Notifications (non-blocking)
     const label = TYPE_LABELS[resourceType] || 'bài học';
     this.sendCollabNotification(newOwnerId, {
       type: 'ownership_received',
-      title: '🎉 Bạn đã được chuyển nhượng quyền sở hữu',
+      title: 'Bạn đã được chuyển nhượng quyền sở hữu',
       message: `Bạn đã nhận quyền sở hữu ${label} "${resourceName}" từ ${oldOwnerName}.`,
     });
-    this.sendCollabNotification(oldOwnerId, {
-      type: 'ownership_transferred',
-      title: 'Đã chuyển nhượng quyền sở hữu',
-      message: `Bạn đã chuyển nhượng quyền sở hữu ${label} "${resourceName}" cho ${newOwnerName}. Bạn vẫn là cộng tác viên.`,
-    });
+    if (oldOwnerId) {
+      this.sendCollabNotification(oldOwnerId, {
+        type: 'ownership_transferred',
+        title: 'Đã chuyển nhượng quyền sở hữu',
+        message: `Bạn đã chuyển nhượng quyền sở hữu ${label} "${resourceName}" cho ${newOwnerName}. Bạn vẫn là cộng tác viên.`,
+      });
+    }
 
     return { updated: true, resourceId, newOwnerId, oldOwnerOwnerId: oldOwnerId, ownerField };
   }
@@ -456,10 +707,10 @@ export class SharingService {
     return results;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Mode 6: Admin per-teacher sharing
   // resource.sharedWithTeacherIds = []  (admin content: topics, grammar, exams)
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async addTeacherShare(params: {
     resourceType: string;
@@ -477,7 +728,17 @@ export class SharingService {
       $addToSet: { sharedWithTeacherIds: teacherId },
     });
 
-    return { updated: true, resourceId, teacherId };
+    const teacher = await this.getUserSummaryById(teacherId);
+    return {
+      updated: true,
+      resourceId,
+      teacherId,
+      uid: teacher?.uid || teacherId,
+      id: teacher?.id || teacherId,
+      email: teacher?.email,
+      displayName: teacher?.displayName,
+      role: teacher?.role,
+    };
   }
 
   async removeTeacherShare(resourceType: string, resourceId: string, teacherId: string) {
@@ -488,13 +749,25 @@ export class SharingService {
     return { updated: true, resourceId, teacherId };
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  async getTeacherShares(resourceType: string, resourceId: string) {
+    const model = this.resourceModel(resourceType);
+    const resource = await (model as any).findById(resourceId).lean();
+    if (!resource) throw new NotFoundException(`${resourceType} "${resourceId}" not found`);
+
+    const teacherIds = Array.isArray(resource['sharedWithTeacherIds']) ? resource['sharedWithTeacherIds'] : [];
+    const teachers = await Promise.all(
+      teacherIds.map((teacherId: string) => this.getUserSummaryById(String(teacherId))),
+    );
+    return teachers.filter(Boolean);
+  }
+
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Private helpers
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
    * Resolve a user ID from either a provided ID or email lookup.
-   * Checks SSTUsers first, then Accounts.
+   * Resolves against account-backed user records.
    */
   private async resolveUserId(userId?: string, email?: string): Promise<string> {
     if (userId) return userId;
@@ -508,21 +781,15 @@ export class SharingService {
   /**
    * Non-blocking in-app notification helper.
    * Notifications are stored in the sst-notifications collection.
-   * This directly creates a notification document without importing NotificationsService
-   * to keep the sharing module self-contained (same pattern as the original JS code
-   * which imported notificationService lazily).
+   * Sharing writes directly through the notifications model to avoid a circular
+   * dependency on NotificationsService while still using the real Nest model.
    */
   private sendCollabNotification(
     userId: string,
     payload: { type: string; title: string; message: string; link?: string },
   ) {
-    // Non-blocking best-effort (fire-and-forget, like the original JS)
-    // Notifications module handles its own schema — we use raw mongoose here
-    // to avoid circular imports. SharingService intentionally doesn't inject
-    // NotificationsService to keep the dependency graph clean.
-    this.sstUsersModel.db
-      .collection('sst-notifications')
-      .insertOne({
+    this.notificationsModel
+      .create({
         userId,
         type: payload.type,
         title: payload.title,
@@ -534,3 +801,4 @@ export class SharingService {
       .catch(err => this.logger.error('Failed to create collab notification', err));
   }
 }
+

@@ -1,34 +1,34 @@
-import { db } from '../config/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { readUserStorageDoc, writeUserStorageDoc } from './userStorageService';
+
+const RECENT_DOC_TYPE = 'recent_lists';
+
+function isLegacyCustomTopicEntry(entry) {
+    return entry?.id === 'custom' && entry?.type === 'topic';
+}
 
 /**
  * Log a recently accessed list/topic to the user's settings.
- * @param {string} userId - The user's ID
- * @param {object} listInfo - Formatted list info: { id, name, type, icon, wordCount, isGeneratedByAI }
+ * @param {string} userId
+ * @param {object} listInfo
  */
 export async function logRecentList(userId, listInfo) {
     if (!userId || !listInfo || !listInfo.id) return;
+
     try {
-        const docRef = doc(db, `users/${userId}/settings`, 'recent_lists');
-        const snap = await getDoc(docRef);
-        let recent = [];
-        if (snap.exists()) {
-            recent = snap.data().lists || [];
-        }
+        const doc = await readUserStorageDoc(userId, RECENT_DOC_TYPE);
+        let recent = Array.isArray(doc?.lists) ? [...doc.lists] : [];
 
-        // Remove if already exists to push to front
-        recent = recent.filter(r => r.id !== listInfo.id);
-
-        // Add to front
+        recent = recent.filter(r => r.id !== listInfo.id && !isLegacyCustomTopicEntry(r));
         recent.unshift({
             ...listInfo,
-            accessedAt: Date.now()
+            accessedAt: Date.now(),
         });
 
-        // Keep top 8
-        if (recent.length > 8) recent = recent.slice(0, 8);
+        if (recent.length > 8) {
+            recent = recent.slice(0, 8);
+        }
 
-        await setDoc(docRef, { lists: recent }, { merge: true });
+        await writeUserStorageDoc(userId, RECENT_DOC_TYPE, { lists: recent });
     } catch (err) {
         console.warn('Failed to log recent list', err);
     }
@@ -36,18 +36,19 @@ export async function logRecentList(userId, listInfo) {
 
 /**
  * Get recently accessed lists.
- * @param {string} userId - The user's ID
+ * @param {string} userId
  * @returns {Promise<Array>}
  */
 export async function getRecentLists(userId) {
     if (!userId) return [];
+
     try {
-        const docRef = doc(db, `users/${userId}/settings`, 'recent_lists');
-        const snap = await getDoc(docRef);
-        if (snap.exists()) {
-            return snap.data().lists || [];
-        }
-        return [];
+        const doc = await readUserStorageDoc(userId, RECENT_DOC_TYPE);
+        const lists = Array.isArray(doc?.lists) ? doc.lists : [];
+        return lists
+            .filter(list => !isLegacyCustomTopicEntry(list))
+            .slice()
+            .sort((a, b) => (b?.accessedAt || 0) - (a?.accessedAt || 0));
     } catch (err) {
         console.warn('Failed to fetch recent lists', err);
         return [];

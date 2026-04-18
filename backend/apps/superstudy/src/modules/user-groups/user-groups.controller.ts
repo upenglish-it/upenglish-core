@@ -13,7 +13,13 @@ export class UserGroupsController {
 
   @ApiOperation({ summary: 'List all groups (excludes hidden by default)' })
   @Get()
-  findAll(@Query('includeHidden') includeHidden?: string) {
+  findAll(
+    @Query('includeHidden') includeHidden?: string,
+    @Query('ids') ids?: string,
+  ) {
+    if (ids) {
+      return this.userGroupsService.findByIds(ids.split(',').map((id) => id.trim()).filter(Boolean));
+    }
     return this.userGroupsService.findAll(includeHidden === 'true');
   }
 

@@ -1,10 +1,123 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getTeacherGroups, getStudentsInGroup } from '../../services/teacherService';
+import { getTeacherGroups, getStudentsInGroup, getAssignmentsForGroups } from '../../services/teacherService';
 import { getActiveReportPeriod, getGroupReportStatus, computePeriodStatus } from '../../services/reportPeriodService';
 import { getLatestRatingStatsForTeacher } from '../../services/teacherRatingService';
-import { Layers, Users, ChevronRight, ClipboardList, CheckCircle, AlertTriangle, Star } from 'lucide-react';
+import { getExamAssignmentsForGroup, getExamSubmissionsForAssignments, getExamAssignmentsForStudents } from '../../services/examService';
+import { Layers, Users, ChevronRight, ClipboardList, CheckCircle, AlertTriangle, ClipboardCheck, FolderKanban, MessageSquare, Send, Star } from 'lucide-react';
+
+function getTimestampMs(value) {
+    if (!value) return 0;
+    if (typeof value?.toMillis === 'function') return value.toMillis();
+    if (typeof value?.toDate === 'function') return value.toDate().getTime();
+    if (value instanceof Date) return value.getTime();
+    if (typeof value === 'number') return value;
+
+    const parsed = new Date(value).getTime();
+    return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function getLatestSubmissionMap(submissions, currentStudentIds) {
+    const latestSubmissionMap = new Map();
+
+    submissions.forEach((submission) => {
+        if (!currentStudentIds.has(submission.studentId)) return;
+
+        const key = `${submission.assignmentId}_${submission.studentId}`;
+        const existing = latestSubmissionMap.get(key);
+        const submissionTime = getTimestampMs(submission.updatedAt) || getTimestampMs(submission.createdAt);
+
+        if (!existing) {
+            latestSubmissionMap.set(key, submission);
+            return;
+        }
+
+        const existingTime = getTimestampMs(existing.updatedAt) || getTimestampMs(existing.createdAt);
+        if (submissionTime > existingTime) {
+            latestSubmissionMap.set(key, submission);
+        }
+    });
+
+    return latestSubmissionMap;
+}
+
+function hasPendingFollowUpAction(submission) {
+    if (!submission?.resultsReleased || submission?.followUpResultsReleased) return false;
+
+    const followUpRequested = submission.followUpRequested || {};
+    const requestedQuestionIds = Object.keys(followUpRequested);
+    if (requestedQuestionIds.length === 0) return false;
+
+    const followUpAnswers = submission.followUpAnswers || {};
+    return requestedQuestionIds.every((questionId) => (
+        Object.values(followUpAnswers).some((sectionAnswers) => sectionAnswers?.[questionId])
+    ));
+}
+
+function hasAiGradingError(submission) {
+    return Object.values(submission?.results || {}).some((result) => {
+        const feedback = result?.feedback || '';
+        return feedback.includes('Lỗi khi chấm')
+            || feedback.includes('chấm thủ công')
+            || feedback.includes('chưa được AI chấm');
+    });
+}
+
+function hasAnyActiveDeadline(item, nowTime) {
+    const due = item?.dueDate ? (item.dueDate.toDate ? item.dueDate.toDate() : new Date(item.dueDate)) : null;
+    if (!due || due.getTime() >= nowTime) return true;
+
+    if (item?.studentDeadlines) {
+        return Object.values(item.studentDeadlines).some((studentDeadline) => {
+            const date = studentDeadline?.toDate ? studentDeadline.toDate() : new Date(studentDeadline);
+            return date.getTime() >= nowTime;
+        });
+    }
+
+    return false;
+}
+
+function buildGroupTaskStats({ submissions, currentStudentIds, regularAssignments, examAssignments }) {
+    const latestSubmissionMap = getLatestSubmissionMap(submissions, currentStudentIds);
+
+    let pendingToGradeCount = 0;
+    let pendingReleaseCount = 0;
+    let pendingFollowUpCount = 0;
+
+    latestSubmissionMap.forEach((submission) => {
+        if (hasPendingFollowUpAction(submission)) {
+            pendingFollowUpCount += 1;
+            return;
+        }
+
+        if (submission.status === 'submitted' || submission.status === 'grading') {
+            pendingToGradeCount += 1;
+            return;
+        }
+
+        if (submission.status === 'graded' && !submission.resultsReleased) {
+            if (hasAiGradingError(submission)) {
+                pendingToGradeCount += 1;
+            } else {
+                pendingReleaseCount += 1;
+            }
+        }
+    });
+
+    const now = Date.now();
+    const activeAssignmentsCount = regularAssignments.filter((assignment) => hasAnyActiveDeadline(assignment, now)).length;
+    const activeExamAssignmentsCount = examAssignments.filter((assignment) => hasAnyActiveDeadline(assignment, now)).length;
+    const hasNoAssignedWork = currentStudentIds.size > 0 && activeAssignmentsCount === 0 && activeExamAssignmentsCount === 0;
+
+    return {
+        pendingToGradeCount,
+        pendingReleaseCount,
+        pendingFollowUpCount,
+        totalPendingCount: pendingToGradeCount + pendingReleaseCount + pendingFollowUpCount,
+        hasNoAssignedWork
+    };
+}
 
 export default function TeacherGroupsPage() {
     const { user } = useAuth();
@@ -15,15 +128,16 @@ export default function TeacherGroupsPage() {
     // Report period
     const [activePeriod, setActivePeriod] = useState(null);
     const [groupReportStats, setGroupReportStats] = useState({}); // { [groupId]: { sent, total } }
+    const [groupExamWorkStats, setGroupExamWorkStats] = useState({}); // { [groupId]: { pendingToGradeCount, pendingReleaseCount, pendingFollowUpCount } }
     const [ratingStats, setRatingStats] = useState(null); // { periodLabel, groups: { [groupId]: { avgScore, count } } }
 
-    useEffect(() => {
-        loadGroups();
-    }, [user]);
-
-    async function loadGroups() {
+    const loadGroups = useCallback(async () => {
         if (!user?.groupIds || user.groupIds.length === 0) {
             setGroups([]);
+            setActivePeriod(null);
+            setGroupReportStats({});
+            setGroupExamWorkStats({});
+            setRatingStats(null);
             setLoading(false);
             return;
         }
@@ -32,6 +146,38 @@ export default function TeacherGroupsPage() {
             setLoading(true);
             const data = await getTeacherGroups(user.groupIds);
             setGroups(data);
+            const assignments = await getAssignmentsForGroups(user.groupIds).catch((e) => {
+                console.warn('Error loading assignments for groups:', e);
+                return [];
+            });
+            const regularAssignmentsByGroupId = assignments.reduce((map, assignment) => {
+                if (!assignment?.groupId) return map;
+                if (!map.has(assignment.groupId)) {
+                    map.set(assignment.groupId, []);
+                }
+                map.get(assignment.groupId).push(assignment);
+                return map;
+            }, new Map());
+
+            const studentsByGroupId = {};
+            const studentGroupIdsMap = new Map();
+
+            await Promise.all(data.map(async (group) => {
+                try {
+                    const students = await getStudentsInGroup(group.id);
+                    studentsByGroupId[group.id] = students;
+                    students.forEach((student) => {
+                        if (!student?.uid) return;
+                        if (!studentGroupIdsMap.has(student.uid)) {
+                            studentGroupIdsMap.set(student.uid, new Set());
+                        }
+                        studentGroupIdsMap.get(student.uid).add(group.id);
+                    });
+                } catch (e) {
+                    console.warn('Error loading students for group', group.id, e);
+                    studentsByGroupId[group.id] = [];
+                }
+            }));
 
             // Load report period + per-group stats
             const period = await getActiveReportPeriod();
@@ -40,10 +186,8 @@ export default function TeacherGroupsPage() {
                 const statsMap = {};
                 await Promise.all(data.map(async (group) => {
                     try {
-                        const [students, reportStatus] = await Promise.all([
-                            getStudentsInGroup(group.id),
-                            getGroupReportStatus(group.id, period.startDate, period.endDate, period.id)
-                        ]);
+                        const students = studentsByGroupId[group.id] || [];
+                        const reportStatus = await getGroupReportStatus(group.id, period.startDate, period.endDate, period.id);
                         statsMap[group.id] = {
                             sent: reportStatus.sentStudentIds.size,
                             late: reportStatus.lateStudentIds.size,
@@ -54,6 +198,85 @@ export default function TeacherGroupsPage() {
                     }
                 }));
                 setGroupReportStats(statsMap);
+            } else {
+                setGroupReportStats({});
+            }
+
+            try {
+                const groupExamAssignments = await Promise.all(data.map(async (group) => {
+                    const examAssignments = await getExamAssignmentsForGroup(group.id).catch((e) => {
+                        console.warn('Error loading exam assignments for group', group.id, e);
+                        return [];
+                    });
+                    return [group.id, examAssignments];
+                }));
+
+                const assignmentsByGroupId = Object.fromEntries(groupExamAssignments);
+
+                // Fetch individually-assigned exams (targetType='individual') for all students
+                // and distribute them to their respective groups — mirrors the original app logic.
+                const allStudentIds = [...studentGroupIdsMap.keys()];
+                const individualAssignments = await getExamAssignmentsForStudents(allStudentIds).catch((e) => {
+                    console.warn('Error loading individual exam assignments:', e);
+                    return [];
+                });
+
+                individualAssignments
+                    .filter((assignment) => assignment.targetType === 'individual')
+                    .forEach((assignment) => {
+                        const targetStudentId = assignment.targetId;
+                        const groupIds = studentGroupIdsMap.get(targetStudentId);
+                        if (!groupIds) return;
+                        groupIds.forEach((groupId) => {
+                            if (!assignmentsByGroupId[groupId]) {
+                                assignmentsByGroupId[groupId] = [];
+                            }
+                            assignmentsByGroupId[groupId].push(assignment);
+                        });
+                    });
+
+                // Deduplicate assignments per group (a student may appear in multiple groups)
+                Object.keys(assignmentsByGroupId).forEach((groupId) => {
+                    const deduped = new Map();
+                    (assignmentsByGroupId[groupId] || []).forEach((assignment) => {
+                        const id = assignment.id || assignment._id;
+                        if (id) deduped.set(id, assignment);
+                    });
+                    assignmentsByGroupId[groupId] = Array.from(deduped.values());
+                });
+
+                const allAssignmentIds = [...new Set(
+                    Object.values(assignmentsByGroupId)
+                        .flat()
+                        .map((assignment) => assignment.id || assignment._id)
+                        .filter(Boolean)
+                )];
+
+                const allSubmissions = allAssignmentIds.length > 0
+                    ? await getExamSubmissionsForAssignments(allAssignmentIds).catch((e) => {
+                        console.warn('Error loading exam submissions:', e);
+                        return [];
+                    })
+                    : [];
+
+                const examWorkStatsMap = {};
+                data.forEach((group) => {
+                    const groupStudents = studentsByGroupId[group.id] || [];
+                    const currentStudentIds = new Set(groupStudents.map((student) => student.uid || student.id).filter(Boolean));
+                    const examGroupAssignments = assignmentsByGroupId[group.id] || [];
+                    const assignmentIds = new Set(examGroupAssignments.map((assignment) => assignment.id));
+                    const relevantSubmissions = allSubmissions.filter((submission) => assignmentIds.has(submission.assignmentId));
+                    examWorkStatsMap[group.id] = buildGroupTaskStats({
+                        submissions: relevantSubmissions,
+                        currentStudentIds,
+                        regularAssignments: regularAssignmentsByGroupId.get(group.id) || [],
+                        examAssignments: examGroupAssignments
+                    });
+                });
+                setGroupExamWorkStats(examWorkStatsMap);
+            } catch (e) {
+                console.warn('Error loading pending exam work stats:', e);
+                setGroupExamWorkStats({});
             }
 
             // Load teacher rating stats
@@ -66,10 +289,15 @@ export default function TeacherGroupsPage() {
         } catch (err) {
             console.error(err);
             setError('Lỗi tải danh sách lớp học.');
+            setGroupExamWorkStats({});
         } finally {
             setLoading(false);
         }
-    }
+    }, [user]);
+
+    useEffect(() => {
+        loadGroups();
+    }, [loadGroups]);
 
     return (
         <div className="admin-page">
@@ -94,6 +322,13 @@ export default function TeacherGroupsPage() {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
                         {groups.map(group => {
                             const stats = groupReportStats[group.id];
+                            const examWork = groupExamWorkStats[group.id];
+                            const shouldShowTaskTags = examWork && (
+                                examWork.pendingToGradeCount > 0
+                                || examWork.pendingReleaseCount > 0
+                                || examWork.pendingFollowUpCount > 0
+                                || examWork.hasNoAssignedWork
+                            );
                             const periodStatus = activePeriod ? computePeriodStatus(activePeriod) : null;
                             const missing = stats ? stats.total - stats.sent : 0;
                             const groupRating = ratingStats?.groups?.[group.id];
@@ -114,13 +349,77 @@ export default function TeacherGroupsPage() {
                                                 <Users size={24} />
                                             </div>
                                             <div style={{ flex: 1 }}>
-                                                <h3 style={{ margin: '0 0 4px 0', fontSize: '1.2rem', color: '#0f172a', fontWeight: 700 }}>{group.name}</h3>
-                                                <span style={{ fontSize: '0.8rem', color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>ID: {group.id}</span>
+                                                <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#0f172a', fontWeight: 700 }}>{group.name}</h3>
                                             </div>
                                         </div>
-                                        <p style={{ margin: '0 0 16px 0', fontSize: '0.95rem', color: '#475569', flex: 1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                                            {group.description || 'Không có mô tả'}
-                                        </p>
+                                        {shouldShowTaskTags && (
+                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
+                                                {examWork.pendingToGradeCount > 0 && (
+                                                    <span style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '5px',
+                                                        padding: '6px 10px',
+                                                        borderRadius: '999px',
+                                                        background: '#fff7ed',
+                                                        border: '1px solid #fed7aa',
+                                                        color: '#c2410c',
+                                                        fontSize: '0.78rem',
+                                                        fontWeight: 700
+                                                    }}>
+                                                        <ClipboardCheck size={13} /> {examWork.pendingToGradeCount} chờ chấm
+                                                    </span>
+                                                )}
+                                                {examWork.pendingReleaseCount > 0 && (
+                                                    <span style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '5px',
+                                                        padding: '6px 10px',
+                                                        borderRadius: '999px',
+                                                        background: '#eef2ff',
+                                                        border: '1px solid #c7d2fe',
+                                                        color: '#4f46e5',
+                                                        fontSize: '0.78rem',
+                                                        fontWeight: 700
+                                                    }}>
+                                                        <Send size={13} /> {examWork.pendingReleaseCount} chờ trả kết quả
+                                                    </span>
+                                                )}
+                                                {examWork.pendingFollowUpCount > 0 && (
+                                                    <span style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '5px',
+                                                        padding: '6px 10px',
+                                                        borderRadius: '999px',
+                                                        background: '#fefce8',
+                                                        border: '1px solid #fcd34d',
+                                                        color: '#a16207',
+                                                        fontSize: '0.78rem',
+                                                        fontWeight: 700
+                                                    }}>
+                                                        <MessageSquare size={13} /> {examWork.pendingFollowUpCount} bài sửa chờ xử lý
+                                                    </span>
+                                                )}
+                                                {examWork.hasNoAssignedWork && (
+                                                    <span style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '5px',
+                                                        padding: '6px 10px',
+                                                        borderRadius: '999px',
+                                                        background: '#fff7ed',
+                                                        border: '1px solid #fdba74',
+                                                        color: '#c2410c',
+                                                        fontSize: '0.78rem',
+                                                        fontWeight: 700
+                                                    }}>
+                                                        <FolderKanban size={13} /> Chưa có bài được giao
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
 
                                         {/* Report period stats */}
                                         {activePeriod && stats && (
@@ -174,9 +473,9 @@ export default function TeacherGroupsPage() {
                                             </div>
                                         )}
 
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '16px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: '16px' }}>
                                             <span style={{ fontSize: '0.9rem', color: 'var(--color-primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                Xem danh sách học viên <ChevronRight size={16} />
+                                                Chi tiết <ChevronRight size={16} />
                                             </span>
                                         </div>
                                     </div>

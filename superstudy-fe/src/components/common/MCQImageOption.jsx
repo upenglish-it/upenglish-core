@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useId, useState, useRef } from 'react';
 import { uploadOptionImage, deleteOptionImage, generateAndUploadOptionImage } from '../../services/examService';
 import { ImagePlus, X, Loader, Sparkles } from 'lucide-react';
 
@@ -44,6 +44,7 @@ export function OptionContent({ opt, size = 120 }) {
 export function ImageOptionUploader({ value, onChange, onScheduleDelete, onTrackUpload, onSaveOriginalText, restoreValue, disabled }) {
     const [uploading, setUploading] = useState(false);
     const fileRef = useRef(null);
+    const inputId = useId();
 
     const handleFile = async (e) => {
         const file = e.target.files?.[0];
@@ -122,6 +123,9 @@ export function ImageOptionUploader({ value, onChange, onScheduleDelete, onTrack
     return (
         <>
             <input
+                id={inputId}
+                name={`mcq-image-upload-${inputId}`}
+                aria-label="Tải ảnh đáp án"
                 ref={fileRef}
                 type="file"
                 accept="image/*"

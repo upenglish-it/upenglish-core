@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Users, LogOut, Home, Menu, Layers, BookOpen, ClipboardCheck, Settings, X, Mail, MessageSquare, Star, Gift, MessageSquareText, Gamepad2 } from 'lucide-react';
+import { LayoutDashboard, Users, LogOut, Home, Menu, Layers, BookOpen, ClipboardCheck, Settings, X, Mail, MessageSquare, Star, Gift, MessageSquareText, Gamepad2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { db } from '../../config/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { usersService } from '../../models';
 import { getMyUnreadFeedbackCount } from '../../services/feedbackService';
 import Avatar from '../../components/common/Avatar';
 import BrandLogo from '../../components/common/BrandLogo';
@@ -28,15 +27,14 @@ export default function TeacherLayout() {
     useEffect(() => {
         if (!user?.uid) return;
         getMyUnreadFeedbackCount(user.uid).then(setReceivedUnread).catch(() => {});
-        const userRef = doc(db, `users/${user.uid}`);
-        getDoc(userRef).then(async snap => {
-            if (snap.exists()) {
-                const data = snap.data();
+        usersService.findOne(user.uid).then(async result => {
+            const data = result?.data || result;
+            if (data) {
                 if (data.teacherTitle) setTeacherTitle(data.teacherTitle);
                 if (data.studentTitle) setStudentTitle(data.studentTitle);
                 if (data.emailPreferences) setEmailPreferences(data.emailPreferences);
                 // Check if teacher has any groups with reward points enabled
-                const groupIds = data.groupIds || [];
+                const groupIds = data.groupIds || user.groupIds || [];
                 if (groupIds.length > 0) {
                     try {
                         const { getTeacherGroups } = await import('../../services/teacherService');
@@ -45,27 +43,27 @@ export default function TeacherLayout() {
                     } catch (e) {
                         console.warn('Could not check reward groups:', e);
                     }
+                } else {
+                    setHasRewardGroups(false);
                 }
             }
-        }).catch(err => console.warn('Could not load user settings:', err));
-    }, [user?.uid]);
+        }).catch(err => console.warn('Could not load user settings via API:', err));
+    }, [user?.uid, user?.groupIds]);
 
     const saveHonorific = async (field, value) => {
         if (field === 'teacherTitle') setTeacherTitle(value);
         else setStudentTitle(value);
         if (user?.uid) {
             try {
-                const userRef = doc(db, `users/${user.uid}`);
-                await setDoc(userRef, { [field]: value }, { merge: true });
+                await usersService.update(user.uid, { [field]: value });
             } catch (err) {
-                console.warn('Could not save honorific to Firestore:', err);
+                console.warn('Could not save honorific to API:', err);
             }
         }
     };
 
     const TEACHER_EMAIL_TYPES = [
         { key: 'deadline_expired', label: 'Bài hết hạn — cần chấm', emoji: '⏰' },
-        { key: 'half_submitted', label: '50% học viên đã nộp bài', emoji: '📊' },
         { key: 'skill_report_reminder', label: 'Nhắc viết báo cáo kỹ năng', emoji: '📊' },
         { key: 'student_joined', label: 'Học viên mới vào lớp', emoji: '👤' },
         { key: 'exam_graded_by_other', label: 'Bài được GV khác chấm', emoji: '📝' },
@@ -80,9 +78,9 @@ export default function TeacherLayout() {
         setEmailPreferences(updated);
         if (user?.uid) {
             try {
-                await setDoc(doc(db, `users/${user.uid}`), { emailPreferences: updated }, { merge: true });
+                await usersService.update(user.uid, { emailPreferences: updated });
             } catch (err) {
-                console.warn('Could not save email preference:', err);
+                console.warn('Could not save email preference to API:', err);
             }
         }
     };
@@ -95,6 +93,9 @@ export default function TeacherLayout() {
                     <BrandLogo size="1.5rem" />
                 </div>
                 <nav className="admin-nav">
+                    <Link to="/teacher" className={`admin-nav-item ${pathname === '/teacher' ? 'active' : ''}`} onClick={() => setSidebarOpen(false)}>
+                        <LayoutDashboard size={20} /> Tổng quan
+                    </Link>
                     <Link to="/teacher/groups" className={`admin-nav-item ${pathname.includes('/teacher/groups') ? 'active' : ''}`} onClick={() => setSidebarOpen(false)}>
                         <Users size={20} /> Lớp học của tôi
                     </Link>

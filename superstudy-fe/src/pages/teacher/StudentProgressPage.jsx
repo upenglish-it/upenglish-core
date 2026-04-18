@@ -8,7 +8,7 @@ import { getGroupById, getStudentsInGroup, getAssignmentsForGroup, getStudentTop
 import { getUserLearningStats, getAdminTopics, getFolders } from '../../services/adminService';
 import { getGrammarExercises, getSharedAndPublicGrammarExercises } from '../../services/grammarService';
 import { getStudentGrammarProgressSummary, getStudentGrammarQuestionsProgress } from '../../services/grammarSpacedRepetition';
-import { getExamAssignmentsForGroup, getExamSubmissionsForAssignments, getExams, getSharedExams } from '../../services/examService';
+import { getExamAssignmentsForStudent, getExamSubmissionsForAssignments, getExams, getSharedExams } from '../../services/examService';
 import { analyzeStudentSkills } from '../../services/skillAnalysisService';
 import { generateSkillReport, saveSkillReport, getSkillReports, deleteSkillReport, sendSkillReport } from '../../services/skillReportService';
 import { getActiveReportPeriod, computePeriodStatus, getAllReportPeriods } from '../../services/reportPeriodService';
@@ -227,7 +227,7 @@ export default function StudentProgressPage() {
                     getExams('teacher'),
                     getExams('admin'),
                     getSharedExams(user?.mergedExamAccess || user?.examAccess || []),
-                    getExamAssignmentsForGroup(groupId).catch(() => [])
+                    getExamAssignmentsForStudent(studentId, [groupId]).catch(() => [])
                 ]);
                 examAsgns = groupExamAsgns;
                 const map = new Map();

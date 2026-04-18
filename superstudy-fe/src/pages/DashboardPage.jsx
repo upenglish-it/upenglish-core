@@ -1,17 +1,17 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { db } from '../config/firebase';
-import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { BookOpen, PenLine, FolderOpen, BarChart3, LogOut, Sparkles, Trophy, Flame, Settings, X, PlayCircle, Plus, BrainCircuit, Shield, Clock, Users, Home, ClipboardList, ChevronDown, FileCheck, Sun, Moon, AlertTriangle, Medal, Lock, Check, CheckCheck, XCircle, Heart, Loader, MessageSquareText, Send } from 'lucide-react';
+import { BookOpen, PenLine, FolderOpen, BarChart3, LogOut, Sparkles, Trophy, Flame, Settings, X, PlayCircle, Plus, BrainCircuit, Shield, Clock, Users, Home, ClipboardList, ChevronDown, FileCheck, Sun, Moon, AlertTriangle, Medal, Lock, Check, CheckCheck, XCircle, Heart, Loader, MessageSquareText, Send, Paperclip, Image as ImageIcon } from 'lucide-react';
 import Avatar from '../components/common/Avatar';
 import { getRecentLists } from '../services/recentService';
 import { getAllWordProgressMap, getReviewCounts, getLearnedWordsForTopic, getWordProgressMapForTopic } from '../services/spacedRepetition';
 import { getStudentGrammarProgressSummary, getUserOverallGrammarStats } from '../services/grammarSpacedRepetition';
-import { getSavedWords, toggleSavedWord } from '../services/savedService';
-import { getAdminTopics, getAdminTopicWords, getUserLearningStats } from '../services/adminService';
-import { getAssignmentsForGroups, getStudentTopicProgressSummary, getSharedAndPublicTeacherTopics, getStudentsInGroup, getGroupById } from '../services/teacherService';
+import { getSavedWords, toggleSavedWord, getCustomListById } from '../services/savedService';
+import { getAdminTopic, getAdminTopics, getAdminTopicWords, getFolders, getGrammarFolders, getUserLearningStats } from '../services/adminService';
+import { getAssignmentsForGroups, getStudentTopicProgressSummary, getSharedAndPublicTeacherTopics, getStudentsInGroup, getGroupById, getTeacherTopic, getTeacherTopicWords } from '../services/teacherService';
+import { getGrammarExercise } from '../services/grammarService';
 import { getAndUpdateUserStreak } from '../services/userService';
+import { readUserStorageDoc, writeUserStorageDoc } from '../services/userStorageService';
 import { getCurrentMilestone, getNextMilestone } from '../config/streakMilestones';
 import wordData from '../data/wordData';
 import './DashboardPage.css';
@@ -26,6 +26,10 @@ import { getRedFlagsForStudent } from '../services/redFlagService';
 import { getActiveRatingPeriod, getTeachersForStudent, getStudentRatingsForPeriod } from '../services/teacherRatingService';
 import { getStudentRewardPoints } from '../services/rewardPointsService';
 import { submitFeedback } from '../services/feedbackService';
+import { prepareFeedbackImage } from '../services/feedbackImageService';
+import NotificationBell from '../components/common/NotificationBell';
+import { usersService } from '../models';
+
 
 const LEVEL_OPTIONS = [
     { value: 'A1', label: 'A1', desc: 'Beginner' },
@@ -118,6 +122,8 @@ export default function DashboardPage() {
     const [wordSelectData, setWordSelectData] = useState(null); // { words, topicId, topicName, icon, color, isTeacherTopic, progressMap, learnedWords, savedWordsStatus }
     const [selectedWordsForAssignment, setSelectedWordsForAssignment] = useState(new Set());
     const [loadingWordSelect, setLoadingWordSelect] = useState(false);
+    const PREFERENCES_DOC_TYPE = 'preferences';
+    const MILESTONE_DOC_TYPE = 'milestone_shown';
 
     // --- Drag-to-scroll for recent slider ---
     const sliderRef = useRef(null);
@@ -222,27 +228,25 @@ export default function DashboardPage() {
         localStorage.setItem('appTheme', theme);
     }, [theme]);
 
-    // Load level from Firestore on mount
+    // Load level and honorific settings on mount
     useEffect(() => {
         if (!user?.uid) return;
-        const prefsRef = doc(db, `users/${user.uid}/settings`, 'preferences');
-        getDoc(prefsRef).then(snap => {
-            if (snap.exists() && snap.data().cefrLevel) {
-                const lvl = snap.data().cefrLevel;
-                setSelectedLevel(lvl);
-                localStorage.setItem('userCefrLevel', lvl);
-            }
-        }).catch(err => console.warn('Could not load settings:', err));
+        readUserStorageDoc(user.uid, PREFERENCES_DOC_TYPE)
+            .then((prefs) => {
+                if (prefs?.cefrLevel) {
+                    const lvl = prefs.cefrLevel;
+                    setSelectedLevel(lvl);
+                    localStorage.setItem('userCefrLevel', lvl);
+                }
+            })
+            .catch(err => console.warn('Could not load settings:', err));
 
-        // Load honorific settings from primary user record
-        const userRef = doc(db, `users/${user.uid}`);
-        getDoc(userRef).then(snap => {
-            if (snap.exists()) {
-                const data = snap.data();
-                if (data.teacherTitle) setTeacherTitle(data.teacherTitle);
-                if (data.studentTitle) setStudentTitle(data.studentTitle);
-            }
-        }).catch(err => console.warn('Could not load user settings:', err));
+        usersService.findOne(user.uid)
+            .then((userData) => {
+                if (userData?.teacherTitle) setTeacherTitle(userData.teacherTitle);
+                if (userData?.studentTitle) setStudentTitle(userData.studentTitle);
+            })
+            .catch(err => console.warn('Could not load user settings:', err));
     }, [user?.uid]);
 
 
@@ -252,39 +256,35 @@ export default function DashboardPage() {
             // Filter out lists that no longer exist
             const validated = await Promise.all(
                 lists.map(async (list) => {
-                    // Grammar exercises are always valid (stored in Firestore)
                     if (list.isGrammar) {
                         try {
-                            const snap = await getDoc(doc(db, 'grammar_exercises', list.id));
-                            return snap.exists() ? { ...list, ...snap.data() } : null;
+                            const exercise = await getGrammarExercise(list.id);
+                            return exercise ? { ...list, ...exercise } : null;
                         } catch {
                             return null;
                         }
                     }
-                    // Teacher-created topics are always valid (stored in Firestore)
                     if (list.isTeacherTopic) {
                         try {
-                            const snap = await getDoc(doc(db, 'teacher_topics', list.id));
-                            return snap.exists() ? { ...list, ...snap.data() } : null;
+                            const topic = await getTeacherTopic(list.id);
+                            return topic ? { ...list, ...topic, isTeacherTopic: true } : null;
                         } catch {
                             return null;
                         }
                     }
 
                     if (list.type === 'ai' || list.type === 'custom') {
-                        // Check Firestore for AI/custom lists
                         try {
-                            const snap = await getDoc(doc(db, `users/${user.uid}/custom_lists`, list.id));
-                            return snap.exists() ? list : null;
+                            const customList = await getCustomListById(user.uid, list.id);
+                            return customList ? list : null;
                         } catch {
                             return null;
                         }
                     }
                     if (list.type === 'topic') {
-                        // Only valid if the ID matches a real built-in topic
                         try {
-                            const snap = await getDoc(doc(db, 'topics', list.id));
-                            return snap.exists() ? { ...list, ...snap.data() } : null;
+                            const topic = await getAdminTopic(list.id);
+                            return topic ? { ...list, ...topic } : null;
                         } catch {
                             return null;
                         }
@@ -390,22 +390,24 @@ export default function DashboardPage() {
                     } else if (isStudent && streak < 60 && localStorage.getItem('appTheme') === 'ruby') {
                         setTheme('light');
                     }
-                    // Check for new milestone celebration (Firestore-backed)
+                    // Check for new milestone celebration (NestJS-backed)
                     const currentMs = getCurrentMilestone(streak);
                     if (currentMs) {
                         // Quick local check first to avoid flash
                         const localLastShown = parseInt(localStorage.getItem('lastMilestoneShown') || '0', 10);
                         if (currentMs.threshold > localLastShown) {
-                            // Verify with Firestore (source of truth)
-                            const msRef = doc(db, `users/${user.uid}/stats`, 'milestone_shown');
-                            getDoc(msRef).then(msSnap => {
-                                const firestoreLastShown = msSnap.exists() ? (msSnap.data().lastThreshold || 0) : 0;
-                                // Sync localStorage with Firestore
-                                localStorage.setItem('lastMilestoneShown', String(Math.max(firestoreLastShown, localLastShown)));
-                                if (currentMs.threshold > firestoreLastShown) {
+                            // Verify with backend (source of truth)
+                            readUserStorageDoc(user.uid, MILESTONE_DOC_TYPE).then((milestoneDoc) => {
+                                const storedLastShown = milestoneDoc?.lastThreshold || 0;
+                                // Sync localStorage with stored server value
+                                localStorage.setItem('lastMilestoneShown', String(Math.max(storedLastShown, localLastShown)));
+                                if (currentMs.threshold > storedLastShown) {
                                     setCelebrationMilestone(currentMs);
                                     localStorage.setItem('lastMilestoneShown', String(currentMs.threshold));
-                                    setDoc(msRef, { lastThreshold: currentMs.threshold, updatedAt: new Date().toISOString() }, { merge: true }).catch(console.warn);
+                                    writeUserStorageDoc(user.uid, MILESTONE_DOC_TYPE, {
+                                        lastThreshold: currentMs.threshold,
+                                        updatedAt: new Date().toISOString(),
+                                    }).catch(console.warn);
                                 }
                             }).catch(console.warn);
                         }
@@ -645,13 +647,12 @@ export default function DashboardPage() {
     const handleLevelSelect = async (level) => {
         setSelectedLevel(level);
         localStorage.setItem('userCefrLevel', level);
-        // Persist to Firestore
+        // Persist to user settings
         if (user?.uid) {
             try {
-                const prefsRef = doc(db, `users/${user.uid}/settings`, 'preferences');
-                await setDoc(prefsRef, { cefrLevel: level }, { merge: true });
+                await writeUserStorageDoc(user.uid, PREFERENCES_DOC_TYPE, { cefrLevel: level });
             } catch (err) {
-                console.warn('Could not save level to Firestore:', err);
+                console.warn('Could not save level to settings:', err);
             }
         }
     };
@@ -661,10 +662,9 @@ export default function DashboardPage() {
         else setStudentTitle(value);
         if (user?.uid) {
             try {
-                const userRef = doc(db, `users/${user.uid}`);
-                await setDoc(userRef, { [field]: value }, { merge: true });
+                await usersService.update(user.uid, { [field]: value });
             } catch (err) {
-                console.warn('Could not save honorific to Firestore:', err);
+                console.warn('Could not save honorific:', err);
             }
         }
     };
@@ -688,14 +688,63 @@ export default function DashboardPage() {
     const [feedbackMessage, setFeedbackMessage] = useState('');
     const [feedbackSending, setFeedbackSending] = useState(false);
     const [feedbackSuccess, setFeedbackSuccess] = useState(false);
+    const [feedbackImageBlob, setFeedbackImageBlob] = useState(null);
+    const [feedbackImagePreviewUrl, setFeedbackImagePreviewUrl] = useState('');
+    const [feedbackImageName, setFeedbackImageName] = useState('');
+    const [feedbackPreparingImage, setFeedbackPreparingImage] = useState(false);
+    const [feedbackImageError, setFeedbackImageError] = useState('');
+    const feedbackImageInputRef = useRef(null);
 
     const FEEDBACK_CATEGORIES = [
         { value: 'suggestion', label: 'Đề xuất', emoji: '💡', color: '#4f46e5', bg: '#eff6ff' },
         { value: 'complaint', label: 'Khiếu nại', emoji: '⚠️', color: '#dc2626', bg: '#fef2f2' },
     ];
 
+    useEffect(() => () => {
+        if (feedbackImagePreviewUrl) {
+            URL.revokeObjectURL(feedbackImagePreviewUrl);
+        }
+    }, [feedbackImagePreviewUrl]);
+
+    const clearFeedbackImage = () => {
+        if (feedbackImagePreviewUrl) {
+            URL.revokeObjectURL(feedbackImagePreviewUrl);
+        }
+        setFeedbackImageBlob(null);
+        setFeedbackImagePreviewUrl('');
+        setFeedbackImageName('');
+        setFeedbackImageError('');
+        if (feedbackImageInputRef.current) {
+            feedbackImageInputRef.current.value = '';
+        }
+    };
+
+    const handleFeedbackImageSelected = async (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        setFeedbackPreparingImage(true);
+        setFeedbackImageError('');
+
+        try {
+            const { blob, previewUrl } = await prepareFeedbackImage(file);
+            if (feedbackImagePreviewUrl) {
+                URL.revokeObjectURL(feedbackImagePreviewUrl);
+            }
+            setFeedbackImageBlob(blob);
+            setFeedbackImagePreviewUrl(previewUrl);
+            setFeedbackImageName(file.name || 'attachment.webp');
+        } catch (error) {
+            console.error('Error preparing feedback image:', error);
+            setFeedbackImageError(error.message || 'Không thể xử lý ảnh. Vui lòng thử ảnh khác.');
+            event.target.value = '';
+        }
+
+        setFeedbackPreparingImage(false);
+    };
+
     const handleSendFeedback = async () => {
-        if (!feedbackMessage.trim() || feedbackSending) return;
+        if (!feedbackMessage.trim() || feedbackSending || feedbackPreparingImage) return;
         setFeedbackSending(true);
         try {
             await submitFeedback({
@@ -705,9 +754,12 @@ export default function DashboardPage() {
                 senderName: user.displayName || '',
                 senderEmail: user.email || '',
                 senderRole: user.role || 'user',
+                imageBlob: feedbackImageBlob,
+                imageName: feedbackImageName,
             });
             setFeedbackSuccess(true);
             setFeedbackMessage('');
+            clearFeedbackImage();
             setTimeout(() => {
                 setFeedbackSuccess(false);
                 setShowFeedbackModal(false);
@@ -749,20 +801,17 @@ export default function DashboardPage() {
             let words = [];
             if (listInfo.type === 'topic') {
                 if (listInfo.isTeacherTopic) {
-                    // Teacher-created topic: fetch words from Firestore
-                    const wordsSnap = await getDocs(collection(db, `teacher_topics/${listInfo.id}/words`));
-                    wordsSnap.forEach(docSnap => {
-                        words.push(docSnap.data());
-                    });
+                    // Teacher-created topic: fetch words via NestJS
+                    words = await getTeacherTopicWords(listInfo.id);
                 } else {
                     words = await getAdminTopicWords(listInfo.id);
                 }
             } else if (listInfo.type === 'saved') {
                 words = await getSavedWords(user.uid);
             } else {
-                const snap = await getDoc(doc(db, `users/${user.uid}/custom_lists`, listInfo.id));
-                if (snap.exists()) {
-                    words = snap.data().words || [];
+                const customList = await getCustomListById(user.uid, listInfo.id);
+                if (customList) {
+                    words = customList.words || [];
                 }
             }
 
@@ -805,8 +854,7 @@ export default function DashboardPage() {
         try {
             let words = [];
             if (a.isTeacherTopic) {
-                const wordsSnap = await getDocs(collection(db, `teacher_topics/${a.topicId}/words`));
-                wordsSnap.forEach(docSnap => { words.push(docSnap.data()); });
+                words = await getTeacherTopicWords(a.topicId);
             } else {
                 words = await getAdminTopicWords(a.topicId);
             }
@@ -944,40 +992,36 @@ export default function DashboardPage() {
                     let listInfo = null;
 
                     if (shareType === 'teacher_topic') {
-                        const snap = await getDoc(doc(db, 'teacher_topics', shareId));
-                        if (snap.exists()) {
-                            const data = snap.data();
+                        const data = await getTeacherTopic(shareId);
+                        if (data) {
                             listInfo = { id: shareId, type: 'topic', name: data.name, isTeacherTopic: true, isGrammar: false, icon: data.icon, color: data.color };
                         }
                     } else if (shareType === 'admin_topic') {
-                        const snap = await getDoc(doc(db, 'topics', shareId));
-                        if (snap.exists()) {
-                            const data = snap.data();
+                        const data = await getAdminTopic(shareId);
+                        if (data) {
                             listInfo = { id: shareId, type: 'topic', name: data.name, isTeacherTopic: false, isGrammar: false, icon: data.icon, color: data.color };
                         }
                     } else if (shareType === 'teacher_grammar') {
-                        const snap = await getDoc(doc(db, 'teacher_grammar', shareId));
-                        if (snap.exists()) {
-                            const data = snap.data();
+                        const data = await getGrammarExercise(shareId);
+                        if (data) {
                             listInfo = { id: shareId, type: 'topic', name: data.name, isTeacherTopic: true, isGrammar: true, icon: data.icon, color: data.color };
                         }
                     } else if (shareType === 'admin_grammar') {
-                        const snap = await getDoc(doc(db, 'grammar_exercises', shareId));
-                        if (snap.exists()) {
-                            const data = snap.data();
+                        const data = await getGrammarExercise(shareId);
+                        if (data) {
                             listInfo = { id: shareId, type: 'topic', name: data.name, isTeacherTopic: false, isGrammar: true, icon: data.icon, color: data.color };
                         }
                     } else if (shareType === 'admin_folder') {
-                        const snap = await getDoc(doc(db, 'folders', shareId));
-                        if (snap.exists()) {
-                            const data = snap.data();
-                            listInfo = { id: shareId, type: 'topic', name: data.name, isTeacherTopic: false, isGrammar: false, icon: '📁', color: '#6366f1', forceTopicSelect: true };
+                        const folders = await getFolders();
+                        const folderData = folders.find(f => f.id === shareId);
+                        if (folderData) {
+                            listInfo = { id: shareId, type: 'topic', name: folderData.name, isTeacherTopic: false, isGrammar: false, icon: '📁', color: '#6366f1', forceTopicSelect: true };
                         }
                     } else if (shareType === 'admin_grammar_folder' || shareType === 'grammar_folder') {
-                        const snap = await getDoc(doc(db, 'grammar_folders', shareId));
-                        if (snap.exists()) {
-                            const data = snap.data();
-                            listInfo = { id: shareId, type: 'topic', name: data.name, isTeacherTopic: false, isGrammar: true, icon: '📁', color: '#f59e0b', forceGrammarSelect: true };
+                        const gFolders = await getGrammarFolders();
+                        const gFolder = gFolders.find(f => f.id === shareId);
+                        if (gFolder) {
+                            listInfo = { id: shareId, type: 'topic', name: gFolder.name, isTeacherTopic: false, isGrammar: true, icon: '📁', color: '#f59e0b', forceGrammarSelect: true };
                         }
                     }
 
@@ -1018,6 +1062,8 @@ export default function DashboardPage() {
                         <div className="app-header-actions-group">
                             {(user?.role === 'admin' || user?.role === 'teacher' || user?.role === 'staff') && (
                                 <>
+                                    <NotificationBell />
+                                    <div className="app-header-divider"></div>
                                     {(user?.role === 'admin' || user?.role === 'staff') && (
                                         <button className="app-header-action-btn" onClick={() => { sessionStorage.removeItem('viewMode'); navigate('/admin'); }} title="Chuyển tới Admin Panel">
                                             <Shield size={16} />
@@ -1391,8 +1437,12 @@ export default function DashboardPage() {
                         </div>
                     </div>
                     <div className="dashboard-progress-card" onClick={() => setIsProgressOpen(true)}>
-                        {(() => { const hasFlags = studentRedFlags.filter(f => !f.removed).length > 0; return (
-                        <div className={`dashboard-progress-stats${hasFlags ? ' has-flags' : ''}`}>
+                        {(() => {
+                            const activeFlags = studentRedFlags.filter(f => !f.removed);
+                            const hasFlags = activeFlags.length > 0;
+                            const progressStatCount = 2 + (hasFlags ? 1 : 0) + (totalRewardPoints > 0 ? 1 : 0);
+                            return (
+                        <div className={`dashboard-progress-stats${hasFlags ? ' has-flags' : ''}${progressStatCount >= 3 ? ' has-three-plus' : ''}`}>
                             {classRanks.length > 0 ? (
                                 <div className="dashboard-progress-item">
                                     <div className="dashboard-stat-icon-wrapper warning">
@@ -1429,7 +1479,6 @@ export default function DashboardPage() {
                             )}
                             {/* Red flag subtle indicator */}
                             {(() => {
-                                const activeFlags = studentRedFlags.filter(f => !f.removed);
                                 if (activeFlags.length === 0) return null;
                                 const maxPerGroup = {};
                                 activeFlags.forEach(f => {
@@ -1482,7 +1531,8 @@ export default function DashboardPage() {
                             </div>
 
                         </div>
-                        ); })()}
+                        );
+                        })()}
                         <div className="dashboard-progress-cta">
                             <span>Xem tiến trình</span>
                             <span className="dashboard-progress-arrow">›</span>
@@ -2410,7 +2460,7 @@ export default function DashboardPage() {
                 {/* Skill Report Viewer Modal */}
                 {viewingSkillReport && (
                     <div className="settings-modal-backdrop" onClick={() => setViewingSkillReport(null)}>
-                        <div className="settings-modal animate-slide-up" onClick={e => e.stopPropagation()} style={{ maxWidth: '680px', maxHeight: '80vh', overflow: 'auto' }}>
+                        <div className="settings-modal animate-slide-up" onClick={e => e.stopPropagation()} style={{ maxWidth: '700px', maxHeight: '80vh', overflow: 'auto' }}>
                             <button className="settings-modal-close" onClick={() => setViewingSkillReport(null)}>
                                 <X size={20} />
                             </button>
@@ -2734,7 +2784,7 @@ export default function DashboardPage() {
 
             {/* Feedback Modal */}
             {showFeedbackModal && (
-                <div className="topic-modal-backdrop" onClick={() => !feedbackSending && setShowFeedbackModal(false)} style={{ zIndex: 2500 }}>
+                <div className="topic-modal-backdrop" onClick={() => !feedbackSending && !feedbackPreparingImage && setShowFeedbackModal(false)} style={{ zIndex: 2500 }}>
                     <div className="glass-card" onClick={e => e.stopPropagation()} style={{
                         maxWidth: '480px', width: '92%', margin: 'auto', padding: '28px 24px',
                         borderRadius: 'var(--radius-xl)', background: 'var(--bg-primary)',
@@ -2752,9 +2802,10 @@ export default function DashboardPage() {
                                     <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         <MessageSquareText size={22} color="#7c3aed" /> Góp ý ẩn danh
                                     </h3>
-                                    <button onClick={() => setShowFeedbackModal(false)} style={{
+                                    <button onClick={() => setShowFeedbackModal(false)} disabled={feedbackSending || feedbackPreparingImage} style={{
                                         background: 'none', border: 'none', cursor: 'pointer', padding: '6px',
                                         borderRadius: '10px', color: 'var(--text-secondary)',
+                                        opacity: feedbackSending || feedbackPreparingImage ? 0.5 : 1,
                                     }}>
                                         <X size={20} />
                                     </button>
@@ -2803,14 +2854,124 @@ export default function DashboardPage() {
                                     />
                                 </div>
 
+                                {/* Image Attachment */}
+                                <div style={{ marginBottom: '20px' }}>
+                                    <div style={{ marginBottom: '8px' }}>
+                                        <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Ảnh đính kèm</label>
+                                    </div>
+
+                                    <input
+                                        ref={feedbackImageInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleFeedbackImageSelected}
+                                        style={{ display: 'none' }}
+                                    />
+
+                                    <button
+                                        type="button"
+                                        onClick={() => feedbackImageInputRef.current?.click()}
+                                        disabled={feedbackSending || feedbackPreparingImage}
+                                        style={{
+                                            width: '100%',
+                                            padding: '12px 14px',
+                                            borderRadius: '14px',
+                                            border: '1.5px dashed #c4b5fd',
+                                            background: '#f5f3ff',
+                                            color: '#6d28d9',
+                                            fontSize: '0.88rem',
+                                            fontWeight: 700,
+                                            cursor: feedbackSending || feedbackPreparingImage ? 'not-allowed' : 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '8px',
+                                            opacity: feedbackSending || feedbackPreparingImage ? 0.6 : 1,
+                                        }}
+                                    >
+                                        {feedbackPreparingImage ? (
+                                            <><Loader size={16} className="spin" /> Đang xử lý ảnh...</>
+                                        ) : (
+                                            <><Paperclip size={16} /> Chọn ảnh để đính kèm</>
+                                        )}
+                                    </button>
+
+                                    {feedbackImageError && (
+                                        <p style={{ margin: '8px 0 0', fontSize: '0.78rem', color: '#dc2626', lineHeight: 1.5 }}>
+                                            {feedbackImageError}
+                                        </p>
+                                    )}
+
+                                    {feedbackImagePreviewUrl && (
+                                        <div style={{
+                                            marginTop: '12px',
+                                            border: '1px solid var(--border-color)',
+                                            borderRadius: '16px',
+                                            overflow: 'hidden',
+                                            background: 'var(--bg-primary)',
+                                        }}>
+                                            <div style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                gap: '12px',
+                                                padding: '10px 12px',
+                                                borderBottom: '1px solid var(--border-color)',
+                                                background: 'var(--bg-secondary)',
+                                            }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                                                    <ImageIcon size={15} color="#7c3aed" />
+                                                    <span style={{
+                                                        fontSize: '0.8rem',
+                                                        fontWeight: 600,
+                                                        color: 'var(--text-primary)',
+                                                        whiteSpace: 'nowrap',
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis',
+                                                    }}>
+                                                        {feedbackImageName || 'Ảnh đính kèm'}
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={clearFeedbackImage}
+                                                    disabled={feedbackSending}
+                                                    style={{
+                                                        border: 'none',
+                                                        background: 'none',
+                                                        color: '#ef4444',
+                                                        fontSize: '0.78rem',
+                                                        fontWeight: 700,
+                                                        cursor: feedbackSending ? 'not-allowed' : 'pointer',
+                                                        flexShrink: 0,
+                                                    }}
+                                                >
+                                                    Xóa ảnh
+                                                </button>
+                                            </div>
+                                            <img
+                                                src={feedbackImagePreviewUrl}
+                                                alt={feedbackImageName || 'Ảnh góp ý'}
+                                                style={{
+                                                    display: 'block',
+                                                    width: '100%',
+                                                    maxHeight: '260px',
+                                                    objectFit: 'contain',
+                                                    background: '#ffffff',
+                                                }}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+
                                 {/* Send Button */}
                                 <button
                                     onClick={handleSendFeedback}
-                                    disabled={!feedbackMessage.trim() || feedbackSending}
+                                    disabled={!feedbackMessage.trim() || feedbackSending || feedbackPreparingImage}
                                     style={{
                                         width: '100%', padding: '14px', border: 'none', borderRadius: '14px',
-                                        background: !feedbackMessage.trim() ? '#cbd5e1' : 'linear-gradient(135deg, #7c3aed, #6366f1)',
-                                        color: '#fff', fontSize: '0.95rem', fontWeight: 700, cursor: !feedbackMessage.trim() ? 'not-allowed' : 'pointer',
+                                        background: !feedbackMessage.trim() || feedbackPreparingImage ? '#cbd5e1' : 'linear-gradient(135deg, #7c3aed, #6366f1)',
+                                        color: '#fff', fontSize: '0.95rem', fontWeight: 700, cursor: !feedbackMessage.trim() || feedbackPreparingImage ? 'not-allowed' : 'pointer',
                                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                                         transition: 'all 0.2s', opacity: feedbackSending ? 0.7 : 1,
                                     }}

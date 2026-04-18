@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lật thẻ</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #0D1117 0%, #161B22 50%, #1C2333 100%);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      color: #E6EDF3;
+      padding: 24px;
+      overflow: hidden;
+    }
+
+    /* Waiting screen */
+    #waiting {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      text-align: center;
+    }
+
+    .wait-icon {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: rgba(108, 92, 231, 0.15);
+      border: 2px solid rgba(108, 92, 231, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      animation: pulse 2s ease infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(108, 92, 231, 0.3); }
+      50% { transform: scale(1.05); box-shadow: 0 0 0 12px rgba(108, 92, 231, 0); }
+    }
+
+    #waiting h2 { font-size: 1.3rem; font-weight: 700; color: #E6EDF3; }
+    #waiting p  { font-size: 0.9rem; color: #8B949E; }
+
+    /* Game screen */
+    #game { display: none; flex-direction: column; align-items: center; width: 100%; max-width: 560px; gap: 20px; }
+
+    /* Header */
+    .game-header {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .game-title { font-size: 1rem; font-weight: 700; color: #A29BFE; display: flex; align-items: center; gap: 6px; }
+    .counter { font-size: 0.85rem; font-weight: 600; color: #8B949E; }
+
+    /* Progress bar */
+    .progress-track {
+      width: 100%;
+      height: 6px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 9999px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #6C5CE7, #A29BFE);
+      border-radius: 9999px;
+      transition: width 0.4s ease;
+    }
+
+    /* Card flip */
+    .card-scene {
+      width: 100%;
+      height: 280px;
+      perspective: 1200px;
+      cursor: pointer;
+    }
+
+    .card {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      border-radius: 20px;
+    }
+
+    .card.flipped { transform: rotateY(180deg); }
+
+    .card-face {
+      position: absolute;
+      inset: 0;
+      border-radius: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+    }
+
+    .card-front {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(20px);
+    }
+
+    .card-back {
+      background: linear-gradient(135deg, rgba(108, 92, 231, 0.18) 0%, rgba(0, 206, 201, 0.1) 100%);
+      border: 1px solid rgba(108, 92, 231, 0.3);
+      transform: rotateY(180deg);
+    }
+
+    .card-hint {
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #6E7681;
+      margin-bottom: 16px;
+    }
+
+    .card-word {
+      font-size: 2.4rem;
+      font-weight: 800;
+      color: #E6EDF3;
+      text-align: center;
+      line-height: 1.15;
+    }
+
+    .card-phonetic {
+      margin-top: 10px;
+      font-size: 0.95rem;
+      color: #A29BFE;
+      font-style: italic;
+    }
+
+    .card-type {
+      margin-top: 8px;
+      font-size: 0.75rem;
+      color: #6E7681;
+      font-weight: 500;
+    }
+
+    .card-tap-hint {
+      margin-top: 20px;
+      font-size: 0.75rem;
+      color: #6E7681;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .card-meaning {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #E6EDF3;
+      text-align: center;
+      line-height: 1.2;
+    }
+
+    .card-example {
+      margin-top: 14px;
+      font-size: 0.9rem;
+      color: #8B949E;
+      text-align: center;
+      line-height: 1.6;
+      font-style: italic;
+    }
+
+    .card-example-vi {
+      margin-top: 6px;
+      font-size: 0.85rem;
+      color: #6E7681;
+      text-align: center;
+    }
+
+    /* Navigation */
+    .nav-row {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    .nav-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.06);
+      color: #E6EDF3;
+      font-size: 1.2rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      backdrop-filter: blur(8px);
+    }
+    .nav-btn:hover:not(:disabled) { background: rgba(108,92,231,0.2); border-color: rgba(108,92,231,0.5); }
+    .nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .flip-btn {
+      padding: 12px 28px;
+      border-radius: 9999px;
+      border: 1px solid rgba(108,92,231,0.4);
+      background: rgba(108,92,231,0.15);
+      color: #A29BFE;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      backdrop-filter: blur(8px);
+    }
+    .flip-btn:hover { background: rgba(108,92,231,0.3); border-color: rgba(108,92,231,0.7); }
+
+    /* Known / Unknown row */
+    .verdict-row {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .verdict-btn {
+      padding: 12px;
+      border-radius: 12px;
+      border: none;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .verdict-btn.unknown {
+      background: rgba(255, 107, 107, 0.12);
+      color: #FF6B6B;
+      border: 1px solid rgba(255,107,107,0.3);
+    }
+    .verdict-btn.unknown:hover { background: rgba(255, 107, 107, 0.22); }
+
+    .verdict-btn.known {
+      background: rgba(0, 184, 148, 0.12);
+      color: #00B894;
+      border: 1px solid rgba(0,184,148,0.3);
+    }
+    .verdict-btn.known:hover { background: rgba(0, 184, 148, 0.22); }
+
+    /* Result screen */
+    #result {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 20px;
+      max-width: 400px;
+    }
+
+    .result-emoji { font-size: 56px; }
+    .result-title { font-size: 1.6rem; font-weight: 800; color: #E6EDF3; }
+    .result-sub { font-size: 0.95rem; color: #8B949E; line-height: 1.6; }
+
+    .result-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      width: 100%;
+    }
+
+    .stat-card {
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+    }
+
+    .stat-num { font-size: 2rem; font-weight: 800; }
+    .stat-num.green { color: #00B894; }
+    .stat-num.red { color: #FF6B6B; }
+    .stat-label { font-size: 0.8rem; color: #8B949E; margin-top: 2px; }
+
+    .replay-btn {
+      padding: 14px 36px;
+      border-radius: 9999px;
+      border: none;
+      background: linear-gradient(135deg, #6C5CE7, #5A4BD1);
+      color: white;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 4px 20px rgba(108,92,231,0.4);
+    }
+    .replay-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 28px rgba(108,92,231,0.5); }
+
+    /* Flip animation indicator */
+    .flip-indicator {
+      width: 100%;
+      text-align: center;
+      font-size: 0.78rem;
+      color: #6E7681;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .animate-in { animation: slideIn 0.35s ease both; }
+  </style>
+</head>
+<body>
+
+  <!-- Waiting for payload -->
+  <div id="waiting">
+    <div class="wait-icon">🃏</div>
+    <h2>Lật thẻ từ vựng</h2>
+    <p>Đang tải dữ liệu từ bài học...</p>
+  </div>
+
+  <!-- Game screen -->
+  <div id="game">
+    <div class="game-header animate-in">
+      <span class="game-title">🃏 Lật thẻ</span>
+      <span class="counter" id="counter">1 / 5</span>
+    </div>
+
+    <div class="progress-track animate-in">
+      <div class="progress-fill" id="progress" style="width:0%"></div>
+    </div>
+
+    <div class="card-scene animate-in" id="cardScene" onclick="flipCard()">
+      <div class="card" id="card">
+        <div class="card-face card-front" id="cardFront">
+          <div class="card-hint">Tiếng Anh</div>
+          <div class="card-word" id="frontWord">apple</div>
+          <div class="card-phonetic" id="frontPhonetic">/ˈae.pəl/</div>
+          <div class="card-type" id="frontType"></div>
+          <div class="card-tap-hint">👆 Bấm để xem nghĩa</div>
+        </div>
+
+        <div class="card-face card-back" id="cardBack">
+          <div class="card-hint">Tiếng Việt</div>
+          <div class="card-meaning" id="backMeaning">quả táo</div>
+          <div class="card-example" id="backExample"></div>
+          <div class="card-example-vi" id="backExampleVi"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flip-indicator" id="flipIndicator">Bấm vào thẻ hoặc nhấn Space để lật</div>
+
+    <div class="nav-row animate-in">
+      <button class="nav-btn" id="prevBtn" onclick="navigate(-1)" disabled>‹</button>
+      <button class="flip-btn" onclick="flipCard()">Lật thẻ</button>
+      <button class="nav-btn" id="nextBtn" onclick="navigate(1)">›</button>
+    </div>
+
+    <div class="verdict-row animate-in" id="verdictRow" style="display:none">
+      <button class="verdict-btn unknown" onclick="markVerdict('unknown')">✗ Chưa nhớ</button>
+      <button class="verdict-btn known" onclick="markVerdict('known')">✓ Đã nhớ</button>
+    </div>
+  </div>
+
+  <!-- Result screen -->
+  <div id="result">
+    <div class="result-emoji" id="resultEmoji">🎉</div>
+    <div class="result-title">Hoàn thành!</div>
+    <div class="result-sub" id="resultSub">Bạn đã xem qua tất cả thẻ từ vựng.</div>
+    <div class="result-stats">
+      <div class="stat-card">
+        <div class="stat-num green" id="knownCount">0</div>
+        <div class="stat-label">✓ Đã nhớ</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num red" id="unknownCount">0</div>
+        <div class="stat-label">✗ Chưa nhớ</div>
+      </div>
+    </div>
+    <button class="replay-btn" onclick="restartGame()">🔁 Chơi lại</button>
+  </div>
+
+  <script>
+    // ─── State ───────────────────────────────────────────
+    let words = [];
+    let currentIndex = 0;
+    let isFlipped = false;
+    let verdicts = {}; // { index: 'known' | 'unknown' }
+
+    // ─── PostMessage Integration ──────────────────────────
+    window.addEventListener('message', function(event) {
+      const msg = event.data;
+      if (!msg || typeof msg !== 'object') return;
+
+      if (msg.type === 'GAME_DATA' && msg.dataType === 'vocabulary') {
+        const raw = Array.isArray(msg.words) ? msg.words : [];
+        words = raw.filter(w => w && w.word && w.meaning);
+        if (words.length > 0) {
+          startGame();
+        }
+      }
+    });
+
+    // Request data from parent on load
+    window.addEventListener('load', function() {
+      setTimeout(function() {
+        window.parent.postMessage({ type: 'GAME_REQUEST_RELOAD' }, '*');
+      }, 100);
+    });
+
+    // ─── Game Logic ───────────────────────────────────────
+    function startGame() {
+      currentIndex = 0;
+      isFlipped = false;
+      verdicts = {};
+      document.getElementById('waiting').style.display = 'none';
+      document.getElementById('result').style.display = 'none';
+      const gameEl = document.getElementById('game');
+      gameEl.style.display = 'flex';
+      renderCard();
+    }
+
+    function renderCard() {
+      if (words.length === 0) return;
+
+      const word = words[currentIndex];
+
+      // Reset flip state
+      isFlipped = false;
+      const card = document.getElementById('card');
+      card.classList.remove('flipped');
+
+      // Front face
+      document.getElementById('frontWord').textContent = word.word || '';
+      document.getElementById('frontPhonetic').textContent = word.phonetic || '';
+      document.getElementById('frontType').textContent = word.wordType ? `(${word.wordType})` : '';
+
+      // Back face
+      document.getElementById('backMeaning').textContent = word.meaning || '';
+      document.getElementById('backExample').textContent = word.example ? `"${word.example}"` : '';
+      document.getElementById('backExampleVi').textContent = word.exampleTranslation || '';
+
+      // Progress
+      const pct = ((currentIndex) / words.length) * 100;
+      document.getElementById('progress').style.width = pct + '%';
+      document.getElementById('counter').textContent = (currentIndex + 1) + ' / ' + words.length;
+
+      // Navigation state
+      document.getElementById('prevBtn').disabled = currentIndex === 0;
+      document.getElementById('nextBtn').disabled = currentIndex === words.length - 1;
+
+      // Verdict row hidden until flipped
+      document.getElementById('verdictRow').style.display = 'none';
+      document.getElementById('flipIndicator').style.display = '';
+    }
+
+    function flipCard() {
+      const card = document.getElementById('card');
+      isFlipped = !isFlipped;
+      card.classList.toggle('flipped', isFlipped);
+
+      if (isFlipped) {
+        // Show verdict buttons
+        document.getElementById('verdictRow').style.display = 'grid';
+        document.getElementById('flipIndicator').style.display = 'none';
+      } else {
+        document.getElementById('verdictRow').style.display = 'none';
+        document.getElementById('flipIndicator').style.display = '';
+      }
+    }
+
+    function navigate(dir) {
+      const next = currentIndex + dir;
+      if (next < 0 || next >= words.length) return;
+
+      if (next === words.length - 1 && dir === 1) {
+        // Last card — allow going there
+      }
+
+      currentIndex = next;
+      renderCard();
+    }
+
+    function markVerdict(verdict) {
+      verdicts[currentIndex] = verdict;
+
+      // Animate the card out
+      if (currentIndex < words.length - 1) {
+        currentIndex++;
+        renderCard();
+      } else {
+        // All cards seen → show result
+        showResult();
+      }
+    }
+
+    function showResult() {
+      // Count verdicts
+      let known = 0;
+      let unknown = 0;
+      for (const v of Object.values(verdicts)) {
+        if (v === 'known') known++;
+        else unknown++;
+      }
+
+      // Cards that were never judged count as unknown
+      const judged = known + unknown;
+      const unseen = words.length - judged;
+      unknown += unseen;
+
+      document.getElementById('knownCount').textContent = known;
+      document.getElementById('unknownCount').textContent = unknown;
+
+      const pct = Math.round((known / words.length) * 100);
+      let emoji = '🎉';
+      let sub = `Bạn nhớ ${known}/${words.length} từ (${pct}%). Hãy ôn lại những thẻ chưa nhớ!`;
+      if (pct === 100) { emoji = '🏆'; sub = 'Xuất sắc! Bạn đã nhớ tất cả từ vựng!'; }
+      else if (pct >= 70) { emoji = '😊'; }
+      else if (pct >= 40) { emoji = '💪'; sub = `Bạn nhớ ${known}/${words.length} từ. Tiếp tục cố gắng!`; }
+      else { emoji = '📚'; sub = `Bạn nhớ ${known}/${words.length} từ. Hãy ôn luyện thêm!`; }
+
+      document.getElementById('resultEmoji').textContent = emoji;
+      document.getElementById('resultSub').textContent = sub;
+
+      // Update progress to 100%
+      document.getElementById('progress').style.width = '100%';
+
+      document.getElementById('game').style.display = 'none';
+      const resultEl = document.getElementById('result');
+      resultEl.style.display = 'flex';
+
+      // Send completion signal to parent
+      window.parent.postMessage({
+        type: 'GAME_COMPLETE',
+        summary: {
+          message: sub,
+          correctAnswers: known,
+          totalQuestions: words.length,
+          score: pct
+        }
+      }, '*');
+    }
+
+    function restartGame() {
+      startGame();
+    }
+
+    // ─── Keyboard shortcuts ───────────────────────────────
+    window.addEventListener('keydown', function(e) {
+      if (e.code === 'Space') { e.preventDefault(); flipCard(); }
+      if (e.code === 'ArrowLeft') navigate(-1);
+      if (e.code === 'ArrowRight') navigate(1);
+      if (e.code === 'KeyK' && isFlipped) markVerdict('known');
+      if (e.code === 'KeyU' && isFlipped) markVerdict('unknown');
+    });
+  </script>
+</body>
+</html>

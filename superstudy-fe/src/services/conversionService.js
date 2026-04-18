@@ -1,8 +1,6 @@
-import { db, storage } from '../config/firebase';
-import { collection, doc, getDocs, getDoc, setDoc, Timestamp, query, where } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { recalcExamQuestionCache, getExam, getExamQuestions, saveExam, saveExamQuestion } from './examService';
 import { recalcGrammarQuestionCache, getGrammarExercise, getGrammarQuestions, saveGrammarExercise, saveGrammarQuestion } from './grammarService';
+import { uploadPublicAsset } from './uploadService';
 
 // ==========================================
 // HELPER: Copy a Firebase Storage file to a new path
@@ -28,10 +26,11 @@ async function copyStorageFile(url, targetFolder) {
         else if (contentType.includes('png')) ext = 'png';
         else if (contentType.includes('jpeg') || contentType.includes('jpg')) ext = 'jpg';
 
-        const newPath = `${targetFolder}/${timestamp}_${rand}.${ext}`;
-        const storageRef = ref(storage, newPath);
-        await uploadBytes(storageRef, blob, { contentType: blob.type || 'application/octet-stream' });
-        return getDownloadURL(storageRef);
+        const upload = await uploadPublicAsset(blob, targetFolder, {
+            fileName: `${timestamp}_${rand}.${ext}`,
+            contentType: blob.type || 'application/octet-stream',
+        });
+        return upload?.url || url;
     } catch (e) {
         console.error('[conversionService] Error copying storage file:', url, e);
         return url;

@@ -13,8 +13,18 @@ export class UsersController {
 
   @ApiOperation({ summary: 'List all users (optionally filter by role)' })
   @Get()
-  findAll(@Query('role') role?: string, @Query('status') status?: string) {
-    return this.usersService.findAll({ role, status });
+  findAll(
+    @Query('role') role?: string,
+    @Query('status') status?: string,
+    @Query('groupId') groupId?: string,
+    @Query('includeDeleted') includeDeleted?: string,
+  ) {
+    return this.usersService.findAll({
+      role,
+      status,
+      groupId,
+      includeDeleted: includeDeleted === 'true',
+    });
   }
 
   @ApiOperation({ summary: 'List all accounts straight from ISMS mappings' })
@@ -96,5 +106,20 @@ export class UsersController {
     @Query('endDate') endDate?: string,
   ) {
     return this.usersService.getLearningStats(id, startDate, endDate);
+  }
+
+  @ApiOperation({ summary: 'Permanently delete a user and ALL related data (cascading)' })
+  @Delete(':id/permanent')
+  permanentDelete(@Param('id') id: string) {
+    return this.usersService.permanentDeleteUser(id);
+  }
+
+  @ApiOperation({ summary: 'Change user email (updates ISMS account + sst-users doc)' })
+  @Patch(':id/email')
+  changeEmail(
+    @Param('id') id: string,
+    @Body() body: { newEmail: string },
+  ) {
+    return this.usersService.changeUserEmail(id, body.newEmail);
   }
 }

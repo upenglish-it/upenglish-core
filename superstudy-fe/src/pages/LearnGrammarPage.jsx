@@ -64,7 +64,14 @@ export default function LearnGrammarPage() {
     const navigate = useNavigate();
     const { settings } = useAppSettings();
     useAntiCopy();
-    const { exerciseId, exerciseName, icon, color } = location.state || {};
+    const searchParams = new URLSearchParams(location.search);
+    const stateData = location.state || {};
+    // Support both location.state (internal navigation) and ?exerciseId= query param (direct URL / preview links)
+    const exerciseId = stateData.exerciseId || searchParams.get('exerciseId');
+    const exerciseName = stateData.exerciseName;
+    const icon = stateData.icon;
+    const color = stateData.color;
+    const isPreviewMode = searchParams.get('preview') === 'true';
 
     const [questions, setQuestions] = useState([]);
     const [originalQuestions, setOriginalQuestions] = useState([]);

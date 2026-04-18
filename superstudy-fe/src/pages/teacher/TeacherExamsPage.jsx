@@ -6,13 +6,14 @@ import { getUsersPublicInfo } from '../../services/userService';
 import { addCollaborator, removeCollaborator, transferOwnership, getCollaboratedResources, findTeacherByEmail, getTeacherGroups, getStudentsInGroup, updateCollaboratorRole } from '../../services/teacherService';
 import { useAuth } from '../../contexts/AuthContext';
 
-import { Edit, Trash2, X, Plus, List, Search, Clock, ClipboardCheck, ClipboardList, FolderOpen, Globe, Lock, AlertTriangle, Share2, ChevronDown, ChevronRight, AlertCircle, Users, UserPlus, Landmark, Send, CheckCircle, XCircle, ArrowRightLeft, UsersRound, FileText, Calendar, Copy, GripVertical } from 'lucide-react';
+import { Edit, Trash2, X, Plus, List, Search, Clock, ClipboardCheck, ClipboardList, FolderOpen, Globe, Lock, AlertTriangle, Share2, ChevronDown, ChevronRight, AlertCircle, Users, UserPlus, Landmark, Send, CheckCircle, XCircle, ArrowRightLeft, UsersRound, FileText, Calendar, Copy, GripVertical, Eye } from 'lucide-react';
 import { duplicateExam } from '../../services/duplicateService';
 import { convertExamToGrammar } from '../../services/conversionService';
 import CustomSelect from '../../components/common/CustomSelect';
 import EmailAutocomplete from '../../components/common/EmailAutocomplete';
 import ShareModal from '../../components/common/ShareModal';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import { truncateText } from '../../utils/textDisplay';
 
 export default function TeacherExamsPage() {
     const { user } = useAuth();
@@ -87,8 +88,8 @@ export default function TeacherExamsPage() {
         if (user?.uid) loadData();
     }, [user?.uid]);
 
-    async function loadData() {
-        setLoading(true);
+    async function loadData(silent = false) {
+        if (!silent) setLoading(true);
         try {
             // 1. Fetch own teacher exams
             const teacherExams = await getExams('teacher');
@@ -575,19 +576,37 @@ export default function TeacherExamsPage() {
                 loadData();
             }
         } else if (result.type === 'exam') {
-            // Exam reorder within folder
+            // Exam reorder within folder (search-aware)
             const folderId = result.source.droppableId.replace('folder-exams-', '');
             const folder = teacherFolders.find(f => f.id === folderId);
             if (!folder) return;
-            const ids = [...(folder.examIds || [])];
-            const [movedId] = ids.splice(result.source.index, 1);
-            ids.splice(result.destination.index, 0, movedId);
-            setTeacherFolders(prev => prev.map(f => f.id === folderId ? { ...f, examIds: ids } : f));
+            const allExamIds = [...(folder.examIds || [])];
+            const searchLower2 = searchTerm.toLowerCase();
+            const visibleExamIds = allExamIds.filter(id => {
+                const exam = mergedExams.find(e => e.id === id);
+                if (!exam) return false;
+                if (searchLower2) {
+                    return (exam.name || '').toLowerCase().includes(searchLower2) ||
+                           (exam.description || '').toLowerCase().includes(searchLower2);
+                }
+                return true;
+            });
+            const reorderedVisible = [...visibleExamIds];
+            const [movedId] = reorderedVisible.splice(result.source.index, 1);
+            reorderedVisible.splice(result.destination.index, 0, movedId);
+            const visibleSet = new Set(visibleExamIds);
+            const newIds = [];
+            let visibleIdx = 0;
+            for (const id of allExamIds) {
+                if (visibleSet.has(id)) { newIds.push(reorderedVisible[visibleIdx++]); }
+                else { newIds.push(id); }
+            }
+            setTeacherFolders(prev => prev.map(f => f.id === folderId ? { ...f, examIds: newIds } : f));
             try {
-                await saveTeacherExamFolder(user.uid, { ...folder, examIds: ids });
+                await saveTeacherExamFolder(user.uid, { ...folder, examIds: newIds });
             } catch (error) {
                 setAlertMessage({ type: 'error', text: 'Lỗi đổi vị trí bài: ' + error.message });
-                loadData();
+                loadData(true);
             }
         }
     }
@@ -642,6 +661,8 @@ export default function TeacherExamsPage() {
                 <div className="admin-search-box">
                     <Search size={16} className="search-icon" />
                     <input
+                        id="teacher-exams-search"
+                        name="teacherExamsSearch"
                         type="text"
                         placeholder="Tìm bài tập và kiểm tra, folder..."
                         value={searchTerm}
@@ -851,6 +872,7 @@ export default function TeacherExamsPage() {
                                                                         <Link to={isSystem ? `/teacher/system-exams/${exam.id}` : `/teacher/exams/${exam.id}`} className="admin-action-btn" title="Xem/Quản lý câu hỏi">
                                                                             <List size={16} />
                                                                         </Link>
+                                                                        <button className="admin-action-btn" title={`Xem trước ${exam.examType === 'test' ? 'bài kiểm tra' : 'bài tập'}`} onClick={() => { if (!exam.sections || exam.sections.length === 0) { alert('Bài tập chưa có nội dung để xem trước.'); return; } window.open(`${window.__APP_BASE__ || './'}?_preview=${encodeURIComponent(`/exam?examId=${exam.id}&preview=true`)}`, '_blank'); }}><Eye size={16} /></button>
                                                                         {isOwn && (
                                                                             <>
                                                                                 <button className="admin-action-btn" onClick={() => setExamToDuplicate(exam)} title="Nhân đôi"><Copy size={16} /></button>
@@ -945,6 +967,7 @@ export default function TeacherExamsPage() {
                                                                         <Link to={isSystem ? `/teacher/system-exams/${exam.id}` : `/teacher/exams/${exam.id}`} className="admin-action-btn" title="Xem/Quản lý câu hỏi">
                                                                             <List size={16} />
                                                                         </Link>
+                                                                        <button className="admin-action-btn" title={`Xem trước ${exam.examType === 'test' ? 'bài kiểm tra' : 'bài tập'}`} onClick={() => { if (!exam.sections || exam.sections.length === 0) { alert('Bài tập chưa có nội dung để xem trước.'); return; } window.open(`${window.__APP_BASE__ || './'}?_preview=${encodeURIComponent(`/exam?examId=${exam.id}&preview=true`)}`, '_blank'); }}><Eye size={16} /></button>
                                                                         {isOwn && (
                                                                             <>
                                                                                 <button className="admin-action-btn" onClick={() => setExamToDuplicate(exam)} title="Nhân đôi"><Copy size={16} /></button>
@@ -1083,6 +1106,7 @@ export default function TeacherExamsPage() {
                                                                         <Link to={`/teacher/system-exams/${exam.id}`} className="admin-action-btn" title="Xem/Quản lý câu hỏi">
                                                                             <List size={16} />
                                                                         </Link>
+                                                                        <button className="admin-action-btn" title={`Xem trước ${exam.examType === 'test' ? 'bài kiểm tra' : 'bài tập'}`} onClick={() => { if (!exam.sections || exam.sections.length === 0) { alert('Bài tập chưa có nội dung để xem trước.'); return; } window.open(`${window.__APP_BASE__ || './'}?_preview=${encodeURIComponent(`/exam?examId=${exam.id}&preview=true`)}`, '_blank'); }}><Eye size={16} /></button>
                                                                         <span style={{ fontSize: '0.8rem', color: '#3b82f6', fontStyle: 'italic', display: 'flex', alignItems: 'center' }}>
                                                                             <Lock size={12} style={{ marginRight: '4px' }} /> Chính thức
                                                                         </span>
@@ -1166,6 +1190,7 @@ export default function TeacherExamsPage() {
                                                             <Link to={isSystem ? `/teacher/system-exams/${exam.id}` : `/teacher/exams/${exam.id}`} className="admin-action-btn" title="Xem/Quản lý câu hỏi">
                                                                 <List size={16} />
                                                             </Link>
+                                                            <button className="admin-action-btn" title={`Xem trước ${exam.examType === 'test' ? 'bài kiểm tra' : 'bài tập'}`} onClick={() => { if (!exam.sections || exam.sections.length === 0) { alert('Bài tập chưa có nội dung để xem trước.'); return; } window.open(`${window.__APP_BASE__ || './'}?_preview=${encodeURIComponent(`/exam?examId=${exam.id}&preview=true`)}`, '_blank'); }}><Eye size={16} /></button>
                                                             {isOwn && (
                                                                 <>
                                                                     <button className="admin-action-btn" onClick={() => setExamToDuplicate(exam)} title="Nhân đôi"><Copy size={16} /></button>
@@ -1460,7 +1485,6 @@ export default function TeacherExamsPage() {
                         setIsQuickAssigning(true);
                         setQuickAssignSuccess('');
                         try {
-                            const dueDateTimestamp = Timestamp.fromDate(new Date(quickAssignDueDate));
                             const assignPayload = {
                                 examId: resourceToShare.id,
                                 examName: resourceToShare.name,
@@ -1468,13 +1492,13 @@ export default function TeacherExamsPage() {
                                 examType: resourceToShare.examType || 'homework',
                                 targetType: 'group',
                                 targetId: quickAssignGroupId,
-                                dueDate: dueDateTimestamp,
+                                dueDate: new Date(quickAssignDueDate).toISOString(),
                                 createdBy: user?.uid,
                                 teacherTitle: user?.teacherTitle || '',
                                 studentTitle: user?.studentTitle || ''
                             };
                             if (quickAssignScheduledStart && quickAssignScheduledStart !== 'pending') {
-                                assignPayload.scheduledStart = Timestamp.fromDate(new Date(quickAssignScheduledStart));
+                                assignPayload.scheduledStart = new Date(quickAssignScheduledStart).toISOString();
                             }
                             if (quickAssignSelectedStudentIds.length > 0) {
                                 assignPayload.assignedStudentIds = quickAssignSelectedStudentIds;

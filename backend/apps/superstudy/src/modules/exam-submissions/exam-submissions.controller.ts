@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Patch,
+  Controller, Get, Post, Patch, Delete,
   Param, Query, Body, HttpCode, HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -11,12 +11,26 @@ import { ExamSubmissionsService } from './exam-submissions.service';
 export class ExamSubmissionsController {
   constructor(private readonly examSubmissionsService: ExamSubmissionsService) {}
 
-  @ApiOperation({ summary: 'List submissions for an assignment' })
+  @ApiOperation({ summary: 'Lookup a submission by assignmentId + studentId' })
+  @Get('lookup')
+  lookup(
+    @Query('assignmentId') assignmentId: string,
+    @Query('studentId') studentId: string,
+  ) {
+    return this.examSubmissionsService.lookup(assignmentId, studentId);
+  }
+
+  @ApiOperation({ summary: 'List submissions (filter by assignmentId, studentId, or comma-sep assignmentIds)' })
   @Get()
   findAll(
     @Query('assignmentId') assignmentId?: string,
     @Query('studentId') studentId?: string,
+    @Query('assignmentIds') assignmentIds?: string,
   ) {
+    if (assignmentIds) {
+      const ids = assignmentIds.split(',').filter(Boolean);
+      return this.examSubmissionsService.findByAssignments(ids);
+    }
     return this.examSubmissionsService.findAll({ assignmentId, studentId });
   }
 
@@ -36,6 +50,12 @@ export class ExamSubmissionsController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() body: Record<string, any>) {
     return this.examSubmissionsService.update(id, body);
+  }
+
+  @ApiOperation({ summary: 'Delete a submission (hard delete)' })
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.examSubmissionsService.remove(id);
   }
 
   @ApiOperation({ summary: 'Release exam results to student' })

@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Snake Linguist SuperStudy</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Quicksand', sans-serif;
+        background: linear-gradient(180deg, #1a5f2a 0%, #0d3314 50%, #071a0a 100%);
+        color: #f3f4f6;
+        touch-action: none;
+        min-height: 100vh;
+      }
+      
+      .font-game {
+        font-family: 'Quicksand', sans-serif;
+      }
+
+      /* PopCap Style Glossy Button */
+      .popcap-btn {
+        position: relative;
+        border-radius: 16px;
+        font-weight: 700;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+        box-shadow: 
+          0 6px 0 rgba(0,0,0,0.3),
+          0 8px 15px rgba(0,0,0,0.3),
+          inset 0 2px 0 rgba(255,255,255,0.3);
+        transition: all 0.1s ease;
+        overflow: hidden;
+      }
+      .popcap-btn::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 10%;
+        right: 10%;
+        height: 40%;
+        background: linear-gradient(180deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 100%);
+        border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+        pointer-events: none;
+      }
+      .popcap-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 
+          0 8px 0 rgba(0,0,0,0.3),
+          0 12px 20px rgba(0,0,0,0.3),
+          inset 0 2px 0 rgba(255,255,255,0.3);
+      }
+      .popcap-btn:active {
+        transform: translateY(4px);
+        box-shadow: 
+          0 2px 0 rgba(0,0,0,0.3),
+          0 4px 8px rgba(0,0,0,0.3),
+          inset 0 2px 0 rgba(255,255,255,0.2);
+      }
+
+      .popcap-btn-green {
+        background: linear-gradient(180deg, #7ed321 0%, #4a9c1d 50%, #3d8018 100%);
+        border: 3px solid #2d5a0f;
+      }
+      .popcap-btn-orange {
+        background: linear-gradient(180deg, #ffb347 0%, #ff8c00 50%, #e67300 100%);
+        border: 3px solid #b35900;
+      }
+      .popcap-btn-blue {
+        background: linear-gradient(180deg, #5bc0de 0%, #3498db 50%, #2980b9 100%);
+        border: 3px solid #1a5276;
+      }
+      .popcap-btn-red {
+        background: linear-gradient(180deg, #ff6b6b 0%, #ee5a24 50%, #c0392b 100%);
+        border: 3px solid #922b21;
+      }
+      .popcap-btn-purple {
+        background: linear-gradient(180deg, #a29bfe 0%, #6c5ce7 50%, #5b4cdb 100%);
+        border: 3px solid #4834d4;
+      }
+      .popcap-btn-gray {
+        background: linear-gradient(180deg, #95a5a6 0%, #7f8c8d 50%, #6c7a7b 100%);
+        border: 3px solid #566573;
+      }
+
+      /* Wood Frame Style */
+      .wood-frame {
+        background: linear-gradient(135deg, #8B4513 0%, #654321 50%, #4a3520 100%);
+        border: 4px solid #2d1810;
+        border-radius: 20px;
+        box-shadow: 
+          inset 0 2px 4px rgba(255,255,255,0.2),
+          inset 0 -2px 4px rgba(0,0,0,0.3),
+          0 8px 20px rgba(0,0,0,0.5);
+        padding: 12px;
+      }
+
+      /* Grass Pattern Background */
+      .grass-bg {
+        background: 
+          radial-gradient(ellipse at 20% 80%, rgba(34, 139, 34, 0.3) 0%, transparent 50%),
+          radial-gradient(ellipse at 80% 20%, rgba(50, 205, 50, 0.2) 0%, transparent 50%),
+          linear-gradient(180deg, #1a5f2a 0%, #0d3314 100%);
+      }
+
+      /* Cartoon Panel */
+      .cartoon-panel {
+        background: linear-gradient(180deg, #3d5c47 0%, #2d4435 100%);
+        border: 4px solid #1a2e1f;
+        border-radius: 20px;
+        box-shadow: 
+          inset 0 2px 0 rgba(255,255,255,0.15),
+          inset 0 -2px 0 rgba(0,0,0,0.2),
+          0 6px 20px rgba(0,0,0,0.4);
+      }
+
+      /* Score Badge */
+      .score-badge {
+        background: linear-gradient(180deg, #ffd700 0%, #ffb300 50%, #ff8c00 100%);
+        border: 3px solid #b8860b;
+        border-radius: 12px;
+        box-shadow: 
+          inset 0 2px 0 rgba(255,255,255,0.4),
+          0 3px 0 rgba(0,0,0,0.2);
+        color: #5d4e0b;
+        text-shadow: 0 1px 0 rgba(255,255,255,0.5);
+      }
+
+      /* Heart Style */
+      .heart-full {
+        filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3));
+      }
+      .heart-empty {
+        filter: grayscale(100%) drop-shadow(0 2px 2px rgba(0,0,0,0.3));
+        opacity: 0.4;
+      }
+
+      /* Food Item Bounce */
+      @keyframes foodBounce {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+      }
+      .food-bounce {
+        animation: foodBounce 0.6s ease-in-out infinite;
+      }
+
+      /* Sparkle Effect */
+      @keyframes sparkle {
+        0%, 100% { opacity: 0; transform: scale(0) rotate(0deg); }
+        50% { opacity: 1; transform: scale(1) rotate(180deg); }
+      }
+      .sparkle {
+        animation: sparkle 1.5s ease-in-out infinite;
+      }
+
+      /* Float Animation */
+      @keyframes float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-8px); }
+      }
+      .float-anim {
+        animation: float 3s ease-in-out infinite;
+      }
+
+      /* Wiggle Animation */
+      @keyframes wiggle {
+        0%, 100% { transform: rotate(-3deg); }
+        50% { transform: rotate(3deg); }
+      }
+      .wiggle-anim {
+        animation: wiggle 0.5s ease-in-out infinite;
+      }
+
+      /* Pop Animation */
+      @keyframes pop {
+        0% { transform: scale(0.8); opacity: 0; }
+        50% { transform: scale(1.1); }
+        100% { transform: scale(1); opacity: 1; }
+      }
+      .pop-in {
+        animation: pop 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      }
+
+      /* Shake Animation */
+      @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+        20%, 40%, 60%, 80% { transform: translateX(4px); }
+      }
+      .animate-shake {
+        animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+      }
+
+      /* Glow Effect */
+      .glow-green {
+        box-shadow: 0 0 20px rgba(126, 211, 33, 0.6), 0 0 40px rgba(126, 211, 33, 0.3);
+      }
+      .glow-yellow {
+        box-shadow: 0 0 20px rgba(255, 215, 0, 0.6), 0 0 40px rgba(255, 215, 0, 0.3);
+      }
+      .glow-red {
+        box-shadow: 0 0 15px rgba(255, 0, 0, 0.5);
+      }
+
+      /* Title Text Effect */
+      .title-3d {
+        text-shadow: 
+          0 1px 0 #ccc,
+          0 2px 0 #c9c9c9,
+          0 3px 0 #bbb,
+          0 4px 0 #b9b9b9,
+          0 5px 0 #aaa,
+          0 6px 1px rgba(0,0,0,.1),
+          0 0 5px rgba(0,0,0,.1),
+          0 1px 3px rgba(0,0,0,.3),
+          0 3px 5px rgba(0,0,0,.2),
+          0 5px 10px rgba(0,0,0,.25),
+          0 10px 10px rgba(0,0,0,.2),
+          0 20px 20px rgba(0,0,0,.15);
+      }
+
+      /* Snake Segment Styling */
+      .snake-head {
+        background: linear-gradient(135deg, #7ed321 0%, #5ba318 100%);
+        border: 2px solid #3d6b0f;
+        box-shadow: inset 0 2px 4px rgba(255,255,255,0.3);
+      }
+      .snake-body {
+        background: linear-gradient(135deg, #6bc41a 0%, #4a9112 100%);
+        border: 1px solid #3a700e;
+        box-shadow: inset 0 1px 2px rgba(255,255,255,0.2);
+      }
+
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1a2e1f; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #4a6b4f; 
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #5c855f; 
+      }
+
+      /* Decorative Leaves */
+      .leaf-decor::before,
+      .leaf-decor::after {
+        content: '🌿';
+        position: absolute;
+        font-size: 2rem;
+        opacity: 0.3;
+      }
+      .leaf-decor::before {
+        top: -10px;
+        left: -10px;
+        transform: rotate(-45deg);
+      }
+      .leaf-decor::after {
+        bottom: -10px;
+        right: -10px;
+        transform: rotate(135deg);
+      }
+    </style>
+
+
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0"
+  }
+}
+</script>
+  <script type="module" crossorigin src="./assets/index-YKr8TJHP.js"></script>
+</head>
+  <body>
+    <div id="root"></div>
+</body>
+</html>

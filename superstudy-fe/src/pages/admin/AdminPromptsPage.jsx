@@ -1,50 +1,61 @@
 import { useState, useEffect } from 'react';
 import { getAllPrompts, deletePrompt } from '../../services/promptService';
-import { db } from '../../config/firebase';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { Search, ChevronDown, ChevronRight, PenTool, Mic, Trash2, FolderOpen, User as UserIcon, MessageSquare, AlertCircle, Eye, EyeOff, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
+import { Search, ChevronDown, ChevronRight, PenTool, Mic, Trash2, FolderOpen, MessageSquare, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { usersService } from '../../models';
+import { getResolvedUserEmail, getResolvedUserLabel } from '../../utils/userIdentity';
 
 const SKILL_META = {
     writing: { label: 'Viết', icon: PenTool, color: '#3b82f6', bg: '#eff6ff' },
     speaking: { label: 'Nói', icon: Mic, color: '#f59e0b', bg: '#fffbeb' },
 };
 
+function formatPromptDate(ts) {
+    if (!ts) return '';
+    const date = ts.toDate ? ts.toDate() : new Date(ts);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('vi-VN');
+}
+
 export default function AdminPromptsPage() {
     const [prompts, setPrompts] = useState([]);
-    const [teachers, setTeachers] = useState({}); // uid -> { displayName, email, photoURL }
+    const [teachers, setTeachers] = useState({});
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [expandedTeachers, setExpandedTeachers] = useState({});
     const [expandedPrompts, setExpandedPrompts] = useState({});
     const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-    useEffect(() => { loadData(); }, []);
+    useEffect(() => {
+        loadData();
+    }, []);
 
     async function loadData() {
         setLoading(true);
         try {
-            const allPrompts = await getAllPrompts();
+            const allPrompts = (await getAllPrompts()).map((prompt) => ({
+                ...prompt,
+                id: prompt.id || prompt._id,
+            }));
             setPrompts(allPrompts);
 
-            // Gather unique teacher UIDs and fetch user info
             const uids = [...new Set(allPrompts.map(p => p.createdBy).filter(Boolean))];
             if (uids.length > 0) {
                 const teacherMap = {};
-                // Firestore 'in' query supports max 30 items at once
-                for (let i = 0; i < uids.length; i += 30) {
-                    const batch = uids.slice(i, i + 30);
-                    const snap = await getDocs(query(collection(db, 'users'), where('__name__', 'in', batch)));
-                    snap.forEach(d => {
-                        const data = d.data();
-                        teacherMap[d.id] = { displayName: data.displayName || data.email || d.id, email: data.email, photoURL: data.photoURL };
-                    });
-                }
-                // Fill missing UIDs
-                uids.forEach(uid => {
-                    if (!teacherMap[uid]) teacherMap[uid] = { displayName: uid, email: '' };
-                });
+                await Promise.all(uids.map(async (uid) => {
+                    try {
+                        const result = await usersService.findOne(uid);
+                        const data = result?.data || result;
+                        teacherMap[uid] = {
+                            displayName: getResolvedUserLabel(data, '', uid),
+                            email: getResolvedUserEmail(data),
+                            photoURL: data?.photoURL || data?.profilePhoto || '',
+                        };
+                    } catch {
+                        teacherMap[uid] = { displayName: getResolvedUserLabel({}, '', uid), email: '', photoURL: '' };
+                    }
+                }));
                 setTeachers(teacherMap);
-                // Auto-expand first teacher
+
                 const firstUid = uids[0];
                 if (firstUid) setExpandedTeachers({ [firstUid]: true });
             }
@@ -73,19 +84,6 @@ export default function AdminPromptsPage() {
         setExpandedPrompts(prev => ({ ...prev, [promptId]: !prev[promptId] }));
     }
 
-    function toggleAllPrompts() {
-        const allIds = prompts.map(p => p.id);
-        const allExpanded = allIds.every(id => expandedPrompts[id]);
-        if (allExpanded) {
-            setExpandedPrompts({});
-        } else {
-            const newState = {};
-            allIds.forEach(id => { newState[id] = true; });
-            setExpandedPrompts(newState);
-        }
-    }
-
-    // Group prompts by teacher
     const grouped = {};
     prompts.forEach(p => {
         const uid = p.createdBy || 'unknown';
@@ -93,7 +91,6 @@ export default function AdminPromptsPage() {
         grouped[uid].push(p);
     });
 
-    // Filter by search
     const filteredGrouped = {};
     Object.entries(grouped).forEach(([uid, list]) => {
         const teacherName = (teachers[uid]?.displayName || '').toLowerCase();
@@ -118,7 +115,6 @@ export default function AdminPromptsPage() {
 
     return (
         <div className="admin-page-container">
-            {/* Header */}
             <div className="admin-page-header" style={{ textAlign: 'center', marginBottom: '28px' }}>
                 <h1 style={{ fontSize: '1.6rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
                     <MessageSquare size={28} color="#4f46e5" /> Quản lý Prompt AI
@@ -129,13 +125,13 @@ export default function AdminPromptsPage() {
                 <p style={{ color: '#94a3b8', fontSize: '0.82rem', marginTop: '2px', fontWeight: 600 }}>
                     {totalTeachers} giáo viên • {totalPrompts} prompt
                 </p>
-
             </div>
 
-            {/* Search */}
             <div style={{ maxWidth: '800px', margin: '0 auto 24px', position: 'relative' }}>
                 <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                 <input
+                    id="admin-prompts-search"
+                    name="adminPromptsSearch"
                     type="text"
                     placeholder="Tìm theo tên giáo viên, tiêu đề hoặc nội dung prompt..."
                     value={search}
@@ -151,7 +147,6 @@ export default function AdminPromptsPage() {
                 />
             </div>
 
-            {/* Content */}
             {loading ? (
                 <div style={{ textAlign: 'center', padding: '60px 20px', color: '#94a3b8' }}>
                     <div className="spinner" style={{ margin: '0 auto 16px' }}></div>
@@ -167,7 +162,7 @@ export default function AdminPromptsPage() {
             ) : (
                 <div style={{ maxWidth: '800px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {sortedTeacherUids.map(uid => {
-                        const teacher = teachers[uid] || { displayName: uid };
+                        const teacher = teachers[uid] || { displayName: 'Unknown', email: 'Unknown user' };
                         const teacherPrompts = filteredGrouped[uid];
                         const isExpanded = search ? true : expandedTeachers[uid];
                         const writingCount = teacherPrompts.filter(p => p.skill === 'writing').length;
@@ -179,7 +174,6 @@ export default function AdminPromptsPage() {
                                 background: '#fff', overflow: 'hidden', transition: 'box-shadow 0.2s',
                                 boxShadow: isExpanded ? '0 4px 16px rgba(0,0,0,0.06)' : 'none',
                             }}>
-                                {/* Folder header */}
                                 <div
                                     onClick={() => toggleTeacher(uid)}
                                     style={{
@@ -218,15 +212,16 @@ export default function AdminPromptsPage() {
                                     </div>
                                 </div>
 
-                                {/* Prompt list (expanded) */}
                                 {isExpanded && (
                                     <div style={{ borderTop: '1px solid #f1f5f9' }}>
                                         {teacherPrompts.map((p, idx) => {
                                             const meta = SKILL_META[p.skill] || SKILL_META.writing;
                                             const SkillIcon = meta.icon;
+                                            const promptKey = p.id || p._id || `${uid}-${idx}`;
+
                                             return (
                                                 <div
-                                                    key={p.id}
+                                                    key={promptKey}
                                                     style={{
                                                         padding: '14px 18px 14px 52px',
                                                         borderBottom: idx < teacherPrompts.length - 1 ? '1px solid #f8fafc' : 'none',
@@ -261,25 +256,24 @@ export default function AdminPromptsPage() {
                                                         </button>
                                                     </div>
                                                     <div
-                                                        onClick={() => togglePrompt(p.id)}
+                                                        onClick={() => togglePrompt(promptKey)}
                                                         style={{
                                                             fontSize: '0.82rem', color: '#64748b', lineHeight: 1.6,
-                                                            ...(expandedPrompts[p.id]
+                                                            ...(expandedPrompts[promptKey]
                                                                 ? { whiteSpace: 'pre-wrap' }
-                                                                : { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', whiteSpace: 'pre-wrap' }
-                                                            ),
+                                                                : { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', whiteSpace: 'pre-wrap' }),
                                                             cursor: 'pointer', borderRadius: '8px', padding: '6px 8px', margin: '-6px -8px',
                                                             transition: 'background 0.15s',
                                                         }}
                                                         onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
                                                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                                        title={expandedPrompts[p.id] ? 'Thu gọn' : 'Bấm để xem toàn bộ prompt'}
+                                                        title={expandedPrompts[promptKey] ? 'Thu gọn' : 'Bấm để xem toàn bộ prompt'}
                                                     >
                                                         {p.content}
                                                     </div>
                                                     {p.content && p.content.length > 150 && (
                                                         <button
-                                                            onClick={(e) => { e.stopPropagation(); togglePrompt(p.id); }}
+                                                            onClick={e => { e.stopPropagation(); togglePrompt(promptKey); }}
                                                             style={{
                                                                 background: 'none', border: 'none', cursor: 'pointer',
                                                                 color: '#4f46e5', fontSize: '0.75rem', fontWeight: 600,
@@ -287,15 +281,14 @@ export default function AdminPromptsPage() {
                                                                 display: 'inline-flex', alignItems: 'center', gap: '4px',
                                                             }}
                                                         >
-                                                            {expandedPrompts[p.id]
+                                                            {expandedPrompts[promptKey]
                                                                 ? <><EyeOff size={12} /> Thu gọn</>
-                                                                : <><Eye size={12} /> Xem toàn bộ prompt</>
-                                                            }
+                                                                : <><Eye size={12} /> Xem toàn bộ prompt</>}
                                                         </button>
                                                     )}
                                                     {p.createdAt && (
                                                         <div style={{ fontSize: '0.7rem', color: '#cbd5e1', marginTop: '6px' }}>
-                                                            {p.createdAt.toDate?.().toLocaleDateString('vi-VN')}
+                                                            {formatPromptDate(p.createdAt)}
                                                         </div>
                                                     )}
                                                 </div>
@@ -309,7 +302,6 @@ export default function AdminPromptsPage() {
                 </div>
             )}
 
-            {/* Delete confirmation modal */}
             {deleteConfirm && (
                 <div className="teacher-modal-overlay" onClick={() => setDeleteConfirm(null)}>
                     <div className="teacher-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px' }}>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Bell, Check, Trash2 } from 'lucide-react';
+import { Bell, Check, Trash2, X, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { subscribeToUserNotifications, markNotificationAsRead, markAllNotificationsAsRead, cleanupOldReadNotifications, clearAllNotifications } from '../../services/notificationService';
@@ -11,7 +11,10 @@ export default function NotificationBell() {
     const [notifications, setNotifications] = useState([]);
     const [isOpen, setIsOpen] = useState(false);
     const [isClearing, setIsClearing] = useState(false);
+    const [activePopup, setActivePopup] = useState(null);
+    const [shownPopupIds, setShownPopupIds] = useState(new Set());
     const dropdownRef = useRef(null);
+    const popupStorageKey = user?.uid ? `notification_popup_seen_${user.uid}` : null;
 
     useEffect(() => {
         if (!user?.uid) return;
@@ -27,6 +30,22 @@ export default function NotificationBell() {
     }, [user?.uid]);
 
     useEffect(() => {
+        if (!popupStorageKey) {
+            setShownPopupIds(new Set());
+            setActivePopup(null);
+            return;
+        }
+
+        try {
+            const stored = JSON.parse(sessionStorage.getItem(popupStorageKey) || '[]');
+            setShownPopupIds(new Set(Array.isArray(stored) ? stored : []));
+        } catch {
+            setShownPopupIds(new Set());
+        }
+        setActivePopup(null);
+    }, [popupStorageKey]);
+
+    useEffect(() => {
         function handleClickOutside(event) {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
                 setIsOpen(false);
@@ -38,11 +57,54 @@ export default function NotificationBell() {
 
     const unreadCount = notifications.filter(n => !n.isRead).length;
 
+    useEffect(() => {
+        if (!popupStorageKey) return;
+
+        if (activePopup) {
+            const stillExists = notifications.some(notif => notif.id === activePopup.id && !notif.isRead);
+            if (!stillExists) {
+                setActivePopup(null);
+            }
+            return;
+        }
+
+        const nextPopup = notifications.find(notif => notif.showPopup && !notif.isRead && !shownPopupIds.has(notif.id));
+        if (!nextPopup) return;
+
+        const updatedShownIds = new Set(shownPopupIds);
+        updatedShownIds.add(nextPopup.id);
+        setShownPopupIds(updatedShownIds);
+
+        try {
+            sessionStorage.setItem(popupStorageKey, JSON.stringify([...updatedShownIds]));
+        } catch {
+            // Ignore storage failures; popup can still render in memory.
+        }
+
+        setActivePopup(nextPopup);
+    }, [notifications, activePopup, shownPopupIds, popupStorageKey]);
+
+    const formatNotificationTime = (createdAt) => {
+        if (!createdAt) return 'Vừa xong';
+        const rawDate = createdAt?.toDate ? createdAt.toDate() : createdAt;
+        const parsedDate = rawDate instanceof Date ? rawDate : new Date(rawDate);
+        return Number.isNaN(parsedDate.getTime())
+            ? 'Vừa xong'
+            : parsedDate.toLocaleString('vi-VN');
+    };
+
+    const handlePopupDismiss = () => {
+        setActivePopup(null);
+    };
+
     const handleNotificationClick = async (notification) => {
         if (!notification.isRead) {
             await markNotificationAsRead(notification.id);
         }
         setIsOpen(false);
+        if (activePopup?.id === notification.id) {
+            setActivePopup(null);
+        }
         if (notification.link) {
             navigate(notification.link, { state: { notificationData: notification } });
         }
@@ -79,6 +141,26 @@ export default function NotificationBell() {
                 )}
             </button>
 
+            {activePopup && (
+                <div className="notification-popup-card" role="alert" aria-live="assertive">
+                    <button className="notification-popup-close" onClick={handlePopupDismiss} title="Đóng cảnh báo">
+                        <X size={16} />
+                    </button>
+                    <div className="notification-popup-badge">Ưu tiên cao</div>
+                    <div className="notification-popup-title">{activePopup.title}</div>
+                    <div className="notification-popup-message">{activePopup.message}</div>
+                    <div className="notification-popup-actions">
+                        <button className="notification-popup-secondary" onClick={handlePopupDismiss}>
+                            Để sau
+                        </button>
+                        <button className="notification-popup-primary" onClick={() => handleNotificationClick(activePopup)}>
+                            Xem ngay
+                            <ArrowRight size={14} />
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {isOpen && (
                 <div className="notification-dropdown">
                     <div className="notification-header">
@@ -105,7 +187,7 @@ export default function NotificationBell() {
                                         <div className="notification-title">{notif.title}</div>
                                         <div className="notification-message">{notif.message}</div>
                                         <div className="notification-time">
-                                            {notif.createdAt?.toDate ? new Date(notif.createdAt.toDate()).toLocaleString('vi-VN') : 'Vừa xong'}
+                                            {formatNotificationTime(notif.createdAt)}
                                         </div>
                                     </div>
                                     {!notif.isRead && <div className="notification-dot" />}

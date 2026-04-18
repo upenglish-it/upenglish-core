@@ -290,7 +290,7 @@ export default function AdminUsersPage() {
             await updateUserFolderAccess(selectedUser.uid, userFolderIds);
             await updateUserGroups(selectedUser.uid, userGroupIds);
 
-            // Cập nhật state local để hiển thị nhạy bén hơn
+            // Cập nhật state local để hiển thị nhạy hơn
             setSelectedUser({ ...selectedUser, groupIds: userGroupIds });
 
         } catch (err) {
@@ -359,7 +359,7 @@ export default function AdminUsersPage() {
 
         setConfirmAction({
             type: 'delete',
-            message: `Chuyển tài khoản ${u.email} vào "Người dùng cũ"? Bạn có thể khôi phục sau này.`,
+            message: `Chuyển tài khoản ${u.email} vào "Người dùng cũ"? Người dùng sẽ rời toàn bộ lớp hiện tại và có thể khôi phục lại các lớp đó sau này.`,
             action: async () => { await softDeleteUser(u.uid); }
         });
     }
@@ -375,7 +375,7 @@ export default function AdminUsersPage() {
     function handleRestore(u) {
         setConfirmAction({
             type: 'restore',
-            message: `Khôi phục tài khoản ${u.email}?`,
+            message: `Khôi phục tài khoản ${u.email}? Các lớp trước khi chuyển vào "Người dùng cũ" sẽ được khôi phục tự động.`,
             action: async () => { await restoreUser(u.uid); }
         });
     }
@@ -644,6 +644,8 @@ export default function AdminUsersPage() {
                             <div className="admin-search-box" style={{ flex: 1, minWidth: '240px', maxWidth: '460px' }}>
                                 <Search size={18} className="search-icon" />
                                 <input
+                                    id="admin-users-search"
+                                    name="adminUsersSearch"
                                     type="text"
                                     placeholder="Tìm tên hoặc email..."
                                     value={searchTerm}
@@ -680,7 +682,7 @@ export default function AdminUsersPage() {
                             {pendingInvites.length > 0 && (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                     {pendingInvites.map(w => (
-                                        <div key={w.id} className="wl-item">
+                                        <div key={w._id || w.email} className="wl-item">
                                             <div className="wl-item-icon">
                                                 <Mail size={18} color="#22c55e" />
                                             </div>
@@ -817,7 +819,7 @@ export default function AdminUsersPage() {
                                                                                 <button className={`admin-action-btn ${u.disabled ? '' : 'danger'}`} onClick={() => handleToggleDisabled(u)} title={u.disabled ? 'Mở khóa' : 'Khóa'}>
                                                                                     {u.disabled ? <Unlock size={16} /> : <Lock size={16} />}
                                                                                 </button>
-                                                                                <button className="admin-action-btn danger" onClick={() => handleDelete(u)} title="Xoá">
+                                                                                <button className="admin-action-btn danger" onClick={() => handleDelete(u)} title="Xóa">
                                                                                     <Trash2 size={16} />
                                                                                 </button>
                                                                             </>
@@ -897,7 +899,7 @@ export default function AdminUsersPage() {
                                                         <button className="admin-action-btn" onClick={() => handleRestore(u)} title="Khôi phục" style={{ color: '#22c55e' }}>
                                                             <RotateCcw size={16} />
                                                         </button>
-                                                        <button className="admin-action-btn danger" onClick={() => handlePermanentDelete(u)} title="Xoá vĩnh viễn">
+                                                        <button className="admin-action-btn danger" onClick={() => handlePermanentDelete(u)} title="Xóa vĩnh viễn">
                                                             <Trash2 size={16} />
                                                         </button>
                                                     </div>
@@ -933,6 +935,8 @@ export default function AdminUsersPage() {
                                         {isEditingName ? (
                                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                                 <input
+                                                    id="admin-user-display-name"
+                                                    name="adminUserDisplayName"
                                                     type="text"
                                                     value={tempDisplayName}
                                                     onChange={e => setTempDisplayName(e.target.value)}
@@ -955,6 +959,8 @@ export default function AdminUsersPage() {
                                             {isEditingEmail ? (
                                                 <div style={{ display: 'flex', gap: '6px', alignItems: 'center', width: '100%' }}>
                                                     <input
+                                                        id="admin-user-email"
+                                                        name="adminUserEmail"
                                                         type="email"
                                                         value={tempEmail}
                                                         onChange={e => setTempEmail(e.target.value)}
@@ -1046,7 +1052,7 @@ export default function AdminUsersPage() {
                                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '150px', overflowY: 'auto', paddingRight: '4px' }}>
                                                             {groups.map(g => (
                                                                 <label key={g.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '0.8rem', color: '#475569', cursor: 'pointer', background: '#fff', padding: '6px 8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                                                                    <input type="checkbox" checked={userGroupIds.includes(g.id)} onChange={() => toggleUserGroup(g.id)} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
+                                                                    <input id={`admin-user-group-${g.id}`} name="adminUserGroups" type="checkbox" checked={userGroupIds.includes(g.id)} onChange={() => toggleUserGroup(g.id)} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
                                                                     <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.3 }}>{g.name}</span>
                                                                 </label>
                                                             ))}
@@ -1077,7 +1083,7 @@ export default function AdminUsersPage() {
                                         </div>
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                                             <button className="admin-btn admin-btn-secondary" style={{ fontSize: '0.85rem', padding: '10px', color: '#f59e0b', borderColor: '#fde68a' }} onClick={() => { setSelectedUser(null); openRenewModal(selectedUser); }}>
-                                                <Timer size={16} /> Gia hạn
+                                                <Timer size={16} /> Gia háº¡n
                                             </button>
                                             <button className="admin-btn" style={{ fontSize: '0.85rem', padding: '10px', background: '#fff', border: '1px dashed #fca5a5', color: '#ef4444' }} onClick={() => handleDeleteProgress(selectedUser)}>
                                                 <Trash2 size={16} /> Xóa tiến trình
@@ -1148,7 +1154,7 @@ export default function AdminUsersPage() {
                                             </div>
                                             {approveDuration === 'custom' && (
                                                 <div style={{ marginTop: '10px' }}>
-                                                    <input type="date"
+                                                    <input id="approve-user-custom-date" name="approveUserCustomDate" type="date"
                                                         className="admin-form-input"
                                                         style={{ width: '100%', borderColor: '#3b82f6', background: '#eff6ff' }}
                                                         value={approveCustomDate}
@@ -1172,7 +1178,7 @@ export default function AdminUsersPage() {
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '220px', overflowY: 'auto', paddingRight: '2px' }}>
                                                 {groups.map(g => (
                                                     <label key={g.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '0.75rem', color: '#475569', cursor: 'pointer', background: '#fff', padding: '4px 6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
-                                                        <input type="checkbox" checked={approveGroupIds.includes(g.id)} onChange={() => toggleApproveGroup(g.id)} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
+                                                        <input id={`approve-user-group-${g.id}`} name="approveUserGroups" type="checkbox" checked={approveGroupIds.includes(g.id)} onChange={() => toggleApproveGroup(g.id)} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
                                                         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.3 }}>{g.name}</span>
                                                     </label>
                                                 ))}
@@ -1211,13 +1217,13 @@ export default function AdminUsersPage() {
                                     {/* Left column - Form fields */}
                                     <div style={{ flex: '1 1 280px', minWidth: 0 }}>
                                         <div style={{ marginBottom: '14px' }}>
-                                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Email</label>
-                                            <input type="email" className="admin-form-input" style={{ width: '100%' }} placeholder="student@gmail.com"
+                                            <label htmlFor="whitelist-email" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Email</label>
+                                            <input id="whitelist-email" name="whitelistEmail" type="email" className="admin-form-input" style={{ width: '100%' }} placeholder="student@gmail.com"
                                                 value={wlEmail} onChange={e => setWlEmail(e.target.value)} required autoFocus />
                                         </div>
                                         <div style={{ marginBottom: '14px' }}>
-                                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Tên học viên (Tùy chọn)</label>
-                                            <input type="text" className="admin-form-input" style={{ width: '100%' }} placeholder="Họ và tên..."
+                                            <label htmlFor="whitelist-display-name" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Tên học viên (Tùy chọn)</label>
+                                            <input id="whitelist-display-name" name="whitelistDisplayName" type="text" className="admin-form-input" style={{ width: '100%' }} placeholder="Họ và tên..."
                                                 value={wlDisplayName} onChange={e => setWlDisplayName(e.target.value)} />
                                         </div>
                                         <div style={{ marginBottom: '14px' }}>
@@ -1249,7 +1255,7 @@ export default function AdminUsersPage() {
                                                 </div>
                                                 {wlDuration === 'custom' && (
                                                     <div style={{ marginTop: '10px' }}>
-                                                        <input type="date"
+                                                        <input id="whitelist-custom-date" name="whitelistCustomDate" type="date"
                                                             className="admin-form-input"
                                                             style={{ width: '100%', borderColor: '#10b981', background: '#f0fdf4' }}
                                                             value={wlCustomDate}
@@ -1273,7 +1279,7 @@ export default function AdminUsersPage() {
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '220px', overflowY: 'auto', paddingRight: '2px' }}>
                                                     {groups.map(g => (
                                                         <label key={g.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '0.75rem', color: '#475569', cursor: 'pointer', background: '#fff', padding: '4px 6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
-                                                            <input type="checkbox" checked={wlGroupIds.includes(g.id)} onChange={() => setWlGroupIds(prev => prev.includes(g.id) ? prev.filter(id => id !== g.id) : [...prev, g.id])} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
+                                                            <input id={`whitelist-group-${g.id}`} name="whitelistGroups" type="checkbox" checked={wlGroupIds.includes(g.id)} onChange={() => setWlGroupIds(prev => prev.includes(g.id) ? prev.filter(id => id !== g.id) : [...prev, g.id])} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
                                                             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.3 }}>{g.name}</span>
                                                         </label>
                                                     ))}
@@ -1313,8 +1319,8 @@ export default function AdminUsersPage() {
                                 {/* Left column - Form fields */}
                                 <div style={{ flex: '1 1 280px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '14px' }}>
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Tên hiển thị</label>
-                                        <input type="text" className="admin-form-input" style={{ width: '100%' }} placeholder="Họ và tên..."
+                                        <label htmlFor="edit-whitelist-display-name" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>Tên hiển thị</label>
+                                        <input id="edit-whitelist-display-name" name="editWhitelistDisplayName" type="text" className="admin-form-input" style={{ width: '100%' }} placeholder="Họ và tên..."
                                             value={editWlName} onChange={e => setEditWlName(e.target.value)} />
                                     </div>
                                     <div>
@@ -1346,7 +1352,7 @@ export default function AdminUsersPage() {
                                             </div>
                                             {editWlDuration === 'custom' && (
                                                 <div style={{ marginTop: '10px' }}>
-                                                    <input type="date"
+                                                    <input id="edit-whitelist-custom-date" name="editWhitelistCustomDate" type="date"
                                                         className="admin-form-input"
                                                         style={{ width: '100%', borderColor: '#3b82f6', background: '#eff6ff' }}
                                                         value={editWlCustomDate}
@@ -1369,7 +1375,7 @@ export default function AdminUsersPage() {
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '220px', overflowY: 'auto', paddingRight: '2px' }}>
                                                 {groups.map(g => (
                                                     <label key={g.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '0.75rem', color: '#475569', cursor: 'pointer', background: '#fff', padding: '4px 6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
-                                                        <input type="checkbox" checked={editWlGroupIds.includes(g.id)} onChange={() => setEditWlGroupIds(prev => prev.includes(g.id) ? prev.filter(id => id !== g.id) : [...prev, g.id])} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
+                                                        <input id={`edit-whitelist-group-${g.id}`} name="editWhitelistGroups" type="checkbox" checked={editWlGroupIds.includes(g.id)} onChange={() => setEditWlGroupIds(prev => prev.includes(g.id) ? prev.filter(id => id !== g.id) : [...prev, g.id])} style={{ accentColor: 'var(--color-primary)', marginTop: '2px' }} />
                                                         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.3 }}>{g.name}</span>
                                                     </label>
                                                 ))}
@@ -1456,3 +1462,4 @@ export default function AdminUsersPage() {
         </div >
     );
 }
+

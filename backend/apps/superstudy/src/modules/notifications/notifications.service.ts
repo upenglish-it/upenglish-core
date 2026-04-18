@@ -64,4 +64,9 @@ export class NotificationsService {
     const count = await this.notificationsModel.countDocuments({ userId, isRead: false });
     return { count };
   }
+
+  async clearAll(userId: string) {
+    const result = await this.notificationsModel.deleteMany({ userId });
+    return { deletedCount: result.deletedCount ?? 0 };
+  }
 }

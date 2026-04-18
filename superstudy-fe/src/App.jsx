@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
@@ -7,6 +7,7 @@ import DashboardPage from './pages/DashboardPage';
 import TopicSelectPage from './pages/TopicSelectPage';
 import LearnPage from './pages/LearnPage';
 import PendingApprovalPage from './pages/PendingApprovalPage';
+import SocialLoginLandingPage from './pages/SocialLoginLandingPage';
 import CustomInputPage from './pages/CustomInputPage';
 import SavedListsPage from './pages/SavedListsPage';
 import GenerateListPage from './pages/GenerateListPage';
@@ -47,6 +48,7 @@ import TeacherPromptsPage from './pages/teacher/TeacherPromptsPage';
 import TeacherRatingResultsPage from './pages/teacher/TeacherRatingResultsPage';
 import TeacherReceivedFeedbackPage from './pages/teacher/TeacherReceivedFeedbackPage';
 import TeacherMiniGamesPage from './pages/teacher/TeacherMiniGamesPage';
+import TeacherDashboardPage from './pages/teacher/TeacherDashboardPage';
 import ITRoute from './components/auth/ITRoute';
 import ITLayout from './pages/it/ITLayout';
 import ITDashboardPage from './pages/it/ITDashboardPage';
@@ -95,15 +97,33 @@ function ScrollToTop() {
     return null;
 }
 
+// Handles ?_preview= param: after React mounts, navigate() to the real route
+// Must be inside BrowserRouter to use useNavigate()
+function PreviewRedirect() {
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        if (window.__PENDING_PREVIEW__) {
+            const path = window.__PENDING_PREVIEW__;
+            delete window.__PENDING_PREVIEW__;
+            navigate(path, { replace: true });
+        }
+    }, [navigate]);
+
+    return null;
+}
+
 function App() {
     return (
         <BrowserRouter>
             <ScrollToTop />
+            <PreviewRedirect />
             <ModalBackHandler />
             <AuthProvider>
                 <AppSettingsProvider>
                     <Routes>
                         <Route path="/login" element={<LoginPage />} />
+                        <Route path="/sll" element={<SocialLoginLandingPage />} />
                         <Route path="/pending" element={<PendingApprovalPage />} />
                         <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
                         <Route path="/topics" element={<ProtectedRoute><TopicSelectPage /></ProtectedRoute>} />
@@ -145,7 +165,7 @@ function App() {
                             <Route path="prompts" element={<AdminPromptsPage />} />
                         </Route>
                         <Route path="/teacher" element={<TeacherRoute><TeacherLayout /></TeacherRoute>}>
-                            <Route index element={<Navigate to="groups" replace />} />
+                            <Route index element={<TeacherDashboardPage />} />
                             <Route path="groups" element={<TeacherGroupsPage />} />
                             <Route path="groups/:groupId" element={<TeacherGroupDetailPage />} />
                             <Route path="topics" element={<TeacherTopicsPage />} />

@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { getAdminAllTeacherTopics, deleteAdminTeacherTopic, getGroups, toggleResourcePublic, getResourceSharedEntities, shareResourceToEmail, unshareResourceFromUser, shareResourceToGroup, unshareResourceFromGroup, cleanupExpiredDeletedContent, restoreTeacherTopicToAdmin } from '../../services/adminService';
+import { getAdminAllTeacherTopics, deleteAdminTeacherTopic, getGroups, toggleResourcePublic, getResourceSharedEntities, shareResourceToEmail, unshareResourceFromUser, shareResourceToGroup, unshareResourceFromGroup, cleanupExpiredDeletedContent } from '../../services/adminService';
 import { getAllTeacherTopicFolders, saveTeacherTopicFolder, deleteTeacherTopicFolder, saveTeacherTopic, createAssignment, getAssignmentsForTopic, getDeletedTeacherTopics, getDeletedTeacherTopicFolders, restoreTeacherTopic, restoreTeacherTopicFolder, permanentlyDeleteTeacherTopic, permanentlyDeleteTeacherTopicFolder } from '../../services/teacherService';
 import { useAuth } from '../../contexts/AuthContext';
-import { BookOpen, Search, Trash2, Edit, AlertCircle, Globe, FolderOpen, Plus, X, ChevronDown, ChevronRight, AlertTriangle, List, User, Share2, Users, UsersRound, Mail, UserPlus, Lock, Send, FileText, CheckCircle, RotateCcw } from 'lucide-react';
+import { BookOpen, Search, Trash2, Edit, AlertCircle, Globe, FolderOpen, Plus, X, ChevronDown, ChevronRight, AlertTriangle, List, User, Share2, Users, UsersRound, Mail, UserPlus, Lock, Send, FileText, CheckCircle, RotateCcw, Eye } from 'lucide-react';
 import CustomSelect from '../../components/common/CustomSelect';
 import EmailAutocomplete from '../../components/common/EmailAutocomplete';
-import { usersService } from '../../models';
+import { usersService, topicsService, teacherTopicsService } from '../../models';
+import { findFolderIdForItem, syncItemFolderAssignment, toggleIdInList } from '../../utils/folderManagement';
+import { getResolvedUserEmail, getResolvedUserLabel } from '../../utils/userIdentity';
 
 export default function AdminTeacherTopicsPage() {
     const navigate = useNavigate();
@@ -42,7 +44,7 @@ export default function AdminTeacherTopicsPage() {
     // Folders state
     const [folders, setFolders] = useState([]);
     const [folderFormOpen, setFolderFormOpen] = useState(false);
-    const [folderFormData, setFolderFormData] = useState({ name: '', description: '', icon: '📁', color: '#6366f1', isPublic: false });
+    const [folderFormData, setFolderFormData] = useState({ name: '', description: '', icon: '📁', color: '#6366f1', isPublic: false, topicIds: [] });
     const [isFolderEditing, setIsFolderEditing] = useState(false);
     const [folderToDelete, setFolderToDelete] = useState(null);
     const [isSavingFolder, setIsSavingFolder] = useState(false);
@@ -53,7 +55,7 @@ export default function AdminTeacherTopicsPage() {
 
     // Topic Edit State
     const [topicFormOpen, setTopicFormOpen] = useState(false);
-    const [topicFormData, setTopicFormData] = useState({ id: '', name: '', description: '', icon: '📚', color: '#3b82f6', isPublic: false });
+    const [topicFormData, setTopicFormData] = useState({ id: '', name: '', description: '', icon: '📚', color: '#3b82f6', isPublic: false, folderId: '' });
     const [isSavingTopic, setIsSavingTopic] = useState(false);
 
     // Trash state
@@ -69,20 +71,29 @@ export default function AdminTeacherTopicsPage() {
     const fetchTeacherInfo = async (teacherId, currentMap, fallbackName) => {
         if (!teacherId || currentMap[teacherId]) return;
         try {
-            const userSnap = await usersService.findOne(teacherId);
-            if (userSnap) {
-                setTeacherMap(prev => ({ ...prev, [teacherId]: userSnap }));
-            } else {
-                setTeacherMap(prev => ({ ...prev, [teacherId]: { email: teacherId, displayName: fallbackName || 'Unknown' } }));
-            }
-        } catch (err) {
-            console.error("Error fetching teacher:", err);
-            setTeacherMap(prev => ({ ...prev, [teacherId]: { email: teacherId, displayName: fallbackName || 'Unknown' } }));
+            const result = await usersService.findOne(teacherId);
+            const userSnap = result?.data || result;
+            setTeacherMap(prev => ({
+                ...prev,
+                [teacherId]: {
+                    ...userSnap,
+                    displayName: getResolvedUserLabel(userSnap, fallbackName, teacherId),
+                    email: getResolvedUserEmail(userSnap, fallbackName),
+                },
+            }));
+        } catch {
+            setTeacherMap(prev => ({
+                ...prev,
+                [teacherId]: {
+                    displayName: getResolvedUserLabel({}, fallbackName, teacherId),
+                    email: getResolvedUserEmail({}, fallbackName),
+                },
+            }));
         }
     };
 
-    async function loadData() {
-        setLoading(true);
+    async function loadData(silent = false) {
+        if (!silent) setLoading(true);
         try {
             const [topicsData, foldersData, delTopics, delFolders] = await Promise.all([
                 getAdminAllTeacherTopics(),
@@ -92,8 +103,8 @@ export default function AdminTeacherTopicsPage() {
             ]);
             setTopics(topicsData);
             setFolders(foldersData);
-            setDeletedTopics(delTopics);
-            setDeletedFolders(delFolders);
+            setDeletedTopics((delTopics || []).map(topic => ({ ...topic, id: topic.id || topic._id })));
+            setDeletedFolders((delFolders || []).map(folder => ({ ...folder, id: folder.id || folder._id })));
 
             // Fire-and-forget auto-purge
             cleanupExpiredDeletedContent().catch(() => {});
@@ -118,7 +129,7 @@ export default function AdminTeacherTopicsPage() {
             console.error(error);
             setAlertMessage({ type: 'error', text: 'Lỗi tải dữ liệu: ' + error.message });
         }
-        setLoading(false);
+        if (!silent) setLoading(false);
     }
 
     const filteredTopics = topics.filter(t => {
@@ -161,13 +172,13 @@ export default function AdminTeacherTopicsPage() {
 
     // Folder CRUD
     function openFolderAddForm() {
-        setFolderFormData({ name: '', description: '', icon: '📁', color: '#6366f1', isPublic: false });
+        setFolderFormData({ name: '', description: '', icon: '📁', color: '#6366f1', isPublic: false, topicIds: [] });
         setIsFolderEditing(false);
         setFolderFormOpen(true);
     }
 
     function openFolderEditForm(folder) {
-        setFolderFormData({ ...folder });
+        setFolderFormData({ ...folder, topicIds: folder.topicIds || [] });
         setIsFolderEditing(true);
         setFolderFormOpen(true);
     }
@@ -179,7 +190,7 @@ export default function AdminTeacherTopicsPage() {
             await saveTeacherTopicFolder(folderFormData.teacherId, folderFormData);
             setFolderFormOpen(false);
             setAlertMessage({ type: 'success', text: isFolderEditing ? 'Cập nhật folder thành công!' : 'Tạo folder thành công!' });
-            loadData();
+            loadData(true);
         } catch (error) {
             setAlertMessage({ type: 'error', text: 'Lỗi: ' + error.message });
         }
@@ -188,7 +199,7 @@ export default function AdminTeacherTopicsPage() {
 
     // Topic CRUD
     function openEditTopicForm(topic) {
-        setTopicFormData({ ...topic });
+        setTopicFormData({ ...topic, folderId: findFolderIdForItem(folders, topic.id, 'topicIds') });
         setTopicFormOpen(true);
     }
 
@@ -196,11 +207,19 @@ export default function AdminTeacherTopicsPage() {
         e.preventDefault();
         setIsSavingTopic(true);
         try {
-            const tId = topicFormData.teacherId || topicFormData.createdBy;
-            await saveTeacherTopic(tId, topicFormData);
+            const { folderId, ...topicData } = topicFormData;
+            const tId = topicData.teacherId || topicData.createdBy;
+            await saveTeacherTopic(tId, topicData);
+            await syncItemFolderAssignment({
+                itemId: topicData.id,
+                targetFolderId: folderId,
+                folders,
+                itemIdsKey: 'topicIds',
+                saveFolder: folder => saveTeacherTopicFolder(folder.teacherId, folder)
+            });
             setTopicFormOpen(false);
             setAlertMessage({ type: 'success', text: 'Cập nhật bài học thành công!' });
-            loadData();
+            loadData(true);
         } catch (error) {
             setAlertMessage({ type: 'error', text: 'Lỗi: ' + error.message });
         }
@@ -217,6 +236,73 @@ export default function AdminTeacherTopicsPage() {
             setAlertMessage({ type: 'error', text: 'Lỗi xóa folder: ' + error.message });
         }
         setFolderToDelete(null);
+    }
+
+    function handleFolderTopicToggle(topicId) {
+        setFolderFormData(prev => ({ ...prev, topicIds: toggleIdInList(prev.topicIds, topicId) }));
+    }
+
+    function openTopicPreview(topicId) {
+        window.open(
+            `${window.__APP_BASE__ || './'}?_preview=${encodeURIComponent(`/learn?topicId=${topicId}&preview=true&isTeacherTopic=true`)}`,
+            '_blank'
+        );
+    }
+
+    async function handleRestoreTeacherTopicToAdmin(topicId) {
+        const topicResult = await teacherTopicsService.findOne(topicId);
+        const teacherTopic = topicResult?.data || topicResult;
+        if (!teacherTopic) throw new Error('Topic not found');
+
+        const {
+            _id,
+            id,
+            isDeleted,
+            deletedAt,
+            teacherId,
+            createdBy,
+            createdByRole,
+            collaboratorIds,
+            collaboratorNames,
+            collaboratorRoles,
+            transferredAt,
+            transferredFromOfficial,
+            ...cleanData
+        } = teacherTopic;
+
+        const restoredTopicId = transferredFromOfficial || topicId;
+        const payload = {
+            ...cleanData,
+            id: restoredTopicId,
+            isDeleted: false,
+            deletedAt: null,
+            createdByRole: 'admin',
+            restoredFromTeacher: teacherId || true,
+            restoredAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+        };
+
+        const baseUrl = import.meta.env.VITE_BASE_URL;
+        const existingOfficialTopic = await fetch(`${baseUrl}/topics/${restoredTopicId}`, {
+            credentials: 'include',
+        }).then(async res => {
+            if (res.status === 404) return null;
+            if (!res.ok) {
+                const errorPayload = await res.json().catch(() => null);
+                throw new Error(errorPayload?.message || 'Khong the kiem tra bai hoc chinh thuc.');
+            }
+
+            const payload = await res.json();
+            return payload?.data || payload;
+        });
+
+        if (existingOfficialTopic) {
+            await topicsService.update(restoredTopicId, payload);
+        } else {
+            await topicsService.create(payload);
+        }
+
+        await teacherTopicsService.permanentDelete(topicId);
     }
 
     // --- SHARE HANDLERS ---
@@ -341,6 +427,10 @@ export default function AdminTeacherTopicsPage() {
 
 
 
+    const topicFormTeacherId = topicFormData.teacherId || topicFormData.createdBy || '';
+    const topicFormFolders = folders.filter(folder => folder.teacherId === topicFormTeacherId);
+    const folderFormTopics = topics.filter(topic => topic.teacherId === folderFormData.teacherId);
+
     // Grouping logic by Teacher
     const teacherGroupedData = {};
     const relevantTeacherIds = new Set([
@@ -356,7 +446,7 @@ export default function AdminTeacherTopicsPage() {
         const teacherUnassignedTopics = filteredTopics.filter(t => t.teacherId === teacherId && !tfIds.has(t.id));
 
         teacherGroupedData[teacherId] = {
-            teacher: teacherMap[teacherId] || { id: teacherId, displayName: 'Unknown', email: teacherId },
+            teacher: teacherMap[teacherId] || { id: teacherId, displayName: 'Unknown', email: 'Unknown user' },
             folders: teacherFols,
             unassignedTopics: teacherUnassignedTopics
         };
@@ -382,6 +472,8 @@ export default function AdminTeacherTopicsPage() {
                 <div className="admin-search-box">
                     <Search size={16} className="search-icon" />
                     <input
+                        id="admin-teacher-topics-search"
+                        name="adminTeacherTopicsSearch"
                         type="text"
                         placeholder="Tìm tên bài học, folder, tên GV hoặc email..."
                         value={searchTerm}
@@ -447,8 +539,6 @@ export default function AdminTeacherTopicsPage() {
                                                 </td>
                                                 <td>
                                                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                                        <span style={{ fontSize: '0.8rem', background: '#e0e7ff', color: '#4f46e5', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, border: '1px solid #c7d2fe' }}>Folders: {tFolders.length}</span>
-                                                        <span style={{ fontSize: '0.8rem', background: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, border: '1px solid #fde68a' }}>Bài rời: {tTopics.length}</span>
                                                         <span style={{ fontSize: '0.8rem', background: '#f0fdf4', color: '#16a34a', padding: '2px 8px', borderRadius: '4px', fontWeight: 700, border: '1px solid #bbf7d0' }}>Tổng bài: {topics.filter(t => t.teacherId === teacherId).length}</span>
                                                     </div>
                                                 </td>
@@ -562,6 +652,9 @@ export default function AdminTeacherTopicsPage() {
                                                                                 </td>
                                                                                 <td className="text-right">
                                                                                     <div className="admin-table-actions">
+                                                                                        <button className="admin-action-btn" onClick={() => openTopicPreview(topic.id)} title="Xem trước">
+                                                                                            <Eye size={14} />
+                                                                                        </button>
                                                                                         <Link to={`/admin/teacher-topics/${topic.id}`} className="admin-action-btn" title="Chỉnh sửa từ vựng">
                                                                                             <List size={14} />
                                                                                         </Link>
@@ -632,6 +725,9 @@ export default function AdminTeacherTopicsPage() {
                                                                     </td>
                                                                     <td className="text-right">
                                                                         <div className="admin-table-actions">
+                                                                            <button className="admin-action-btn" onClick={() => openTopicPreview(topic.id)} title="Xem trước">
+                                                                                <Eye size={14} />
+                                                                            </button>
                                                                             <Link to={`/admin/teacher-topics/${topic.id}`} className="admin-action-btn" title="Chỉnh sửa từ vựng">
                                                                                 <List size={14} />
                                                                             </Link>
@@ -665,96 +761,180 @@ export default function AdminTeacherTopicsPage() {
 
             {/* TRASH SECTION */}
             {(deletedTopics.length > 0 || deletedFolders.length > 0) && (
-                <div className="admin-card" style={{ marginTop: '24px', border: '1px solid #fecaca' }}>
+                <div className="admin-card trash-card-container" style={{
+                    marginTop: '32px',
+                    background: 'linear-gradient(135deg, #fff1f2 0%, #ffffff 100%)',
+                    border: '1.5px solid #fda4af',
+                    boxShadow: '0 8px 16px -4px rgba(225, 29, 72, 0.12), 0 4px 8px -2px rgba(225, 29, 72, 0.08)',
+                    padding: 0,
+                    overflow: 'hidden'
+                }}>
                     <div
-                        style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '16px 20px', userSelect: 'none' }}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '14px', cursor: 'pointer',
+                            padding: '18px 20px', userSelect: 'none',
+                            background: trashExpanded ? 'rgba(255, 255, 255, 0.5)' : 'transparent',
+                            transition: 'background 0.3s ease'
+                        }}
                         onClick={() => setTrashExpanded(!trashExpanded)}
                     >
-                        {trashExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                        <Trash2 size={18} style={{ color: '#ef4444' }} />
-                        <span style={{ fontWeight: 600, fontSize: '1rem', color: '#dc2626' }}>Thùng rác</span>
-                        <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 'normal' }}>({deletedTopics.length + deletedFolders.length} mục · Tự xóa sau 30 ngày)</span>
+                        <div style={{
+                            width: '42px', height: '42px', borderRadius: '14px',
+                            background: '#fff', border: '1px solid #fda4af',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            boxShadow: '0 2px 4px rgba(225, 29, 72, 0.06)'
+                        }}>
+                            <Trash2 size={22} style={{ color: '#e11d48' }} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontWeight: 800, fontSize: '1.1rem', color: '#9f1239', letterSpacing: '-0.01em' }}>Thùng rác</span>
+                                <span style={{
+                                    background: '#e11d48', color: '#fff', fontSize: '0.75rem',
+                                    fontWeight: 700, padding: '2px 8px', borderRadius: '100px',
+                                    boxShadow: '0 2px 4px rgba(225, 29, 72, 0.2)'
+                                }}>
+                                    {deletedTopics.length + deletedFolders.length}
+                                </span>
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: '#e11d48', opacity: 0.7, fontWeight: 500, marginTop: '2px' }}>
+                                Tự xóa vĩnh viễn sau 30 ngày
+                            </div>
+                        </div>
+                        <div style={{
+                            width: '32px', height: '32px', borderRadius: '50%',
+                            background: '#fff', display: 'flex', alignItems: 'center',
+                            justifyContent: 'center', border: '1px solid #fecaca'
+                        }}>
+                            {trashExpanded ? <ChevronDown size={18} color="#9f1239" /> : <ChevronRight size={18} color="#9f1239" />}
+                        </div>
                     </div>
                     {trashExpanded && (
                         <div style={{ padding: '0 20px 20px' }}>
                             <div className="admin-table-container">
-                                <table className="admin-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Loại</th>
-                                            <th>Tên</th>
-                                            <th>Giáo viên</th>
-                                            <th>Còn lại</th>
-                                            <th className="text-right">Thao tác</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {deletedFolders.map(folder => {
-                                            const daysLeft = folder.deletedAt ? Math.max(0, 30 - Math.floor((Date.now() - (folder.deletedAt.toMillis ? folder.deletedAt.toMillis() : new Date(folder.deletedAt).getTime())) / 86400000)) : '?';
-                                            const teacher = teacherMap[folder.teacherId] || {};
-                                            return (
-                                                <tr key={`df-${folder.id}`}>
-                                                    <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', color: '#6366f1' }}><FolderOpen size={14} /> Folder</span></td>
-                                                    <td style={{ fontWeight: 500 }}>{folder.name}</td>
-                                                    <td style={{ fontSize: '0.85rem', color: '#64748b' }}>{teacher.displayName || teacher.email || folder.teacherId}</td>
-                                                    <td><span style={{ fontSize: '0.8rem', color: daysLeft <= 7 ? '#ef4444' : '#f59e0b', fontWeight: 600 }}>{daysLeft} ngày</span></td>
-                                                    <td className="text-right">
-                                                        <div className="admin-table-actions">
-                                                            <button className="admin-action-btn" disabled={trashActionLoading === folder.id} title="Khôi phục cho GV" onClick={async () => {
-                                                                setTrashActionLoading(folder.id);
-                                                                try { await restoreTeacherTopicFolder(folder.id); loadData(); setAlertMessage({ type: 'success', text: 'Đã khôi phục folder cho giáo viên!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
-                                                                setTrashActionLoading(null);
-                                                            }}><RotateCcw size={14} /></button>
-                                                            <button className="admin-action-btn danger" disabled={trashActionLoading === folder.id} title="Xóa vĩnh viễn" onClick={async () => {
-                                                                if (!window.confirm('Xóa vĩnh viễn folder này?')) return;
-                                                                setTrashActionLoading(folder.id);
-                                                                try { await permanentlyDeleteTeacherTopicFolder(folder.id); loadData(); setAlertMessage({ type: 'success', text: 'Đã xóa vĩnh viễn!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
-                                                                setTrashActionLoading(null);
-                                                            }}><Trash2 size={14} /></button>
+                                <div className="trash-items-list" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    {deletedFolders.map(folder => {
+                                        const folderId = folder.id || folder._id;
+                                        folder.id = folderId;
+                                        const daysLeft = folder.deletedAt ? Math.max(0, 30 - Math.floor((Date.now() - (folder.deletedAt.toMillis ? folder.deletedAt.toMillis() : new Date(folder.deletedAt).getTime())) / 86400000)) : '?';
+                                        const teacher = teacherMap[folder.teacherId] || {};
+                                        return (
+                                            <div key={`df-${folderId}`} className="trash-item-card" style={{
+                                                background: '#fff', borderRadius: '16px', padding: '16px',
+                                                border: '1px solid #fecaca', boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+                                                display: 'flex', flexDirection: 'column', gap: '12px'
+                                            }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+                                                        <div style={{
+                                                            width: '40px', height: '40px', borderRadius: '12px',
+                                                            background: '#eef2ff', color: '#6366f1',
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            flexShrink: 0
+                                                        }}>
+                                                            <FolderOpen size={20} />
                                                         </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                        {deletedTopics.map(topic => {
-                                            const daysLeft = topic.deletedAt ? Math.max(0, 30 - Math.floor((Date.now() - (topic.deletedAt.toMillis ? topic.deletedAt.toMillis() : new Date(topic.deletedAt).getTime())) / 86400000)) : '?';
-                                            const teacher = teacherMap[topic.teacherId] || {};
-                                            return (
-                                                <tr key={`dt-${topic.id}`}>
-                                                    <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', color: '#10b981' }}><BookOpen size={14} /> Bài học</span></td>
-                                                    <td>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                            <span style={{ fontSize: '1rem' }}>{topic.icon || '📚'}</span>
-                                                            <span style={{ fontWeight: 500 }}>{topic.name}</span>
+                                                        <div style={{ minWidth: 0, flex: 1 }}>
+                                                            <div style={{ fontWeight: 800, fontSize: '1rem', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{folder.name}</div>
+                                                            <div style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                                <User size={13} /> {teacher.displayName || teacher.email || 'Giáo viên'}
+                                                            </div>
                                                         </div>
-                                                    </td>
-                                                    <td style={{ fontSize: '0.85rem', color: '#64748b' }}>{teacher.displayName || teacher.email || topic.teacherId}</td>
-                                                    <td><span style={{ fontSize: '0.8rem', color: daysLeft <= 7 ? '#ef4444' : '#f59e0b', fontWeight: 600 }}>{daysLeft} ngày</span></td>
-                                                    <td className="text-right">
-                                                        <div className="admin-table-actions">
-                                                            <button className="admin-action-btn" disabled={trashActionLoading === topic.id} title="Khôi phục cho Giáo viên" onClick={async () => {
-                                                                setTrashActionLoading(topic.id);
-                                                                try { await restoreTeacherTopic(topic.id); loadData(); setAlertMessage({ type: 'success', text: 'Đã khôi phục cho giáo viên!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
-                                                                setTrashActionLoading(null);
-                                                            }}><RotateCcw size={14} /><User size={12} style={{ marginLeft: '-4px' }} /></button>
-                                                            <button className="admin-action-btn" disabled={trashActionLoading === topic.id} title="Khôi phục cho Admin" style={{ color: '#7c3aed' }} onClick={async () => {
-                                                                setTrashActionLoading(topic.id);
-                                                                try { await restoreTeacherTopicToAdmin(topic.id); loadData(); setAlertMessage({ type: 'success', text: 'Đã khôi phục cho Admin!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
-                                                                setTrashActionLoading(null);
-                                                            }}><RotateCcw size={14} /><UsersRound size={12} style={{ marginLeft: '-4px' }} /></button>
-                                                            <button className="admin-action-btn danger" disabled={trashActionLoading === topic.id} title="Xóa vĩnh viễn" onClick={async () => {
-                                                                if (!window.confirm('Xóa vĩnh viễn bài học này? Tất cả từ vựng bên trong sẽ bị xóa.')) return;
-                                                                setTrashActionLoading(topic.id);
-                                                                try { await permanentlyDeleteTeacherTopic(topic.id); loadData(); setAlertMessage({ type: 'success', text: 'Đã xóa vĩnh viễn!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
-                                                                setTrashActionLoading(null);
-                                                            }}><Trash2 size={14} /></button>
+                                                    </div>
+                                                    <span style={{
+                                                        fontSize: '0.75rem', fontWeight: 700, padding: '4px 10px', borderRadius: '100px',
+                                                        background: daysLeft <= 7 ? '#fff1f2' : '#fffbeb',
+                                                        color: daysLeft <= 7 ? '#e11d48' : '#d97706',
+                                                        border: `1px solid ${daysLeft <= 7 ? '#fda4af' : '#fde68a'}`,
+                                                        whiteSpace: 'nowrap'
+                                                    }}>
+                                                        {daysLeft} ngày còn lại
+                                                    </span>
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid #f1f5f9', paddingTop: '12px' }}>
+                                                    <button className="admin-btn admin-btn-secondary" style={{ padding: '0 16px', fontSize: '0.8rem', height: '36px', borderRadius: '10px' }} disabled={trashActionLoading === folderId} onClick={async () => {
+                                                        setTrashActionLoading(folderId);
+                                                        try { await restoreTeacherTopicFolder(folderId); loadData(true); setAlertMessage({ type: 'success', text: 'Đã khôi phục folder!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
+                                                        setTrashActionLoading(null);
+                                                    }}>
+                                                        <RotateCcw size={16} /> <span style={{ marginLeft: '6px' }}>Khôi phục</span>
+                                                    </button>
+                                                    <button className="admin-btn" style={{ padding: '0 16px', fontSize: '0.8rem', height: '36px', borderRadius: '10px', background: '#fff1f2', color: '#e11d48', border: '1px solid #fda4af' }} disabled={trashActionLoading === folderId} onClick={async () => {
+                                                        if (!window.confirm('Xóa vĩnh viễn folder này?')) return;
+                                                        setTrashActionLoading(folderId);
+                                                        try { await permanentlyDeleteTeacherTopicFolder(folderId); loadData(true); setAlertMessage({ type: 'success', text: 'Xóa vĩnh viễn thành công!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
+                                                        setTrashActionLoading(null);
+                                                    }}>
+                                                        <Trash2 size={16} /> <span style={{ marginLeft: '6px' }}>Xóa bỏ</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    {deletedTopics.map(topic => {
+                                        const daysLeft = topic.deletedAt ? Math.max(0, 30 - Math.floor((Date.now() - (topic.deletedAt.toMillis ? topic.deletedAt.toMillis() : new Date(topic.deletedAt).getTime())) / 86400000)) : '?';
+                                        const teacher = teacherMap[topic.teacherId] || {};
+                                        return (
+                                            <div key={`dt-${topic.id}`} className="trash-item-card" style={{
+                                                background: '#fff', borderRadius: '16px', padding: '16px',
+                                                border: '1px solid #fecaca', boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+                                                display: 'flex', flexDirection: 'column', gap: '12px'
+                                            }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+                                                        <div style={{
+                                                            width: '40px', height: '40px', borderRadius: '12px',
+                                                            background: `${topic.color || '#3b82f6'}15`, color: topic.color || '#3b82f6',
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            fontSize: '1.2rem', flexShrink: 0
+                                                        }}>
+                                                            {topic.icon || '📚'}
                                                         </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
+                                                        <div style={{ minWidth: 0, flex: 1 }}>
+                                                            <div style={{ fontWeight: 800, fontSize: '1rem', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{topic.name}</div>
+                                                            <div style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                                <User size={13} /> {teacher.displayName || teacher.email || 'Giáo viên'}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <span style={{
+                                                        fontSize: '0.75rem', fontWeight: 700, padding: '4px 10px', borderRadius: '100px',
+                                                        background: daysLeft <= 7 ? '#fff1f2' : '#fffbeb',
+                                                        color: daysLeft <= 7 ? '#e11d48' : '#d97706',
+                                                        border: `1px solid ${daysLeft <= 7 ? '#fda4af' : '#fde68a'}`,
+                                                        whiteSpace: 'nowrap'
+                                                    }}>
+                                                        {daysLeft} ngày còn lại
+                                                    </span>
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid #f1f5f9', paddingTop: '12px' }}>
+                                                    <button className="admin-btn admin-btn-secondary" style={{ padding: '0 16px', fontSize: '0.8rem', height: '36px', borderRadius: '10px' }} disabled={trashActionLoading === topic.id} onClick={async () => {
+                                                        setTrashActionLoading(topic.id);
+                                                        try { await restoreTeacherTopic(topic.id); loadData(true); setAlertMessage({ type: 'success', text: 'Đã khôi phục cho giáo viên!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
+                                                        setTrashActionLoading(null);
+                                                    }}>
+                                                        <RotateCcw size={16} /> <span style={{ marginLeft: '6px' }}>Khôi phục</span>
+                                                    </button>
+                                                    <button className="admin-btn admin-btn-secondary" style={{ padding: '0 16px', fontSize: '0.8rem', height: '36px', borderRadius: '10px', color: '#7c3aed', borderColor: '#ddd6fe' }} disabled={trashActionLoading === topic.id} onClick={async () => {
+                                                        setTrashActionLoading(topic.id);
+                                                        try { await handleRestoreTeacherTopicToAdmin(topic.id); loadData(true); setAlertMessage({ type: 'success', text: 'Đã khôi phục cho Admin!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
+                                                        setTrashActionLoading(null);
+                                                    }}>
+                                                        <RotateCcw size={16} /> <span style={{ marginLeft: '6px' }}>Về Admin</span>
+                                                    </button>
+                                                    <button className="admin-btn" style={{ padding: '0 16px', fontSize: '0.8rem', height: '36px', borderRadius: '10px', background: '#fff1f2', color: '#e11d48', border: '1px solid #fda4af' }} disabled={trashActionLoading === topic.id} onClick={async () => {
+                                                        if (!window.confirm('Xóa vĩnh viễn bài học này? Tất cả từ vựng bên trong sẽ bị xóa.')) return;
+                                                        setTrashActionLoading(topic.id);
+                                                        try { await permanentlyDeleteTeacherTopic(topic.id); loadData(true); setAlertMessage({ type: 'success', text: 'Xóa vĩnh viễn thành công!' }); } catch (e) { setAlertMessage({ type: 'error', text: e.message }); }
+                                                        setTrashActionLoading(null);
+                                                    }}>
+                                                        <Trash2 size={16} /> <span style={{ marginLeft: '6px' }}>Xóa bỏ</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         </div>
                     )}
@@ -789,6 +969,26 @@ export default function AdminTeacherTopicsPage() {
                                         <input type="checkbox" checked={folderFormData.isPublic || false} onChange={e => setFolderFormData({ ...folderFormData, isPublic: e.target.checked })} />
                                         Công khai (Public)
                                     </label>
+                                </div>
+                                <div className="admin-form-group">
+                                    <label>Chọn các bài học đưa vào Folder này</label>
+                                    <div className="admin-folder-topics-select">
+                                        {folderFormTopics.length === 0 ? (
+                                            <p className="admin-text-muted" style={{ padding: '12px' }}>Folder này chưa có bài học cùng giáo viên để chọn.</p>
+                                        ) : (
+                                            folderFormTopics.map(topic => (
+                                                <div key={topic.id} className="admin-folder-topic-item" onClick={() => handleFolderTopicToggle(topic.id)}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={(folderFormData.topicIds || []).includes(topic.id)}
+                                                        onChange={() => { }}
+                                                    />
+                                                    <span className="admin-topic-icon" style={{ background: `${topic.color || '#3b82f6'}20`, display: 'inline-flex', width: '24px', height: '24px', fontSize: '0.8rem' }}>{topic.icon || '📚'}</span>
+                                                    <span style={{ fontSize: '0.9rem' }}>{topic.name}</span>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="admin-modal-actions" style={{ marginTop: '24px', flexDirection: 'row' }}>
                                     <button type="button" className="admin-btn admin-btn-secondary" style={{ flex: 1 }} onClick={() => setFolderFormOpen(false)} disabled={isSavingFolder}>Hủy</button>
@@ -827,6 +1027,18 @@ export default function AdminTeacherTopicsPage() {
                                     <input type="checkbox" checked={topicFormData.isPublic || false} onChange={e => setTopicFormData({ ...topicFormData, isPublic: e.target.checked })} />
                                     Công khai (Public)
                                 </label>
+                            </div>
+                            <div className="admin-form-group">
+                                <CustomSelect
+                                    label="Folder"
+                                    value={topicFormData.folderId || ''}
+                                    onChange={value => setTopicFormData({ ...topicFormData, folderId: value })}
+                                    placeholder="-- Chưa phân loại --"
+                                    options={[
+                                        { value: '', label: '-- Chưa phân loại --' },
+                                        ...topicFormFolders.map(folder => ({ value: folder.id, label: `📁 ${folder.name}` }))
+                                    ]}
+                                />
                             </div>
                             <div className="admin-modal-actions" style={{ marginTop: '24px', flexDirection: 'row' }}>
                                 <button type="button" className="admin-btn admin-btn-secondary" style={{ flex: 1 }} onClick={() => setTopicFormOpen(false)} disabled={isSavingTopic}>Hủy</button>
@@ -966,7 +1178,7 @@ export default function AdminTeacherTopicsPage() {
                                     <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '6px', fontWeight: 600 }}>Đã giao cho:</p>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                                         {existingAssignments.map(a => (
-                                            <span key={a.id} style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '20px', background: 'linear-gradient(135deg, #fef3c7, #fde68a)', color: '#92400e', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px solid #fcd34d' }}>✅ {a.groupName || a.targetName || allGroups.find(g => g.id === a.groupId)?.name || 'Lớp'}</span>
+                                            <span key={a.id || a._id || `${a.groupId}-${a.topicId}`} style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '20px', background: 'linear-gradient(135deg, #fef3c7, #fde68a)', color: '#92400e', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px solid #fcd34d' }}>✅ {a.groupName || a.targetName || allGroups.find(g => g.id === a.groupId)?.name || 'Lớp'}</span>
                                         ))}
                                     </div>
                                 </div>

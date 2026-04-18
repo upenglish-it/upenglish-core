@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lat The SuperStudy</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Handjet:wght@400;700;800&family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              'display-pixel': ['"Press Start 2P"', 'cursive'],
+              'pixel': ['"Handjet"', 'monospace'],
+              'mono-pixel': ['"VT323"', 'monospace'],
+            },
+            colors: {
+              retro: {
+                bg: '#F3E5AB',
+                dark: '#1A1A1A',
+                red: '#D9381E',
+                blue: '#5D8AA8',
+                gold: '#C5A059',
+                paper: '#FFFDF5',
+              }
+            },
+            boxShadow: {
+              'pixel': '4px 4px 0px 0px rgba(0,0,0,1)',
+              'pixel-sm': '2px 2px 0px 0px rgba(0,0,0,1)',
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        image-rendering: pixelated;
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-B2Exwykz.js"></script>
+  </head>
+  <body class="bg-retro-bg text-retro-dark min-h-screen font-mono-pixel selection:bg-retro-red selection:text-white">
+    <div id="root"></div>
+  </body>
+</html>

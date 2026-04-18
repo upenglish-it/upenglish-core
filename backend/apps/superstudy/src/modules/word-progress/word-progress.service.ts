@@ -146,6 +146,11 @@ export class WordProgressService {
     return { deleted: result.deletedCount };
   }
 
+  async removeOne(userId: string, topicId: string, wordId: string) {
+    const result = await this.progressModel.findOneAndDelete({ userId, topicId, wordId }).lean();
+    return { deleted: !!result };
+  }
+
   // ──────────────────────────────────────────
   // Streak logic — migrated from userService.js
   // userService uses Firestore sub-collection users/{uid}/stats/overview

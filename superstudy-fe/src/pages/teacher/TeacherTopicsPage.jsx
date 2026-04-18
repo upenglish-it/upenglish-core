@@ -5,7 +5,8 @@ import { submitProposal, getProposalForSource } from '../../services/contentProp
 import { getUsersPublicInfo } from '../../services/userService';
 import { getFolders, getGroups, toggleResourcePublic, getResourceSharedEntities, shareResourceToEmail, unshareResourceFromUser, shareResourceToGroup, unshareResourceFromGroup, getAdminTopics } from '../../services/adminService';
 import { useAuth } from '../../contexts/AuthContext';
-import { BookOpen, Edit, Trash2, X, Plus, List, FolderOpen, Share2, Globe, Users, Mail, UserPlus, Lock, Search, AlertTriangle, ChevronDown, ChevronRight, AlertCircle, Landmark, Send, CheckCircle, XCircle, Clock, ArrowRightLeft, UsersRound, FileText, Calendar, Copy, GripVertical } from 'lucide-react';
+import { BookOpen, Edit, Trash2, X, Plus, List, FolderOpen, Share2, Globe, Users, Mail, UserPlus, Lock, Search, AlertTriangle, ChevronDown, ChevronRight, AlertCircle, Landmark, Send, CheckCircle, XCircle, Clock, ArrowRightLeft, UsersRound, FileText, Calendar, Copy, GripVertical, Eye } from 'lucide-react';
+import { truncateText } from '../../utils/textDisplay';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { duplicateTeacherTopic } from '../../services/duplicateService';
 import EmailAutocomplete from '../../components/common/EmailAutocomplete';
@@ -176,7 +177,36 @@ export default function TeacherTopicsPage() {
             setFolders(visibleFolders);
 
             const ownFolders = await getTeacherTopicFolders(user.uid);
-            setTeacherFolders(ownFolders);
+            const ownTopicIds = new Set(ownTopics.map(t => t.id));
+            const transferredTopicMap = new Map(
+                ownTopics
+                    .filter(t => t.transferredFromOfficial)
+                    .map(t => [t.transferredFromOfficial, t.id])
+            );
+            const repairedFolders = await Promise.all(ownFolders.map(async (folder) => {
+                const originalTopicIds = Array.isArray(folder.topicIds) ? folder.topicIds : [];
+                if (originalTopicIds.length === 0) return folder;
+                let changed = false;
+                const seen = new Set();
+                const repairedTopicIds = originalTopicIds
+                    .map((topicId) => {
+                        const nextTopicId = ownTopicIds.has(topicId) ? topicId : (transferredTopicMap.get(topicId) || topicId);
+                        if (nextTopicId !== topicId) changed = true;
+                        if (seen.has(nextTopicId)) return null;
+                        seen.add(nextTopicId);
+                        return nextTopicId;
+                    })
+                    .filter(Boolean);
+                if (!changed) return folder;
+                const repairedFolder = { ...folder, topicIds: repairedTopicIds };
+                try {
+                    await saveTeacherTopicFolder(user.uid, repairedFolder);
+                } catch (repairError) {
+                    console.error('Error repairing transferred topic folder:', repairError);
+                }
+                return repairedFolder;
+            }));
+            setTeacherFolders(repairedFolders);
 
             // Fetch teacher names for shared topics
             const sharedTeacherIds = [...new Set(sharedTopics.filter(t => t.teacherId && t.teacherId !== user.uid).map(t => t.teacherId))];
@@ -684,12 +714,27 @@ export default function TeacherTopicsPage() {
             const folderId = result.source.droppableId.replace('folder-topics-', '');
             const folder = teacherFolders.find(f => f.id === folderId);
             if (!folder) return;
-            const ids = [...(folder.topicIds || [])];
-            const [movedId] = ids.splice(result.source.index, 1);
-            ids.splice(result.destination.index, 0, movedId);
-            setTeacherFolders(prev => prev.map(f => f.id === folderId ? { ...f, topicIds: ids } : f));
+            const allIds = [...(folder.topicIds || [])];
+            const searchLower2 = searchTerm.toLowerCase();
+            const visibleIds = allIds.filter(id => {
+                const t = topics.find(e => e.id === id);
+                if (!t) return false;
+                if (searchLower2) return (t.name || '').toLowerCase().includes(searchLower2) || (t.description || '').toLowerCase().includes(searchLower2);
+                return true;
+            });
+            const reorderedVisible = [...visibleIds];
+            const [movedId] = reorderedVisible.splice(result.source.index, 1);
+            reorderedVisible.splice(result.destination.index, 0, movedId);
+            const visibleSet = new Set(visibleIds);
+            const newIds = [];
+            let vIdx = 0;
+            for (const id of allIds) {
+                if (visibleSet.has(id)) newIds.push(reorderedVisible[vIdx++]);
+                else newIds.push(id);
+            }
+            setTeacherFolders(prev => prev.map(f => f.id === folderId ? { ...f, topicIds: newIds } : f));
             try {
-                await saveTeacherTopicFolder(user.uid, { ...folder, topicIds: ids });
+                await saveTeacherTopicFolder(user.uid, { ...folder, topicIds: newIds });
             } catch (error) {
                 setAlertMessage({ type: 'error', text: 'Lỗi đổi vị trí bài: ' + error.message });
                 loadTopics();
@@ -743,6 +788,8 @@ export default function TeacherTopicsPage() {
                 <div className="admin-search-box">
                     <Search size={16} className="search-icon" />
                     <input
+                        id="teacher-topics-search"
+                        name="teacherTopicsSearch"
                         type="text"
                         placeholder="Tìm kiếm bài học, folder..."
                         value={searchTerm}
@@ -905,7 +952,8 @@ export default function TeacherTopicsPage() {
                                                             <td data-label="Thao tác" className="text-right">
                                                                 <div className="admin-table-actions">
                                                                     <button className="admin-action-btn" onClick={() => openShareModal(topic)} title="Chia sẻ"><Share2 size={16} /></button>
-                                                                    <Link to={`/teacher/topics/${topic.id}`} className="admin-action-btn" title="Quản lý từ vựng"><List size={16} /></Link>
+                                                                    <button className="admin-action-btn" onClick={() => window.open(`${window.__APP_BASE__ || './'}?_preview=${encodeURIComponent(`/learn?topicId=${topic.id}&preview=true&isTeacherTopic=true`)}`, '_blank')} title="Xem trước bài học"><Eye size={16} /></button>
+                                                                    <Link to={topic.isAdmin ? `/teacher/system-topics/${topic.id}` : `/teacher/topics/${topic.id}`} className="admin-action-btn" title="Quản lý từ vựng"><List size={16} /></Link>
                                                                     {(topic.isOwner || topic.teacherId === user.uid) && (
                                                                         <button className="admin-action-btn" onClick={() => setTopicToDuplicate(topic)} title="Nhân đôi bài học"><Copy size={16} /></button>
                                                                     )}
@@ -968,6 +1016,7 @@ export default function TeacherTopicsPage() {
                                                             <td data-label="Thao tác" className="text-right">
                                                                 <div className="admin-table-actions">
                                                                     <button className="admin-action-btn" onClick={() => openShareModal(topic)} title="Chia sẻ"><Share2 size={16} /></button>
+                                                                    <button className="admin-action-btn" onClick={() => window.open(`${window.__APP_BASE__ || './'}?_preview=${encodeURIComponent(`/learn?topicId=${topic.id}&preview=true&isTeacherTopic=true`)}`, '_blank')} title="Xem trước bài học"><Eye size={16} /></button>
                                                                     <Link to={topic.isAdmin ? `/teacher/system-topics/${topic.id}` : `/teacher/topics/${topic.id}`} className="admin-action-btn" title="Quản lý từ vựng"><List size={16} /></Link>
                                                                     {(topic.isOwner || topic.teacherId === user.uid) && (
                                                                         <button className="admin-action-btn" onClick={() => setTopicToDuplicate(topic)} title="Nhân đôi bài học"><Copy size={16} /></button>
@@ -1074,6 +1123,7 @@ export default function TeacherTopicsPage() {
                                                             <td data-label="Thao tác" className="text-right">
                                                                 <div className="admin-table-actions">
                                                                     <button className="admin-action-btn" onClick={() => openShareModal(topic)} title="Chia sẻ"><Share2 size={16} /></button>
+                                                                    <button className="admin-action-btn" onClick={() => window.open(`${window.__APP_BASE__ || './'}?_preview=${encodeURIComponent(`/learn?topicId=${topic.id}&preview=true&isTeacherTopic=true`)}`, '_blank')} title="Xem trước bài học"><Eye size={16} /></button>
                                                                     <Link to={topic.isAdmin ? `/teacher/system-topics/${topic.id}` : `/teacher/topics/${topic.id}`} className="admin-action-btn" title="Quản lý từ vựng"><List size={16} /></Link>
                                                                 </div>
                                                             </td>
@@ -1138,6 +1188,7 @@ export default function TeacherTopicsPage() {
                                                 <td data-label="Thao tác" className="text-right">
                                                     <div className="admin-table-actions">
                                                         <button className="admin-action-btn" onClick={() => openShareModal(topic)} title="Chia sẻ"><Share2 size={16} /></button>
+                                                        <button className="admin-action-btn" onClick={() => window.open(`${window.__APP_BASE__ || './'}?_preview=${encodeURIComponent(`/learn?topicId=${topic.id}&preview=true&isTeacherTopic=true`)}`, '_blank')} title="Xem trước bài học"><Eye size={16} /></button>
                                                         <Link to={topic.isAdmin ? `/teacher/system-topics/${topic.id}` : `/teacher/topics/${topic.id}`} className="admin-action-btn" title="Quản lý từ vựng"><List size={16} /></Link>
                                                         {(topic.isOwner || topic.teacherId === user.uid) && (
                                                             <button className="admin-action-btn" onClick={() => setTopicToDuplicate(topic)} title="Nhân đôi bài học"><Copy size={16} /></button>

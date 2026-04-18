@@ -4,9 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { getReviewProgressDocs, updateWordProgress } from '../services/spacedRepetition';
 import { getAdminTopicWords } from '../services/adminService';
 import { getTeacherTopicWords } from '../services/teacherService';
-import { checkWordSaved, toggleSavedWord } from '../services/savedService';
-import { db } from '../config/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { checkWordSaved, toggleSavedWord, getCustomListById } from '../services/savedService';
 import wordData from '../data/wordData';
 import { Heart } from 'lucide-react';
 import './LearnPage.css';
@@ -141,13 +139,10 @@ export default function ReviewPage() {
                 for (const docProg of progressDocs) {
                     let wObj = null;
                     if (docProg.topicId && docProg.topicId.startsWith('list_')) {
-                        // Custom list word
                         try {
-                            const snap = await getDoc(doc(db, `users/${user?.uid}/custom_lists`, docProg.topicId));
-                            if (snap.exists()) {
-                                const words = snap.data().words || [];
-                                wObj = words.find(w => w.word === docProg.word);
-                            }
+                            const customList = await getCustomListById(user?.uid, docProg.topicId);
+                            const words = customList?.words || [];
+                            wObj = words.find(w => w.word === docProg.word);
                         } catch (e) {
                             console.warn('Could not fetch custom list word:', e);
                         }
@@ -184,14 +179,7 @@ export default function ReviewPage() {
                             remainingSteps
                         });
                     } else {
-                        // Cleanup orphaned progress document
-                        try {
-                            const { deleteDoc } = await import('firebase/firestore');
-                            await deleteDoc(doc(db, `users/${user.uid}/word_progress`, docProg.id));
-                            console.log(`Deleted orphaned progress for: ${docProg.word}`);
-                        } catch (e) {
-                            console.warn('Failed to delete orphaned progress:', e);
-                        }
+                        console.warn(`Skipping orphaned review progress for: ${docProg.word}`);
                     }
                 }
 

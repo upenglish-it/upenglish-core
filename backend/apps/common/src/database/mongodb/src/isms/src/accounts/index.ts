@@ -1,9 +1,10 @@
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 import { Properties } from '../properties';
 import { PropertiesBranches } from '../properties/branches';
 import { SYSTEM_ID } from 'apps/common/src/utils';
 
 @modelOptions({
+  options: { allowMixed: Severity.ALLOW },
   schemaOptions: {
     timestamps: true,
     versionKey: false,
@@ -37,6 +38,10 @@ export class Accounts {
   @Prop({ type: Array, required: true })
   public emailAddresses: Array<string>;
 
+  /** Optional flattened primary email kept for SuperStudy compatibility. */
+  @Prop({ type: String, required: false, default: null })
+  public email: string;
+
   @Prop({ type: Array, required: true })
   public contactNumbers: Array<IContactNumber>;
 
@@ -55,6 +60,10 @@ export class Accounts {
   @Prop({ type: String, required: false, default: null })
   public profilePhoto: string;
 
+  /** Legacy SuperStudy photo field kept in sync with profilePhoto. */
+  @Prop({ type: String, required: false, default: null })
+  public photoURL: string;
+
   @Prop({ type: Array, default: [] })
   public guardians: Array<{ name: string; relationship: string; primaryNumber: string; secondaryNumber: string }>;
 
@@ -70,8 +79,16 @@ export class Accounts {
   @Prop({ type: Boolean, required: false, default: false })
   public deleted: boolean;
 
+  /** Optional deletion timestamp used by SuperStudy compatibility flows. */
+  @Prop({ type: Date, required: false, default: null })
+  public deletedAt: Date;
+
   @Prop({ type: Boolean, required: false, default: true })
   public active: boolean;
+
+  /** Legacy SuperStudy disabled flag mirrored from deleted when needed. */
+  @Prop({ type: Boolean, required: false, default: false })
+  public disabled: boolean;
 
   @Prop({ type: Boolean, required: false, default: false })
   public lead: boolean;
@@ -119,6 +136,68 @@ export class Accounts {
 
   @Prop({ type: String, required: true })
   public createdFrom: TCreatedFrom;
+
+  // Optional SuperStudy compatibility / migration support fields.
+
+  /** Friendly display name used in SuperStudy UI (falls back to firstName + lastName) */
+  @Prop({ type: String, required: false, default: null })
+  public displayName: string;
+
+  /** SuperStudy account lifecycle status */
+  @Prop({ type: String, enum: ['pending', 'approved', 'expired'], required: false, default: 'approved' })
+  public status: 'pending' | 'approved' | 'expired';
+
+  /** Date this account was approved for SuperStudy access */
+  @Prop({ type: Date, required: false, default: null })
+  public approvedAt: Date;
+
+  /** SuperStudy access expiry (null = never expires) */
+  @Prop({ type: Date, required: false, default: null })
+  public expiresAt: Date;
+
+  /** Tracks when expiry notification email was sent */
+  @Prop({ type: Date, required: false, default: null })
+  public expiryNotifiedAt: Date;
+
+  /** Topic folder IDs this account has access to in SuperStudy */
+  @Prop({ type: Array, required: false, default: [] })
+  public folderAccess: string[];
+
+  /** Direct topic IDs this account has access to in SuperStudy */
+  @Prop({ type: Array, required: false, default: [] })
+  public topicAccess: string[];
+
+  /** Grammar exercise IDs this account has access to in SuperStudy */
+  @Prop({ type: Array, required: false, default: [] })
+  public grammarAccess: string[];
+
+  /** Exam IDs this account has access to in SuperStudy */
+  @Prop({ type: Array, required: false, default: [] })
+  public examAccess: string[];
+
+  /** SuperStudy group (class) IDs this account belongs to */
+  @Prop({ type: Array, required: false, default: [] })
+  public groupIds: string[];
+
+  /** Per-notification-type email preference overrides for SuperStudy */
+  @Prop({ type: Object, required: false, default: {} })
+  public emailPreferences: Record<string, boolean>;
+
+  /** Honorific/title shown in SuperStudy for teachers (e.g. 'Mr.', 'Ms.') */
+  @Prop({ type: String, required: false, default: null })
+  public teacherTitle: string;
+
+  /** Honorific/title shown in SuperStudy for students */
+  @Prop({ type: String, required: false, default: null })
+  public studentTitle: string;
+
+  /** Optional admin UI language preference used by SuperStudy. */
+  @Prop({ type: String, required: false, default: null })
+  public adminLanguage: string;
+
+  /** SuperStudy creator/approver reference when relevant. */
+  @Prop({ ref: () => Accounts, type: String, required: false, default: null })
+  public createdBy: Accounts;
 
   // @Prop({ type: String, default: 'active' })
   // public status: TAccountStatus;
@@ -323,7 +402,7 @@ export interface IContactNumber {
 //  */
 // export type TAccountsBaseRole = 'master' | 'customer';
 
-export type TRole = 'admin' | 'teacher' | 'student' | 'receptionist' | 'marketing';
+export type TRole = 'admin' | 'teacher' | 'student' | 'receptionist' | 'marketing' | 'staff' | 'user';
 export type TCreatedFrom = 'manual' | 'csv' | 'migration';
 // export type TAccountStatus = 'active' | 'inactive';
 export type TAccountGender = 'male' | 'female';

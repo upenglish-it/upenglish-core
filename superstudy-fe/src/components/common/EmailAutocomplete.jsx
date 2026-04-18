@@ -1,13 +1,21 @@
-import { useState, useEffect, useRef } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../../config/firebase';
-import { getWhitelistEmails } from '../../services/adminService';
+﻿import { useState, useEffect, useRef } from 'react';
+import { getAllUsers, getWhitelistEmails } from '../../services/adminService';
 import { Mail } from 'lucide-react';
 
 let cachedUsers = null;
 let cachedWhitelist = null;
 
-export default function EmailAutocomplete({ value, onChange, onSubmit, onSelect, disabled, placeholder, roleFilter }) {
+export default function EmailAutocomplete({
+    value,
+    onChange,
+    onSubmit,
+    onSelect,
+    disabled,
+    placeholder,
+    roleFilter,
+    inputId,
+    inputName,
+}) {
     const [suggestions, setSuggestions] = useState([]);
     const [showDropdown, setShowDropdown] = useState(false);
     const [allEmails, setAllEmails] = useState([]);
@@ -17,10 +25,7 @@ export default function EmailAutocomplete({ value, onChange, onSubmit, onSelect,
         async function loadEmails() {
             try {
                 if (!cachedUsers) {
-                    const snap = await getDocs(collection(db, 'users'));
-                    const users = [];
-                    snap.forEach(doc => users.push({ uid: doc.id, ...doc.data() }));
-                    cachedUsers = users;
+                    cachedUsers = await getAllUsers();
                 }
                 if (!cachedWhitelist) {
                     cachedWhitelist = await getWhitelistEmails();
@@ -116,6 +121,8 @@ export default function EmailAutocomplete({ value, onChange, onSubmit, onSelect,
         <div ref={wrapperRef} style={{ position: 'relative', flex: 1, minWidth: 0 }}>
             <input
                 ref={inputRef}
+                id={inputId}
+                name={inputName || inputId || 'email-autocomplete'}
                 type="email"
                 value={value}
                 onChange={e => onChange(e.target.value)}
@@ -192,7 +199,7 @@ export default function EmailAutocomplete({ value, onChange, onSubmit, onSelect,
                                                 padding: '1px 4px', borderRadius: '3px',
                                                 background: '#fef3c7', color: '#92400e', fontWeight: 600
                                             }}>
-                                                Chưa đăng nhập
+                                                ChÆ°a Ä‘Äƒng nháº­p
                                             </span>
                                         )}
                                     </div>

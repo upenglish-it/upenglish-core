@@ -169,4 +169,27 @@ export class TeacherFoldersController {
   permanentDeleteTeacherExamFolder(@Param('id') id: string) {
     return this.service.permanentDeleteTeacherFolder('exams', id);
   }
+
+  // ─── Shared / Public Access ──────────────────────────────────────────────
+
+  @ApiOperation({ summary: 'Get public and explicitly shared teacher topic folders' })
+  @Post('topics/shared')
+  @HttpCode(HttpStatus.OK)
+  getSharedAndPublicTopicFolders(@Body() body: { folderAccessIds?: string[] }) {
+    return this.service.getSharedAndPublicFolders('topics', body.folderAccessIds || []);
+  }
+
+  @ApiOperation({ summary: 'Get public and explicitly shared teacher grammar folders' })
+  @Post('grammar/shared')
+  @HttpCode(HttpStatus.OK)
+  getSharedAndPublicGrammarFolders(@Body() body: { folderAccessIds?: string[] }) {
+    return this.service.getSharedAndPublicFolders('grammar', body.folderAccessIds || []);
+  }
+
+  @ApiOperation({ summary: 'Get public and explicitly shared teacher exam folders' })
+  @Post('exams/shared')
+  @HttpCode(HttpStatus.OK)
+  getSharedAndPublicExamFolders(@Body() body: { folderAccessIds?: string[] }) {
+    return this.service.getSharedAndPublicFolders('exams', body.folderAccessIds || []);
+  }
 }

@@ -1,16 +1,45 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Edit3, Trash2, Send, Eye, Gamepad2, X, Upload, FileText, CheckCircle2, Search } from 'lucide-react';
+import {
+    AlertTriangle,
+    CheckCircle2,
+    Clock3,
+    Edit3,
+    Eye,
+    FileText,
+    Gamepad2,
+    Layers3,
+    Plus,
+    Search,
+    Send,
+    Trash2,
+    Upload,
+    X
+} from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getMyGames, createMiniGame, updateMiniGame, deleteMiniGame, submitForReview } from '../../services/miniGameService';
-import { storage } from '../../config/firebase';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { createMiniGame, deleteMiniGame, getMyGames, submitForReview, updateMiniGame } from '../../services/miniGameService';
+import {
+    isMiniGameBundleFile,
+    isMiniGameHtmlFile,
+    isMiniGameThumbnailFile,
+    uploadMiniGameBundleFile,
+    uploadMiniGameHtmlFile,
+    uploadMiniGameThumbnailFile
+} from '../../services/miniGameBundleService';
+import {
+    buildMiniGameMockPayload,
+    getMiniGameDefaultSource,
+    getMiniGameDeliveryMode,
+    getMiniGameLaunchUrl,
+    getMiniGameMaxItems,
+    getMiniGameMinItems
+} from '../../services/miniGameRuntime';
 import GameLauncher from '../../components/games/GameLauncher';
 
 const DATA_TYPE_LABELS = {
-    vocabulary: '📚 Từ vựng',
-    grammar: '📝 Ngữ pháp',
-    both: '📚📝 Cả hai'
+    vocabulary: 'Từ vựng',
+    grammar: 'Ngữ pháp',
+    both: 'Cả hai'
 };
 
 const STATUS_LABELS = {
@@ -20,16 +49,126 @@ const STATUS_LABELS = {
     rejected: 'Bị từ chối'
 };
 
+const DELIVERY_MODE_LABELS = {
+    single_html: 'HTML',
+    dist_bundle: 'ZIP dist'
+};
+
+const TAB_CONFIG = [
+    { key: 'all', label: 'Tất cả', icon: Layers3 },
+    { key: 'draft', label: 'Nháp', icon: FileText },
+    { key: 'pending_review', label: 'Chờ duyệt', icon: Clock3 },
+    { key: 'approved', label: 'Đã duyệt', icon: CheckCircle2 },
+    { key: 'rejected', label: 'Cần sửa', icon: AlertTriangle }
+];
+
+const EMPTY_STATE_COPY = {
+    all: {
+        title: 'Chưa có mini game nào',
+        description: 'Tạo game đầu tiên, upload bản build và preview ngay trong hệ thống.'
+    },
+    draft: {
+        title: 'Không có bản nháp nào',
+        description: 'Mọi game đã được xử lý xong. Bạn có thể tạo một ý tưởng mới.'
+    },
+    pending_review: {
+        title: 'Không có game nào đang chờ duyệt',
+        description: 'Sau khi hoàn tất preview và kiểm tra data, hãy nộp game để admin duyệt.'
+    },
+    approved: {
+        title: 'Chưa có game nào được duyệt',
+        description: 'Bạn có thể bắt đầu từ bản nháp, gửi duyệt và theo dõi phản hồi tại đây.'
+    },
+    rejected: {
+        title: 'Không có game nào cần sửa',
+        description: 'Kho game đang sạch sẽ. Nếu có feedback mới, mục này sẽ hiện tại đây.'
+    }
+};
+
 const INITIAL_FORM = {
     name: '',
     description: '',
     gameUrl: '',
+    launchUrl: '',
+    deliveryMode: 'single_html',
     dataType: 'vocabulary',
     thumbnail: '',
-    minWords: '',
-    maxWords: '',
-    tags: ''
+    minItems: '',
+    maxItems: '',
+    tags: '',
+    entryPath: 'index.html',
+    storagePrefix: '',
+    bundleVersion: '',
+    fileName: ''
 };
+
+function getMiniGameUploadErrorMessage(error) {
+    const rawMessage = error?.message || 'Lỗi không xác định khi upload mini game.';
+
+    if (error?.status === 413 || /too large|payload/i.test(rawMessage)) {
+        return 'File game quá lớn cho server hiện tại. Hãy giảm kích thước bundle hoặc tăng giới hạn upload ở backend.';
+    }
+
+    if (error?.status === 401 || error?.status === 403) {
+        return 'Server đang từ chối upload mini game. Hãy kiểm tra phiên đăng nhập và quyền truy cập rồi thử lại.';
+    }
+
+    return rawMessage;
+}
+
+function getToastIcon(type) {
+    switch (type) {
+        case 'success':
+            return '✅';
+        case 'error':
+            return '⚠️';
+        default:
+            return 'ℹ️';
+    }
+}
+
+function buildPersistedFileState(formState) {
+    const deliveryMode = formState.deliveryMode || 'single_html';
+    const launchUrl = formState.launchUrl || formState.gameUrl || '';
+
+    return {
+        deliveryMode,
+        launchUrl,
+        gameUrl: deliveryMode === 'dist_bundle' ? '' : launchUrl,
+        entryPath: formState.entryPath || 'index.html',
+        storagePrefix: formState.storagePrefix || '',
+        bundleVersion: formState.bundleVersion || null,
+        fileName: formState.fileName || ''
+    };
+}
+
+function formatTimestamp(timestamp) {
+    if (!timestamp) return 'Vừa cập nhật';
+
+    const date = typeof timestamp?.toDate === 'function'
+        ? timestamp.toDate()
+        : timestamp?.seconds
+            ? new Date(timestamp.seconds * 1000)
+            : new Date(timestamp);
+
+    if (Number.isNaN(date.getTime())) return 'Vừa cập nhật';
+
+    return date.toLocaleDateString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    });
+}
+
+function getItemRangeLabel(game) {
+    const minItems = getMiniGameMinItems(game);
+    const maxItems = getMiniGameMaxItems(game);
+
+    if (minItems && maxItems) return `${minItems}-${maxItems} mục`;
+    if (minItems) return `Từ ${minItems} mục`;
+    if (maxItems) return `Tối đa ${maxItems} mục`;
+    return null;
+}
 
 export default function ITGamesPage() {
     const { user } = useAuth();
@@ -42,18 +181,50 @@ export default function ITGamesPage() {
     const [form, setForm] = useState(INITIAL_FORM);
     const [saving, setSaving] = useState(false);
     const [previewGame, setPreviewGame] = useState(null);
+    const [previewPayload, setPreviewPayload] = useState(null);
+    const [previewConfigGame, setPreviewConfigGame] = useState(null);
+    const [previewSource, setPreviewSource] = useState('vocabulary');
     const [confirmDelete, setConfirmDelete] = useState(null);
+    const [confirmSubmit, setConfirmSubmit] = useState(null);
     const [uploadFile, setUploadFile] = useState(null);
+    const [thumbnailFile, setThumbnailFile] = useState(null);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
-    const fileInputRef = useRef(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [toast, setToast] = useState(null);
+    const [thumbnailPreviewUrl, setThumbnailPreviewUrl] = useState('');
+    const fileInputRef = useRef(null);
+    const thumbnailInputRef = useRef(null);
 
     useEffect(() => {
         if (!user?.uid) return;
         setLoading(true);
-        getMyGames(user.uid).then(setGames).catch(console.error).finally(() => setLoading(false));
+        getMyGames(user.uid)
+            .then(setGames)
+            .catch(console.error)
+            .finally(() => setLoading(false));
     }, [user?.uid]);
+
+    useEffect(() => {
+        const timeoutId = toast ? window.setTimeout(() => setToast(null), 4000) : null;
+        return () => {
+            if (timeoutId) window.clearTimeout(timeoutId);
+        };
+    }, [toast]);
+
+    useEffect(() => {
+        if (!thumbnailFile) {
+            setThumbnailPreviewUrl(form.thumbnail || '');
+            return undefined;
+        }
+
+        const objectUrl = URL.createObjectURL(thumbnailFile);
+        setThumbnailPreviewUrl(objectUrl);
+
+        return () => {
+            URL.revokeObjectURL(objectUrl);
+        };
+    }, [thumbnailFile, form.thumbnail]);
 
     const refreshGames = () => {
         if (!user?.uid) return;
@@ -65,29 +236,39 @@ export default function ITGamesPage() {
         setSearchParams(tab === 'all' ? {} : { tab });
     };
 
-    const filteredGames = games.filter(g => {
-        if (activeTab !== 'all' && g.status !== activeTab) return false;
-        if (searchQuery) {
-            const q = searchQuery.toLowerCase();
-            return (g.name || '').toLowerCase().includes(q) || (g.description || '').toLowerCase().includes(q);
-        }
-        return true;
+    const filteredGames = games.filter(game => {
+        if (activeTab !== 'all' && game.status !== activeTab) return false;
+        if (!searchQuery) return true;
+
+        const query = searchQuery.toLowerCase();
+        return (game.name || '').toLowerCase().includes(query) || (game.description || '').toLowerCase().includes(query);
     });
 
     const counts = {
         all: games.length,
-        draft: games.filter(g => g.status === 'draft').length,
-        pending_review: games.filter(g => g.status === 'pending_review').length,
-        approved: games.filter(g => g.status === 'approved').length,
-        rejected: games.filter(g => g.status === 'rejected').length,
+        draft: games.filter(game => game.status === 'draft').length,
+        pending_review: games.filter(game => game.status === 'pending_review').length,
+        approved: games.filter(game => game.status === 'approved').length,
+        rejected: games.filter(game => game.status === 'rejected').length
     };
 
-    // Modal handlers
+    const resetFormState = () => {
+        setUploadFile(null);
+        setThumbnailFile(null);
+        setUploadProgress(0);
+        setIsDragging(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        if (thumbnailInputRef.current) thumbnailInputRef.current.value = '';
+    };
+
+    const showToast = (message, type = 'info') => {
+        setToast({ message, type });
+    };
+
     const openCreateModal = () => {
         setEditingGame(null);
         setForm(INITIAL_FORM);
-        setUploadFile(null);
-        setUploadProgress(0);
+        resetFormState();
         setShowModal(true);
     };
 
@@ -97,111 +278,139 @@ export default function ITGamesPage() {
             name: game.name || '',
             description: game.description || '',
             gameUrl: game.gameUrl || '',
+            launchUrl: getMiniGameLaunchUrl(game),
+            deliveryMode: getMiniGameDeliveryMode(game),
             dataType: game.dataType || 'vocabulary',
             thumbnail: game.thumbnail || '',
-            minWords: game.minWords || '',
-            maxWords: game.maxWords || '',
-            tags: (game.tags || []).join(', ')
+            minItems: getMiniGameMinItems(game) ?? '',
+            maxItems: getMiniGameMaxItems(game) ?? '',
+            tags: (game.tags || []).join(', '),
+            entryPath: game.entryPath || 'index.html',
+            storagePrefix: game.storagePrefix || '',
+            bundleVersion: game.bundleVersion || '',
+            fileName: game.fileName || ''
         });
-        setUploadFile(null);
-        setUploadProgress(0);
+        resetFormState();
         setShowModal(true);
     };
 
-    // Upload file to Firebase Storage
-    const uploadGameFile = (file, gameId) => {
-        return new Promise((resolve, reject) => {
-            const storageRef = ref(storage, `mini-games/${gameId}/index.html`);
-            const uploadTask = uploadBytesResumable(storageRef, file, {
-                contentType: 'text/html'
-            });
+    const handleIncomingUploadFile = (file) => {
+        if (!file) return;
 
-            uploadTask.on('state_changed',
-                (snapshot) => {
-                    const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-                    setUploadProgress(progress);
-                },
-                (error) => {
-                    console.error('Upload error:', error);
-                    reject(error);
-                },
-                async () => {
-                    try {
-                        const url = await getDownloadURL(uploadTask.snapshot.ref);
-                        resolve(url);
-                    } catch (err) {
-                        reject(err);
-                    }
-                }
-            );
-        });
+        if (isMiniGameHtmlFile(file) || isMiniGameBundleFile(file)) {
+            setUploadFile(file);
+            return;
+        }
+
+        showToast('Vui lòng chọn file `.html`, `.htm` hoặc `.zip` của thư mục dist.', 'error');
+    };
+
+    const handleIncomingThumbnailFile = (file) => {
+        if (!file) return;
+
+        if (isMiniGameThumbnailFile(file)) {
+            setThumbnailFile(file);
+            return;
+        }
+
+        showToast('Vui lòng chọn ảnh thumbnail dạng PNG, JPG, WEBP, GIF hoặc SVG.', 'error');
+    };
+
+    const uploadSelectedFile = async (file, gameId) => {
+        if (isMiniGameBundleFile(file)) {
+            return uploadMiniGameBundleFile(file, gameId, setUploadProgress);
+        }
+
+        if (isMiniGameHtmlFile(file)) {
+            return uploadMiniGameHtmlFile(file, gameId, setUploadProgress);
+        }
+
+        throw new Error('Định dạng file không được hỗ trợ.');
     };
 
     const handleSave = async () => {
         if (!form.name.trim()) {
-            alert('Vui lòng nhập tên game.');
+            showToast('Vui lòng nhập tên game.', 'error');
             return;
         }
-        if (!uploadFile && !form.gameUrl) {
-            alert('Vui lòng upload file HTML game.');
+
+        if (!uploadFile && !form.launchUrl && !form.gameUrl) {
+            showToast('Vui lòng upload file `.html` hoặc `.zip` của dist game.', 'error');
             return;
         }
+
         setSaving(true);
+        setUploadProgress(0);
+
         try {
+            let gameId = editingGame?.id;
+
             const data = {
                 name: form.name.trim(),
                 description: form.description.trim(),
                 dataType: form.dataType,
                 thumbnail: form.thumbnail.trim(),
-                minWords: form.minWords ? parseInt(form.minWords) : null,
-                maxWords: form.maxWords ? parseInt(form.maxWords) : null,
-                tags: form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : []
+                minItems: form.minItems ? parseInt(form.minItems, 10) : null,
+                maxItems: form.maxItems ? parseInt(form.maxItems, 10) : null,
+                tags: form.tags ? form.tags.split(',').map(tag => tag.trim()).filter(Boolean) : []
             };
 
-            let gameId;
-            if (editingGame) {
-                gameId = editingGame.id;
-                // Upload new file if selected
-                if (uploadFile) {
-                    data.gameUrl = await uploadGameFile(uploadFile, gameId);
-                    data.fileName = uploadFile.name;
-                } else {
-                    data.gameUrl = form.gameUrl;
-                }
-                await updateMiniGame(gameId, data);
-            } else {
-                data.createdBy = user.uid;
-                data.createdByName = user.displayName || 'IT';
-                // Create game first to get ID, then upload file
-                const created = await createMiniGame({ ...data, gameUrl: '' });
+            if (!gameId) {
+                const created = await createMiniGame({
+                    ...data,
+                    createdBy: user.uid,
+                    createdByName: user.displayName || 'IT',
+                    launchUrl: '',
+                    gameUrl: ''
+                });
                 gameId = created.id;
-                if (uploadFile) {
-                    const downloadUrl = await uploadGameFile(uploadFile, gameId);
-                    await updateMiniGame(gameId, { gameUrl: downloadUrl, fileName: uploadFile.name });
-                }
             }
+
+            const thumbnailUrl = thumbnailFile
+                ? await uploadMiniGameThumbnailFile(thumbnailFile, gameId)
+                : data.thumbnail;
+
+            const fileData = uploadFile
+                ? await uploadSelectedFile(uploadFile, gameId)
+                : buildPersistedFileState(form);
+
+            await updateMiniGame(gameId, {
+                ...data,
+                thumbnail: thumbnailUrl,
+                ...fileData
+            });
+
             refreshGames();
             setShowModal(false);
+            showToast(editingGame ? 'Đã cập nhật game thành công.' : 'Đã tạo game thành công.', 'success');
         } catch (error) {
             console.error('Error saving game:', error);
-            alert('Lỗi khi lưu game: ' + error.message);
+            showToast(`Lỗi khi lưu game: ${getMiniGameUploadErrorMessage(error)}`, 'error');
         } finally {
             setSaving(false);
         }
     };
 
     const handleSubmitReview = async (game) => {
-        if (!game.gameUrl) {
-            alert('Vui lòng thêm URL game trước khi nộp duyệt.');
+        if (!getMiniGameLaunchUrl(game)) {
+            showToast('Vui lòng thêm file game trước khi nộp duyệt.', 'error');
             return;
         }
-        if (!window.confirm(`Nộp "${game.name}" để Admin duyệt?`)) return;
+
+        setConfirmSubmit(game);
+    };
+
+    const confirmSubmitReview = async () => {
+        if (!confirmSubmit) return;
+
         try {
-            await submitForReview(game.id, user.uid);
+            await submitForReview(confirmSubmit.id, user.uid);
+            setConfirmSubmit(null);
             refreshGames();
+            showToast('Đã nộp game để Admin duyệt.', 'success');
         } catch (error) {
             console.error('Error submitting for review:', error);
-            alert('Lỗi khi nộp duyệt.');
+            showToast('Lỗi khi nộp duyệt game.', 'error');
         }
     };
 
@@ -210,212 +419,327 @@ export default function ITGamesPage() {
             await deleteMiniGame(gameId);
             setConfirmDelete(null);
             refreshGames();
+            showToast('Đã xóa game thành công.', 'success');
         } catch (error) {
             console.error('Error deleting game:', error);
-            alert('Lỗi khi xóa game.');
+            showToast('Lỗi khi xóa game.', 'error');
         }
     };
 
-    const handlePreview = (game) => {
+    const openPreview = (game) => {
+        if (game.dataType === 'both') {
+            setPreviewConfigGame(game);
+            setPreviewSource(getMiniGameDefaultSource(game));
+            return;
+        }
+
         setPreviewGame(game);
+        setPreviewPayload(buildMiniGameMockPayload(game, getMiniGameDefaultSource(game)));
     };
+
+    const launchConfiguredPreview = () => {
+        if (!previewConfigGame) return;
+
+        setPreviewGame(previewConfigGame);
+        setPreviewPayload(buildMiniGameMockPayload(previewConfigGame, previewSource));
+        setPreviewConfigGame(null);
+    };
+
+    const hasExistingUpload = Boolean(form.launchUrl || form.gameUrl);
+    const effectiveUploadMode = uploadFile
+        ? (isMiniGameBundleFile(uploadFile) ? 'dist_bundle' : 'single_html')
+        : (form.deliveryMode || 'single_html');
+
+    const currentEmptyState = EMPTY_STATE_COPY[activeTab] || EMPTY_STATE_COPY.all;
+    const filteredSummary = filteredGames.length === games.length
+        ? `${games.length} game trong thư viện`
+        : `Đang hiển thị ${filteredGames.length}/${games.length} game`;
 
     if (loading) {
         return (
-            <div style={{ padding: '40px', textAlign: 'center' }}>
-                <div className="spinner" style={{ width: 36, height: 36, borderWidth: 3, margin: '0 auto' }}></div>
+            <div className="it-page it-page-loading">
+                <div className="spinner" style={{ width: 36, height: 36, borderWidth: 3 }}></div>
+                <p className="it-loading-copy">Đang tải thư viện mini game...</p>
             </div>
         );
     }
 
     return (
-        <div>
-            <h1 className="admin-page-title" style={{ marginBottom: '4px', textAlign: 'center' }}>🎮 Game của tôi</h1>
-            <p className="admin-page-subtitle" style={{ textAlign: 'center' }}>Tạo, chỉnh sửa và nộp mini games để Admin duyệt</p>
-
-            {/* Tabs */}
-            <div className="admin-tabs-container" style={{ marginTop: '16px', marginBottom: '16px' }}>
-                {[
-                    { key: 'all', label: 'Tất cả' },
-                    { key: 'draft', label: '📝 Nháp' },
-                    { key: 'pending_review', label: '⏳ Chờ duyệt' },
-                    { key: 'approved', label: '✅ Đã duyệt' },
-                    { key: 'rejected', label: '❌ Bị từ chối' }
-                ].map(tab => (
-                    <button key={tab.key} className={`admin-tab ${activeTab === tab.key ? 'active' : ''}`} onClick={() => handleTabChange(tab.key)}>
-                        {tab.label} {counts[tab.key] > 0 && `(${counts[tab.key]})`}
+        <div className="admin-page it-page">
+            {toast && (
+                <div className={`it-toast it-toast--${toast.type || 'info'}`}>
+                    <span className="it-toast-icon">{getToastIcon(toast.type)}</span>
+                    <div className="it-toast-message">{toast.message}</div>
+                    <button type="button" className="it-toast-close" onClick={() => setToast(null)}>
+                        <X size={16} />
                     </button>
-                ))}
-            </div>
-
-            {/* Search + Action bar */}
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
-                <div style={{ position: 'relative', maxWidth: '400px', flex: '1 1 300px' }}>
-                    <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                    <input type="text" placeholder="Tìm game..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ width: '100%', padding: '10px 12px 10px 36px', border: '1.5px solid #e2e8f0', borderRadius: '12px', fontSize: '0.88rem', outline: 'none' }} />
-                </div>
-                <button className="it-game-btn primary" style={{ padding: '10px 20px', borderRadius: '12px', flex: 'none' }} onClick={openCreateModal}>
-                    <Plus size={18} /> Tạo game mới
-                </button>
-            </div>
-
-            {/* Games grid */}
-            {filteredGames.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '48px 20px', color: '#94a3b8' }}>
-                    <div style={{ fontSize: '3rem', marginBottom: '12px' }}>🎮</div>
-                    <h3 style={{ fontSize: '1.1rem', color: '#64748b', fontWeight: 600, marginBottom: '6px' }}>
-                        {activeTab === 'all' ? 'Chưa có game nào' : `Không có game ${STATUS_LABELS[activeTab]?.toLowerCase() || ''}`}
-                    </h3>
-                    <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
-                        {activeTab === 'all' ? 'Bấm "Tạo game mới" để bắt đầu!' : 'Chuyển tab khác để xem game.'}
-                    </p>
-                </div>
-            ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
-                    {filteredGames.map(game => (
-                        <div key={game.id} style={{ background: '#fff', borderRadius: '16px', border: '1.5px solid #e2e8f0', overflow: 'hidden', transition: 'all 0.2s' }}>
-                            <div style={{ width: '100%', height: '140px', background: 'linear-gradient(135deg, #e0e7ff, #c7d2fe)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '3rem' }}>
-                                {game.thumbnail ? <img src={game.thumbnail} alt={game.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '🎮'}
-                            </div>
-                            <div style={{ padding: '14px 16px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', flexWrap: 'wrap', gap: '6px' }}>
-                                    <span style={{ fontWeight: 700, fontSize: '1rem', color: '#1e293b' }}>{game.name}</span>
-                                    <span className={`game-status-badge ${game.status}`}>{STATUS_LABELS[game.status]}</span>
-                                </div>
-                                <p style={{ fontSize: '0.82rem', color: '#64748b', lineHeight: 1.45, marginBottom: '6px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{game.description || 'Chưa có mô tả'}</p>
-                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '10px' }}>
-                                    <span>{DATA_TYPE_LABELS[game.dataType] || game.dataType}</span>
-                                    {(game.tags || []).slice(0, 2).map(tag => (
-                                        <span key={tag}>• {tag}</span>
-                                    ))}
-                                </div>
-
-                                {/* Actions */}
-                                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                                    {game.gameUrl && (
-                                        <button className="it-game-btn secondary" onClick={() => handlePreview(game)} style={{ padding: '6px 12px', fontSize: '0.78rem', flex: 'none' }}>
-                                            <Eye size={14} /> Xem
-                                        </button>
-                                    )}
-                                    {(game.status === 'draft' || game.status === 'rejected') && (
-                                        <>
-                                            <button className="it-game-btn secondary" onClick={() => openEditModal(game)} style={{ padding: '6px 12px', fontSize: '0.78rem', flex: 'none' }}>
-                                                <Edit3 size={14} /> Sửa
-                                            </button>
-                                            <button className="it-game-btn submit" onClick={() => handleSubmitReview(game)} style={{ padding: '6px 12px', fontSize: '0.78rem', flex: 'none' }}>
-                                                <Send size={14} /> {game.status === 'rejected' ? 'Nộp lại' : 'Nộp duyệt'}
-                                            </button>
-                                        </>
-                                    )}
-                                    {game.status === 'draft' && (
-                                        <button className="it-game-btn danger" onClick={() => setConfirmDelete(game)} title="Xóa" style={{ padding: '6px 10px', flex: 'none' }}>
-                                            <Trash2 size={14} />
-                                        </button>
-                                    )}
-                                </div>
-
-                                {/* Reject note */}
-                                {game.status === 'rejected' && game.reviewNote && (
-                                    <div style={{ marginTop: '8px', padding: '8px 10px', background: '#fef2f2', borderRadius: '8px', border: '1px solid #fecaca', fontSize: '0.78rem', color: '#991b1b' }}>
-                                        <strong style={{ color: '#dc2626' }}>Ghi chú từ Admin:</strong> {game.reviewNote}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    ))}
                 </div>
             )}
 
-            {/* Create/Edit Modal */}
+            <section className="it-hero-card">
+                <div className="it-hero-content">
+                    <span className="it-hero-kicker">Mini Game Studio</span>
+                    <h1 className="it-hero-title">
+                        <Gamepad2 size={26} />
+                        Game của tôi
+                    </h1>
+                    <p className="it-hero-subtitle">
+                        Tạo, cập nhật và nộp mini game theo một flow gọn: upload bản build, preview, rồi gửi admin duyệt.
+                    </p>
+                    <div className="it-hero-pills">
+                        <span className="it-hero-pill subtle">{counts.draft} bản nháp</span>
+                        <span className="it-hero-pill subtle">{counts.pending_review} chờ duyệt</span>
+                        <span className="it-hero-pill subtle">{counts.approved} đã duyệt</span>
+                        <span className="it-hero-pill subtle danger">{counts.rejected} cần sửa</span>
+                    </div>
+                </div>
+
+                <div className="it-hero-actions">
+                    <button className="it-game-btn primary" onClick={openCreateModal}>
+                        <Plus size={18} />
+                        Tạo game mới
+                    </button>
+                </div>
+            </section>
+
+            <section className="it-toolbar-shell">
+                <div className="it-filter-tabs">
+                    {TAB_CONFIG.map(({ key, label, icon: Icon }) => (
+                        <button
+                            key={key}
+                            type="button"
+                            className={`it-filter-tab ${activeTab === key ? 'active' : ''}`}
+                            onClick={() => handleTabChange(key)}
+                        >
+                            <Icon size={15} />
+                            <span>{label}</span>
+                            <span className="it-filter-tab-count">{counts[key]}</span>
+                        </button>
+                    ))}
+                </div>
+
+                <div className="it-toolbar-row">
+                    <div className="it-search-input-wrapper">
+                        <Search size={16} />
+                        <input
+                            id="it-game-search"
+                            name="it_game_search"
+                            type="text"
+                            placeholder="Tìm theo tên hoặc mô tả game..."
+                            value={searchQuery}
+                            onChange={event => setSearchQuery(event.target.value)}
+                            className="it-search-input"
+                        />
+                    </div>
+
+                    <div className="it-toolbar-meta">
+                        <span className="it-results-copy">{filteredSummary}</span>
+                    </div>
+                </div>
+
+                {activeTab === 'rejected' && counts.rejected > 0 && (
+                    <div className="it-inline-note tone-danger">
+                        Xem kỹ ghi chú từ admin trong từng card trước khi nộp lại, nhất là file build và data mock.
+                    </div>
+                )}
+            </section>
+
+            {filteredGames.length === 0 ? (
+                <section className="it-empty-state it-empty-state-panel">
+                    <div className="it-empty-state-icon">🎮</div>
+                    <h3>{currentEmptyState.title}</h3>
+                    <p>{currentEmptyState.description}</p>
+                    <button className="it-game-btn primary" onClick={openCreateModal}>
+                        <Plus size={18} />
+                        Tạo game mới
+                    </button>
+                </section>
+            ) : (
+                <section className="it-games-grid">
+                    {filteredGames.map(game => {
+                        const itemRangeLabel = getItemRangeLabel(game);
+                        const launchUrl = getMiniGameLaunchUrl(game);
+
+                        return (
+                            <article key={game.id} className={`it-game-card status-${game.status}`}>
+                                <div className="it-game-card-thumb">
+                                    {game.thumbnail ? (
+                                        <img src={game.thumbnail} alt={game.name} />
+                                    ) : (
+                                        <div className="it-game-thumb-fallback">
+                                            <Gamepad2 size={34} />
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="it-game-card-body">
+                                    <div className="it-game-card-header">
+                                        <div className="it-game-card-heading">
+                                            <h3 className="it-game-card-name">{game.name}</h3>
+                                            <p className="it-game-card-date">Cập nhật {formatTimestamp(game.updatedAt || game.submittedAt || game.createdAt)}</p>
+                                        </div>
+                                        <span className={`game-status-badge ${game.status}`}>{STATUS_LABELS[game.status]}</span>
+                                    </div>
+
+                                    <p className="it-game-card-desc">{game.description || 'Chưa có mô tả cho game này.'}</p>
+
+                                    <div className="it-game-card-meta">
+                                        <span className="it-game-card-tag">{DATA_TYPE_LABELS[game.dataType] || game.dataType}</span>
+                                        <span className="it-game-card-tag">{DELIVERY_MODE_LABELS[getMiniGameDeliveryMode(game)] || 'HTML'}</span>
+                                        {itemRangeLabel && <span className="it-game-card-tag">{itemRangeLabel}</span>}
+                                        {(game.tags || []).slice(0, 2).map(tag => (
+                                            <span key={tag} className="it-game-card-tag">{tag}</span>
+                                        ))}
+                                    </div>
+
+                                    <div className="it-game-card-actions">
+                                        {launchUrl && (
+                                            <button className="it-game-btn secondary compact" onClick={() => openPreview(game)}>
+                                                <Eye size={14} />
+                                                Preview
+                                            </button>
+                                        )}
+
+                                        {(game.status === 'draft' || game.status === 'rejected') && (
+                                            <>
+                                                <button className="it-game-btn secondary compact" onClick={() => openEditModal(game)}>
+                                                    <Edit3 size={14} />
+                                                    Sửa
+                                                </button>
+                                                <button className="it-game-btn submit compact" onClick={() => handleSubmitReview(game)}>
+                                                    <Send size={14} />
+                                                    {game.status === 'rejected' ? 'Nộp lại' : 'Nộp duyệt'}
+                                                </button>
+                                            </>
+                                        )}
+
+                                        {game.status === 'draft' && (
+                                            <button className="it-game-btn danger compact is-icon-only" onClick={() => setConfirmDelete(game)} title="Xóa game">
+                                                <Trash2 size={14} />
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {game.status === 'rejected' && game.reviewNote && (
+                                        <div className="it-game-reject-note">
+                                            <strong>Ghi chú từ Admin</strong>
+                                            {game.reviewNote}
+                                        </div>
+                                    )}
+                                </div>
+                            </article>
+                        );
+                    })}
+                </section>
+            )}
+
             {showModal && (
                 <div className="it-modal-overlay" onClick={() => setShowModal(false)}>
-                    <div className="it-modal" onClick={e => e.stopPropagation()}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-                            <h2 className="it-modal-title" style={{ marginBottom: 0 }}>
-                                <Gamepad2 size={22} color="#4f46e5" />
+                    <div className="it-modal it-modal-wide" onClick={event => event.stopPropagation()}>
+                        <div className="it-modal-header">
+                            <h2 className="it-modal-title">
+                                <Gamepad2 size={22} />
                                 {editingGame ? 'Chỉnh sửa game' : 'Tạo game mới'}
                             </h2>
-                            <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '4px' }}>
+                            <button type="button" className="it-modal-close" onClick={() => setShowModal(false)}>
                                 <X size={20} />
                             </button>
                         </div>
 
                         <div className="it-form-group">
-                            <label className="it-form-label">Tên game *</label>
-                            <input className="it-form-input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="VD: Word Match" />
+                            <label className="it-form-label" htmlFor="it-game-name">Tên game *</label>
+                            <input
+                                id="it-game-name"
+                                name="it_game_name"
+                                className="it-form-input"
+                                value={form.name}
+                                onChange={event => setForm({ ...form, name: event.target.value })}
+                                placeholder="VD: Word Match"
+                            />
                         </div>
 
                         <div className="it-form-group">
-                            <label className="it-form-label">Mô tả</label>
-                            <textarea className="it-form-textarea" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Mô tả cách chơi..." />
+                            <label className="it-form-label" htmlFor="it-game-description">Mô tả</label>
+                            <textarea
+                                id="it-game-description"
+                                name="it_game_description"
+                                className="it-form-textarea"
+                                value={form.description}
+                                onChange={event => setForm({ ...form, description: event.target.value })}
+                                placeholder="Mô tả ngắn về luật chơi và trải nghiệm chính..."
+                            />
                         </div>
 
                         <div className="it-form-group">
-                            <label className="it-form-label">File game (HTML) *</label>
+                            <label className="it-form-label" htmlFor="it-game-file-upload">File game (`.html` hoặc `.zip dist`) *</label>
                             <div
-                                className={`it-upload-zone ${isDragging ? 'dragging' : ''} ${uploadFile || form.gameUrl ? 'has-file' : ''}`}
-                                onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+                                className={`it-upload-zone ${isDragging ? 'dragging' : ''} ${uploadFile || hasExistingUpload ? 'has-file' : ''}`}
+                                onDragOver={event => {
+                                    event.preventDefault();
+                                    setIsDragging(true);
+                                }}
                                 onDragLeave={() => setIsDragging(false)}
-                                onDrop={e => {
-                                    e.preventDefault();
+                                onDrop={event => {
+                                    event.preventDefault();
                                     setIsDragging(false);
-                                    const file = e.dataTransfer.files[0];
-                                    if (file && (file.name.endsWith('.html') || file.name.endsWith('.htm'))) {
-                                        setUploadFile(file);
-                                    } else {
-                                        alert('Vui lòng chọn file .html');
-                                    }
+                                    handleIncomingUploadFile(event.dataTransfer.files[0]);
                                 }}
                                 onClick={() => fileInputRef.current?.click()}
                             >
                                 <input
+                                    id="it-game-file-upload"
+                                    name="it_game_file_upload"
                                     ref={fileInputRef}
                                     type="file"
-                                    accept=".html,.htm"
+                                    accept=".html,.htm,.zip"
                                     style={{ display: 'none' }}
-                                    onChange={e => {
-                                        const file = e.target.files[0];
-                                        if (file) setUploadFile(file);
+                                    onChange={event => {
+                                        handleIncomingUploadFile(event.target.files[0]);
+                                        event.target.value = '';
                                     }}
                                 />
+
                                 {uploadFile ? (
                                     <div className="it-upload-selected">
-                                        <FileText size={24} color="#4f46e5" />
+                                        <FileText size={24} />
                                         <div>
-                                            <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.9rem' }}>{uploadFile.name}</div>
-                                            <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                                                {(uploadFile.size / 1024).toFixed(1)} KB — Sẵn sàng upload
+                                            <div className="it-upload-file-name">{uploadFile.name}</div>
+                                            <div className="it-upload-file-meta">
+                                                {(uploadFile.size / 1024).toFixed(1)} KB - {isMiniGameBundleFile(uploadFile) ? 'ZIP dist bundle' : 'HTML đơn'}
                                             </div>
                                         </div>
                                         <button
-                                            onClick={e => { e.stopPropagation(); setUploadFile(null); }}
-                                            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#94a3b8' }}
+                                            type="button"
+                                            className="it-modal-close ghost"
+                                            onClick={event => {
+                                                event.stopPropagation();
+                                                setUploadFile(null);
+                                            }}
                                         >
                                             <X size={18} />
                                         </button>
                                     </div>
-                                ) : form.gameUrl ? (
-                                    <div className="it-upload-selected">
-                                        <CheckCircle2 size={24} color="#22c55e" />
+                                ) : hasExistingUpload ? (
+                                    <div className="it-upload-selected success">
+                                        <CheckCircle2 size={24} />
                                         <div>
-                                            <div style={{ fontWeight: 700, color: '#16a34a', fontSize: '0.9rem' }}>Đã upload</div>
-                                            <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                                                Bấm để upload file mới thay thế
-                                            </div>
+                                            <div className="it-upload-file-name">Đã upload {DELIVERY_MODE_LABELS[form.deliveryMode] || 'HTML'}</div>
+                                            <div className="it-upload-file-meta">{form.fileName || 'Bấm để upload file mới thay thế'}</div>
                                         </div>
                                     </div>
                                 ) : (
                                     <div className="it-upload-placeholder">
-                                        <Upload size={28} color="#94a3b8" />
-                                        <div style={{ fontSize: '0.9rem', color: '#475569', fontWeight: 600 }}>
-                                            Kéo thả file HTML vào đây
-                                        </div>
-                                        <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
-                                            hoặc bấm để chọn file (.html)
-                                        </div>
+                                        <Upload size={28} />
+                                        <div className="it-upload-placeholder-title">Kéo thả file HTML hoặc ZIP dist vào đây</div>
+                                        <div className="it-upload-placeholder-copy">ZIP nên chứa `index.html` ở thư mục gốc của bản build.</div>
                                     </div>
                                 )}
                             </div>
+
+                            <div className="it-upload-hint">
+                                Chế độ hiện tại: <strong>{DELIVERY_MODE_LABELS[effectiveUploadMode]}</strong>. Nếu game build bằng React/Vite, nhớ cấu hình `base: './'`.
+                            </div>
+
                             {saving && uploadProgress > 0 && uploadProgress < 100 && (
                                 <div className="it-upload-progress">
                                     <div className="it-upload-progress-bar" style={{ width: `${uploadProgress}%` }} />
@@ -424,81 +748,240 @@ export default function ITGamesPage() {
                             )}
                         </div>
 
-                        <div className="it-form-group">
-                            <label className="it-form-label">Loại dữ liệu</label>
-                            <select className="it-form-select" value={form.dataType} onChange={e => setForm({ ...form, dataType: e.target.value })}>
-                                <option value="vocabulary">Từ vựng</option>
-                                <option value="grammar">Ngữ pháp</option>
-                                <option value="both">Cả hai</option>
-                            </select>
-                        </div>
-
-                        <div className="it-form-group">
-                            <label className="it-form-label">URL ảnh thumbnail</label>
-                            <input className="it-form-input" value={form.thumbnail} onChange={e => setForm({ ...form, thumbnail: e.target.value })} placeholder="https://..." />
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div className="it-form-grid">
                             <div className="it-form-group">
-                                <label className="it-form-label">Số từ tối thiểu</label>
-                                <input className="it-form-input" type="number" value={form.minWords} onChange={e => setForm({ ...form, minWords: e.target.value })} placeholder="VD: 4" />
+                                <label className="it-form-label" htmlFor="it-game-data-type">Loại dữ liệu</label>
+                                <select
+                                    id="it-game-data-type"
+                                    name="it_game_data_type"
+                                    className="it-form-select"
+                                    value={form.dataType}
+                                    onChange={event => setForm({ ...form, dataType: event.target.value })}
+                                >
+                                    <option value="vocabulary">Từ vựng</option>
+                                    <option value="grammar">Ngữ pháp</option>
+                                    <option value="both">Cả hai</option>
+                                </select>
+                            </div>
+
+                            <div className="it-form-group">
+                                <label className="it-form-label" htmlFor="it-game-thumbnail-upload">Ảnh thumbnail</label>
+                                <div
+                                    className={`it-upload-zone ${thumbnailPreviewUrl ? 'has-file' : ''}`}
+                                    onClick={() => thumbnailInputRef.current?.click()}
+                                >
+                                    <input
+                                        id="it-game-thumbnail-upload"
+                                        name="it_game_thumbnail_upload"
+                                        ref={thumbnailInputRef}
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,image/svg+xml,.png,.jpg,.jpeg,.webp,.gif,.svg"
+                                        style={{ display: 'none' }}
+                                        onChange={event => {
+                                            handleIncomingThumbnailFile(event.target.files[0]);
+                                            event.target.value = '';
+                                        }}
+                                    />
+
+                                    {thumbnailPreviewUrl ? (
+                                        <div className="it-upload-selected">
+                                            <img
+                                                src={thumbnailPreviewUrl}
+                                                alt="Thumbnail preview"
+                                                className="it-thumbnail-preview-image"
+                                            />
+                                            <div className="it-thumbnail-preview-copy">
+                                                <div className="it-upload-file-name">
+                                                    {thumbnailFile ? thumbnailFile.name : 'Thumbnail hiện tại'}
+                                                </div>
+                                                <div className="it-upload-file-meta">
+                                                    {thumbnailFile
+                                                        ? `${(thumbnailFile.size / 1024).toFixed(1)} KB - Ảnh mới sẽ được upload khi lưu`
+                                                        : 'Bấm để chọn ảnh khác thay thế'}
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="it-modal-close ghost"
+                                                onClick={event => {
+                                                    event.stopPropagation();
+                                                    if (thumbnailFile) {
+                                                        setThumbnailFile(null);
+                                                    } else {
+                                                        setForm(prev => ({ ...prev, thumbnail: '' }));
+                                                    }
+                                                    if (thumbnailInputRef.current) thumbnailInputRef.current.value = '';
+                                                }}
+                                            >
+                                                <X size={18} />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="it-upload-placeholder">
+                                            <Upload size={28} />
+                                            <div className="it-upload-placeholder-title">Upload ảnh thumbnail trực tiếp</div>
+                                            <div className="it-upload-placeholder-copy">Hỗ trợ PNG, JPG, WEBP, GIF hoặc SVG.</div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="it-form-grid">
+                            <div className="it-form-group">
+                                <label className="it-form-label" htmlFor="it-game-min-items">Số mục tối thiểu</label>
+                                <input
+                                    id="it-game-min-items"
+                                    name="it_game_min_items"
+                                    className="it-form-input"
+                                    type="number"
+                                    value={form.minItems}
+                                    onChange={event => setForm({ ...form, minItems: event.target.value })}
+                                    placeholder="VD: 4"
+                                />
                             </div>
                             <div className="it-form-group">
-                                <label className="it-form-label">Số từ tối đa</label>
-                                <input className="it-form-input" type="number" value={form.maxWords} onChange={e => setForm({ ...form, maxWords: e.target.value })} placeholder="VD: 20" />
+                                <label className="it-form-label" htmlFor="it-game-max-items">Số mục tối đa</label>
+                                <input
+                                    id="it-game-max-items"
+                                    name="it_game_max_items"
+                                    className="it-form-input"
+                                    type="number"
+                                    value={form.maxItems}
+                                    onChange={event => setForm({ ...form, maxItems: event.target.value })}
+                                    placeholder="VD: 20"
+                                />
                             </div>
                         </div>
 
                         <div className="it-form-group">
-                            <label className="it-form-label">Tags (phân cách bằng dấu phẩy)</label>
-                            <input className="it-form-input" value={form.tags} onChange={e => setForm({ ...form, tags: e.target.value })} placeholder="matching, vocabulary, interactive" />
+                            <label className="it-form-label" htmlFor="it-game-tags">Tags (phân cách bằng dấu phẩy)</label>
+                            <input
+                                id="it-game-tags"
+                                name="it_game_tags"
+                                className="it-form-input"
+                                value={form.tags}
+                                onChange={event => setForm({ ...form, tags: event.target.value })}
+                                placeholder="matching, vocab, interactive"
+                            />
                         </div>
 
                         <div className="it-modal-actions">
-                            <button className="it-game-btn secondary" onClick={() => setShowModal(false)} style={{ padding: '10px 20px' }}>Hủy</button>
-                            <button className="it-game-btn primary" onClick={handleSave} disabled={saving} style={{ padding: '10px 24px' }}>
-                                {saving ? 'Đang lưu...' : (editingGame ? 'Cập nhật' : 'Tạo game')}
+                            <button className="it-game-btn secondary" onClick={() => setShowModal(false)}>
+                                Hủy
+                            </button>
+                            <button className="it-game-btn primary" onClick={handleSave} disabled={saving}>
+                                {saving ? 'Đang lưu...' : (editingGame ? 'Cập nhật game' : 'Tạo game')}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Delete Confirmation */}
+            {previewConfigGame && (
+                <div className="it-modal-overlay" onClick={() => setPreviewConfigGame(null)}>
+                    <div className="it-modal it-modal-compact" onClick={event => event.stopPropagation()}>
+                        <div className="it-modal-header">
+                            <h3 className="it-modal-title">
+                                <Eye size={20} />
+                                Preview: {previewConfigGame.name}
+                            </h3>
+                            <button type="button" className="it-modal-close" onClick={() => setPreviewConfigGame(null)}>
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <p className="it-modal-copy">
+                            Game này hỗ trợ cả vocab và grammar. Chọn nguồn mock data trước khi mở preview.
+                        </p>
+
+                        <div className="it-choice-grid">
+                            <button
+                                type="button"
+                                className={`it-choice-card ${previewSource === 'vocabulary' ? 'active' : ''}`}
+                                onClick={() => setPreviewSource('vocabulary')}
+                            >
+                                <strong>Từ vựng</strong>
+                                <span>Preview với bộ vocab mock</span>
+                            </button>
+                            <button
+                                type="button"
+                                className={`it-choice-card ${previewSource === 'grammar' ? 'active' : ''}`}
+                                onClick={() => setPreviewSource('grammar')}
+                            >
+                                <strong>Ngữ pháp</strong>
+                                <span>Preview với bộ grammar mock</span>
+                            </button>
+                        </div>
+
+                        <div className="it-modal-actions">
+                            <button className="it-game-btn secondary" onClick={() => setPreviewConfigGame(null)}>
+                                Hủy
+                            </button>
+                            <button className="it-game-btn primary" onClick={launchConfiguredPreview}>
+                                <Eye size={15} />
+                                Mở preview
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {confirmDelete && (
                 <div className="it-modal-overlay" onClick={() => setConfirmDelete(null)}>
-                    <div className="it-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>🗑️</div>
-                        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}>Xóa game?</h3>
-                        <p style={{ fontSize: '0.88rem', color: '#64748b', marginBottom: '20px' }}>
-                            Bạn có chắc muốn xóa "<strong>{confirmDelete.name}</strong>"? Hành động này không thể hoàn tác.
+                    <div className="it-modal it-modal-compact it-modal-centered" onClick={event => event.stopPropagation()}>
+                        <div className="it-confirm-icon tone-danger">
+                            <Trash2 size={28} />
+                        </div>
+                        <h3 className="it-confirm-title">Xóa game?</h3>
+                        <p className="it-confirm-copy">
+                            Bạn chắc chắn muốn xóa "<strong>{confirmDelete.name}</strong>"? Hành động này không thể hoàn tác.
                         </p>
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-                            <button className="it-game-btn secondary" onClick={() => setConfirmDelete(null)} style={{ padding: '10px 20px' }}>Hủy</button>
-                            <button className="it-game-btn danger" onClick={() => handleDelete(confirmDelete.id)} style={{ padding: '10px 20px' }}>
-                                <Trash2 size={15} /> Xóa
+                        <div className="it-modal-actions centered">
+                            <button className="it-game-btn secondary" onClick={() => setConfirmDelete(null)}>
+                                Hủy
+                            </button>
+                            <button className="it-game-btn danger" onClick={() => handleDelete(confirmDelete.id)}>
+                                <Trash2 size={15} />
+                                Xóa game
                             </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Game Preview */}
-            {previewGame && (
+            {confirmSubmit && (
+                <div className="it-modal-overlay" onClick={() => setConfirmSubmit(null)}>
+                    <div className="it-modal it-modal-compact it-modal-centered" onClick={event => event.stopPropagation()}>
+                        <div className="it-confirm-icon tone-primary">
+                            <Send size={26} />
+                        </div>
+                        <h3 className="it-confirm-title">Nộp game để duyệt?</h3>
+                        <p className="it-confirm-copy">
+                            "<strong>{confirmSubmit.name}</strong>" sẽ chuyển sang trạng thái chờ admin duyệt. Nếu bị từ chối, bạn vẫn có thể quay lại sửa và nộp lại.
+                        </p>
+                        <div className="it-modal-actions centered">
+                            <button className="it-game-btn secondary" onClick={() => setConfirmSubmit(null)}>
+                                Hủy
+                            </button>
+                            <button className="it-game-btn primary" onClick={confirmSubmitReview}>
+                                <Send size={15} />
+                                Xác nhận nộp
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {previewGame && previewPayload && (
                 <GameLauncher
-                    gameUrl={previewGame.gameUrl}
+                    gameUrl={getMiniGameLaunchUrl(previewGame)}
                     gameName={previewGame.name}
-                    gameData={{
-                        dataType: 'vocabulary',
-                        words: [
-                            { word: 'apple', meaning: 'quả táo', phonetic: '/ˈæp.əl/' },
-                            { word: 'banana', meaning: 'quả chuối', phonetic: '/bəˈnæn.ə/' },
-                            { word: 'cat', meaning: 'con mèo', example: 'The cat is sleeping.' },
-                            { word: 'dog', meaning: 'con chó', example: 'I have a dog.' },
-                            { word: 'elephant', meaning: 'con voi' }
-                        ]
+                    gameData={previewPayload}
+                    onClose={() => {
+                        setPreviewGame(null);
+                        setPreviewPayload(null);
                     }}
-                    onClose={() => setPreviewGame(null)}
                 />
             )}
         </div>

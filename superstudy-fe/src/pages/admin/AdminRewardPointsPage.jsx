@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { db } from '../../config/firebase';
-import { collection, getDocs } from 'firebase/firestore';
 import { getGroups } from '../../services/adminService';
 import { addPoints, subtractPoints, redeemGift, getRewardHistory } from '../../services/rewardPointsService';
 import { Gift, Plus, Minus, History, Search, ChevronDown, Star, Package, X, Award, Users, TrendingUp, TrendingDown, Check, Loader } from 'lucide-react';
 import Avatar from '../../components/common/Avatar';
 import { useAuth } from '../../contexts/AuthContext';
+import { api, usersService } from '../../models';
 
 export default function AdminRewardPointsPage() {
     const { user } = useAuth();
@@ -87,20 +86,25 @@ export default function AdminRewardPointsPage() {
     async function loadStudents(groupId) {
         setStudentsLoading(true);
         try {
-            // Read users for this group only
-            const usersSnap = await getDocs(collection(db, 'users'));
-            const groupMembers = [];
-            usersSnap.forEach(docSnap => {
-                const data = docSnap.data();
-                if ((data.groupIds || []).includes(groupId) && (data.role === 'user' || !data.role) && !data.isDeleted) {
-                    groupMembers.push({ uid: docSnap.id, ...data });
-                }
-            });
+            const [membersResult, rewardPointsResult] = await Promise.all([
+                usersService.getGroupMembers(groupId),
+                api.get('/reward-points'),
+            ]);
 
-            // Read centralized reward points for group members
-            const rewardSnap = await getDocs(collection(db, 'reward_points'));
+            const groupMembers = (membersResult?.data || membersResult || [])
+                .filter(member => (member.role === 'user' || !member.role) && !member.isDeleted && member.deleted !== true)
+                .map(member => ({
+                    ...member,
+                    uid: member.uid || member._id || member.id,
+                    photoURL: member.photoURL || member.profilePhoto || '',
+                }));
+
+            const rewardPoints = rewardPointsResult?.data || rewardPointsResult || [];
             const rewardMap = {};
-            rewardSnap.forEach(d => { rewardMap[d.id] = d.data().points || 0; });
+            rewardPoints.forEach(item => {
+                const key = item.userId || item.id || item._id;
+                if (key) rewardMap[key] = item.points || 0;
+            });
 
             const merged = groupMembers.map(m => ({ ...m, points: rewardMap[m.uid] || 0 }));
             setStudents(merged.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || '')));
@@ -217,18 +221,24 @@ export default function AdminRewardPointsPage() {
         if (searchTerm.trim().length >= 2 && allUsersCache.length === 0) {
             (async () => {
                 try {
-                    const usersSnap = await getDocs(collection(db, 'users'));
-                    let allUsers = [];
-                    usersSnap.forEach(docSnap => {
-                        const data = docSnap.data();
-                        if ((data.role === 'user' || !data.role) && !data.isDeleted) {
-                            allUsers.push({ uid: docSnap.id, ...data });
-                        }
-                    });
-                    const rewardSnap = await getDocs(collection(db, 'reward_points'));
+                    const [usersResult, rewardPointsResult] = await Promise.all([
+                        usersService.findAll({ role: 'user' }),
+                        api.get('/reward-points'),
+                    ]);
+                    const rewardPoints = rewardPointsResult?.data || rewardPointsResult || [];
                     const rewardMap = {};
-                    rewardSnap.forEach(d => { rewardMap[d.id] = d.data().points || 0; });
-                    allUsers = allUsers.map(u => ({ ...u, points: rewardMap[u.uid] || 0 }));
+                    rewardPoints.forEach(item => {
+                        const key = item.userId || item.id || item._id;
+                        if (key) rewardMap[key] = item.points || 0;
+                    });
+                    const allUsers = (usersResult?.data || usersResult || [])
+                        .filter(user => !user.isDeleted && user.deleted !== true)
+                        .map(user => ({
+                            ...user,
+                            uid: user.uid || user._id || user.id,
+                            photoURL: user.photoURL || user.profilePhoto || '',
+                            points: rewardMap[user.uid || user._id || user.id] || 0,
+                        }));
                     setAllUsersCache(allUsers);
                 } catch (e) {
                     console.warn('Could not load cross-group search cache:', e);
@@ -323,6 +333,9 @@ export default function AdminRewardPointsPage() {
                             <Search size={16} className="search-icon" />
                             <input
                                 type="text"
+                                id="admin-reward-points-search"
+                                name="rewardPointsSearch"
+                                aria-label="Tìm học viên"
                                 placeholder="Tìm học viên..."
                                 value={searchTerm}
                                 onChange={e => setSearchTerm(e.target.value)}
@@ -391,6 +404,9 @@ export default function AdminRewardPointsPage() {
                                                 </button>
                                                 <input
                                                     type="number"
+                                                    id={`reward-points-amount-${uid}`}
+                                                    name={`rewardPointsAmount-${uid}`}
+                                                    aria-label={`Số điểm cho ${student.displayName || student.email || uid}`}
                                                     placeholder="0"
                                                     value={amt}
                                                     onChange={e => setInlineAmounts(prev => ({ ...prev, [uid]: e.target.value }))}
@@ -420,6 +436,9 @@ export default function AdminRewardPointsPage() {
                                             {/* Reason input */}
                                             <input
                                                 type="text"
+                                                id={`reward-points-reason-${uid}`}
+                                                name={`rewardPointsReason-${uid}`}
+                                                aria-label={`Lý do cho ${student.displayName || student.email || uid}`}
                                                 placeholder="Lý do..."
                                                 value={inlineReasons[uid] || ''}
                                                 onChange={e => setInlineReasons(prev => ({ ...prev, [uid]: e.target.value }))}
@@ -483,6 +502,9 @@ export default function AdminRewardPointsPage() {
                                 <label>Tên quà tặng <span className="text-danger">*</span></label>
                                 <input
                                     type="text"
+                                    id="redeem-gift-name"
+                                    name="redeemGiftName"
+                                    aria-label="Tên quà tặng"
                                     className="admin-form-input"
                                     placeholder="Ví dụ: Bút bi, Sticker, Sổ tay…"
                                     value={redeemGiftName}
@@ -495,6 +517,9 @@ export default function AdminRewardPointsPage() {
                                 <label>Số điểm trừ <span className="text-danger">*</span></label>
                                 <input
                                     type="number"
+                                    id="redeem-amount"
+                                    name="redeemAmount"
+                                    aria-label="Số điểm trừ"
                                     className="admin-form-input"
                                     placeholder="Ví dụ: 50"
                                     value={redeemAmount}

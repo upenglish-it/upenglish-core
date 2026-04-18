@@ -1,15 +1,15 @@
-export const TopicStatusC = ['draft', 'published', 'archived', 'active'] as const;
+export const TopicStatusC = ['draft', 'published', 'archived', 'active', 'coming_soon'] as const;
 
 // Utils
 import { SYSTEM_ID } from 'apps/common/src/utils';
 // NestJs Imports
-import { Prop, modelOptions } from '@typegoose/typegoose';
+import { Prop, modelOptions, Severity } from '@typegoose/typegoose';
 // Schemas
 import { Accounts, Properties, PropertiesBranches } from '../../../isms';
 
 export const SSTTopicsCN = 'sst-topics';
 
-@modelOptions({ schemaOptions: { timestamps: true, versionKey: false, collection: SSTTopicsCN } })
+@modelOptions({ options: { allowMixed: Severity.ALLOW }, schemaOptions: { timestamps: true, versionKey: false, collection: SSTTopicsCN } })
 export class SSTTopics {
   @Prop({ type: String, default: () => SYSTEM_ID() })
   public readonly _id: string;
@@ -25,6 +25,18 @@ export class SSTTopics {
 
   @Prop({ type: String, default: null })
   public readonly description: string;
+
+  /** Source teacher topic ID when this official topic came from a teacher proposal/copy. */
+  @Prop({ type: String, default: null })
+  public readonly copiedFrom?: string;
+
+  /** Teacher ID that originally proposed this official topic. */
+  @Prop({ type: String, default: null })
+  public readonly proposedBy?: string;
+
+  /** Teacher display name that originally proposed this official topic. */
+  @Prop({ type: String, default: null })
+  public readonly proposedByName?: string;
 
   /** The array of vocabulary words for this topic */
   @Prop({ type: Array, default: [] })
@@ -57,7 +69,7 @@ export class SSTTopics {
   public readonly folderId: string;
 
   /** Teacher IDs that have been individually shared this topic */
-  @Prop({ type: Array, default: [] })
+  @Prop({ type: [String], default: [] })
   public readonly sharedWithTeacherIds: string[];
 
   /** 'admin' | 'teacher' */
