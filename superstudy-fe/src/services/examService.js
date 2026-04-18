@@ -725,15 +725,7 @@ export async function deleteExamSubmission(submissionId) {
     // 1. Delete via API
     await examSubmissionsService.remove(submissionId);
 
-    // 2. Clean up audio files in Storage
-    try {
-        const folderRef = ref(storage, `audio_answers/${submissionId}`);
-        const listRes = await listAll(folderRef);
-        const deletePromises = listRes.items.map(fileRef => deleteObject(fileRef));
-        await Promise.all(deletePromises);
-    } catch (error) {
-        console.error('Error cleaning up audio files:', error);
-    }
+    // Backend handles cascade deletion of audio files in storage
 }
 
 /**

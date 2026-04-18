@@ -6,13 +6,14 @@ import { getUsersPublicInfo } from '../../services/userService';
 import { getGroups, toggleResourcePublic, getResourceSharedEntities, shareResourceToEmail, unshareResourceFromUser, shareResourceToGroup, unshareResourceFromGroup, getGrammarFolders } from '../../services/adminService';
 import { addCollaborator, removeCollaborator, transferOwnership, getCollaboratedResources, findTeacherByEmail, getTeacherGroups, createAssignment, getAssignmentsForTopic, getStudentsInGroup, updateCollaboratorRole } from '../../services/teacherService';
 import { useAuth } from '../../contexts/AuthContext';
-import { BookOpen, Edit, Trash2, X, Plus, List, FolderOpen, Share2, Globe, Users, Mail, UserPlus, Lock, Search, AlertTriangle, ChevronDown, ChevronRight, AlertCircle, Landmark, Send, CheckCircle, XCircle, Clock, ArrowRightLeft, UsersRound, FileText, Calendar, Copy, GripVertical } from 'lucide-react';
+import { BookOpen, Edit, Trash2, X, Plus, List, FolderOpen, Share2, Globe, Users, Mail, UserPlus, Lock, Search, AlertTriangle, ChevronDown, ChevronRight, AlertCircle, Landmark, Send, CheckCircle, XCircle, Clock, ArrowRightLeft, UsersRound, FileText, Calendar, Copy, GripVertical, Eye } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { duplicateGrammarExercise } from '../../services/duplicateService';
 import { convertGrammarToExam } from '../../services/conversionService';
 import EmailAutocomplete from '../../components/common/EmailAutocomplete';
 import CustomSelect from '../../components/common/CustomSelect';
 import ShareModal from '../../components/common/ShareModal';
+import { truncateText } from '../../utils/textDisplay';
 
 export default function TeacherGrammarPage() {
     const { user } = useAuth();
@@ -698,11 +699,29 @@ export default function TeacherGrammarPage() {
             const folderId = source.droppableId.replace('folder-exercises-', '');
             const folder = teacherFolders.find(f => f.id === folderId);
             if (!folder) return;
-            const ids = Array.from(folder.exerciseIds || []);
-            const [movedId] = ids.splice(source.index, 1);
-            ids.splice(destination.index, 0, movedId);
-            setTeacherFolders(prev => prev.map(f => f.id === folderId ? { ...f, exerciseIds: ids } : f));
-            try { await saveTeacherGrammarFolder(user.uid, { ...folder, exerciseIds: ids }); } catch (e) { console.error('Error reordering exercises:', e); loadExercises(); }
+            const allIds = [...(folder.exerciseIds || [])];
+            const searchLower2 = searchTerm.toLowerCase();
+            const visibleIds = allIds.filter(id => {
+                const ex = exercises.find(e => e.id === id);
+                if (!ex) return false;
+                if (searchLower2) {
+                    return (ex.name || '').toLowerCase().includes(searchLower2) ||
+                           (ex.description || '').toLowerCase().includes(searchLower2);
+                }
+                return true;
+            });
+            const reorderedVisible = [...visibleIds];
+            const [movedId] = reorderedVisible.splice(source.index, 1);
+            reorderedVisible.splice(destination.index, 0, movedId);
+            const visibleSet = new Set(visibleIds);
+            const newIds = [];
+            let vIdx = 0;
+            for (const id of allIds) {
+                if (visibleSet.has(id)) { newIds.push(reorderedVisible[vIdx++]); }
+                else { newIds.push(id); }
+            }
+            setTeacherFolders(prev => prev.map(f => f.id === folderId ? { ...f, exerciseIds: newIds } : f));
+            try { await saveTeacherGrammarFolder(user.uid, { ...folder, exerciseIds: newIds }); } catch (e) { console.error('Error reordering exercises:', e); loadExercises(); }
             return;
         }
     }
@@ -920,6 +939,7 @@ export default function TeacherGrammarPage() {
                                                             <td data-label="Thao tác" className="text-right">
                                                                 <div className="admin-table-actions">
                                                                     <button className="admin-action-btn" onClick={() => openShareModal(exercise)} title="Chia sẻ"><Share2 size={16} /></button>
+                                                                    <button className="admin-action-btn" onClick={() => window.open(`${window.__APP_BASE__ || './'}?_preview=${encodeURIComponent(`/grammar-learn?exerciseId=${exercise.id}&preview=true`)}`, '_blank')} title="Xem trước bài học"><Eye size={16} /></button>
                                                                     <Link to={`/teacher/grammar/${exercise.id}`} className="admin-action-btn" title="Xem/Quản lý câu hỏi"><List size={16} /></Link>
                                                                     {(exercise.isOwner || exercise.teacherId === user.uid) && (
                                                                         <>
@@ -978,6 +998,7 @@ export default function TeacherGrammarPage() {
                                                             <td data-label="Thao tác" className="text-right">
                                                                 <div className="admin-table-actions">
                                                                     <button className="admin-action-btn" onClick={() => openShareModal(exercise)} title="Chia sẻ"><Share2 size={16} /></button>
+                                                                    <button className="admin-action-btn" onClick={() => window.open(`${window.__APP_BASE__ || './'}?_preview=${encodeURIComponent(`/grammar-learn?exerciseId=${exercise.id}&preview=true`)}`, '_blank')} title="Xem trước bài học"><Eye size={16} /></button>
                                                                     <Link to={exercise.isAdmin ? `/teacher/system-grammar/${exercise.id}` : `/teacher/grammar/${exercise.id}`} className="admin-action-btn" title="Xem/Quản lý câu hỏi"><List size={16} /></Link>
                                                                     {(exercise.isOwner || exercise.teacherId === user.uid) && (
                                                                         <>
@@ -1082,6 +1103,7 @@ export default function TeacherGrammarPage() {
                                                             <td data-label="Thao tác" className="text-right">
                                                                 <div className="admin-table-actions">
                                                                     <button className="admin-action-btn" onClick={() => openShareModal(exercise)} title="Chia sẻ"><Share2 size={16} /></button>
+                                                                    <button className="admin-action-btn" onClick={() => window.open(`${window.__APP_BASE__ || './'}?_preview=${encodeURIComponent(`/grammar-learn?exerciseId=${exercise.id}&preview=true`)}`, '_blank')} title="Xem trước bài học"><Eye size={16} /></button>
                                                                     <Link to={`/teacher/system-grammar/${exercise.id}`} className="admin-action-btn" title="Xem/Quản lý câu hỏi"><List size={16} /></Link>
                                                                 </div>
                                                             </td>
@@ -1135,6 +1157,7 @@ export default function TeacherGrammarPage() {
                                                 <td data-label="Thao tác" className="text-right">
                                                     <div className="admin-table-actions">
                                                         <button className="admin-action-btn" onClick={() => openShareModal(exercise)} title="Chia sẻ"><Share2 size={16} /></button>
+                                                        <button className="admin-action-btn" onClick={() => window.open(`${window.__APP_BASE__ || './'}?_preview=${encodeURIComponent(`/grammar-learn?exerciseId=${exercise.id}&preview=true`)}`, '_blank')} title="Xem trước bài học"><Eye size={16} /></button>
                                                         <Link to={exercise.isAdmin ? `/teacher/system-grammar/${exercise.id}` : `/teacher/grammar/${exercise.id}`} className="admin-action-btn" title="Xem/Quản lý câu hỏi"><List size={16} /></Link>
                                                         {(exercise.isOwner || exercise.teacherId === user.uid) && (
                                                             <>

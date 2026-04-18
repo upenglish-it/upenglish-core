@@ -64,7 +64,6 @@ export default function TeacherLayout() {
 
     const TEACHER_EMAIL_TYPES = [
         { key: 'deadline_expired', label: 'Bài hết hạn — cần chấm', emoji: '⏰' },
-        { key: 'half_submitted', label: '50% học viên đã nộp bài', emoji: '📊' },
         { key: 'skill_report_reminder', label: 'Nhắc viết báo cáo kỹ năng', emoji: '📊' },
         { key: 'student_joined', label: 'Học viên mới vào lớp', emoji: '👤' },
         { key: 'exam_graded_by_other', label: 'Bài được GV khác chấm', emoji: '📝' },

@@ -23,19 +23,19 @@ function normalizeUser(user) {
 
 function getCategoryMeta(category) {
     return category === 'complaint'
-        ? { label: 'Khiáº¿u náº¡i', emoji: 'âš ï¸' }
-        : { label: 'Äá» xuáº¥t', emoji: 'ðŸ’¡' };
+        ? { label: 'Khiếu nại', emoji: '⚠️' }
+        : { label: 'Đề xuất', emoji: '💡' };
 }
 
 function truncateFeedbackMessage(message, maxLength = 120) {
     const cleaned = (message || '').trim().replace(/\s+/g, ' ');
     if (cleaned.length <= maxLength) return cleaned;
-    return `${cleaned.slice(0, maxLength - 1)}â€¦`;
+    return `${cleaned.slice(0, maxLength - 1)}…`;
 }
 
 function getFeedbackSourceLabel(senderRole, targetType) {
-    if (targetType === 'direct') return 'tá»« ná»™i bá»™';
-    return senderRole === 'user' ? 'tá»« há»c viÃªn' : 'tá»« ná»™i bá»™';
+    if (targetType === 'direct') return 'từ nội bộ';
+    return senderRole === 'user' ? 'từ học viên' : 'từ nội bộ';
 }
 
 function getFeedbackLinkForRole(role, targetType) {
@@ -105,7 +105,7 @@ async function notifyFeedbackRecipients({
     const { label: categoryLabel, emoji: categoryEmoji } = getCategoryMeta(category);
     const sourceLabel = getFeedbackSourceLabel(senderRole, targetType);
     const preview = truncateFeedbackMessage(message);
-    const attachmentText = hasAttachment ? ' â€¢ CÃ³ áº£nh Ä‘Ã­nh kÃ¨m' : '';
+    const attachmentText = hasAttachment ? ' • Có ảnh đính kèm' : '';
 
     if (targetType === 'direct') {
         const recipient = await getDirectRecipient({ targetUid, targetName, targetEmail, targetRole });
@@ -117,7 +117,7 @@ async function notifyFeedbackRecipients({
             await createNotification({
                 userId: recipient.uid,
                 type: 'feedback_direct',
-                title: 'ðŸ’¬ Báº¡n nháº­n Ä‘Æ°á»£c gÃ³p Ã½ áº©n danh má»›i',
+                title: '💬 Bạn nhận được góp ý ẩn danh mới',
                 message: `${categoryEmoji} ${categoryLabel}${attachmentText}: ${preview}`,
                 link,
                 showPopup: true,
@@ -130,12 +130,12 @@ async function notifyFeedbackRecipients({
         if (recipient.email) {
             try {
                 await queueEmail(recipient.email, {
-                    subject: `${categoryEmoji} Báº¡n nháº­n Ä‘Æ°á»£c gÃ³p Ã½ áº©n danh má»›i`,
+                    subject: `${categoryEmoji} Bạn nhận được góp ý ẩn danh mới`,
                     html: buildEmailHtml({
-                        emoji: 'ðŸ’¬',
-                        heading: 'GÃ³p Ã½ áº©n danh má»›i',
+                        emoji: '💬',
+                        heading: 'Góp ý ẩn danh mới',
                         headingColor: '#7c3aed',
-                        greeting: `ChÃ o ${recipient.displayName || 'bạn'} ðŸ‘‹`,
+                        greeting: `Chào ${recipient.displayName || 'bạn'} 👋`,
                         body: `
                             <p>Bạn vừa nhận được một góp ý ẩn danh ${sourceLabel}.</p>
                             <p><strong>Phân loại:</strong> ${categoryEmoji} ${categoryLabel}</p>
@@ -162,8 +162,8 @@ async function notifyFeedbackRecipients({
     if (recipients.length === 0) return;
 
     const title = senderRole === 'user'
-        ? 'ðŸ’¬ Há»c viÃªn gá»­i gÃ³p Ã½ áº©n danh má»›i'
-        : 'ðŸ’¬ CÃ³ gÃ³p Ã½ áº©n danh má»›i gá»­i tá»›i ban quáº£n lÃ½';
+        ? '💬 Học viên gửi góp ý ẩn danh mới'
+        : '💬 Có góp ý ẩn danh mới gửi tới ban quản lý';
     const link = '/admin/feedback';
 
     await Promise.allSettled(recipients.map(async recipient => {
@@ -186,13 +186,13 @@ async function notifyFeedbackRecipients({
         try {
             await queueEmail(recipient.email, {
                 subject: senderRole === 'user'
-                    ? `${categoryEmoji} Há»c viÃªn gá»­i gÃ³p Ã½ áº©n danh má»›i`
-                    : `${categoryEmoji} CÃ³ gÃ³p Ã½ áº©n danh má»›i gá»­i tá»›i ban quáº£n lÃ½`,
+                    ? `${categoryEmoji} Học viên gửi góp ý ẩn danh mới`
+                    : `${categoryEmoji} Có góp ý ẩn danh mới gửi tới ban quản lý`,
                 html: buildEmailHtml({
-                    emoji: 'ðŸ’¬',
-                    heading: 'GÃ³p Ã½ áº©n danh má»›i',
+                    emoji: '💬',
+                    heading: 'Góp ý ẩn danh mới',
                     headingColor: '#7c3aed',
-                    greeting: `ChÃ o ${recipient.displayName || 'bạn'} ðŸ‘‹`,
+                    greeting: `Chào ${recipient.displayName || 'bạn'} 👋`,
                     body: `
                         <p>Hệ thống vừa nhận được một góp ý ẩn danh ${sourceLabel}.</p>
                         <p><strong>Phân loại:</strong> ${categoryEmoji} ${categoryLabel}</p>

@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getTeacherGroups, getStudentsInGroup, getAssignmentsForGroups } from '../../services/teacherService';
 import { getActiveReportPeriod, getGroupReportStatus, computePeriodStatus } from '../../services/reportPeriodService';
 import { getLatestRatingStatsForTeacher } from '../../services/teacherRatingService';
-import { getExamAssignmentsForGroup, getExamSubmissionsForAssignments } from '../../services/examService';
+import { getExamAssignmentsForGroup, getExamSubmissionsForAssignments, getExamAssignmentsForStudents } from '../../services/examService';
 import { Layers, Users, ChevronRight, ClipboardList, CheckCircle, AlertTriangle, ClipboardCheck, FolderKanban, MessageSquare, Send, Star } from 'lucide-react';
 
 function getTimestampMs(value) {
@@ -160,11 +160,19 @@ export default function TeacherGroupsPage() {
             }, new Map());
 
             const studentsByGroupId = {};
+            const studentGroupIdsMap = new Map();
 
             await Promise.all(data.map(async (group) => {
                 try {
                     const students = await getStudentsInGroup(group.id);
                     studentsByGroupId[group.id] = students;
+                    students.forEach((student) => {
+                        if (!student?.uid) return;
+                        if (!studentGroupIdsMap.has(student.uid)) {
+                            studentGroupIdsMap.set(student.uid, new Set());
+                        }
+                        studentGroupIdsMap.get(student.uid).add(group.id);
+                    });
                 } catch (e) {
                     console.warn('Error loading students for group', group.id, e);
                     studentsByGroupId[group.id] = [];
@@ -205,10 +213,42 @@ export default function TeacherGroupsPage() {
 
                 const assignmentsByGroupId = Object.fromEntries(groupExamAssignments);
 
+                // Fetch individually-assigned exams (targetType='individual') for all students
+                // and distribute them to their respective groups — mirrors the original app logic.
+                const allStudentIds = [...studentGroupIdsMap.keys()];
+                const individualAssignments = await getExamAssignmentsForStudents(allStudentIds).catch((e) => {
+                    console.warn('Error loading individual exam assignments:', e);
+                    return [];
+                });
+
+                individualAssignments
+                    .filter((assignment) => assignment.targetType === 'individual')
+                    .forEach((assignment) => {
+                        const targetStudentId = assignment.targetId;
+                        const groupIds = studentGroupIdsMap.get(targetStudentId);
+                        if (!groupIds) return;
+                        groupIds.forEach((groupId) => {
+                            if (!assignmentsByGroupId[groupId]) {
+                                assignmentsByGroupId[groupId] = [];
+                            }
+                            assignmentsByGroupId[groupId].push(assignment);
+                        });
+                    });
+
+                // Deduplicate assignments per group (a student may appear in multiple groups)
+                Object.keys(assignmentsByGroupId).forEach((groupId) => {
+                    const deduped = new Map();
+                    (assignmentsByGroupId[groupId] || []).forEach((assignment) => {
+                        const id = assignment.id || assignment._id;
+                        if (id) deduped.set(id, assignment);
+                    });
+                    assignmentsByGroupId[groupId] = Array.from(deduped.values());
+                });
+
                 const allAssignmentIds = [...new Set(
                     Object.values(assignmentsByGroupId)
                         .flat()
-                        .map((assignment) => assignment.id)
+                        .map((assignment) => assignment.id || assignment._id)
                         .filter(Boolean)
                 )];
 

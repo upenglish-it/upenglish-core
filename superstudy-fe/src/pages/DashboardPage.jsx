@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { BookOpen, PenLine, FolderOpen, BarChart3, LogOut, Sparkles, Trophy, Flame, Settings, X, PlayCircle, Plus, BrainCircuit, Shield, Clock, Users, Home, ClipboardList, ChevronDown, FileCheck, Sun, Moon, AlertTriangle, Medal, Lock, Check, CheckCheck, XCircle, Heart, Loader, MessageSquareText, Send, Paperclip, Image as ImageIcon } from 'lucide-react';
@@ -27,7 +27,9 @@ import { getActiveRatingPeriod, getTeachersForStudent, getStudentRatingsForPerio
 import { getStudentRewardPoints } from '../services/rewardPointsService';
 import { submitFeedback } from '../services/feedbackService';
 import { prepareFeedbackImage } from '../services/feedbackImageService';
+import NotificationBell from '../components/common/NotificationBell';
 import { usersService } from '../models';
+
 
 const LEVEL_OPTIONS = [
     { value: 'A1', label: 'A1', desc: 'Beginner' },
@@ -37,11 +39,6 @@ const LEVEL_OPTIONS = [
     { value: 'C1', label: 'C1', desc: 'Advanced' },
     { value: 'C2', label: 'C2', desc: 'Proficiency' },
 ];
-
-function isLikelyTeacherTopicId(topicId) {
-    const normalized = String(topicId || '').trim();
-    return normalized.startsWith('t-');
-}
 
 // Helper: resolve effective dueDate for a student (checks per-student overrides first)
 function getEffectiveDueDate(a, uid) {
@@ -89,6 +86,12 @@ export default function DashboardPage() {
     const [urgentExam, setUrgentExam] = useState(null);
     const [newResult, setNewResult] = useState(null);
     const [showAlertType, setShowAlertType] = useState(null); // 'urgent' or 'result'
+
+    // Migration tool
+    const [migrationStatus, setMigrationStatus] = useState('');
+    const [migrationResults, setMigrationResults] = useState(null);
+    const [isMigrating, setIsMigrating] = useState(false);
+    const [migrationForceMode, setMigrationForceMode] = useState(false);
 
     // Skill Reports
     const [skillReports, setSkillReports] = useState([]);
@@ -203,13 +206,13 @@ export default function DashboardPage() {
         window.addEventListener('mouseup', handleMouseUp);
     }, []);
 
-    // Build groupId â†’ groupName map (from AuthContext, properly aligned even with hidden groups)
+    // Build groupId → groupName map (from AuthContext, properly aligned even with hidden groups)
     const groupIdToName = useMemo(() => {
         return user?.groupIdToNameMap || {};
     }, [user?.groupIdToNameMap]);
 
 
-    // Handle ?scrollTo=reports query param â€” auto-scroll to skill reports section
+    // Handle ?scrollTo=reports query param — auto-scroll to skill reports section
     useEffect(() => {
         const scrollTo = searchParams.get('scrollTo');
         if (scrollTo === 'reports' && reportsRef.current) {
@@ -225,7 +228,7 @@ export default function DashboardPage() {
         localStorage.setItem('appTheme', theme);
     }, [theme]);
 
-    // Load level from user settings on mount
+    // Load level and honorific settings on mount
     useEffect(() => {
         if (!user?.uid) return;
         readUserStorageDoc(user.uid, PREFERENCES_DOC_TYPE)
@@ -261,7 +264,7 @@ export default function DashboardPage() {
                             return null;
                         }
                     }
-                    if (list.isTeacherTopic || isLikelyTeacherTopicId(list.id)) {
+                    if (list.isTeacherTopic) {
                         try {
                             const topic = await getTeacherTopic(list.id);
                             return topic ? { ...list, ...topic, isTeacherTopic: true } : null;
@@ -387,13 +390,13 @@ export default function DashboardPage() {
                     } else if (isStudent && streak < 60 && localStorage.getItem('appTheme') === 'ruby') {
                         setTheme('light');
                     }
-                    // Check for new milestone celebration (Firestore-backed)
+                    // Check for new milestone celebration (NestJS-backed)
                     const currentMs = getCurrentMilestone(streak);
                     if (currentMs) {
                         // Quick local check first to avoid flash
                         const localLastShown = parseInt(localStorage.getItem('lastMilestoneShown') || '0', 10);
                         if (currentMs.threshold > localLastShown) {
-                            // Verify with Firestore (source of truth)
+                            // Verify with backend (source of truth)
                             readUserStorageDoc(user.uid, MILESTONE_DOC_TYPE).then((milestoneDoc) => {
                                 const storedLastShown = milestoneDoc?.lastThreshold || 0;
                                 // Sync localStorage with stored server value
@@ -667,14 +670,14 @@ export default function DashboardPage() {
     };
 
     const actions = [
-        { id: 'topics', icon: BookOpen, title: 'BÃ i há»c tá»« vá»±ng', description: 'Há»c tá»« vá»±ng theo chá»§ Ä‘á»', color: 'var(--color-primary)', path: '/topics' },
-        { id: 'grammar', icon: PenLine, title: 'BÃ i há»c ká»¹ nÄƒng', description: 'Luyá»‡n táº­p cÃ¡c bÃ i ká»¹ nÄƒng', color: '#d97706', path: '/grammar-topics' },
-        { id: 'saved', icon: FolderOpen, title: 'Danh sÃ¡ch cÃ¡ nhÃ¢n', description: 'Tiáº¿p tá»¥c há»c danh sÃ¡ch cÃ¡ nhÃ¢n', color: 'var(--color-warning)', path: '/saved-lists' },
+        { id: 'topics', icon: BookOpen, title: 'Bài học từ vựng', description: 'Học từ vựng theo chủ đề', color: 'var(--color-primary)', path: '/topics' },
+        { id: 'grammar', icon: PenLine, title: 'Bài học kỹ năng', description: 'Luyện tập các bài kỹ năng', color: '#d97706', path: '/grammar-topics' },
+        { id: 'saved', icon: FolderOpen, title: 'Danh sách cá nhân', description: 'Tiếp tục học danh sách cá nhân', color: 'var(--color-warning)', path: '/saved-lists' },
     ];
 
     const createActions = [
-        { id: 'ai-gen', icon: Sparkles, title: 'Táº¡o danh sÃ¡ch tá»«', description: 'DÃ¹ng AI táº¡o bá»™ tá»« theo chá»§ Ä‘á»', color: 'var(--color-primary-light)', path: '/generate-list', isAI: true },
-        { id: 'custom', icon: PenLine, title: 'Tá»± táº¡o bÃ i há»c', description: 'Tá»± nháº­p tá»« muá»‘n há»c', color: 'var(--color-secondary)', path: '/custom-input' },
+        { id: 'ai-gen', icon: Sparkles, title: 'Tạo danh sách từ', description: 'Dùng AI tạo bộ từ theo chủ đề', color: 'var(--color-primary-light)', path: '/generate-list', isAI: true },
+        { id: 'custom', icon: PenLine, title: 'Tự tạo bài học', description: 'Tự nhập từ muốn học', color: 'var(--color-secondary)', path: '/custom-input' },
     ];
 
     const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
@@ -693,8 +696,8 @@ export default function DashboardPage() {
     const feedbackImageInputRef = useRef(null);
 
     const FEEDBACK_CATEGORIES = [
-        { value: 'suggestion', label: 'Äá» xuáº¥t', emoji: 'ðŸ’¡', color: '#4f46e5', bg: '#eff6ff' },
-        { value: 'complaint', label: 'Khiáº¿u náº¡i', emoji: 'âš ï¸', color: '#dc2626', bg: '#fef2f2' },
+        { value: 'suggestion', label: 'Đề xuất', emoji: '💡', color: '#4f46e5', bg: '#eff6ff' },
+        { value: 'complaint', label: 'Khiếu nại', emoji: '⚠️', color: '#dc2626', bg: '#fef2f2' },
     ];
 
     useEffect(() => () => {
@@ -714,14 +717,6 @@ export default function DashboardPage() {
         if (feedbackImageInputRef.current) {
             feedbackImageInputRef.current.value = '';
         }
-    };
-
-    const closeFeedbackModal = () => {
-        if (feedbackSending) return;
-        clearFeedbackImage();
-        setFeedbackMessage('');
-        setFeedbackSuccess(false);
-        setShowFeedbackModal(false);
     };
 
     const handleFeedbackImageSelected = async (event) => {
@@ -771,7 +766,7 @@ export default function DashboardPage() {
             }, 1800);
         } catch (err) {
             console.error('Error sending feedback:', err);
-            alert('CÃ³ lá»—i xáº£y ra. Vui lÃ²ng thá»­ láº¡i.');
+            alert('Có lỗi xảy ra. Vui lòng thử lại.');
         }
         setFeedbackSending(false);
     };
@@ -794,7 +789,7 @@ export default function DashboardPage() {
                 state: {
                     exerciseId: listInfo.id,
                     exerciseName: listInfo.name,
-                    icon: listInfo.icon || 'âœï¸',
+                    icon: listInfo.icon || '✍️',
                     color: listInfo.color || '#d97706'
                 }
             });
@@ -805,7 +800,8 @@ export default function DashboardPage() {
             setIsLoadingRecent(true);
             let words = [];
             if (listInfo.type === 'topic') {
-                if (listInfo.isTeacherTopic || isLikelyTeacherTopicId(listInfo.id)) {
+                if (listInfo.isTeacherTopic) {
+                    // Teacher-created topic: fetch words via NestJS
                     words = await getTeacherTopicWords(listInfo.id);
                 } else {
                     words = await getAdminTopicWords(listInfo.id);
@@ -814,11 +810,13 @@ export default function DashboardPage() {
                 words = await getSavedWords(user.uid);
             } else {
                 const customList = await getCustomListById(user.uid, listInfo.id);
-                words = customList?.words || [];
+                if (customList) {
+                    words = customList.words || [];
+                }
             }
 
             if (!words || words.length === 0) {
-                alert('Danh sÃ¡ch nÃ y hiá»‡n khÃ´ng cÃ³ tá»« vá»±ng nÃ o.');
+                alert('Danh sách này hiện không có từ vựng nào.');
                 setIsLoadingRecent(false);
                 return;
             }
@@ -862,7 +860,7 @@ export default function DashboardPage() {
             }
 
             if (!words || words.length === 0) {
-                alert('Danh sÃ¡ch nÃ y hiá»‡n khÃ´ng cÃ³ tá»« vá»±ng nÃ o.');
+                alert('Danh sách này hiện không có từ vựng nào.');
                 setLoadingWordSelect(false);
                 return;
             }
@@ -880,7 +878,7 @@ export default function DashboardPage() {
                 words,
                 topicId: a.topicId,
                 topicName: a.topicName,
-                icon: a.topicIcon || 'ðŸ“š',
+                icon: a.topicIcon || '📚',
                 color: a.topicColor || 'var(--color-primary)',
                 isTeacherTopic: a.isTeacherTopic,
                 progressMap: pMap,
@@ -1015,15 +1013,15 @@ export default function DashboardPage() {
                         }
                     } else if (shareType === 'admin_folder') {
                         const folders = await getFolders();
-                        const data = folders.find(folder => folder.id === shareId);
-                        if (data) {
-                            listInfo = { id: shareId, type: 'topic', name: data.name, isTeacherTopic: false, isGrammar: false, icon: 'ðŸ“', color: '#6366f1', forceTopicSelect: true };
+                        const folderData = folders.find(f => f.id === shareId);
+                        if (folderData) {
+                            listInfo = { id: shareId, type: 'topic', name: folderData.name, isTeacherTopic: false, isGrammar: false, icon: '📁', color: '#6366f1', forceTopicSelect: true };
                         }
                     } else if (shareType === 'admin_grammar_folder' || shareType === 'grammar_folder') {
-                        const folders = await getGrammarFolders();
-                        const data = folders.find(folder => folder.id === shareId);
-                        if (data) {
-                            listInfo = { id: shareId, type: 'topic', name: data.name, isTeacherTopic: false, isGrammar: true, icon: 'ðŸ“', color: '#f59e0b', forceGrammarSelect: true };
+                        const gFolders = await getGrammarFolders();
+                        const gFolder = gFolders.find(f => f.id === shareId);
+                        if (gFolder) {
+                            listInfo = { id: shareId, type: 'topic', name: gFolder.name, isTeacherTopic: false, isGrammar: true, icon: '📁', color: '#f59e0b', forceGrammarSelect: true };
                         }
                     }
 
@@ -1064,6 +1062,8 @@ export default function DashboardPage() {
                         <div className="app-header-actions-group">
                             {(user?.role === 'admin' || user?.role === 'teacher' || user?.role === 'staff') && (
                                 <>
+                                    <NotificationBell />
+                                    <div className="app-header-divider"></div>
                                     {(user?.role === 'admin' || user?.role === 'staff') && (
                                         <button className="app-header-action-btn" onClick={() => { sessionStorage.removeItem('viewMode'); navigate('/admin'); }} title="Chuyển tới Admin Panel">
                                             <Shield size={16} />
@@ -1136,15 +1136,15 @@ export default function DashboardPage() {
                                 <div>
                                     <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px', display: 'block' }}>Gọi học sinh {studentTitle && <span style={{ color: '#4f46e5' }}>({studentTitle})</span>}</label>
                                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                        {['em', 'con', 'báº¡n'].map(t => (
+                                        {['em', 'con', 'bạn'].map(t => (
                                             <button key={t} className={`settings-level-pill ${studentTitle === t ? 'settings-level-pill--active' : ''}`} onClick={() => { saveHonorific('studentTitle', t); setCustomStudent(''); }} style={{ flex: 1, padding: '12px', fontSize: '0.95rem', fontWeight: 600 }}>
                                                 {t}
                                             </button>
                                         ))}
                                     </div>
                                     <div style={{ display: 'flex', gap: '8px', marginTop: '8px', alignItems: 'center' }}>
-                                        <input type="text" placeholder="Hoáº·c nháº­p khÃ¡c..." value={customStudent} onChange={e => setCustomStudent(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && customStudent.trim()) saveHonorific('studentTitle', customStudent.trim()); }} style={{ flex: 1, padding: '10px 14px', border: '1.5px solid var(--border-color)', borderRadius: '12px', fontSize: '0.9rem', outline: 'none', background: 'var(--bg-primary)', color: 'var(--text-primary)' }} />
-                                        {customStudent.trim() && <button className="settings-level-pill settings-level-pill--active" style={{ padding: '10px 16px' }} onClick={() => saveHonorific('studentTitle', customStudent.trim())}>LÆ°u</button>}
+                                        <input type="text" placeholder="Hoặc nhập khác..." value={customStudent} onChange={e => setCustomStudent(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && customStudent.trim()) saveHonorific('studentTitle', customStudent.trim()); }} style={{ flex: 1, padding: '10px 14px', border: '1.5px solid var(--border-color)', borderRadius: '12px', fontSize: '0.9rem', outline: 'none', background: 'var(--bg-primary)', color: 'var(--text-primary)' }} />
+                                        {customStudent.trim() && <button className="settings-level-pill settings-level-pill--active" style={{ padding: '10px 16px' }} onClick={() => saveHonorific('studentTitle', customStudent.trim())}>Lưu</button>}
                                     </div>
                                 </div>
                             </div>
@@ -1160,19 +1160,19 @@ export default function DashboardPage() {
                             const diamondUnlocked = !isStudent || isTestUser || currentStreak >= 40;
                             const rubyUnlocked = !isStudent || isTestUser || currentStreak >= 60;
                             const nextUnlock = !darkUnlocked
-                                ? `Äáº¡t streak 5 ngÃ y Ä‘á»ƒ má»Ÿ khoÃ¡ giao diá»‡n tá»‘i (hiá»‡n táº¡i: ${currentStreak} ngÃ y)`
+                                ? `Đạt streak 5 ngày để mở khoá giao diện tối (hiện tại: ${currentStreak} ngày)`
                                 : !silverUnlocked
-                                    ? `Äáº¡t streak 18 ngÃ y Ä‘á»ƒ má»Ÿ khoÃ¡ NÃºt Báº¡c (hiá»‡n táº¡i: ${currentStreak} ngÃ y)`
+                                    ? `Đạt streak 18 ngày để mở khoá Nút Bạc (hiện tại: ${currentStreak} ngày)`
                                     : !goldUnlocked
-                                        ? `Äáº¡t streak 30 ngÃ y Ä‘á»ƒ má»Ÿ khoÃ¡ NÃºt VÃ ng (hiá»‡n táº¡i: ${currentStreak} ngÃ y)`
+                                        ? `Đạt streak 30 ngày để mở khoá Nút Vàng (hiện tại: ${currentStreak} ngày)`
                                         : !diamondUnlocked
-                                            ? `Äáº¡t streak 40 ngÃ y Ä‘á»ƒ má»Ÿ khoÃ¡ Kim CÆ°Æ¡ng (hiá»‡n táº¡i: ${currentStreak} ngÃ y)`
+                                            ? `Đạt streak 40 ngày để mở khoá Kim Cương (hiện tại: ${currentStreak} ngày)`
                                             : !rubyUnlocked
-                                                ? `Äáº¡t streak 60 ngÃ y Ä‘á»ƒ má»Ÿ khoÃ¡ NÃºt Ruby (hiá»‡n táº¡i: ${currentStreak} ngÃ y)`
-                                                : 'Chá»n giao diá»‡n yÃªu thÃ­ch';
+                                                ? `Đạt streak 60 ngày để mở khoá Nút Ruby (hiện tại: ${currentStreak} ngày)`
+                                                : 'Chọn giao diện yêu thích';
                             return (
                                 <div className="settings-section" style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--border-color)' }}>
-                                    <label className="settings-section-label">Giao diá»‡n</label>
+                                    <label className="settings-section-label">Giao diện</label>
                                     <p className="settings-section-desc">{nextUnlock}</p>
                                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                         {/* Ruby Button */}
@@ -1182,8 +1182,8 @@ export default function DashboardPage() {
                                                 onClick={() => setTheme('ruby')}
                                                 style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px', minWidth: '90px' }}
                                             >
-                                                <span style={{ fontSize: '1.1rem' }}>ðŸ”´</span>
-                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>NÃºt Ruby</span>
+                                                <span style={{ fontSize: '1.1rem' }}>🔴</span>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Nút Ruby</span>
                                             </button>
                                         ) : (
                                             <button
@@ -1192,7 +1192,7 @@ export default function DashboardPage() {
                                                 style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px', opacity: 0.45, cursor: 'not-allowed', minWidth: '90px' }}
                                             >
                                                 <Lock size={14} />
-                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>NÃºt Ruby</span>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Nút Ruby</span>
                                             </button>
                                         )}
                                         {/* Diamond Button */}
@@ -1202,8 +1202,8 @@ export default function DashboardPage() {
                                                 onClick={() => setTheme('diamond')}
                                                 style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px', minWidth: '90px' }}
                                             >
-                                                <span style={{ fontSize: '1.1rem' }}>ðŸ’Ž</span>
-                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Kim CÆ°Æ¡ng</span>
+                                                <span style={{ fontSize: '1.1rem' }}>💎</span>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Kim Cương</span>
                                             </button>
                                         ) : (
                                             <button
@@ -1212,7 +1212,7 @@ export default function DashboardPage() {
                                                 style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px', opacity: 0.45, cursor: 'not-allowed', minWidth: '90px' }}
                                             >
                                                 <Lock size={14} />
-                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Kim CÆ°Æ¡ng</span>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Kim Cương</span>
                                             </button>
                                         )}
                                         {/* Gold Button */}
@@ -1222,8 +1222,8 @@ export default function DashboardPage() {
                                                 onClick={() => setTheme('gold')}
                                                 style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px', minWidth: '90px' }}
                                             >
-                                                <span style={{ fontSize: '1.1rem' }}>ðŸ¥‡</span>
-                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>NÃºt VÃ ng</span>
+                                                <span style={{ fontSize: '1.1rem' }}>🥇</span>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Nút Vàng</span>
                                             </button>
                                         ) : (
                                             <button
@@ -1232,7 +1232,7 @@ export default function DashboardPage() {
                                                 style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px', opacity: 0.45, cursor: 'not-allowed', minWidth: '90px' }}
                                             >
                                                 <Lock size={14} />
-                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>NÃºt VÃ ng</span>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Nút Vàng</span>
                                             </button>
                                         )}
                                         {/* Silver Button */}
@@ -1242,8 +1242,8 @@ export default function DashboardPage() {
                                                 onClick={() => setTheme('silver')}
                                                 style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px', minWidth: '90px' }}
                                             >
-                                                <span style={{ fontSize: '1.1rem' }}>ðŸ¥ˆ</span>
-                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>NÃºt Báº¡c</span>
+                                                <span style={{ fontSize: '1.1rem' }}>🥈</span>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Nút Bạc</span>
                                             </button>
                                         ) : (
                                             <button
@@ -1252,7 +1252,7 @@ export default function DashboardPage() {
                                                 style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px', opacity: 0.45, cursor: 'not-allowed', minWidth: '90px' }}
                                             >
                                                 <Lock size={14} />
-                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>NÃºt Báº¡c</span>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Nút Bạc</span>
                                             </button>
                                         )}
                                         {/* Dark */}
@@ -1263,7 +1263,7 @@ export default function DashboardPage() {
                                                 style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px' }}
                                             >
                                                 <Moon size={18} />
-                                                <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>Tá»‘i</span>
+                                                <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>Tối</span>
                                             </button>
                                         ) : (
                                             <button
@@ -1272,7 +1272,7 @@ export default function DashboardPage() {
                                                 style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px', opacity: 0.45, cursor: 'not-allowed' }}
                                             >
                                                 <Lock size={16} />
-                                                <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>Tá»‘i</span>
+                                                <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>Tối</span>
                                             </button>
                                         )}
                                         {/* Light */}
@@ -1282,12 +1282,108 @@ export default function DashboardPage() {
                                             style={{ flex: 1, flexDirection: 'row', gap: '8px', padding: '12px' }}
                                         >
                                             <Sun size={18} />
-                                            <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>SÃ¡ng</span>
+                                            <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>Sáng</span>
                                         </button>
                                     </div>
                                 </div>
                             );
                         })()}
+
+                        {/* Admin migration tools */}
+                        {(user?.role === 'admin') && (
+                            <div className="settings-section" style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--border-color)' }}>
+                                <label className="settings-section-label">🔧 Công cụ quản trị</label>
+                                <p className="settings-section-desc">Phân loại lại errorCategory cho câu hỏi bằng AI</p>
+                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                    <button
+                                        className="settings-level-pill"
+                                        disabled={isMigrating}
+                                        onClick={async () => {
+                                            setIsMigrating(true); setMigrationResults(null); setMigrationForceMode(false);
+                                            const { migrateErrorCategories } = await import('../services/migrateErrorCategories');
+                                            const res = await migrateErrorCategories(msg => setMigrationStatus(msg), true, false);
+                                            setMigrationResults(res); setIsMigrating(false);
+                                        }}
+                                        style={{ flex: 1, padding: '12px', fontWeight: 600 }}>
+                                        {isMigrating ? '⏳ Đang quét...' : '🔍 Quét câu thiếu/sai'}
+                                    </button>
+                                    <button
+                                        className="settings-level-pill"
+                                        disabled={isMigrating}
+                                        onClick={async () => {
+                                            setIsMigrating(true); setMigrationResults(null); setMigrationForceMode(true);
+                                            const { migrateErrorCategories } = await import('../services/migrateErrorCategories');
+                                            const res = await migrateErrorCategories(msg => setMigrationStatus(msg), true, true);
+                                            setMigrationResults(res); setIsMigrating(false);
+                                        }}
+                                        style={{ flex: 1, padding: '12px', fontWeight: 600, color: '#f59e0b', border: '1.5px solid #f59e0b' }}>
+                                        {isMigrating ? '⏳ Đang quét...' : '🔄 Quét lại TẤT CẢ'}
+                                    </button>
+                                    {migrationResults && migrationResults.details?.length > 0 && (
+                                        <button
+                                            className="settings-level-pill settings-level-pill--active"
+                                            disabled={isMigrating}
+                                            onClick={async () => {
+                                                setIsMigrating(true);
+                                                const { applyMigrationResults } = await import('../services/migrateErrorCategories');
+                                                await applyMigrationResults(migrationResults.details, msg => setMigrationStatus(msg));
+                                                setMigrationResults(null); setIsMigrating(false);
+                                            }}
+                                            style={{ flex: 1, padding: '12px', fontWeight: 600 }}>
+                                            ✅ Áp dụng ({migrationResults.details.length} câu)
+                                        </button>
+                                    )}
+                                </div>
+                                {migrationStatus && (
+                                    <div style={{ marginTop: '10px', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: '10px', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                                        {migrationStatus}
+                                    </div>
+                                )}
+                                {migrationResults && migrationResults.details?.length > 0 && (
+                                    <div style={{ marginTop: '10px', maxHeight: '200px', overflowY: 'auto', fontSize: '0.75rem' }}>
+                                        <div style={{ fontWeight: 700, marginBottom: '6px', color: 'var(--text-primary)' }}>
+                                            Grammar: {migrationResults.grammarQuestions.needsUpdate}/{migrationResults.grammarQuestions.total} | Exams: {migrationResults.examQuestions.needsUpdate}/{migrationResults.examQuestions.total}
+                                        </div>
+                                        {migrationResults.details.slice(0, 30).map((d, i) => (
+                                            <div key={i} style={{ display: 'flex', gap: '6px', padding: '3px 0', borderBottom: '1px solid var(--border-color)', alignItems: 'center' }}>
+                                                <span style={{ color: '#94a3b8', minWidth: '40px' }}>{d.coll === 'grammar_questions' ? '📝' : '📄'}</span>
+                                                <span style={{ flex: 1, color: 'var(--text-secondary)' }}>{d.purpose || d.id}</span>
+                                                <span style={{ color: '#ef4444', textDecoration: 'line-through', minWidth: '80px' }}>{d.oldCategory}</span>
+                                                <span style={{ color: '#22c55e', fontWeight: 700, minWidth: '80px' }}>{d.newCategory}</span>
+                                                <span>{d.aiClassified ? '🤖' : '⚠️'}</span>
+                                            </div>
+                                        ))}
+                                        {migrationResults.details.length > 30 && (
+                                            <div style={{ padding: '6px', color: '#94a3b8', textAlign: 'center' }}>...và {migrationResults.details.length - 30} câu khác</div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Reward Points Migration */}
+                        {(user?.role === 'admin') && (
+                            <div className="settings-section" style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
+                                <label className="settings-section-label">🎁 Chuyển đổi dữ liệu điểm thưởng</label>
+                                <p className="settings-section-desc">Gộp điểm thưởng từ từng lớp thành điểm tích luỹ cá nhân (chỉ cần chạy 1 lần)</p>
+                                <button
+                                    className="settings-level-pill"
+                                    disabled={isMigrating}
+                                    onClick={async () => {
+                                        setIsMigrating(true); setMigrationStatus('');
+                                        try {
+                                            const { migrateRewardPointsToCentral } = await import('../services/migrateRewardPoints');
+                                            await migrateRewardPointsToCentral(msg => setMigrationStatus(msg));
+                                        } catch (e) {
+                                            setMigrationStatus('❌ Lỗi: ' + e.message);
+                                        }
+                                        setIsMigrating(false);
+                                    }}
+                                    style={{ padding: '12px', fontWeight: 600, width: '100%' }}>
+                                    {isMigrating ? '⏳ Đang chuyển đổi...' : '🔄 Chuyển đổi điểm thưởng'}
+                                </button>
+                            </div>
+                        )}
 
                         {/* The account/logout section has been moved to the header */}
                     </div>
@@ -1300,7 +1396,7 @@ export default function DashboardPage() {
                         <Avatar src={user?.photoURL} alt={user?.displayName} size={80} className="dashboard-avatar" />
                         <div className="dashboard-welcome-content">
                             <h1 className="dashboard-welcome-name">
-                                {user?.displayName || user?.email?.split('@')[0] || 'Há»c ViÃªn'}
+                                {user?.displayName || user?.email?.split('@')[0] || 'Học Viên'}
                             </h1>
                             {/* Milestone title badge */}
                             {(() => {
@@ -1322,9 +1418,9 @@ export default function DashboardPage() {
                                     return (
                                         <div className="dashboard-milestone-row dashboard-milestone-locked">
                                             <div className="dashboard-milestone-info">
-                                                <span className="dashboard-milestone-subtitle">Äáº¡t {nextMs.threshold} ngÃ y Ä‘á»ƒ nháº­n danh hiá»‡u!</span>
+                                                <span className="dashboard-milestone-subtitle">Đạt {nextMs.threshold} ngày để nhận danh hiệu!</span>
                                             </div>
-                                            <span className="dashboard-milestone-emoji">ðŸŽ¯</span>
+                                            <span className="dashboard-milestone-emoji">🎯</span>
                                         </div>
                                     );
                                 }
@@ -1341,8 +1437,12 @@ export default function DashboardPage() {
                         </div>
                     </div>
                     <div className="dashboard-progress-card" onClick={() => setIsProgressOpen(true)}>
-                        {(() => { const hasFlags = studentRedFlags.filter(f => !f.removed).length > 0; return (
-                        <div className={`dashboard-progress-stats${hasFlags ? ' has-flags' : ''}`}>
+                        {(() => {
+                            const activeFlags = studentRedFlags.filter(f => !f.removed);
+                            const hasFlags = activeFlags.length > 0;
+                            const progressStatCount = 2 + (hasFlags ? 1 : 0) + (totalRewardPoints > 0 ? 1 : 0);
+                            return (
+                        <div className={`dashboard-progress-stats${hasFlags ? ' has-flags' : ''}${progressStatCount >= 3 ? ' has-three-plus' : ''}`}>
                             {classRanks.length > 0 ? (
                                 <div className="dashboard-progress-item">
                                     <div className="dashboard-stat-icon-wrapper warning">
@@ -1372,14 +1472,13 @@ export default function DashboardPage() {
                                         <Medal size={22} />
                                     </div>
                                     <div className="dashboard-stat-info">
-                                        <span className="dashboard-stat-value">â€”</span>
-                                        <span className="dashboard-stat-label">Xáº¿p háº¡ng</span>
+                                        <span className="dashboard-stat-value">—</span>
+                                        <span className="dashboard-stat-label">Xếp hạng</span>
                                     </div>
                                 </div>
                             )}
                             {/* Red flag subtle indicator */}
                             {(() => {
-                                const activeFlags = studentRedFlags.filter(f => !f.removed);
                                 if (activeFlags.length === 0) return null;
                                 const maxPerGroup = {};
                                 activeFlags.forEach(f => {
@@ -1394,13 +1493,13 @@ export default function DashboardPage() {
                                             <div className="dashboard-stat-icon-wrapper" style={{
                                                 background: isTerminated ? 'rgba(220,38,38,0.12)' : maxCount === 2 ? 'rgba(234,88,12,0.12)' : 'rgba(202,138,4,0.12)'
                                             }}>
-                                                <span style={{ fontSize: '18px' }}>ðŸš©</span>
+                                                <span style={{ fontSize: '18px' }}>🚩</span>
                                             </div>
                                             <div className="dashboard-stat-info">
                                                 <span className="dashboard-stat-value" style={{
                                                     color: isTerminated ? '#dc2626' : maxCount === 2 ? '#ea580c' : '#ca8a04'
                                                 }}>{maxCount}/3</span>
-                                                <span className="dashboard-stat-label">Cá» Ä‘á»</span>
+                                                <span className="dashboard-stat-label">Cờ đỏ</span>
                                             </div>
                                         </div>
                                     </>
@@ -1411,11 +1510,11 @@ export default function DashboardPage() {
                                     <div className="dashboard-progress-divider" />
                                     <div className="dashboard-progress-item">
                                         <div className="dashboard-stat-icon-wrapper" style={{ background: 'rgba(245, 158, 11, 0.12)' }}>
-                                            <span style={{ fontSize: '20px' }}>â­</span>
+                                            <span style={{ fontSize: '20px' }}>⭐</span>
                                         </div>
                                         <div className="dashboard-stat-info">
                                             <span className="dashboard-stat-value" style={{ color: '#f59e0b' }}>{totalRewardPoints}</span>
-                                            <span className="dashboard-stat-label">Äiá»ƒm thÆ°á»Ÿng</span>
+                                            <span className="dashboard-stat-label">Điểm thưởng</span>
                                         </div>
                                     </div>
                                 </>
@@ -1427,15 +1526,16 @@ export default function DashboardPage() {
                                 </div>
                                 <div className="dashboard-stat-info">
                                     <span className="dashboard-stat-value">{currentStreak}</span>
-                                    <span className="dashboard-stat-label">NgÃ y streak</span>
+                                    <span className="dashboard-stat-label">Ngày streak</span>
                                 </div>
                             </div>
 
                         </div>
-                        ); })()}
+                        );
+                        })()}
                         <div className="dashboard-progress-cta">
-                            <span>Xem tiáº¿n trÃ¬nh</span>
-                            <span className="dashboard-progress-arrow">â€º</span>
+                            <span>Xem tiến trình</span>
+                            <span className="dashboard-progress-arrow">›</span>
                         </div>
                     </div>
                 </section>
@@ -1491,13 +1591,13 @@ export default function DashboardPage() {
                                     onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.01)'}
                                     onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                                 >
-                                    <span style={{ fontSize: '1.3rem' }}>â­</span>
+                                    <span style={{ fontSize: '1.3rem' }}>⭐</span>
                                     <div style={{ flex: 1, minWidth: 0 }}>
-                                        <span style={{ fontWeight: 700, fontSize: '0.88rem', display: 'block' }}>ÄÃ¡nh giÃ¡ GiÃ¡o viÃªn</span>
-                                        <span style={{ fontSize: '0.72rem', opacity: 0.95, display: 'block', marginTop: '2px' }}>ðŸ”¥ HoÃ n thÃ nh Ä‘á»ƒ nháº­n +{streakPerGroup} ngÃ y streak/lá»›p!</span>
+                                        <span style={{ fontWeight: 700, fontSize: '0.88rem', display: 'block' }}>Đánh giá Giáo viên</span>
+                                        <span style={{ fontSize: '0.72rem', opacity: 0.95, display: 'block', marginTop: '2px' }}>🔥 Hoàn thành để nhận +{streakPerGroup} ngày streak/lớp!</span>
                                     </div>
-                                    <span style={{ fontSize: '0.75rem', opacity: 0.9, whiteSpace: 'nowrap' }}>{daysLeft > 0 ? `${daysLeft} ngÃ y` : 'Cuá»‘i ká»³!'}</span>
-                                    <span style={{ fontSize: '0.85rem' }}>â†’</span>
+                                    <span style={{ fontSize: '0.75rem', opacity: 0.9, whiteSpace: 'nowrap' }}>{daysLeft > 0 ? `${daysLeft} ngày` : 'Cuối kỳ!'}</span>
+                                    <span style={{ fontSize: '0.85rem' }}>→</span>
                                 </div>
                             );
                         })()}
@@ -1507,14 +1607,14 @@ export default function DashboardPage() {
                                 className={`dashboard-nav-item ${activeMainTab === 'learning' ? 'active' : ''}`}
                             >
                                 <Home size={18} />
-                                Há»c
+                                Học
                             </button>
                             <button
                                 onClick={() => setActiveMainTab('assignments')}
                                 className={`dashboard-nav-item ${activeMainTab === 'assignments' ? 'active' : ''}`}
                             >
                                 <ClipboardList size={18} />
-                                BÃ i luyá»‡n
+                                Bài luyện
                                 {newAssignmentsCount > 0 && (
                                     <span className="dashboard-nav-badge-round">
                                         {newAssignmentsCount}
@@ -1526,7 +1626,7 @@ export default function DashboardPage() {
                                 className={`dashboard-nav-item ${activeMainTab === 'exams' ? 'active' : ''}`}
                             >
                                 <FileCheck size={18} />
-                                BÃ i táº­p & KT
+                                Bài tập & KT
                                 {(examAssignments.length > 0) && (() => {
                                     const subsMap = {};
                                     examSubmissions.forEach(s => {
@@ -1546,10 +1646,10 @@ export default function DashboardPage() {
                                         const due = getEffectiveDueDate(a, user.uid);
                                         const isOverdue = due && due < now;
 
-                                        // Not submitted and not overdue â†’ active
+                                        // Not submitted and not overdue → active
                                         if (!hasSubmitted && !isOverdue) return true;
 
-                                        // Submitted but has pending follow-ups â†’ active
+                                        // Submitted but has pending follow-ups → active
                                         const fuRequested = sub?.followUpRequested || {};
                                         const fuAnswers = sub?.followUpAnswers || {};
                                         const hasPendingFollowUp = Object.keys(fuRequested).some(qId => {
@@ -1557,10 +1657,10 @@ export default function DashboardPage() {
                                         });
                                         if (hasSubmitted && hasPendingFollowUp) return true;
 
-                                        // Has new results not yet viewed â†’ active
+                                        // Has new results not yet viewed → active
                                         if (sub?.status === 'graded' && sub?.resultsReleased && !sub?.viewedByStudent) return true;
 
-                                        // Has new follow-up results not yet viewed â†’ active
+                                        // Has new follow-up results not yet viewed → active
                                         if (sub?.followUpResultsReleased && !sub?.followUpResultsViewedByStudent) return true;
 
                                         return false;
@@ -1580,7 +1680,7 @@ export default function DashboardPage() {
                 })()}
 
                 {/* Exam Alert Modal */}
-                {/* Priority Popup System: Exam Alert â†’ Teacher Rating â†’ Milestone */}
+                {/* Priority Popup System: Exam Alert → Teacher Rating → Milestone */}
                 {/* Priority 1: Exam Alert */}
                 {showExamAlert && (
                     <div className="settings-modal-backdrop" style={{ zIndex: 3000, alignItems: 'center' }}>
@@ -1591,20 +1691,20 @@ export default function DashboardPage() {
                                         <div style={{ width: '80px', height: '80px', background: 'var(--bg-input)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: 'var(--color-error)', border: '1px solid var(--border-color)' }}>
                                             <AlertTriangle size={40} />
                                         </div>
-                                        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-error)', margin: '0 0 8px' }}>ThÃ´ng bÃ¡o kháº©n!</h2>
+                                        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-error)', margin: '0 0 8px' }}>Thông báo khẩn!</h2>
                                         <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.5 }}>
-                                            Báº¡n cÃ³ {urgentExam.examType === 'test' ? 'bÃ i kiá»ƒm tra' : 'bÃ i táº­p'} <strong>{urgentExam.name}</strong> chÆ°a hoÃ n thÃ nh. HÃ£y lÃ m ngay trÆ°á»›c khi háº¿t háº¡n!
+                                            Bạn có {urgentExam.examType === 'test' ? 'bài kiểm tra' : 'bài tập'} <strong>{urgentExam.name}</strong> chưa hoàn thành. Hãy làm ngay trước khi hết hạn!
                                         </p>
                                     </div>
 
                                     <div style={{ background: 'var(--bg-input)', padding: '16px', borderRadius: '20px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', border: '1px solid var(--border-color)' }}>
                                         <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: `${urgentExam.color || '#6366f1'}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>
-                                            {urgentExam.icon || 'ðŸ“‹'}
+                                            {urgentExam.icon || '📋'}
                                         </div>
                                         <div style={{ flex: 1, textAlign: 'left' }}>
                                             <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>{urgentExam.name}</div>
                                             <div style={{ fontSize: '0.8rem', color: 'var(--color-error)', fontWeight: 600 }}>
-                                                â± Háº¡n: {urgentExam.dueDate ? (urgentExam.dueDate.toDate ? urgentExam.dueDate.toDate() : new Date(urgentExam.dueDate)).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : 'N/A'}
+                                                ⏱ Hạn: {urgentExam.dueDate ? (urgentExam.dueDate.toDate ? urgentExam.dueDate.toDate() : new Date(urgentExam.dueDate)).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : 'N/A'}
                                             </div>
                                         </div>
                                     </div>
@@ -1618,14 +1718,14 @@ export default function DashboardPage() {
                                                 navigate(`/exam?examId=${urgentExam.examId}&assignmentId=${urgentExam.id}&seed=${urgentExam.variationSeed || 0}`);
                                             }}
                                         >
-                                            LÃ m bÃ i ngay
+                                            Làm bài ngay
                                         </button>
                                         <button
                                             className="btn"
                                             style={{ padding: '14px', borderRadius: '16px', fontWeight: 700, color: 'var(--text-secondary)', background: 'transparent' }}
                                             onClick={() => setShowExamAlert(false)}
                                         >
-                                            Äá»ƒ sau
+                                            Để sau
                                         </button>
                                     </div>
                                 </>
@@ -1637,20 +1737,20 @@ export default function DashboardPage() {
                                         <div style={{ width: '80px', height: '80px', background: 'var(--bg-input)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: 'var(--color-success)', border: '1px solid var(--border-color)' }}>
                                             <Trophy size={40} />
                                         </div>
-                                        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>ÄÃ£ cÃ³ Ä‘iá»ƒm!</h2>
+                                        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>Đã có điểm!</h2>
                                         <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.5 }}>
-                                            GiÃ¡o viÃªn Ä‘Ã£ cháº¥m xong {newResult.examType === 'test' ? 'bÃ i kiá»ƒm tra' : 'bÃ i táº­p'} <strong>{newResult.examName}</strong>. HÃ£y xem káº¿t quáº£ cá»§a báº¡n nhÃ©!
+                                            Giáo viên đã chấm xong {newResult.examType === 'test' ? 'bài kiểm tra' : 'bài tập'} <strong>{newResult.examName}</strong>. Hãy xem kết quả của bạn nhé!
                                         </p>
                                     </div>
 
                                     <div style={{ background: 'var(--bg-input)', padding: '16px', borderRadius: '20px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', border: '1px solid var(--border-color)' }}>
                                         <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: `${newResult.examColor || '#10b981'}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>
-                                            {newResult.examIcon || 'ðŸŽ‰'}
+                                            {newResult.examIcon || '🎉'}
                                         </div>
                                         <div style={{ flex: 1, textAlign: 'left' }}>
                                             <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>{newResult.examName}</div>
                                             <div style={{ fontSize: '0.8rem', color: 'var(--color-success)', fontWeight: 600 }}>
-                                                âœ¨ ÄÃ£ cháº¥m xong
+                                                ✨ Đã chấm xong
                                             </div>
                                         </div>
                                     </div>
@@ -1664,14 +1764,14 @@ export default function DashboardPage() {
                                                 navigate(`/exam-result?assignmentId=${newResult.assignmentId}&studentId=${user?.uid}`);
                                             }}
                                         >
-                                            Xem káº¿t quáº£
+                                            Xem kết quả
                                         </button>
                                         <button
                                             className="btn"
                                             style={{ padding: '14px', borderRadius: '16px', fontWeight: 700, color: 'var(--text-secondary)', background: 'transparent' }}
                                             onClick={() => setShowExamAlert(false)}
                                         >
-                                            ÄÃ³ng
+                                            Đóng
                                         </button>
                                     </div>
                                 </>
@@ -1699,18 +1799,18 @@ export default function DashboardPage() {
                             <div className="settings-modal animate-slide-up" style={{ padding: '32px', borderRadius: '32px', maxWidth: '450px', paddingBottom: '32px' }} onClick={e => e.stopPropagation()}>
                                 <div style={{ textAlign: 'center', marginBottom: '24px' }}>
                                     <div style={{ width: '80px', height: '80px', background: 'linear-gradient(135deg, #fef3c7, #fde68a)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '2.2rem' }}>
-                                        â­
+                                        ⭐
                                     </div>
-                                    <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>ÄÃ¡nh giÃ¡ GiÃ¡o viÃªn</h2>
+                                    <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>Đánh giá Giáo viên</h2>
                                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.6 }}>
-                                        Ká»³ Ä‘Ã¡nh giÃ¡ giÃ¡o viÃªn Ä‘ang má»Ÿ! HÃ£y Ä‘Ã¡nh giÃ¡ Ä‘á»ƒ giÃºp cáº£i thiá»‡n cháº¥t lÆ°á»£ng giáº£ng dáº¡y.
+                                        Kỳ đánh giá giáo viên đang mở! Hãy đánh giá để giúp cải thiện chất lượng giảng dạy.
                                     </p>
                                 </div>
 
                                 <div style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', padding: '14px 18px', borderRadius: '16px', border: '1.5px solid #f59e0b', marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                                     <Flame size={20} color="#ea580c" />
-                                    <span style={{ fontWeight: 800, fontSize: '0.95rem', color: '#92400e' }}>+{baseDays} ngÃ y streak/lá»›p</span>
-                                    <span style={{ fontSize: '0.78rem', color: '#a16207' }}>â€¢ CÃ²n {daysLeft > 0 ? `${daysLeft} ngÃ y` : 'hÃ´m nay!'}</span>
+                                    <span style={{ fontWeight: 800, fontSize: '0.95rem', color: '#92400e' }}>+{baseDays} ngày streak/lớp</span>
+                                    <span style={{ fontSize: '0.78rem', color: '#a16207' }}>• Còn {daysLeft > 0 ? `${daysLeft} ngày` : 'hôm nay!'}</span>
                                 </div>
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1722,14 +1822,14 @@ export default function DashboardPage() {
                                             navigate('/rate-teacher');
                                         }}
                                     >
-                                        ÄÃ¡nh giÃ¡ ngay
+                                        Đánh giá ngay
                                     </button>
                                     <button
                                         className="btn"
                                         style={{ padding: '14px', borderRadius: '16px', fontWeight: 700, color: 'var(--text-secondary)', background: 'transparent' }}
                                         onClick={() => setShowRatingPopup(false)}
                                     >
-                                        Äá»ƒ sau
+                                        Để sau
                                     </button>
                                 </div>
                             </div>
@@ -1753,14 +1853,14 @@ export default function DashboardPage() {
                                     <BrainCircuit size={28} />
                                 </div>
                                 <div className="review-card-content">
-                                    <h3>Tá»« vá»±ng</h3>
-                                    <p><strong>{reviewStats.totalCount}</strong> tá»« cáº§n Ã´n</p>
+                                    <h3>Từ vựng</h3>
+                                    <p><strong>{reviewStats.totalCount}</strong> từ cần ôn</p>
                                 </div>
                                 <button
                                     className="btn btn-primary review-card-btn"
                                     onClick={() => navigate('/review')}
                                 >
-                                    Ã”n ngay
+                                    Ôn ngay
                                 </button>
                             </div>
                         )}
@@ -1771,15 +1871,15 @@ export default function DashboardPage() {
                                     <PenLine size={28} />
                                 </div>
                                 <div className="review-card-content">
-                                    <h3>Ká»¹ nÄƒng</h3>
-                                    <p><strong>{grammarReviewStats.totalCount}</strong> cÃ¢u cáº§n lÃ m</p>
+                                    <h3>Kỹ năng</h3>
+                                    <p><strong>{grammarReviewStats.totalCount}</strong> câu cần làm</p>
                                 </div>
                                 <button
                                     className="btn btn-primary review-card-btn"
                                     style={{ background: 'var(--color-warning)', color: '#fff', boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)' }}
                                     onClick={() => navigate('/grammar-review')}
                                 >
-                                    Ã”n ngay
+                                    Ôn ngay
                                 </button>
                             </div>
                         )}
@@ -1860,19 +1960,19 @@ export default function DashboardPage() {
                             )}
                             {!a.isDone && a.isNew && (
                                 <span style={{ position: 'absolute', top: '12px', right: '12px', background: '#ef4444', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '3px 8px', borderRadius: '10px', textTransform: 'uppercase', letterSpacing: '0.5px', boxShadow: '0 0 8px rgba(239, 68, 68, 0.4)', zIndex: 2 }}>
-                                    Má»›i
+                                    Mới
                                 </span>
                             )}
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                 {a.isGrammar ? (
                                     <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', fontWeight: 800, color: '#d97706', background: 'rgba(245, 158, 11, 0.15)', padding: '4px 8px', borderRadius: '12px' }}>
                                         {a.topicIcon ? <span style={{ fontSize: '1rem' }}>{a.topicIcon}</span> : <PenLine size={12} />}
-                                        Ká»¹ nÄƒng
+                                        Kỹ năng
                                     </span>
                                 ) : (
                                     <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', fontWeight: 800, color: '#3b82f6', background: 'rgba(59, 130, 246, 0.15)', padding: '4px 8px', borderRadius: '12px' }}>
                                         {a.topicIcon ? <span style={{ fontSize: '1rem' }}>{a.topicIcon}</span> : <BookOpen size={12} />}
-                                        Tá»« vá»±ng
+                                        Từ vựng
                                     </span>
                                 )}
                                 <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--text-primary)', fontWeight: 700 }}>{a.topicName}</h3>
@@ -1881,15 +1981,15 @@ export default function DashboardPage() {
                                 <Clock size={14} />
                                 <span>
                                     {(() => {
-                                        if (!a.due) return 'KhÃ´ng cÃ³ háº¡n';
-                                        if (a.isOverdue) return 'ÄÃ£ háº¿t háº¡n';
+                                        if (!a.due) return 'Không có hạn';
+                                        if (a.isOverdue) return 'Đã hết hạn';
                                         const diff = a.due.getTime() - Date.now();
                                         const hours = Math.floor(diff / (1000 * 60 * 60));
                                         const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                                        if (hours < 1) return `CÃ²n ${minutes} phÃºt`;
-                                        if (hours < 48) return `CÃ²n ${hours} giá» ${minutes > 0 ? minutes + ' phÃºt' : ''}`;
+                                        if (hours < 1) return `Còn ${minutes} phút`;
+                                        if (hours < 48) return `Còn ${hours} giờ ${minutes > 0 ? minutes + ' phút' : ''}`;
                                         const days = Math.floor(hours / 24);
-                                        return `CÃ²n ${days} ngÃ y`;
+                                        return `Còn ${days} ngày`;
                                     })()}
                                 </span>
                             </p>
@@ -1897,7 +1997,7 @@ export default function DashboardPage() {
                             {a.prog && a.prog.total > 0 && (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '8px', zIndex: 1 }}>
                                     <div style={{ flex: 1, height: '8px', background: 'var(--bg-glass)', borderRadius: '4px', overflow: 'hidden', display: 'flex', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.2)' }}>
-                                        <div style={{ width: `${a.percent}%`, background: '#10b981', transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)' }} title={`Tiáº¿n Ä‘á»™: ${a.percent}%`} />
+                                        <div style={{ width: `${a.percent}%`, background: '#10b981', transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)' }} title={`Tiến độ: ${a.percent}%`} />
                                     </div>
                                     <div style={{ fontSize: '0.9rem', fontWeight: 800, color: a.isDone ? '#10b981' : 'var(--text-primary)', minWidth: '40px', textAlign: 'right' }}>
                                         {a.percent}%
@@ -1919,7 +2019,7 @@ export default function DashboardPage() {
                                         className={`dashboard-group-filter-btn${selectedGroupFilter === 'all' ? ' active' : ''}`}
                                         onClick={() => setSelectedGroupFilter('all')}
                                     >
-                                        Táº¥t cáº£
+                                        Tất cả
                                     </button>
                                     {Object.entries(groupIdToName).map(([gid, gname]) => (
                                         <button
@@ -1933,12 +2033,12 @@ export default function DashboardPage() {
                                 </div>
                             )}
                             <div className="dashboard-recent-header flex-between" style={{ marginBottom: '16px' }}>
-                                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0' }}>ðŸ“‹ Cáº§n lÃ m ({filteredPending.length})</h3>
+                                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0' }}>📋 Cần làm ({filteredPending.length})</h3>
                             </div>
                             <div style={{ marginBottom: '32px' }}>
                                 {filteredPending.length === 0 ? (
                                     <div style={{ textAlign: 'center', padding: '32px 24px', background: 'var(--bg-glass-card)', borderRadius: '20px', color: 'var(--text-muted)', border: '1px dashed var(--border-color)', fontSize: '0.95rem' }}>
-                                        ðŸŽ‰ Tuyá»‡t vá»i! Báº¡n khÃ´ng cÃ³ bÃ i luyá»‡n nÃ o Ä‘ang chá».
+                                        🎉 Tuyệt vời! Bạn không có bài luyện nào đang chờ.
                                     </div>
                                 ) : (
                                     <div style={{ display: 'grid', gap: '12px' }}>
@@ -1954,7 +2054,7 @@ export default function DashboardPage() {
                                         style={{ cursor: 'pointer', marginBottom: showOverdueAssignments ? '16px' : '0' }}
                                         onClick={() => setShowOverdueAssignments(!showOverdueAssignments)}
                                     >
-                                        <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-secondary)', margin: 0 }}>â° KhÃ´ng hoÃ n thÃ nh ({filteredOverdue.length})</h3>
+                                        <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-secondary)', margin: 0 }}>⏰ Không hoàn thành ({filteredOverdue.length})</h3>
                                         <ChevronDown size={20} style={{ transform: showOverdueAssignments ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s', color: 'var(--text-secondary)' }} />
                                     </div>
 
@@ -1973,7 +2073,7 @@ export default function DashboardPage() {
                                         style={{ cursor: 'pointer', marginBottom: showAllAssignments ? '16px' : '0' }}
                                         onClick={() => setShowAllAssignments(!showAllAssignments)}
                                     >
-                                        <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-secondary)', margin: 0 }}>âœ… ÄÃ£ hoÃ n thÃ nh ({filteredCompleted.length})</h3>
+                                        <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-secondary)', margin: 0 }}>✅ Đã hoàn thành ({filteredCompleted.length})</h3>
                                         <ChevronDown size={20} style={{ transform: showAllAssignments ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s', color: 'var(--text-secondary)' }} />
                                     </div>
 
@@ -1990,7 +2090,7 @@ export default function DashboardPage() {
 
                 {activeMainTab === 'assignments' && assignments.length === 0 && (
                     <div style={{ textAlign: 'center', padding: '40px 24px', background: 'var(--bg-glass-card)', borderRadius: '20px', color: 'var(--text-muted)', border: '1px dashed var(--border-color)', fontSize: '1rem' }}>
-                        ðŸŽ‰ Báº¡n chÆ°a cÃ³ bÃ i luyá»‡n nÃ o Ä‘Æ°á»£c giao!
+                        🎉 Bạn chưa có bài luyện nào được giao!
                     </div>
                 )}
 
@@ -2067,7 +2167,7 @@ export default function DashboardPage() {
                                 {/* Floating badges */}
                                 {!isDone && isNew && (
                                     <span style={{ position: 'absolute', top: '12px', right: '12px', background: '#ef4444', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '3px 8px', borderRadius: '10px', textTransform: 'uppercase', letterSpacing: '0.5px', boxShadow: '0 0 8px rgba(239, 68, 68, 0.4)', zIndex: 2 }}>
-                                        Má»›i
+                                        Mới
                                     </span>
                                 )}
 
@@ -2084,49 +2184,49 @@ export default function DashboardPage() {
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                                     <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', fontWeight: 800, color: examInfo?.examType === 'test' ? '#dc2626' : '#6366f1', background: examInfo?.examType === 'test' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(99, 102, 241, 0.15)', padding: '4px 8px', borderRadius: '12px', flexShrink: 0 }}>
                                         {examInfo?.icon ? <span style={{ fontSize: '1rem' }}>{examInfo.icon}</span> : <FileCheck size={12} />}
-                                        {examInfo?.examType === 'test' ? 'Kiá»ƒm tra' : 'BÃ i táº­p'}
+                                        {examInfo?.examType === 'test' ? 'Kiểm tra' : 'Bài tập'}
                                     </span>
                                     {a.hasNewFollowUpResults ? (
                                         <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 800, color: '#7c3aed', background: 'rgba(139, 92, 246, 0.12)', padding: '6px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
-                                            ðŸ“ Káº¿t quáº£ bÃ i sá»­a
+                                            📝 Kết quả bài sửa
                                         </span>
                                     ) : a.hasNewResults ? (
                                         <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 800, color: '#dc2626', background: 'rgba(239, 68, 68, 0.12)', padding: '6px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
-                                            ðŸŽ‰ Má»›i cÃ³ Ä‘iá»ƒm
+                                            🎉 Mới có điểm
                                         </span>
                                     ) : a.hasPendingFollowUp ? (
                                         <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 800, color: '#d97706', background: 'rgba(245, 158, 11, 0.12)', padding: '6px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
-                                            âœï¸ Cáº§n sá»­a bÃ i
+                                            ✍️ Cần sửa bài
                                         </span>
                                     ) : isDone ? (
                                         isGraded ? (
                                             <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800, color: percent >= 80 ? '#10b981' : percent >= 50 ? '#f59e0b' : '#ef4444', background: percent >= 80 ? 'rgba(16, 185, 129, 0.12)' : percent >= 50 ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)', padding: '6px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
-                                                âœ… {Math.round(sub.totalScore * 10) / 10}/{sub.maxTotalScore}
+                                                ✅ {Math.round(sub.totalScore * 10) / 10}/{sub.maxTotalScore}
                                             </span>
                                         ) : (
                                             <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.12)', padding: '6px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
-                                                â³ Äang cháº¥m
+                                                ⏳ Đang chấm
                                             </span>
                                         )
                                     ) : (
                                         <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800, color: (isOverdue && !isDone) ? '#ef4444' : isDueSoon ? '#ef4444' : 'var(--text-secondary)', background: (isOverdue && !isDone) ? 'rgba(239, 68, 68, 0.12)' : isDueSoon ? 'rgba(239, 68, 68, 0.12)' : 'rgba(128, 128, 128, 0.1)', padding: '6px 10px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
                                             <Clock size={14} />
                                             {(() => {
-                                                if (!due) return 'KhÃ´ng cÃ³ háº¡n';
-                                                if (isOverdue) return 'ÄÃ£ háº¿t háº¡n';
+                                                if (!due) return 'Không có hạn';
+                                                if (isOverdue) return 'Đã hết hạn';
                                                 const diff = due.getTime() - Date.now();
                                                 const hours = Math.floor(diff / (1000 * 60 * 60));
                                                 const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                                                if (hours < 1) return `CÃ²n ${minutes} phÃºt`;
-                                                if (hours < 48) return `CÃ²n ${hours}g ${minutes > 0 ? minutes + 'p' : ''}`;
+                                                if (hours < 1) return `Còn ${minutes} phút`;
+                                                if (hours < 48) return `Còn ${hours}g ${minutes > 0 ? minutes + 'p' : ''}`;
                                                 const days = Math.floor(hours / 24);
-                                                return `CÃ²n ${days} ngÃ y`;
+                                                return `Còn ${days} ngày`;
                                             })()}
                                         </span>
                                     )}
                                 </div>
                                 {/* Exam name */}
-                                <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--text-primary)', fontWeight: 700 }}>{examInfo?.name || 'BÃ i táº­p vÃ  Kiá»ƒm tra'}</h3>
+                                <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--text-primary)', fontWeight: 700 }}>{examInfo?.name || 'Bài tập và Kiểm tra'}</h3>
                             </div>
                         );
                     };
@@ -2139,7 +2239,7 @@ export default function DashboardPage() {
                                         className={`dashboard-group-filter-btn${selectedGroupFilter === 'all' ? ' active' : ''}`}
                                         onClick={() => setSelectedGroupFilter('all')}
                                     >
-                                        Táº¥t cáº£
+                                        Tất cả
                                     </button>
                                     {Object.entries(groupIdToName).map(([gid, gname]) => (
                                         <button
@@ -2160,7 +2260,7 @@ export default function DashboardPage() {
                                     <>
                                         {fActive.length > 0 && (
                                             <section>
-                                                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '12px' }}>ðŸ“‹ Cáº§n lÃ m ({fActive.length})</h3>
+                                                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '12px' }}>📋 Cần làm ({fActive.length})</h3>
                                                 {fActive.map(a => renderExamCard(a, 'active'))}
                                             </section>
                                         )}
@@ -2171,7 +2271,7 @@ export default function DashboardPage() {
                                                     style={{ cursor: 'pointer', marginBottom: showOverdueExams ? '12px' : '0' }}
                                                     onClick={() => setShowOverdueExams(!showOverdueExams)}
                                                 >
-                                                    <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-secondary)', margin: 0 }}>â° KhÃ´ng hoÃ n thÃ nh ({fOverdue.length})</h3>
+                                                    <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-secondary)', margin: 0 }}>⏰ Không hoàn thành ({fOverdue.length})</h3>
                                                     <ChevronDown size={20} style={{ transform: showOverdueExams ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s', color: 'var(--text-secondary)' }} />
                                                 </div>
                                                 {showOverdueExams && fOverdue.map(a => renderExamCard(a, 'overdue'))}
@@ -2186,7 +2286,7 @@ export default function DashboardPage() {
                                                     {newlyGraded.length > 0 && (
                                                         <section style={{ marginBottom: '16px' }}>
                                                             <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#10b981', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                                ðŸŽ‰ Má»›i cÃ³ Ä‘iá»ƒm ({newlyGraded.length})
+                                                                🎉 Mới có điểm ({newlyGraded.length})
                                                             </h3>
                                                             {newlyGraded.map(a => renderExamCard(a, 'completed'))}
                                                         </section>
@@ -2198,7 +2298,7 @@ export default function DashboardPage() {
                                                                 style={{ cursor: 'pointer', marginBottom: showAllExams ? '12px' : '0' }}
                                                                 onClick={() => setShowAllExams(!showAllExams)}
                                                             >
-                                                                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-secondary)', margin: 0 }}>âœ… ÄÃ£ hoÃ n thÃ nh ({restCompleted.length})</h3>
+                                                                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-secondary)', margin: 0 }}>✅ Đã hoàn thành ({restCompleted.length})</h3>
                                                                 <ChevronDown size={20} style={{ transform: showAllExams ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s', color: 'var(--text-secondary)' }} />
                                                             </div>
                                                             {showAllExams && restCompleted.map(a => renderExamCard(a, 'completed'))}
@@ -2209,7 +2309,7 @@ export default function DashboardPage() {
                                         })()}
                                         {fActive.length === 0 && fOverdue.length === 0 && fCompleted.length === 0 && (
                                             <div style={{ textAlign: 'center', padding: '40px 24px', background: 'var(--bg-glass-card)', borderRadius: '20px', color: 'var(--text-muted)', border: '1px dashed var(--border-color)', fontSize: '1rem' }}>
-                                                ðŸ“‹ Báº¡n chÆ°a cÃ³ bÃ i táº­p vÃ  kiá»ƒm tra nÃ o!
+                                                📋 Bạn chưa có bài tập và kiểm tra nào!
                                             </div>
                                         )}
                                     </>
@@ -2222,7 +2322,7 @@ export default function DashboardPage() {
                 {activeMainTab === 'learning' && recentLists.length > 0 && (
                     <section className="dashboard-recent animate-slide-up" style={{ animationDelay: '0.1s' }}>
                         <div className="dashboard-recent-header flex-between">
-                            <h2 className="text-md font-semibold text-secondary">Há»c gáº§n Ä‘Ã¢y</h2>
+                            <h2 className="text-md font-semibold text-secondary">Học gần đây</h2>
                         </div>
                         <div className={`dashboard-recent-slider${isDraggingSlider ? ' is-dragging' : ''}`}
                             ref={sliderRef}
@@ -2238,14 +2338,14 @@ export default function DashboardPage() {
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                             {list.isGrammar ? (
                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '0.6rem', fontWeight: 800, color: '#d97706', background: 'rgba(245, 158, 11, 0.15)', padding: '2px 6px', borderRadius: '6px', lineHeight: 1 }}>
-                                                    <PenLine size={9} /> Ká»¹ nÄƒng
+                                                    <PenLine size={9} /> Kỹ năng
                                                 </span>
                                             ) : (
                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '0.6rem', fontWeight: 800, color: '#3b82f6', background: 'rgba(59, 130, 246, 0.15)', padding: '2px 6px', borderRadius: '6px', lineHeight: 1 }}>
-                                                    <BookOpen size={9} /> Tá»« vá»±ng
+                                                    <BookOpen size={9} /> Từ vựng
                                                 </span>
                                             )}
-                                            <p style={{ margin: 0 }}>{list.wordCount} {list.isGrammar ? 'cÃ¢u' : 'tá»«'}</p>
+                                            <p style={{ margin: 0 }}>{list.wordCount} {list.isGrammar ? 'câu' : 'từ'}</p>
                                         </div>
                                     </div>
                                     <button className="recent-list-play">
@@ -2261,7 +2361,7 @@ export default function DashboardPage() {
                 {activeMainTab === 'learning' && (
                     <section className="dashboard-actions-section">
                         <div className="dashboard-recent-header flex-between" style={{ marginBottom: 'var(--space-md)' }}>
-                            <h2 className="text-md font-semibold text-secondary">KhÃ¡m phÃ¡</h2>
+                            <h2 className="text-md font-semibold text-secondary">Khám phá</h2>
                         </div>
                         <div className="dashboard-actions">
                             {actions.map((action, index) => (
@@ -2274,7 +2374,7 @@ export default function DashboardPage() {
                                         <h3>{action.title}</h3>
                                         <p>{action.description}</p>
                                     </div>
-                                    <span className="dashboard-action-arrow">â†’</span>
+                                    <span className="dashboard-action-arrow">→</span>
                                 </button>
                             ))}
                         </div>
@@ -2291,7 +2391,7 @@ export default function DashboardPage() {
                         <section className="dashboard-actions-section">
                             <div className="dashboard-recent-header flex-between" style={{ marginBottom: 'var(--space-md)' }}>
                                 <h2 className="text-md font-semibold text-secondary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    ðŸ“Š BÃ¡o cÃ¡o ká»¹ nÄƒng
+                                    📊 Báo cáo kỹ năng
                                 </h2>
                             </div>
                             {Object.keys(groupIdToName).length > 1 && (
@@ -2300,7 +2400,7 @@ export default function DashboardPage() {
                                         className={`dashboard-group-filter-btn${selectedGroupFilter === 'all' ? ' active' : ''}`}
                                         onClick={() => setSelectedGroupFilter('all')}
                                     >
-                                        Táº¥t cáº£
+                                        Tất cả
                                     </button>
                                     {Object.entries(groupIdToName).map(([gid, gname]) => (
                                         <button
@@ -2315,16 +2415,16 @@ export default function DashboardPage() {
                             )}
                             {filteredSkillReports.length === 0 ? (
                                 <div style={{ textAlign: 'center', padding: '32px 24px', background: 'var(--bg-glass-card)', borderRadius: '20px', color: 'var(--text-muted)', border: '1px dashed var(--border-color)', fontSize: '0.95rem' }}>
-                                    KhÃ´ng cÃ³ bÃ¡o cÃ¡o ká»¹ nÄƒng cho lá»›p nÃ y.
+                                    Không có báo cáo kỹ năng cho lớp này.
                                 </div>
                             ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                     {filteredSkillReports.slice(0, 3).map(report => {
                                         const dateLabel = report.startDate && report.endDate
-                                            ? `${report.startDate} â†’ ${report.endDate}`
-                                            : (report.sentAt?.toDate ? report.sentAt.toDate().toLocaleDateString('vi-VN') : 'Gáº§n Ä‘Ã¢y');
+                                            ? `${report.startDate} → ${report.endDate}`
+                                            : (report.sentAt?.toDate ? report.sentAt.toDate().toLocaleDateString('vi-VN') : 'Gần đây');
                                         const reportGroupName = groupIdToName[report.groupId];
-                                        const reportTitle = report.periodLabel || 'ÄÃ¡nh giÃ¡ ká»¹ nÄƒng';
+                                        const reportTitle = report.periodLabel || 'Đánh giá kỹ năng';
                                         return (
                                             <div
                                                 key={report.id}
@@ -2347,7 +2447,7 @@ export default function DashboardPage() {
                                                     </h3>
                                                     <p>{dateLabel}</p>
                                                 </div>
-                                                <span className="dashboard-action-arrow">â†’</span>
+                                                <span className="dashboard-action-arrow">→</span>
                                             </div>
                                         );
                                     })}
@@ -2360,12 +2460,12 @@ export default function DashboardPage() {
                 {/* Skill Report Viewer Modal */}
                 {viewingSkillReport && (
                     <div className="settings-modal-backdrop" onClick={() => setViewingSkillReport(null)}>
-                        <div className="settings-modal animate-slide-up" onClick={e => e.stopPropagation()} style={{ maxWidth: '680px', maxHeight: '80vh', overflow: 'auto' }}>
+                        <div className="settings-modal animate-slide-up" onClick={e => e.stopPropagation()} style={{ maxWidth: '700px', maxHeight: '80vh', overflow: 'auto' }}>
                             <button className="settings-modal-close" onClick={() => setViewingSkillReport(null)}>
                                 <X size={20} />
                             </button>
                             <div className="settings-modal-header">
-                                <h3>ðŸ“Š BÃ¡o cÃ¡o ká»¹ nÄƒng</h3>
+                                <h3>📊 Báo cáo kỹ năng</h3>
                             </div>
 
                             {viewingSkillReport.skillData && (() => {
@@ -2382,21 +2482,21 @@ export default function DashboardPage() {
                                                 <PolarGrid stroke="#e2e8f0" />
                                                 <PolarAngleAxis dataKey="skill" tick={{ fontSize: 10, fontWeight: 700, fill: '#475569' }} />
                                                 <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 9, fill: '#94a3b8' }} />
-                                                <Radar name="Ká»¹ nÄƒng" dataKey="score" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.2} strokeWidth={2} dot={{ r: 3, fill: '#8b5cf6' }} />
-                                                <Tooltip formatter={(val) => [`${val}/100`, 'Äiá»ƒm']} />
+                                                <Radar name="Kỹ năng" dataKey="score" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.2} strokeWidth={2} dot={{ r: 3, fill: '#8b5cf6' }} />
+                                                <Tooltip formatter={(val) => [`${val}/100`, 'Điểm']} />
                                             </RadarChart>
                                         </ResponsiveContainer>
 
                                         {/* Skill score summary */}
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', marginTop: '8px' }}>
                                             {Object.entries(viewingSkillReport.skillData.skills).map(([key, val]) => {
-                                                const EMOJIS = { listening: 'ðŸŽ§', speaking: 'ðŸ—£ï¸', reading: 'ðŸ“–', writing: 'âœï¸', grammar: 'ðŸ“', vocabulary: 'ðŸ“š' };
+                                                const EMOJIS = { listening: '🎧', speaking: '🗣️', reading: '📖', writing: '✍️', grammar: '📝', vocabulary: '📚' };
                                                 const color = val.score === null ? '#cbd5e1' : val.score >= 70 ? '#16a34a' : val.score >= 50 ? '#ca8a04' : '#ef4444';
                                                 return (
                                                     <div key={key} style={{ textAlign: 'center', padding: '8px 4px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #f1f5f9' }}>
                                                         <span style={{ fontSize: '1rem' }}>{EMOJIS[key]}</span>
                                                         <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>{SKILL_LABELS[key]}</div>
-                                                        <div style={{ fontSize: '1rem', fontWeight: 900, color }}>{val.score ?? 'â€”'}</div>
+                                                        <div style={{ fontSize: '1rem', fontWeight: 900, color }}>{val.score ?? '—'}</div>
                                                     </div>
                                                 );
                                             })}
@@ -2413,10 +2513,10 @@ export default function DashboardPage() {
                                     border: '1.5px solid #fecaca',
                                     display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap'
                                 }}>
-                                    <span style={{ fontSize: '1rem' }}>ðŸš©</span>
+                                    <span style={{ fontSize: '1rem' }}>🚩</span>
                                     <div style={{ flex: 1 }}>
                                         <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#dc2626', marginBottom: '4px' }}>
-                                            Cá» Ä‘á» ({viewingSkillReport.redFlagsSummary.length})
+                                            Cờ đỏ ({viewingSkillReport.redFlagsSummary.length})
                                         </div>
                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                                             {viewingSkillReport.redFlagsSummary.map((f, i) => (
@@ -2434,12 +2534,12 @@ export default function DashboardPage() {
 
                             {viewingSkillReport.aiReport?.overallLevel && (
                                 <div style={{ padding: '8px 12px', background: '#eef2ff', borderRadius: '10px', marginBottom: '12px', fontSize: '0.85rem', fontWeight: 700, color: '#4f46e5' }}>
-                                    TrÃ¬nh Ä‘á»™ Æ°á»›c tÃ­nh: {viewingSkillReport.aiReport.overallLevel}
+                                    Trình độ ước tính: {viewingSkillReport.aiReport.overallLevel}
                                 </div>
                             )}
 
                             <div className="sp-report-html" style={{ fontSize: '0.88rem', color: '#334155', lineHeight: 1.6, background: '#f8fafc', padding: '14px', borderRadius: '12px' }}
-                                dangerouslySetInnerHTML={{ __html: (viewingSkillReport.finalReport || viewingSkillReport.aiReport?.detailedReport || 'KhÃ´ng cÃ³ ná»™i dung.').replace(/&nbsp;/g, ' ') }}
+                                dangerouslySetInnerHTML={{ __html: (viewingSkillReport.finalReport || viewingSkillReport.aiReport?.detailedReport || 'Không có nội dung.').replace(/&nbsp;/g, ' ') }}
                             />
                         </div>
                     </div>
@@ -2472,7 +2572,7 @@ export default function DashboardPage() {
                         </h2>
                         <p className="milestone-celebration-subtitle">"{celebrationMilestone.subtitle}"</p>
                         <p className="milestone-celebration-streak">
-                            ðŸ”¥ {currentStreak} ngÃ y streak liÃªn tá»¥c!
+                            🔥 {currentStreak} ngày streak liên tục!
                         </p>
                         {celebrationMilestone.themeName && (
                             <p style={{
@@ -2486,7 +2586,7 @@ export default function DashboardPage() {
                                 margin: '0 0 8px',
                                 textAlign: 'center',
                             }}>
-                                ðŸŽ¨ Báº¡n vá»«a má»Ÿ khoÃ¡: <strong>{celebrationMilestone.themeName}</strong>
+                                🎨 Bạn vừa mở khoá: <strong>{celebrationMilestone.themeName}</strong>
                             </p>
                         )}
                         {(() => {
@@ -2501,13 +2601,13 @@ export default function DashboardPage() {
                                     textAlign: 'center',
                                     lineHeight: 1.5,
                                 }}>
-                                    Má»‘c tiáº¿p theo: <strong style={{ color: nextMs.color }}>{nextMs.emoji} {nextMs.title}</strong> â€” cÃ²n {daysLeft} ngÃ y{nextMs.themeName ? ` (má»Ÿ khoÃ¡ ${nextMs.themeName})` : ''}
+                                    Mốc tiếp theo: <strong style={{ color: nextMs.color }}>{nextMs.emoji} {nextMs.title}</strong> — còn {daysLeft} ngày{nextMs.themeName ? ` (mở khoá ${nextMs.themeName})` : ''}
                                 </p>
                             );
                         })()}
                         <button className="milestone-celebration-btn" onClick={() => setCelebrationMilestone(null)}
                             style={{ background: `linear-gradient(135deg, ${celebrationMilestone.color}, ${celebrationMilestone.color}dd)` }}>
-                            Tuyá»‡t vá»i! ðŸŽ‰
+                            Tuyệt vời! 🎉
                         </button>
                     </div>
                 </div>
@@ -2526,7 +2626,7 @@ export default function DashboardPage() {
                                 <div>
                                     <h2 className="wordlist-title">{wordSelectData.topicName}</h2>
                                     <p className="wordlist-subtitle">
-                                        {selectedWordsForAssignment.size} tá»« Ä‘Æ°á»£c chá»n
+                                        {selectedWordsForAssignment.size} từ được chọn
                                     </p>
                                 </div>
                             </div>
@@ -2539,15 +2639,15 @@ export default function DashboardPage() {
                         <div className="wordlist-actions">
                             <button className="wordlist-action-btn" onClick={wsSelectAllUnlearned}>
                                 <CheckCheck size={14} />
-                                ChÆ°a hoÃ n thÃ nh
+                                Chưa hoàn thành
                             </button>
                             <button className="wordlist-action-btn" onClick={wsSelectAll}>
                                 <Check size={14} />
-                                Táº¥t cáº£
+                                Tất cả
                             </button>
                             <button className="wordlist-action-btn wordlist-action-btn--danger" onClick={wsDeselectAll}>
                                 <XCircle size={14} />
-                                Bá» chá»n
+                                Bỏ chọn
                             </button>
                         </div>
 
@@ -2575,7 +2675,7 @@ export default function DashboardPage() {
                                             <div className="wordlist-item-top">
                                                 <span className="wordlist-item-word">{w.word}</span>
                                                 {isLearned && (
-                                                    <span className="wordlist-learned-badge">âœ“ ÄÃ£ há»c</span>
+                                                    <span className="wordlist-learned-badge">✓ Đã học</span>
                                                 )}
                                             </div>
                                             <span className="wordlist-item-meaning">{w.vietnameseMeaning}</span>
@@ -2584,7 +2684,7 @@ export default function DashboardPage() {
                                             <button
                                                 className={`wordlist-bookmark-btn ${wordSelectData.savedWordsStatus[w.word] ? 'is-saved' : ''}`}
                                                 onClick={(e) => handleWsToggleSave(e, w)}
-                                                title={wordSelectData.savedWordsStatus[w.word] ? "Bá» lÆ°u tá»«" : "LÆ°u tá»« vá»±ng"}
+                                                title={wordSelectData.savedWordsStatus[w.word] ? "Bỏ lưu từ" : "Lưu từ vựng"}
                                             >
                                                 <Heart size={16} fill={wordSelectData.savedWordsStatus[w.word] ? "currentColor" : "none"} className={wordSelectData.savedWordsStatus[w.word] ? "text-error" : ""} />
                                             </button>
@@ -2610,7 +2710,7 @@ export default function DashboardPage() {
                                 onClick={handleConfirmWordSelect}
                                 disabled={selectedWordsForAssignment.size === 0}
                             >
-                                {selectedWordsForAssignment.size > 0 ? `ðŸš€ Báº¯t Ä‘áº§u há»c ${selectedWordsForAssignment.size} tá»«` : 'ðŸš€ Báº¯t Ä‘áº§u há»c 0 tá»«'}
+                                {selectedWordsForAssignment.size > 0 ? `🚀 Bắt đầu học ${selectedWordsForAssignment.size} từ` : '🚀 Bắt đầu học 0 từ'}
                             </button>
                         </div>
                     </div>
@@ -2622,7 +2722,7 @@ export default function DashboardPage() {
                 <div className="topic-modal-backdrop" style={{ zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <div style={{ textAlign: 'center', color: '#fff' }}>
                         <Loader size={32} className="spin" style={{ margin: '0 auto 16px' }} />
-                        <p style={{ fontSize: '0.95rem', fontWeight: 600 }}>Äang táº£i tá»« vá»±ng...</p>
+                        <p style={{ fontSize: '0.95rem', fontWeight: 600 }}>Đang tải từ vựng...</p>
                     </div>
                 </div>
             )}
@@ -2662,7 +2762,7 @@ export default function DashboardPage() {
                                     </div>
                                 </button>
                             ))}
-                            {/* Anonymous Feedback option â€” always show for students */}
+                            {/* Anonymous Feedback option — always show for students */}
                             {!(user?.role === 'admin' || user?.role === 'teacher' || user?.role === 'staff') && (
                                 <button
                                     className="dashboard-fab-menu-item"
@@ -2672,8 +2772,8 @@ export default function DashboardPage() {
                                         <MessageSquareText size={22} />
                                     </div>
                                     <div className="dashboard-fab-menu-info">
-                                        <span className="dashboard-fab-menu-title">GÃ³p Ã½ áº©n danh</span>
-                                        <span className="dashboard-fab-menu-desc">Gá»­i pháº£n há»“i cho ban quáº£n lÃ½</span>
+                                        <span className="dashboard-fab-menu-title">Góp ý ẩn danh</span>
+                                        <span className="dashboard-fab-menu-desc">Gửi phản hồi cho ban quản lý</span>
                                     </div>
                                 </button>
                             )}
@@ -2684,7 +2784,7 @@ export default function DashboardPage() {
 
             {/* Feedback Modal */}
             {showFeedbackModal && (
-                <div className="topic-modal-backdrop" onClick={closeFeedbackModal} style={{ zIndex: 2500 }}>
+                <div className="topic-modal-backdrop" onClick={() => !feedbackSending && !feedbackPreparingImage && setShowFeedbackModal(false)} style={{ zIndex: 2500 }}>
                     <div className="glass-card" onClick={e => e.stopPropagation()} style={{
                         maxWidth: '480px', width: '92%', margin: 'auto', padding: '28px 24px',
                         borderRadius: 'var(--radius-xl)', background: 'var(--bg-primary)',
@@ -2692,31 +2792,32 @@ export default function DashboardPage() {
                     }}>
                         {feedbackSuccess ? (
                             <div style={{ textAlign: 'center', padding: '32px 0' }}>
-                                <div style={{ fontSize: '3rem', marginBottom: '16px' }}>âœ…</div>
-                                <h3 style={{ color: '#16a34a', fontWeight: 700, marginBottom: '8px' }}>ÄÃ£ gá»­i thÃ nh cÃ´ng!</h3>
-                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Cáº£m Æ¡n báº¡n Ä‘Ã£ gÃ³p Ã½ â¤ï¸</p>
+                                <div style={{ fontSize: '3rem', marginBottom: '16px' }}>✅</div>
+                                <h3 style={{ color: '#16a34a', fontWeight: 700, marginBottom: '8px' }}>Đã gửi thành công!</h3>
+                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Cảm ơn bạn đã góp ý ❤️</p>
                             </div>
                         ) : (
                             <>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
                                     <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <MessageSquareText size={22} color="#7c3aed" /> GÃ³p Ã½ áº©n danh
+                                        <MessageSquareText size={22} color="#7c3aed" /> Góp ý ẩn danh
                                     </h3>
-                                    <button onClick={closeFeedbackModal} style={{
+                                    <button onClick={() => setShowFeedbackModal(false)} disabled={feedbackSending || feedbackPreparingImage} style={{
                                         background: 'none', border: 'none', cursor: 'pointer', padding: '6px',
                                         borderRadius: '10px', color: 'var(--text-secondary)',
+                                        opacity: feedbackSending || feedbackPreparingImage ? 0.5 : 1,
                                     }}>
                                         <X size={20} />
                                     </button>
                                 </div>
 
                                 <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: 1.5 }}>
-                                    Pháº£n há»“i sáº½ Ä‘Æ°á»£c gá»­i áº©n danh Ä‘áº¿n ban quáº£n lÃ½. HÃ£y chia sáº» Ã½ kiáº¿n tháº­t lÃ²ng nhÃ©!
+                                    Phản hồi sẽ được gửi ẩn danh đến ban quản lý. Hãy chia sẻ ý kiến thật lòng nhé!
                                 </p>
 
                                 {/* Category Selection */}
                                 <div style={{ marginBottom: '16px' }}>
-                                    <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>PhÃ¢n loáº¡i</label>
+                                    <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>Phân loại</label>
                                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                         {FEEDBACK_CATEGORIES.map(c => (
                                             <button
@@ -2738,11 +2839,11 @@ export default function DashboardPage() {
 
                                 {/* Message Input */}
                                 <div style={{ marginBottom: '20px' }}>
-                                    <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>Ná»™i dung</label>
+                                    <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>Nội dung</label>
                                     <textarea
                                         value={feedbackMessage}
                                         onChange={e => setFeedbackMessage(e.target.value)}
-                                        placeholder="Viáº¿t ná»™i dung gÃ³p Ã½ táº¡i Ä‘Ã¢y..."
+                                        placeholder="Viết nội dung góp ý tại đây..."
                                         rows={4}
                                         style={{
                                             width: '100%', padding: '14px 16px', border: '1.5px solid var(--border-color)',
@@ -2753,8 +2854,9 @@ export default function DashboardPage() {
                                     />
                                 </div>
 
+                                {/* Image Attachment */}
                                 <div style={{ marginBottom: '20px' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                    <div style={{ marginBottom: '8px' }}>
                                         <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Ảnh đính kèm</label>
                                     </div>
 
@@ -2821,6 +2923,8 @@ export default function DashboardPage() {
                                                     <ImageIcon size={15} color="#7c3aed" />
                                                     <span style={{
                                                         fontSize: '0.8rem',
+                                                        fontWeight: 600,
+                                                        color: 'var(--text-primary)',
                                                         whiteSpace: 'nowrap',
                                                         overflow: 'hidden',
                                                         textOverflow: 'ellipsis',
@@ -2873,9 +2977,9 @@ export default function DashboardPage() {
                                     }}
                                 >
                                     {feedbackSending ? (
-                                        <><Loader size={18} className="spin" /> Äang gá»­i...</>
+                                        <><Loader size={18} className="spin" /> Đang gửi...</>
                                     ) : (
-                                        <><Send size={18} /> Gá»­i pháº£n há»“i</>
+                                        <><Send size={18} /> Gửi phản hồi</>
                                     )}
                                 </button>
                             </>

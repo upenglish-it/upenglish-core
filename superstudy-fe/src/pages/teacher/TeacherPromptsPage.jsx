@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getTeacherPrompts, createPrompt, updatePrompt, deletePrompt } from '../../services/promptService';
 import { MessageSquare, Plus, Pencil, Trash2, X, Mic, PenTool, Search } from 'lucide-react';
@@ -29,11 +29,8 @@ export default function TeacherPromptsPage() {
     // Delete confirmation
     const [deleteTarget, setDeleteTarget] = useState(null);
 
-    useEffect(() => {
-        if (user?.uid) loadPrompts();
-    }, [user?.uid]);
-
-    async function loadPrompts() {
+    const loadPrompts = useCallback(async () => {
+        if (!user?.uid) return;
         try {
             setLoading(true);
             const data = await getTeacherPrompts(user.uid);
@@ -44,7 +41,11 @@ export default function TeacherPromptsPage() {
         } finally {
             setLoading(false);
         }
-    }
+    }, [user?.uid]);
+
+    useEffect(() => {
+        loadPrompts();
+    }, [loadPrompts]);
 
     function openCreateModal() {
         setEditingPrompt(null);
@@ -124,6 +125,18 @@ export default function TeacherPromptsPage() {
                     <button onClick={() => setError(null)} style={{ marginLeft: '8px', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}>✕</button>
                 </div>
             )}
+
+            <div className="admin-page-header">
+                <div>
+                    <h1 className="admin-page-title" style={{ margin: 0 }}>
+                        <MessageSquare size={24} color="#4f46e5" />
+                        Quản lý prompt
+                    </h1>
+                    <p className="admin-page-subtitle">
+                        Tạo và lưu prompt chấm bài để AI phản hồi đúng phong cách của bạn cho cả bài viết lẫn bài nói.
+                    </p>
+                </div>
+            </div>
 
             {/* Header bar */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>

@@ -919,6 +919,11 @@ export default function TakeExamPage() {
     async function handleSubmitAll(forced = false) {
         // Guard: prevent multiple simultaneous calls from different timers
         if (submitCalledRef.current) return;
+        // Guard: submission not yet created (e.g. user dismissed overdue modal without navigating away)
+        if (!submission?.id) {
+            navigate(-1);
+            return;
+        }
         submitCalledRef.current = true;
         setSubmitting(true);
         try {

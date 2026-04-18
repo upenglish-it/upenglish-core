@@ -353,7 +353,7 @@ export default function GenerateListPage() {
                                 </div>
 
                                 <div className="generate-input-group" style={{ flex: 1 }}>
-                                    <span>3. Trình độ (CEFR)</span>
+                                    <label>3. Trình độ (CEFR)</label>
                                     <div className="generate-input-wrapper" style={{ zIndex: isLevelOpen ? 10 : 1 }}>
                                         <BookOpen size={18} className="text-muted" />
                                         <div
@@ -390,7 +390,7 @@ export default function GenerateListPage() {
                             </div>
 
                             <div className="generate-input-group">
-                                <span>4. Loại từ vựng</span>
+                                <label>4. Loại từ vựng</label>
                                 <div className="generate-input-wrapper" style={{ zIndex: isTypeOpen ? 10 : 1 }}>
                                     <AlignLeft size={18} className="text-muted" />
                                     <div

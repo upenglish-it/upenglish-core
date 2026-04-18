@@ -250,7 +250,7 @@ export default function AdminGroupsPage() {
     const hiddenGroups = filteredGroups.filter(g => g.isHidden);
 
     return (
-        <div className="admin-page">
+        <div className="admin-page admin-groups-page">
             <div className="admin-page-header">
                 <h1 className="admin-page-title">Quản lý Nhóm học viên</h1>
                 <p className="admin-page-subtitle">Tạo và quản lý các nhóm học viên để giao bài tập, chia sẻ nội dung.</p>
@@ -293,13 +293,13 @@ export default function AdminGroupsPage() {
                     </div>
                 ) : (
                     <div className="admin-table-container">
-                        <table className="admin-table">
+                        <table className="admin-table admin-groups-table">
                             <thead>
                                 <tr>
                                     <th>Nhóm</th>
                                     <th>Mô tả</th>
                                     <th>Quyền Folder (Vocab, Kỹ năng)</th>
-                                    <th className="text-right">Hành động</th>
+                                    <th className="text-right" style={{ minWidth: '180px', width: '180px', whiteSpace: 'nowrap' }}>Hành động</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -323,7 +323,9 @@ export default function AdminGroupsPage() {
                                                 </div>
                                             </div>
                                         </td>
-                                        <td data-label="Mô tả" className="admin-text-muted">{group.description}</td>
+                                        <td data-label="Mô tả">
+                                            <span className="admin-groups-description">{group.description || 'Không có mô tả'}</span>
+                                        </td>
                                         <td data-label="Folders">
                                             {(() => {
                                                 const allFolders = [...vocabFolders, ...grammarFolders];
@@ -347,7 +349,7 @@ export default function AdminGroupsPage() {
                                                 );
                                             })()}
                                         </td>
-                                        <td data-label="Hành động" className="text-right">
+                                        <td data-label="Hành động" className="text-right" style={{ minWidth: '180px', width: '180px', verticalAlign: 'top', paddingTop: '14px' }}>
                                             <div className="admin-table-actions">
                                                 <Link to={`/admin/groups/${group.id}`} className="admin-action-btn" title="Xem chi tiết: Thống kê & Bài luyện">
                                                     <BarChart3 size={16} />
@@ -378,13 +380,13 @@ export default function AdminGroupsPage() {
                     </h2>
                     <div className="admin-card" style={{ opacity: 0.8 }}>
                         <div className="admin-table-container">
-                            <table className="admin-table">
+                            <table className="admin-table admin-groups-table">
                                 <thead>
                                     <tr>
                                         <th>Nhóm</th>
                                         <th>Mô tả</th>
                                         <th>Quyền Folder (Vocab, Kỹ năng)</th>
-                                        <th className="text-right">Hành động</th>
+                                        <th className="text-right" style={{ minWidth: '180px', width: '180px', whiteSpace: 'nowrap' }}>Hành động</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -424,7 +426,7 @@ export default function AdminGroupsPage() {
                                                     );
                                                 })()}
                                             </td>
-                                            <td data-label="Hành động" className="text-right">
+                                            <td data-label="Hành động" className="text-right" style={{ minWidth: '180px', width: '180px', verticalAlign: 'top', paddingTop: '14px' }}>
                                                 <div className="admin-table-actions">
                                                     <Link to={`/admin/groups/${group.id}`} className="admin-action-btn" title="Xem chi tiết: Thống kê & Bài luyện">
                                                         <BarChart3 size={16} />

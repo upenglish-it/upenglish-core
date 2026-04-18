@@ -1475,7 +1475,11 @@ export default function AdminReportPeriodsPage() {
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             {deletedPeriods.map(period => {
-                                const deletedAt = period.deletedAt?.toDate?.() || null;
+                                const deletedAt = period.deletedAt
+                                    ? (typeof period.deletedAt?.toDate === 'function'
+                                        ? period.deletedAt.toDate()
+                                        : new Date(period.deletedAt))
+                                    : null;
                                 const daysLeft = deletedAt ? Math.max(0, 30 - Math.floor((Date.now() - deletedAt) / (1000 * 60 * 60 * 24))) : 30;
 
                                 return (

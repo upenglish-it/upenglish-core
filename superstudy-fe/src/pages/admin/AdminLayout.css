@@ -1,4 +1,4 @@
-body.admin-body {
+﻿body.admin-body {
     background: #f0f2f8 !important;
 }
 
@@ -3295,6 +3295,43 @@ body.admin-body {
 }
 
 /* Admin Groups page */
+
+.admin-groups-page .admin-groups-table {
+    min-width: 700px;
+    overflow: visible !important;
+    table-layout: fixed;
+}
+
+.admin-groups-page .admin-groups-table th:nth-child(1),
+.admin-groups-page .admin-groups-table td:nth-child(1) {
+    width: 25%;
+}
+
+.admin-groups-page .admin-groups-table th:nth-child(2),
+.admin-groups-page .admin-groups-table td:nth-child(2) {
+    width: 29%;
+}
+
+.admin-groups-page .admin-groups-table th:nth-child(3),
+.admin-groups-page .admin-groups-table td:nth-child(3) {
+    width: 26%;
+}
+
+.admin-groups-page .admin-groups-table th:nth-child(4),
+.admin-groups-page .admin-groups-table td:nth-child(4) {
+    width: 20%;
+    white-space: nowrap;
+    vertical-align: top;
+    padding-top: 14px;
+    overflow: visible !important;
+}
+
+.admin-groups-page .admin-groups-table .admin-table-actions {
+    width: 124px;
+    flex-wrap: wrap;
+}
+
+
 .admin-groups-description {
     color: #475569;
     display: block;

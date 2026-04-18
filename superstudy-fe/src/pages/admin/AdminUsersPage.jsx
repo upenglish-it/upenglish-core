@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -359,7 +359,7 @@ export default function AdminUsersPage() {
 
         setConfirmAction({
             type: 'delete',
-            message: `Chuyển tài khoản ${u.email} vào "Người dùng cũ"? Bạn có thể khôi phục sau này.`,
+            message: `Chuyển tài khoản ${u.email} vào "Người dùng cũ"? Người dùng sẽ rời toàn bộ lớp hiện tại và có thể khôi phục lại các lớp đó sau này.`,
             action: async () => { await softDeleteUser(u.uid); }
         });
     }
@@ -367,7 +367,7 @@ export default function AdminUsersPage() {
     function handlePermanentDelete(u) {
         setConfirmAction({
             type: 'delete',
-            message: `Xóa vĩnh viễn tài khoản ${u.email} khỏi hệ thống? Hành động này KHÔNG THỂ hoàn tác.`,
+            message: `Xóa vĩnh viễn tài khoản ${u.email} khỏi Firebase Auth và Firestore? Hành động này KHÔNG THỂ hoàn tác.`,
             action: async () => { await permanentDeleteUser(u.uid); }
         });
     }
@@ -375,7 +375,7 @@ export default function AdminUsersPage() {
     function handleRestore(u) {
         setConfirmAction({
             type: 'restore',
-            message: `Khôi phục tài khoản ${u.email}?`,
+            message: `Khôi phục tài khoản ${u.email}? Các lớp trước khi chuyển vào "Người dùng cũ" sẽ được khôi phục tự động.`,
             action: async () => { await restoreUser(u.uid); }
         });
     }
@@ -852,7 +852,7 @@ export default function AdminUsersPage() {
                                     <CheckCircle size={28} color="#22c55e" />
                                 </div>
                                 <h3 style={{ margin: '0 0 4px', fontWeight: 700 }}>Không có người dùng cũ</h3>
-                                <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.9rem' }}>Tài khoản bị xóa sẽ xuất hiện ở đây.</p>
+                                <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.9rem' }}>Tài khoản bị xoá sẽ xuất hiện ở đây.</p>
                             </div>
                         ) : (
                             <div className="admin-table-container">
@@ -860,7 +860,7 @@ export default function AdminUsersPage() {
                                     <thead>
                                         <tr>
                                             <th>Người dùng</th>
-                                            <th>Ngày xóa</th>
+                                            <th>Ngày xoá</th>
                                             <th className="text-right">Thao tác</th>
                                         </tr>
                                     </thead>
@@ -891,7 +891,7 @@ export default function AdminUsersPage() {
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td data-label="Ngày xóa" className="admin-text-muted" style={{ fontSize: '0.85rem' }}>
+                                                <td data-label="Ngày xoá" className="admin-text-muted" style={{ fontSize: '0.85rem' }}>
                                                     {formatDate(u.deletedAt)}
                                                 </td>
                                                 <td data-label="Thao tác" className="text-right">
